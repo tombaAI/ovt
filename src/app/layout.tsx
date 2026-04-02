@@ -5,20 +5,20 @@ import { Providers } from "./providers";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "OVT sprava",
-  description: "Prvni technicke overeni aplikace, databaze a e-mailoveho setupu pro OVT."
+    title: "OVT sprava",
+    description: "Prvni technicke overeni aplikace, databaze a e-mailoveho setupu pro OVT."
 };
 
 type RootLayoutProps = Readonly<{
-  children: ReactNode;
+    children: ReactNode;
 }>;
 
 export default function RootLayout({ children }: RootLayoutProps) {
-  return (
-    <html lang="cs">
-      <body>
-        <Providers>{children}</Providers>
-      </body>
-    </html>
-  );
+    return (
+        <html lang="cs">
+            <body>
+                <Providers>{children}</Providers>
+            </body>
+        </html>
+    );
 }
