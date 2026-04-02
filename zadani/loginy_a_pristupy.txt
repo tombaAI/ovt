@@ -1,0 +1,22 @@
+Supabase
+login: github
+https://supabase.com/dashboard/project/keamjgyijegxmqnyvtys
+OVT_administration
+https://keamjgyijegxmqnyvtys.supabase.co
+keamjgyijegxmqnyvtys
+RklffMdm76E2j7me
+V sekci Authentication -> Providers zapni "Google". Budeš tam muset vložit Client ID a Client Secret (ty získáš v Google Cloud Console - návodů je na to spousta, Supabase tam má přímý odkaz na tutoriál).
+
+
+Vercel
+login: github
+https://vercel.com/tombaais-projects
+
+
+Resend:
+login: github
+key: re_bRd185G8_K99jMWajXcrzFuYkebrSeNae
+Klíčový krok pro doručitelnost: V sekci Domains přidej vaši .cz doménu. Resend ti vygeneruje DNS záznamy (TXT/MX pro DKIM a SPF). Tyto záznamy musíš vložit do administrace vaší domény (tam, kde jsi ji koupil, např. Wedos/Forpsi). Až je Resend ověří, maily nebudou padat do spamu.
+
+Fio:
+0BrlXoF5jrDQdoWBjNEOb9dOTkDi6GWhMRmhPCzmwZx2JBJTY1aDvnsvctMswZlY

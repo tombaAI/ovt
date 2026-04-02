@@ -1,0 +1,36 @@
+Udělat systém, ideálně webový, který bude moct běžet u nějakého veřejného providera v ČR v technologiích, které tam bude podporovat.
+Včetně databáze.
+
+Funkce:
+1) Evidence členů
+- seznam členů, kompletní CRUD záznamů. Současná evidence je vidět v Excelu OVT Příspěvky
+- podpora definice příspěvků a složek příspěvků, které se budou evidovat. Složení je v excelu
+- jedna ze složek jsou brigády: přidej možnost evidovat brigády = brigáda má datum, vedoucího, seznam členů, kteří tam byli = mají do příspěvků příštího roku splněno
+- další ze složek jsou lodě: přidej možnost evidovat lodě = viz Excel OVT Krakorce.xlsx co je k lodi potřeba. A to má pak vliv na příspěvky, protože pokud má někdo loď, tak za ní platí - první loď jiná cena, než druhá, viz definice příspěvků
+- pak jsou slevy, každý může mít jednu. Je potřeba udělat smyslupnou agendu nad typy: seznam členů výboru, seznam vedoucích, seznam indivindi slev, možnost jednoduše definovat, měnit seznam lidí
+- proces kolem příspěvků je tento:
+ 1) příprava podkladů,
+ 2) odeslání každému členovi personalizovaný e-mail s obsahem příspěvků + QR kódem pro platbu v českých korunách v české bance
+ 3) evidence platby - to budeme řešit později, bude to přes API do Fio banky, ale prozatím stačí možnost ručně zadat, že někdo zaplatil, a to i s datem platby, protože se nám stává, že někdo zaplatí později, než je termín, a pak to potřebujeme evidovat. A samozřejmě možnost vidět přehled toho, kdo zaplatil a kdo ne. A možnost posílat upomínky těm, kteří nezaplatili.
+ 4) připomínání pro neplatiče, možnost posílat hromadné e-maily s upomínkami, a to i s personalizací, aby bylo jasné, kdo je adresátem a co má zaplatit.
+
+TBD, pokud tě v této věci něco napadá.
+
+2) Evidence podpora činnosti
+- viz Excel OVT Podpora činnosti.xlsx, kde je seznam akcí, které pořádáme, a které podporujeme.
+Je potřeba udělat systém, který nám umožní evidovat tyto akce. Nechci zatím řešit, kdo kde byl.
+Celé to funguej takto: na posledním listu jsou popsaná pravidla, tak si to projdi a podle toho to udělej
+Organizátoři chtějí typicky posílat peníze na dotace na ty akce, takže by to mělo pro správce umožnit 
+
+3) další budoucí věci 
+budeme řešit později.
+
+Soutěž. 
+Náklady vlek. 
+Přeúčtování TOM
+synchornizace seznamu členů s ČSK
+platby na ČSK.
+Synchronizace s účtem obecně - finance, co přesně tam teče
+Hamerák - kompletní organizace z pohledu financí - plán, setup cen, odhad příjmy, náklady. Na akci: příjmy startovné přes QR, platby nákladů. Po akci: přehled náklady příjmy, vyúčtování, doklady, cesťáky, všechno...
+Synchronizace s Bohemkou - finance příj,y náklady
+
