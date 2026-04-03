@@ -1,5 +1,5 @@
-import { drizzle } from "drizzle-orm/postgres-js";
-import postgres from "postgres";
+import { neon } from "@neondatabase/serverless";
+import { drizzle } from "drizzle-orm/neon-http";
 
 import * as schema from "@/db/schema";
 
@@ -7,15 +7,6 @@ type OvtDb = ReturnType<typeof drizzle<typeof schema>>;
 
 declare global {
     var __ovtDb: OvtDb | undefined;
-}
-
-function resolveSsl(databaseUrl: string): false | "require" {
-    try {
-        const hostname = new URL(databaseUrl).hostname;
-        return hostname === "localhost" || hostname === "127.0.0.1" ? false : "require";
-    } catch {
-        return "require";
-    }
 }
 
 export function hasDatabaseUrl(): boolean {
@@ -30,12 +21,7 @@ export function getDb(): OvtDb {
     }
 
     if (!globalThis.__ovtDb) {
-        const client = postgres(databaseUrl, {
-            ssl: resolveSsl(databaseUrl),
-            prepare: false,
-            max: 1
-        });
-        globalThis.__ovtDb = drizzle(client, { schema });
+        globalThis.__ovtDb = drizzle(neon(databaseUrl), { schema });
     }
 
     return globalThis.__ovtDb;
