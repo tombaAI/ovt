@@ -13,6 +13,19 @@ export default async function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+                <a href="/health" className="contents">
+                    <Card className="hover:border-[#327600]/40 transition-colors cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <p className="text-sm font-medium text-gray-500">Stav aplikace</p>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-xs text-gray-400">Health check → /health</p>
+                        </CardContent>
+                    </Card>
+                </a>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                 <Card className="opacity-50">
                     <CardHeader className="pb-2">
                         <p className="text-sm font-medium text-gray-500">Členové</p>
