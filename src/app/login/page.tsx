@@ -46,6 +46,9 @@ export default async function LoginPage({
                     </CardContent>
                 </Card>
             </div>
+            <a href="/health" className="text-xs text-gray-400 hover:text-gray-600 mt-4 block text-center">
+                Stav aplikace
+            </a>
         </main>
     );
 }
