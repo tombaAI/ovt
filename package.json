@@ -10,6 +10,7 @@
     },
     "dependencies": {
         "@fluentui/react-components": "^9.0.0",
+        "@vercel/speed-insights": "^2.0.0",
         "next": "^15.0.0",
         "postgres": "^3.0.0",
         "react": "^19.0.0",

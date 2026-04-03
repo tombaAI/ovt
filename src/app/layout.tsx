@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import type { ReactNode } from "react";
+import { SpeedInsights } from "@vercel/speed-insights/next";
 
 import { Providers } from "./providers";
 import "./globals.css";
@@ -18,6 +19,7 @@ export default function RootLayout({ children }: RootLayoutProps) {
         <html lang="cs">
             <body>
                 <Providers>{children}</Providers>
+                <SpeedInsights />
             </body>
         </html>
     );
