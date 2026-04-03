@@ -1,9 +1,12 @@
+import { drizzle } from "drizzle-orm/postgres-js";
 import postgres from "postgres";
 
-type SqlClient = ReturnType<typeof postgres>;
+import * as schema from "@/db/schema";
+
+type OvtDb = ReturnType<typeof drizzle<typeof schema>>;
 
 declare global {
-    var __ovtSqlClient: SqlClient | undefined;
+    var __ovtDb: OvtDb | undefined;
 }
 
 function resolveSsl(databaseUrl: string): false | "require" {
@@ -19,20 +22,21 @@ export function hasDatabaseUrl(): boolean {
     return Boolean(process.env.DATABASE_URL);
 }
 
-export function getSqlClient(): SqlClient {
+export function getDb(): OvtDb {
     const databaseUrl = process.env.DATABASE_URL;
 
     if (!databaseUrl) {
         throw new Error("DATABASE_URL is not configured.");
     }
 
-    if (!globalThis.__ovtSqlClient) {
-        globalThis.__ovtSqlClient = postgres(databaseUrl, {
+    if (!globalThis.__ovtDb) {
+        const client = postgres(databaseUrl, {
             ssl: resolveSsl(databaseUrl),
             prepare: false,
             max: 1
         });
+        globalThis.__ovtDb = drizzle(client, { schema });
     }
 
-    return globalThis.__ovtSqlClient;
+    return globalThis.__ovtDb;
 }

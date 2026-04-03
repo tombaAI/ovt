@@ -1,12 +1,6 @@
-"use client";
-
-import { FluentProvider, webLightTheme } from "@fluentui/react-components";
 import type { ReactNode } from "react";
 
-type ProvidersProps = {
-    children: ReactNode;
-};
-
-export function Providers({ children }: ProvidersProps) {
-    return <FluentProvider theme={webLightTheme}>{children}</FluentProvider>;
+// Fluent UI removed — shadcn/ui + Tailwind CSS nepotřebuje provider wrapper.
+export function Providers({ children }: { children: ReactNode }) {
+    return <>{children}</>;
 }
