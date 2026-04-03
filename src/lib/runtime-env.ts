@@ -5,6 +5,7 @@ export type RuntimeFlags = {
     resendApiKey: boolean;
     mailFrom: boolean;
     mailReplyTo: boolean;
+    mailTestTo: boolean;
     supabaseUrl: boolean;
     supabaseAnonKey: boolean;
     supabaseServiceRoleKey: boolean;
@@ -29,8 +30,10 @@ export function getRuntimeFlags(): RuntimeFlags {
         resendApiKey: hasValue(process.env.RESEND_API_KEY),
         mailFrom: hasValue(process.env.MAIL_FROM),
         mailReplyTo: hasValue(process.env.MAIL_REPLY_TO),
+        mailTestTo: hasValue(process.env.MAIL_TEST_TO),
         supabaseUrl: hasValue(process.env.NEXT_PUBLIC_SUPABASE_URL),
         supabaseAnonKey: hasValue(process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY),
         supabaseServiceRoleKey: hasValue(process.env.SUPABASE_SERVICE_ROLE_KEY)
     };
 }
+

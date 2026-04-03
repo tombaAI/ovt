@@ -150,7 +150,7 @@ export function HealthPanel() {
                 Runtime ověření
             </h2>
             <p className="sectionLead">
-                Tohle je první kontrolní vrstva pro technické prověření. Po nasazení na Vercel stačí otevřít tuto stránku a hned vidíš, jestli žije web, databáze a e-mailová konfigurace.
+                Tohle je první kontrolní vrstva pro technické prověření. Po nasazení na Vercel stačí otevřít tuto stránku a hned vidíš, jestli žije web, databáze a jestli je databázová migrace opravdu nahraná. E-mail je pro první deploy volitelný.
             </p>
             <div className="healthGrid">
                 {endpointConfig.map(({ key, title }) => {

@@ -1,24 +1,24 @@
 import { HealthPanel } from "./components/health-panel";
 
-const domainPlan = [
-    "Web administrace poběží na sprava.ovtbohemians.cz.",
-    "Odesílací reputace a DNS pro Resend budou oddělené pod mail.ovtbohemians.cz.",
-    "První systémový odesílatel dává smysl jako sprava@mail.ovtbohemians.cz.",
-    "Lidská kontaktní schránka může zůstat zvlášť, například sprava@ovtbohemians.cz."
+const firstDeployPlan = [
+    "První deploy klidně poběží jen na dočasné adrese z Vercelu, bez vlastní domény a bez e-mailu.",
+    "Pro běh aplikace teď stačí DATABASE_URL a ADMIN_EMAILS. APP_BASE_URL je zatím volitelné.",
+    "Databáze se ověřuje server-side přes PostgreSQL spojení, ne přes klientský Supabase SDK.",
+    "Jakmile doběhne první deploy a migrace, health endpointy ukážou skutečný stav aplikace i databáze."
 ];
 
-const emailFlow = [
-    "Odchozí výzvy k platbě a připomínky posílej z adresy pod ověřenou subdoménou mail.ovtbohemians.cz.",
-    "Pokud chceš časem automaticky zpracovávat odpovědi, vyhraď si samostatnou inbound adresu, například inbox@mail.ovtbohemians.cz.",
-    "Aplikace má už teď počítat s logem e-mailových událostí v databázi, aby šly později napojit Make, n8n nebo vlastní webhooky.",
-    "Resend webhooky umí vracet stav doručení a do budoucna i event email.received pro příchozí poštu."
+const requiredSetup = [
+    "GitHub repozitář je připravený na branchi main a Vercel ho může importovat přímo z GitHubu.",
+    "Na Supabase je potřeba mít aplikovanou první SQL migraci ze složky supabase/migrations.",
+    "Na Vercelu je potřeba nastavit environment variables pro produkci.",
+    "Po deployi zkontroluj stránku /api/health/db a hlavní dashboard dummy aplikace."
 ];
 
-const domainAdminChecklist = [
-    "Nasměrovat subdoménu sprava.ovtbohemians.cz na Vercel podle cílového DNS záznamu, který Vercel ukáže při přidání domény.",
-    "Přidat DNS záznamy, které Resend vygeneruje pro ověření mail.ovtbohemians.cz, typicky SPF a DKIM a ideálně i DMARC.",
-    "Rozhodnout, zda lidská schránka bude sprava@ovtbohemians.cz nebo sprava@mail.ovtbohemians.cz, a podle toho zajistit mailbox nebo forwarding.",
-    "Pokud se má časem automaticky zpracovávat příchozí pošta, připravit i samostatnou adresu jako inbox@mail.ovtbohemians.cz a dohodnout, zda povede do webhooku nebo do mailboxu s další automatizací."
+const laterSetup = [
+    "Vlastní doménu sprava.ovtbohemians.cz přidej až po prvním ověření na vercel.app URL.",
+    "Resend můžeš teď technicky otestovat přes onboarding@resend.dev, ale vlastní mailovou subdoménu nech až do další etapy.",
+    "Google login zatím neřeš. Pro první deploy není potřeba ani v GitHubu, ani ve Vercelu, ani v Supabase nic kolem OAuth nastavovat.",
+    "Až bude hotový základ aplikace, teprve potom má smysl chystat DNS zadání pro admina domény."
 ];
 
 export default function HomePage() {
@@ -26,40 +26,40 @@ export default function HomePage() {
         <main className="shell">
             <section className="hero">
                 <p className="eyebrow">OVT interni sprava</p>
-                <h1>Prvni dummy aplikace pro technicke overeni</h1>
+                <h1>Prvni deploy webu s databazi</h1>
                 <p className="lead">
-                    Tenhle základ slouží jen k tomu, aby se co nejdřív ověřilo, že funguje web, spojení do PostgreSQL a připravenost e-mailového setupu pro <code>sprava.ovtbohemians.cz</code> a <code>mail.ovtbohemians.cz</code>.
+                    Tenhle základ slouží k prvnímu ověření, že funguje web na Vercelu a server-side spojení do PostgreSQL v Supabase. E-mailing a vlastní doména zůstanou zatím vypnuté.
                 </p>
                 <div className="heroMeta">
                     <span>Next.js App Router</span>
                     <span>Fluent UI v9</span>
                     <span>Server-side PostgreSQL</span>
-                    <span>Resend ready</span>
+                    <span>Resend test mode ready</span>
                 </div>
             </section>
 
             <HealthPanel />
 
-            <section className="contentGrid" aria-label="Domény a e-mailový model">
+            <section className="contentGrid" aria-label="První deploy a co je potřeba">
                 <article className="panel">
-                    <h2>Doménový model</h2>
+                    <h2>Co je cílem teď</h2>
                     <p>
-                        Pro první ostrý setup dává nejčistší smysl oddělit admin web a mailovou reputaci. Web zůstane na <code>sprava.ovtbohemians.cz</code>, zatímco odesílání a případná příchozí automatizační pošta poběží pod <code>mail.ovtbohemians.cz</code>.
+                        První deploy nemá řešit celou infrastrukturu. Cíl je prostý: otevřít web na Vercelu, vidět hlavní stránku a potvrdit, že backend opravdu sáhne do databáze a pozná, jestli je nahraná první migrace.
                     </p>
                     <ul className="list">
-                        {domainPlan.map((item) => (
+                        {firstDeployPlan.map((item) => (
                             <li key={item}>{item}</li>
                         ))}
                     </ul>
                 </article>
 
                 <article className="panel">
-                    <h2>E-mailová logika</h2>
+                    <h2>Co musí být nastavené</h2>
                     <p>
-                        Pro tenhle projekt nedává smysl začínat s <code>noreply</code> jako hlavní adresou. Praktická varianta je mít odesílatele, na kterého se dá odpovědět, a až vedle toho technické adresy pro automatizaci.
+                        Bez těchto čtyř kroků první deploy nedává smysl pouštět. Jakmile jsou splněné, stránka i API endpointy už umí technický stav ukázat přímo z nasazené aplikace.
                     </p>
                     <ul className="list">
-                        {emailFlow.map((item) => (
+                        {requiredSetup.map((item) => (
                             <li key={item}>{item}</li>
                         ))}
                     </ul>
@@ -73,17 +73,20 @@ export default function HomePage() {
                         <a className="endpointLink" href="/api/health/email">
                             /api/health/email
                         </a>
+                        <a className="endpointLink" href="/api/email/test">
+                            /api/email/test
+                        </a>
                     </div>
                 </article>
             </section>
 
             <section className="panel panelWide">
-                <h2>Co bude později chtít admin domény</h2>
+                <h2>Co nech zatím na později</h2>
                 <p>
-                    Jakmile budeš chtít od admina domény konkrétní nastavení, tahle dummy aplikace už bude dobrý ověřovací bod. Bude jasné, jaké subdomény existují a co přesně má být nasměrované nebo ověřené.
+                    Tenhle krok je schválně odložený. Nejprve ověř web a databázi na dočasné Vercel URL. Teprve až tohle poběží, má smysl řešit vlastní doménu, DNS a e-mailové workflow.
                 </p>
                 <ol className="steps">
-                    {domainAdminChecklist.map((item) => (
+                    {laterSetup.map((item) => (
                         <li key={item}>{item}</li>
                     ))}
                 </ol>
@@ -91,3 +94,4 @@ export default function HomePage() {
         </main>
     );
 }
+

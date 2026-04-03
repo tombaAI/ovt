@@ -20,17 +20,40 @@ export async function GET() {
 
     try {
         const sql = getSqlClient();
-        const [row] = await sql<{ checked_at: string; database_name: string }[]>`
-      select current_database() as database_name, now()::text as checked_at
-    `;
+        const [row] = await sql<{
+            admin_users_table: string | null;
+            checked_at: string;
+            database_name: string;
+            mail_events_table: string | null;
+        }[]>`
+            select
+                current_database() as database_name,
+                now()::text as checked_at,
+                to_regclass('app.admin_users')::text as admin_users_table,
+                to_regclass('app.mail_events')::text as mail_events_table
+        `;
 
-        return NextResponse.json({
-            ok: true,
-            configured: true,
-            detail: `Připojeno k databázi ${row.database_name}.`,
-            checkedAt: row.checked_at,
-            databaseName: row.database_name
-        });
+        const schemaReady = Boolean(row.admin_users_table && row.mail_events_table);
+
+        return NextResponse.json(
+            {
+                ok: schemaReady,
+                configured: true,
+                detail: schemaReady
+                    ? `Připojeno k databázi ${row.database_name} a první migrace je přítomná.`
+                    : `Připojeno k databázi ${row.database_name}, ale první migrace ještě není aplikovaná.`,
+                checkedAt: row.checked_at,
+                databaseName: row.database_name,
+                schemaReady,
+                tables: {
+                    adminUsers: row.admin_users_table,
+                    mailEvents: row.mail_events_table
+                }
+            },
+            {
+                status: schemaReady ? 200 : 503
+            }
+        );
     } catch {
         return NextResponse.json(
             {
