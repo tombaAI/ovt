@@ -45,10 +45,10 @@ export default async function LoginPage({
                         </form>
                     </CardContent>
                 </Card>
+                <a href="/health" className="text-xs text-gray-400 hover:text-gray-600 block text-center">
+                    Stav aplikace
+                </a>
             </div>
-            <a href="/health" className="text-xs text-gray-400 hover:text-gray-600 mt-4 block text-center">
-                Stav aplikace
-            </a>
         </main>
     );
 }
