@@ -14,20 +14,23 @@ interface Props {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     row: ContribRow | null;
+    onPaymentUpdated: () => void;
 }
-
 
 function fmt(n: number | null) {
     if (n === null) return "—";
     return n.toLocaleString("cs-CZ") + " Kč";
 }
 
-export function PaymentSheet({ open, onOpenChange, row }: Props) {
+export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Props) {
     const [state, formAction, isPending] = useActionState<ContribFormState, FormData>(savePayment, null);
 
     useEffect(() => {
-        if (state && "success" in state) onOpenChange(false);
-    }, [state, onOpenChange]);
+        if (state && "success" in state) {
+            onOpenChange(false);
+            onPaymentUpdated();
+        }
+    }, [state, onOpenChange, onPaymentUpdated]);
 
     if (!row) return null;
 
@@ -44,7 +47,7 @@ export function PaymentSheet({ open, onOpenChange, row }: Props) {
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-md overflow-y-auto">
+            <SheetContent className="w-full sm:max-w-xl overflow-y-auto overflow-x-hidden">
                 <SheetHeader className="mb-5">
                     <SheetTitle>{row.fullName}</SheetTitle>
                     <p className="text-sm text-gray-500">Příspěvky</p>

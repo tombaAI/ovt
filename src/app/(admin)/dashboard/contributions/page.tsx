@@ -1,8 +1,27 @@
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
 import { ContributionsClient } from "./contributions-client";
+
+export type PeriodStatus = "draft" | "confirmed" | "collecting" | "closed";
+
+export type PeriodTab = {
+    id: number;
+    year: number;
+    status: PeriodStatus;
+};
+
+export type PeriodDetail = PeriodTab & {
+    amountBase: number;
+    amountBoat1: number;
+    amountBoat2: number;
+    amountBoat3: number;
+    discountCommittee: number;
+    discountTom: number;
+    brigadeSurcharge: number;
+    dueDate: string | null;
+};
 
 export type ContribRow = {
     contribId: number;
@@ -22,7 +41,6 @@ export type ContribRow = {
     paidAt: string | null;
     isPaid: boolean | null;
     note: string | null;
-    /** Vypočítaný stav platby */
     status: "paid" | "overpaid" | "underpaid" | "unpaid";
 };
 
@@ -35,23 +53,41 @@ function calcStatus(row: Pick<ContribRow, "isPaid" | "paidAmount" | "amountTotal
     return "underpaid";
 }
 
-export default async function ContributionsPage() {
+export default async function ContributionsPage(props: {
+    searchParams: Promise<{ year?: string }>;
+}) {
+    const searchParams = await props.searchParams;
     const db = getDb();
 
-    const [period] = await db.select()
+    const allPeriods = await db
+        .select({
+            id:               contributionPeriods.id,
+            year:             contributionPeriods.year,
+            status:           contributionPeriods.status,
+            amountBase:       contributionPeriods.amountBase,
+            amountBoat1:      contributionPeriods.amountBoat1,
+            amountBoat2:      contributionPeriods.amountBoat2,
+            amountBoat3:      contributionPeriods.amountBoat3,
+            discountCommittee: contributionPeriods.discountCommittee,
+            discountTom:      contributionPeriods.discountTom,
+            brigadeSurcharge: contributionPeriods.brigadeSurcharge,
+            dueDate:          contributionPeriods.dueDate,
+        })
         .from(contributionPeriods)
-        .where(eq(contributionPeriods.year, CONTRIBUTION_YEAR));
+        .orderBy(desc(contributionPeriods.year));
 
-    if (!period) {
+    if (allPeriods.length === 0) {
         return (
             <div className="space-y-4">
-                <h1 className="text-2xl font-semibold text-gray-900">Příspěvky {CONTRIBUTION_YEAR}</h1>
-                <p className="text-gray-500">Období nenalezeno v databázi.</p>
+                <h1 className="text-2xl font-semibold text-gray-900">Příspěvky</h1>
+                <p className="text-gray-500">Žádná období v databázi.</p>
             </div>
         );
     }
 
-    // Fetch contributions joined with member name
+    const requestedYear = Number(searchParams.year) || CONTRIBUTION_YEAR;
+    const period = (allPeriods.find(p => p.year === requestedYear) ?? allPeriods[0]) as PeriodDetail;
+
     const rows = await db
         .select({
             contribId:          memberContributions.id,
@@ -77,57 +113,13 @@ export default async function ContributionsPage() {
         .where(eq(memberContributions.periodId, period.id))
         .orderBy(asc(members.fullName));
 
-    const data: ContribRow[] = rows.map(r => ({
-        ...r,
-        status: calcStatus(r),
-    }));
-
-    const stats = {
-        total:     data.length,
-        paid:      data.filter(r => r.status === "paid").length,
-        overpaid:  data.filter(r => r.status === "overpaid").length,
-        underpaid: data.filter(r => r.status === "underpaid").length,
-        unpaid:    data.filter(r => r.status === "unpaid").length,
-        collected: data.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
-        expected:  data.reduce((s, r) => s + (r.amountTotal ?? 0), 0),
-    };
+    const data: ContribRow[] = rows.map(r => ({ ...r, status: calcStatus(r) }));
 
     return (
-        <div className="space-y-5">
-            <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Příspěvky {CONTRIBUTION_YEAR}</h1>
-                <p className="text-gray-500 mt-1 text-sm">
-                    Základní: {period.amountBase} Kč · Loď 1: {period.amountBoat1} Kč ·
-                    Splatnost: {period.dueDate ?? "—"}
-                </p>
-            </div>
-
-            {/* Summary cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-                <div className="bg-white rounded-xl border p-3">
-                    <p className="text-xs text-gray-500">Zaplaceno správně</p>
-                    <p className="text-2xl font-semibold text-[#327600]">{stats.paid}</p>
-                </div>
-                <div className="bg-white rounded-xl border p-3">
-                    <p className="text-xs text-gray-500">Nezaplaceno</p>
-                    <p className="text-2xl font-semibold text-red-600">{stats.unpaid}</p>
-                </div>
-                <div className="bg-white rounded-xl border p-3">
-                    <p className="text-xs text-gray-500">Nedoplatek / přeplatek</p>
-                    <p className="text-2xl font-semibold text-orange-500">{stats.underpaid + stats.overpaid}</p>
-                </div>
-                <div className="bg-white rounded-xl border p-3">
-                    <p className="text-xs text-gray-500">Vybráno / očekáváno</p>
-                    <p className="text-lg font-semibold text-gray-800">
-                        {stats.collected.toLocaleString("cs-CZ")} Kč
-                    </p>
-                    <p className="text-xs text-gray-400">
-                        z {stats.expected.toLocaleString("cs-CZ")} Kč
-                    </p>
-                </div>
-            </div>
-
-            <ContributionsClient rows={data} />
-        </div>
+        <ContributionsClient
+            periods={allPeriods as PeriodTab[]}
+            period={period}
+            rows={data}
+        />
     );
 }

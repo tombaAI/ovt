@@ -51,6 +51,7 @@ export const contributionPeriods = appSchema.table("contribution_periods", {
     dueDate:             date("due_date"),
     bankAccount:         text("bank_account").notNull().default("2701772934/2010"),
     isDraft:             boolean("is_draft").notNull().default(false),
+    status:              text("status", { enum: ["draft", "confirmed", "collecting", "closed"] }).notNull().default("collecting"),
     createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
