@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods } from "@/db/schema";
+import { members, memberContributions, contributionPeriods, membershipYears } from "@/db/schema";
 import { eq, sql } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import Link from "next/link";
@@ -13,8 +13,11 @@ export default async function DashboardPage() {
     const db = getDb();
     const [memberCounts] = await db.select({
         total:  sql<number>`count(*)`,
-        active: sql<number>`count(*) filter (where ${members.isActive})`,
     }).from(members);
+
+    const [activeCounts] = await db.select({
+        active: sql<number>`count(*)`,
+    }).from(membershipYears).where(eq(membershipYears.year, CONTRIBUTION_YEAR));
 
     const [period] = await db.select({ id: contributionPeriods.id })
         .from(contributionPeriods)
@@ -40,8 +43,8 @@ export default async function DashboardPage() {
                             <p className="text-sm font-medium text-gray-500">Členové</p>
                         </CardHeader>
                         <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">{Number(memberCounts?.active ?? 0)}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">aktivních z {Number(memberCounts?.total ?? 0)} celkem</p>
+                            <p className="text-2xl font-semibold text-gray-900">{Number(activeCounts?.active ?? 0)}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">v {CONTRIBUTION_YEAR} z {Number(memberCounts?.total ?? 0)} celkem</p>
                         </CardContent>
                     </Card>
                 </Link>

@@ -3,7 +3,6 @@
 import { useEffect, useState, useTransition, useActionState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -14,7 +13,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
 import { InlineField } from "./inline-field";
 import {
-    updateMemberField, changeMemberStatus, setIndividualDiscount,
+    updateMemberField, setIndividualDiscount,
     setContributionFlags, setMembershipDates,
     getMemberHistory, saveMembershipHistory,
     getMemberAuditLog, saveMember,
@@ -65,70 +64,6 @@ function AuditHistory({ memberId }: { memberId: number }) {
                 </div>
             ))}
         </div>
-    );
-}
-
-// ── Status change dialog ─────────────────────────────────────────────────────
-function StatusDialog({
-    open, onOpenChange, member, onDone,
-}: {
-    open: boolean; onOpenChange: (v: boolean) => void;
-    member: MemberWithFlags; onDone: () => void;
-}) {
-    const [note, setNote]       = useState("");
-    const [error, setError]     = useState<string | null>(null);
-    const [pending, startTransition] = useTransition();
-    const newStatus = !member.isActive;
-
-    function handleConfirm() {
-        if (!note.trim()) { setError("Poznámka je povinná"); return; }
-        startTransition(async () => {
-            const result = await changeMemberStatus(member.id, newStatus, note);
-            if ("error" in result) { setError(result.error); return; }
-            onDone();
-            onOpenChange(false);
-            setNote("");
-            setError(null);
-        });
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-sm">
-                <DialogHeader>
-                    <DialogTitle>Změna stavu člena</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3 py-2">
-                    <p className="text-sm text-gray-600">
-                        <strong>{member.fullName}</strong> bude označen jako{" "}
-                        <strong>{newStatus ? "aktivní" : "neaktivní"}</strong>.
-                    </p>
-                    {!newStatus && (
-                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded-lg p-2">
-                            Deaktivace může mít dopad na příspěvky. Zkontroluj stav plateb.
-                        </p>
-                    )}
-                    <div className="space-y-1.5">
-                        <Label htmlFor="status-note">Důvod / poznámka *</Label>
-                        <Textarea
-                            id="status-note"
-                            placeholder="Proč se mění stav?"
-                            value={note}
-                            onChange={e => { setNote(e.target.value); setError(null); }}
-                            rows={3}
-                        />
-                        {error && <p className="text-xs text-red-600">{error}</p>}
-                    </div>
-                </div>
-                <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Zrušit</Button>
-                    <Button onClick={handleConfirm} disabled={pending}
-                        className="bg-[#327600] hover:bg-[#2a6400]">
-                        {pending ? "Ukládám…" : "Potvrdit"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }
 
@@ -372,7 +307,6 @@ interface Props {
 
 export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
     const [showHistory, setShowHistory] = useState(false);
-    const [statusDialogOpen, setStatusDialogOpen] = useState(false);
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
     const [committeePending, startCommitteeTransition] = useTransition();
     const [tomPending, startTomTransition] = useTransition();
@@ -418,20 +352,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                     {isEdit && member ? (
                         <>
                             <SheetHeader className="mb-4">
-                                <div className="flex items-start justify-between gap-3">
-                                    <SheetTitle className="leading-tight">{member.fullName}</SheetTitle>
-                                    <div className="flex flex-col items-end gap-1 shrink-0">
-                                        {member.isActive
-                                            ? <Badge className="bg-[#327600]/10 text-[#327600] border-0 text-xs">Aktivní</Badge>
-                                            : <Badge variant="secondary" className="text-xs">Neaktivní</Badge>
-                                        }
-                                        <button
-                                            onClick={() => setStatusDialogOpen(true)}
-                                            className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2">
-                                            Změnit stav
-                                        </button>
-                                    </div>
-                                </div>
+                                <SheetTitle className="leading-tight">{member.fullName}</SheetTitle>
                             </SheetHeader>
 
                             {/* Inline edit fields */}
@@ -586,10 +507,6 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                 <div className="space-y-1.5"><Label htmlFor="note">Poznámka</Label>
                                     <Input id="note" name="note" />
                                 </div>
-                                <div className="flex items-center gap-2">
-                                    <Checkbox id="is_active" name="is_active" defaultChecked />
-                                    <Label htmlFor="is_active" className="cursor-pointer">Aktivní člen</Label>
-                                </div>
                                 {state && "error" in state && <p className="text-sm text-red-600">{state.error}</p>}
                                 <div className="flex gap-2 pt-2">
                                     <Button type="submit" disabled={isPending} className="flex-1 bg-[#327600] hover:bg-[#2a6400]">
@@ -605,12 +522,6 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
 
             {member && (
                 <>
-                    <StatusDialog
-                        open={statusDialogOpen}
-                        onOpenChange={setStatusDialogOpen}
-                        member={member}
-                        onDone={onMemberUpdated}
-                    />
                     <DiscountDialog
                         open={discountDialogOpen}
                         onOpenChange={setDiscountDialogOpen}

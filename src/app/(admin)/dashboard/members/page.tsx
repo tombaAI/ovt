@@ -17,7 +17,6 @@ export type MemberWithFlags = {
     phone: string | null;
     variableSymbol: number | null;
     cskNumber: number | null;
-    isActive: boolean;
     membershipReviewed: boolean;
     note: string | null;
     // Year-specific (from membership_years)
@@ -69,7 +68,6 @@ export default async function MembersPage(props: {
             phone:              members.phone,
             variableSymbol:     members.variableSymbol,
             cskNumber:          members.cskNumber,
-            isActive:           members.isActive,
             membershipReviewed: members.membershipReviewed,
             note:               members.note,
             fromDate:           membershipYears.fromDate,
@@ -102,7 +100,6 @@ export default async function MembersPage(props: {
         phone:              r.phone,
         variableSymbol:     r.variableSymbol,
         cskNumber:          r.cskNumber,
-        isActive:           r.isActive,
         membershipReviewed: r.membershipReviewed,
         note:               r.note,
         fromDate:           r.fromDate,
