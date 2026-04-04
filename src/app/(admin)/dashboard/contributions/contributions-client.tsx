@@ -103,11 +103,12 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                             ].join(" ")}>
                             {p.year}
-                            {!isSelected && (
-                                <span className={`text-xs px-1.5 py-0.5 rounded-full border ${lc.cls}`}>
-                                    {lc.label}
-                                </span>
-                            )}
+                            <span className={[
+                                "text-xs px-1.5 py-0.5 rounded-full border",
+                                isSelected ? "bg-white/15 text-white border-white/20" : lc.cls,
+                            ].join(" ")}>
+                                {lc.label}
+                            </span>
                         </button>
                     );
                 })}
