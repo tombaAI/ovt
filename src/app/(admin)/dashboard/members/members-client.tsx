@@ -88,7 +88,7 @@ export function MembersClient({ members, periodId, currentYearDiscounts }: Props
 
     const onMemberUpdated = useCallback(() => { router.refresh(); }, [router]);
 
-    function openDetail(m: MemberWithFlags) { setEditMemberId(m.id); setSheetOpen(true); }
+    function openDetail(m: MemberWithFlags) { setEditMemberId(m.id); setSheetOpen(true); router.refresh(); }
     function openAdd()                       { setEditMemberId(null); setSheetOpen(true); }
 
     return (
