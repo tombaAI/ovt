@@ -15,8 +15,10 @@ import { Input } from "@/components/ui/input";
 import { InlineField } from "./inline-field";
 import {
     updateMemberField, changeMemberStatus, setIndividualDiscount,
-    setContributionFlags, setMembershipDates, getMemberAuditLog, saveMember,
-    type MemberFormState, type AuditEntry,
+    setContributionFlags, setMembershipDates,
+    getMemberHistory, saveMembershipHistory,
+    getMemberAuditLog, saveMember,
+    type MemberFormState, type AuditEntry, type MemberYearRecord,
 } from "@/lib/actions/members";
 import { FIELD_LABELS } from "@/lib/member-fields";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
@@ -229,17 +231,146 @@ function DiscountDialog({
     );
 }
 
+// ── Membership history review ─────────────────────────────────────────────────
+type YearRowState = {
+    year: number;
+    isMember: boolean;
+    fromDate: string;
+    toDate: string;
+    amountTotal: number | null;
+    paidAmount: number | null;
+    isPaid: boolean | null;
+};
+
+function fmt(n: number | null) {
+    if (n === null) return "—";
+    return n.toLocaleString("cs-CZ") + " Kč";
+}
+
+function MembershipHistoryReview({ memberId, memberReviewed, onDone }: {
+    memberId: number;
+    memberReviewed: boolean;
+    onDone: () => void;
+}) {
+    const [rows, setRows]             = useState<YearRowState[] | null>(null);
+    const [markReviewed, setMark]     = useState(false);
+    const [saving, setSaving]         = useState(false);
+    const [error, setError]           = useState<string | null>(null);
+
+    useEffect(() => {
+        getMemberHistory(memberId).then((data: MemberYearRecord[]) => {
+            setRows([...data].reverse().map(d => ({
+                year:        d.year,
+                isMember:    d.isMember,
+                fromDate:    d.fromDate ?? "",
+                toDate:      d.toDate   ?? "",
+                amountTotal: d.amountTotal,
+                paidAmount:  d.paidAmount,
+                isPaid:      d.isPaid,
+            })));
+        });
+    }, [memberId]);
+
+    function toggle(year: number) {
+        setRows(prev => prev?.map(r => r.year === year ? { ...r, isMember: !r.isMember } : r) ?? null);
+    }
+    function setDate(year: number, field: "fromDate" | "toDate", val: string) {
+        setRows(prev => prev?.map(r => r.year === year ? { ...r, [field]: val } : r) ?? null);
+    }
+
+    async function handleSave() {
+        if (!rows) return;
+        setSaving(true);
+        const result = await saveMembershipHistory(
+            memberId,
+            rows.map(r => ({ year: r.year, isMember: r.isMember, fromDate: r.fromDate || null, toDate: r.toDate || null })),
+            markReviewed,
+        );
+        setSaving(false);
+        if ("error" in result) { setError(result.error); return; }
+        onDone();
+    }
+
+    if (!rows) return <p className="text-xs text-gray-400 py-2">Načítám…</p>;
+
+    return (
+        <div className="space-y-3">
+            <div className="overflow-x-auto -mx-4 px-4">
+                <table className="w-full text-sm min-w-[480px]">
+                    <thead>
+                        <tr className="border-b text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                            <th className="text-left pb-2 pr-3">Rok</th>
+                            <th className="text-right pb-2 pr-3">Předpis</th>
+                            <th className="text-right pb-2 pr-3">Zaplaceno</th>
+                            <th className="text-center pb-2 pr-3">Člen</th>
+                            <th className="text-left pb-2 pr-2">Od</th>
+                            <th className="text-left pb-2">Do</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {rows.map(r => (
+                            <tr key={r.year} className="border-b last:border-0">
+                                <td className="py-2 pr-3 font-semibold text-gray-800">{r.year}</td>
+                                <td className="py-2 pr-3 text-right font-mono text-gray-600 text-xs">{fmt(r.amountTotal)}</td>
+                                <td className={[
+                                    "py-2 pr-3 text-right font-mono text-xs",
+                                    r.isPaid ? "text-[#327600]" : r.paidAmount ? "text-orange-600" : "text-gray-400",
+                                ].join(" ")}>{fmt(r.paidAmount)}</td>
+                                <td className="py-2 pr-3 text-center">
+                                    <Checkbox checked={r.isMember} onCheckedChange={() => toggle(r.year)} />
+                                </td>
+                                <td className="py-2 pr-2">
+                                    {r.isMember && (
+                                        <input type="date" value={r.fromDate}
+                                            onChange={e => setDate(r.year, "fromDate", e.target.value)}
+                                            className="border border-gray-300 rounded px-1.5 py-1 text-xs w-34 focus:outline-none focus:ring-1 focus:ring-[#327600]/40" />
+                                    )}
+                                </td>
+                                <td className="py-2">
+                                    {r.isMember && (
+                                        <input type="date" value={r.toDate}
+                                            onChange={e => setDate(r.year, "toDate", e.target.value)}
+                                            className="border border-gray-300 rounded px-1.5 py-1 text-xs w-34 focus:outline-none focus:ring-1 focus:ring-[#327600]/40" />
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+
+            {!memberReviewed && (
+                <div className="flex items-center gap-2 pt-1">
+                    <Checkbox id="mark-reviewed" checked={markReviewed}
+                        onCheckedChange={v => setMark(Boolean(v))} />
+                    <Label htmlFor="mark-reviewed" className="text-sm cursor-pointer">
+                        Označit jako zkontrolovaného
+                    </Label>
+                </div>
+            )}
+
+            {error && <p className="text-xs text-red-600">{error}</p>}
+
+            <Button onClick={handleSave} disabled={saving} size="sm"
+                className="bg-[#327600] hover:bg-[#2a6400]">
+                {saving ? "Ukládám…" : "Uložit historii"}
+            </Button>
+        </div>
+    );
+}
+
 // ── Main detail sheet ─────────────────────────────────────────────────────────
 interface Props {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     member: MemberWithFlags | null;
+    selectedYear: number;
     periodId: number | null;
     currentYearDiscounts: { committee: number; tom: number } | null;
     onMemberUpdated: () => void;
 }
 
-export function MemberSheet({ open, onOpenChange, member, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
+export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
     const [showHistory, setShowHistory] = useState(false);
     const [statusDialogOpen, setStatusDialogOpen] = useState(false);
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
@@ -348,26 +479,26 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                     {/* Membership dates for this year */}
                                     <InlineField
                                         label="Vstup do roku"
-                                        value={member.joinedAt}
+                                        value={member.fromDate}
                                         type="date"
                                         placeholder="(od začátku roku)"
-                                        fieldId="joinedAt"
+                                        fieldId="fromDate"
                                         activeField={activeField}
                                         onActiveFieldChange={setActiveField}
-                                        onSave={v => setMembershipDates(member.id, periodId!, v || null, member.leftAt).then(r => {
+                                        onSave={v => setMembershipDates(member.id, selectedYear, v || null, member.toDate).then(r => {
                                             if ("success" in r) onMemberUpdated();
                                             return r;
                                         })}
                                     />
                                     <InlineField
                                         label="Ukončení v roku"
-                                        value={member.leftAt}
+                                        value={member.toDate}
                                         type="date"
                                         placeholder="(do konce roku)"
-                                        fieldId="leftAt"
+                                        fieldId="toDate"
                                         activeField={activeField}
                                         onActiveFieldChange={setActiveField}
-                                        onSave={v => setMembershipDates(member.id, periodId!, member.joinedAt, v || null).then(r => {
+                                        onSave={v => setMembershipDates(member.id, selectedYear, member.fromDate, v || null).then(r => {
                                             if ("success" in r) onMemberUpdated();
                                             return r;
                                         })}
@@ -394,7 +525,26 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                 </div>
                             )}
 
-                            {/* History */}
+                            {/* Membership history review */}
+                            <Separator className="mb-4" />
+                            <div className="mb-4">
+                                <div className="flex items-center justify-between mb-3">
+                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                        Historie členství
+                                    </p>
+                                    {member.membershipReviewed
+                                        ? <span className="text-xs text-[#327600] font-medium">✓ Zkontrolováno</span>
+                                        : <span className="text-xs text-yellow-600 font-medium">Ke kontrole</span>
+                                    }
+                                </div>
+                                <MembershipHistoryReview
+                                    memberId={member.id}
+                                    memberReviewed={member.membershipReviewed}
+                                    onDone={onMemberUpdated}
+                                />
+                            </div>
+
+                            {/* Audit history */}
                             <Separator className="mb-4" />
                             <button
                                 onClick={() => setShowHistory(v => !v)}

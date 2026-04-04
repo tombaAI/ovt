@@ -1,8 +1,8 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods, auditLog } from "@/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { members, memberContributions, contributionPeriods, membershipYears, auditLog } from "@/db/schema";
+import { eq, and, sql, desc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
@@ -367,38 +367,126 @@ export async function setContributionFlags(
     }
 }
 
-// ── setMembershipDates — track mid-year join / leave dates ───────────────────
+// ── setMembershipDates — quick inline edit for a single year ─────────────────
 export async function setMembershipDates(
     memberId: number,
-    periodId: number,
-    joinedAt: string | null,
-    leftAt: string | null,
+    year: number,
+    fromDate: string | null,
+    toDate: string | null,
 ): Promise<{ error: string } | { success: true }> {
     const session = await auth();
     const changedBy = session?.user?.email ?? "unknown";
     const db = getDb();
 
     try {
-        const [contrib] = await db.select()
-            .from(memberContributions)
-            .where(and(eq(memberContributions.memberId, memberId), eq(memberContributions.periodId, periodId)));
-        if (!contrib) return { error: "Příspěvkový záznam nenalezen" };
-
-        await db.update(memberContributions).set({
-            joinedAt: joinedAt || null,
-            leftAt:   leftAt   || null,
-        }).where(eq(memberContributions.id, contrib.id));
-
-        const changes = diffObjects(
-            { joinedAt: contrib.joinedAt, leftAt: contrib.leftAt },
-            { joinedAt: joinedAt || null, leftAt: leftAt || null }
-        );
-        if (Object.keys(changes).length > 0) {
-            await db.insert(auditLog).values({
-                entityType: "member", entityId: memberId, action: "update",
-                changes, changedBy,
+        await db.insert(membershipYears)
+            .values({ memberId, year, fromDate: fromDate || null, toDate: toDate || null })
+            .onConflictDoUpdate({
+                target: [membershipYears.memberId, membershipYears.year],
+                set: { fromDate: fromDate || null, toDate: toDate || null },
             });
+
+        await db.insert(auditLog).values({
+            entityType: "member", entityId: memberId, action: "update",
+            changes: { membershipDates: { old: null, new: `${year}: ${fromDate ?? "—"} – ${toDate ?? "—"}` } },
+            changedBy,
+        });
+
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+// ── getMemberHistory — per-year overview 2019–2025 ───────────────────────────
+const REVIEW_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025] as const;
+
+export type MemberYearRecord = {
+    year: number;
+    isMember: boolean;
+    fromDate: string | null;
+    toDate: string | null;
+    amountTotal: number | null;
+    paidAmount: number | null;
+    isPaid: boolean | null;
+};
+
+export async function getMemberHistory(memberId: number): Promise<MemberYearRecord[]> {
+    const db = getDb();
+
+    const myRows = await db.select()
+        .from(membershipYears)
+        .where(eq(membershipYears.memberId, memberId));
+
+    const finRows = await db
+        .select({
+            year:        contributionPeriods.year,
+            amountTotal: memberContributions.amountTotal,
+            paidAmount:  memberContributions.paidAmount,
+            isPaid:      memberContributions.isPaid,
+        })
+        .from(memberContributions)
+        .innerJoin(contributionPeriods, eq(memberContributions.periodId, contributionPeriods.id))
+        .where(eq(memberContributions.memberId, memberId));
+
+    const myMap  = new Map(myRows.map(r => [r.year, r]));
+    const finMap = new Map(finRows.map(r => [r.year, r]));
+
+    return REVIEW_YEARS.map(year => {
+        const my  = myMap.get(year)  ?? null;
+        const fin = finMap.get(year) ?? null;
+        return {
+            year,
+            isMember:    my !== null,
+            fromDate:    my?.fromDate ?? null,
+            toDate:      my?.toDate   ?? null,
+            amountTotal: fin?.amountTotal ?? null,
+            paidAmount:  fin?.paidAmount  ?? null,
+            isPaid:      fin?.isPaid      ?? null,
+        };
+    });
+}
+
+// ── saveMembershipHistory — bulk upsert from review tool ─────────────────────
+export async function saveMembershipHistory(
+    memberId: number,
+    years: { year: number; isMember: boolean; fromDate: string | null; toDate: string | null }[],
+    markReviewed: boolean,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    try {
+        // Delete all review-range rows then re-insert
+        await db.delete(membershipYears).where(
+            and(
+                eq(membershipYears.memberId, memberId),
+                inArray(membershipYears.year, REVIEW_YEARS as unknown as number[])
+            )
+        );
+
+        const toInsert = years
+            .filter(y => y.isMember)
+            .map(y => ({ memberId, year: y.year, fromDate: y.fromDate || null, toDate: y.toDate || null }));
+
+        if (toInsert.length > 0) {
+            await db.insert(membershipYears).values(toInsert);
         }
+
+        if (markReviewed) {
+            await db.update(members)
+                .set({ membershipReviewed: true })
+                .where(eq(members.id, memberId));
+        }
+
+        await db.insert(auditLog).values({
+            entityType: "member", entityId: memberId, action: "membership_review",
+            changes: { reviewedYears: { old: null, new: years.filter(y => y.isMember).map(y => y.year).join(", ") } },
+            changedBy,
+        });
 
         revalidatePath("/dashboard/members");
         return { success: true };

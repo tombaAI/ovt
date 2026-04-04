@@ -5,6 +5,7 @@ import {
     integer,
     jsonb,
     pgSchema,
+    primaryKey,
     serial,
     smallint,
     text,
@@ -32,10 +33,11 @@ export const members = appSchema.table("members", {
     fullName:       text("full_name").notNull(),
     variableSymbol: integer("variable_symbol"),
     cskNumber:      integer("csk_number"),
-    isActive:       boolean("is_active").notNull().default(true),
-    note:           text("note"),
-    createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-    updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    isActive:            boolean("is_active").notNull().default(true),
+    membershipReviewed:  boolean("membership_reviewed").notNull().default(false),
+    note:                text("note"),
+    createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
 export const contributionPeriods = appSchema.table("contribution_periods", {
@@ -83,6 +85,17 @@ export const memberContributions = appSchema.table(
         index("member_contributions_member_idx").on(t.memberId),
         index("member_contributions_period_idx").on(t.periodId),
     ]
+);
+
+export const membershipYears = appSchema.table(
+    "membership_years",
+    {
+        memberId: integer("member_id").notNull().references(() => members.id),
+        year:     smallint("year").notNull(),
+        fromDate: date("from_date"),
+        toDate:   date("to_date"),
+    },
+    (t) => [primaryKey({ columns: [t.memberId, t.year] })]
 );
 
 export const auditLog = appSchema.table(

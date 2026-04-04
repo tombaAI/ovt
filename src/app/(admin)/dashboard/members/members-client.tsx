@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags, PeriodTab } from "./page";
 
-type FilterKey = "all" | "committee" | "tom" | "individual" | "new" | "left";
+type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "review";
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -16,8 +16,8 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "committee",  label: "Výbor"              },
     { key: "tom",        label: "Vedoucí TOM"        },
     { key: "individual", label: "Individuální sleva" },
-    { key: "new",        label: "Noví"               },
-    { key: "left",       label: "Ukončili"           },
+    { key: "partial",    label: "Část roku"          },
+    { key: "review",     label: "Ke kontrole"        },
 ];
 
 function lastName(fullName: string) {
@@ -38,7 +38,7 @@ interface Props {
     currentYearDiscounts: { committee: number; tom: number } | null;
 }
 
-function RoleBadges({ m }: { m: MemberWithFlags }) {
+function MemberBadges({ m }: { m: MemberWithFlags }) {
     return (
         <>
             {m.isCommittee && <Badge className="bg-amber-100 text-amber-700 border-0 text-xs font-normal">Výbor</Badge>}
@@ -48,14 +48,19 @@ function RoleBadges({ m }: { m: MemberWithFlags }) {
                     Sleva {Math.abs(m.discountIndividual)} Kč
                 </Badge>
             )}
-            {m.joinedAt && (
+            {m.fromDate && (
                 <Badge className="bg-green-100 text-green-700 border-0 text-xs font-normal">
-                    Nový od {fmtDate(m.joinedAt)}
+                    od {fmtDate(m.fromDate)}
                 </Badge>
             )}
-            {m.leftAt && (
-                <Badge className="bg-red-100 text-red-700 border-0 text-xs font-normal">
-                    Ukončil {fmtDate(m.leftAt)}
+            {m.toDate && (
+                <Badge className="bg-orange-100 text-orange-700 border-0 text-xs font-normal">
+                    do {fmtDate(m.toDate)}
+                </Badge>
+            )}
+            {!m.membershipReviewed && (
+                <Badge className="bg-yellow-100 text-yellow-700 border border-yellow-200 text-xs font-normal">
+                    Ke kontrole
                 </Badge>
             )}
         </>
@@ -64,9 +69,9 @@ function RoleBadges({ m }: { m: MemberWithFlags }) {
 
 export function MembersClient({ members, periods, selectedYear, periodId, currentYearDiscounts }: Props) {
     const router = useRouter();
-    const [filter, setFilter]           = useState<FilterKey>("all");
-    const [sort, setSort]               = useState<SortKey>("firstName");
-    const [sheetOpen, setSheetOpen]     = useState(false);
+    const [filter, setFilter]             = useState<FilterKey>("all");
+    const [sort, setSort]                 = useState<SortKey>("firstName");
+    const [sheetOpen, setSheetOpen]       = useState(false);
     const [editMemberId, setEditMemberId] = useState<number | null>(null);
 
     const editMember = editMemberId !== null ? (members.find(m => m.id === editMemberId) ?? null) : null;
@@ -81,8 +86,8 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
         committee:  members.filter(m => m.isCommittee).length,
         tom:        members.filter(m => m.isTom).length,
         individual: members.filter(m => m.discountIndividual !== null).length,
-        new:        members.filter(m => m.joinedAt !== null).length,
-        left:       members.filter(m => m.leftAt !== null).length,
+        partial:    members.filter(m => m.fromDate !== null || m.toDate !== null).length,
+        review:     members.filter(m => !m.membershipReviewed).length,
     }), [members]);
 
     const filtered = useMemo(() => {
@@ -91,8 +96,8 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             case "committee":  list = members.filter(m => m.isCommittee); break;
             case "tom":        list = members.filter(m => m.isTom); break;
             case "individual": list = members.filter(m => m.discountIndividual !== null); break;
-            case "new":        list = members.filter(m => m.joinedAt !== null); break;
-            case "left":       list = members.filter(m => m.leftAt !== null); break;
+            case "partial":    list = members.filter(m => m.fromDate !== null || m.toDate !== null); break;
+            case "review":     list = members.filter(m => !m.membershipReviewed); break;
             default:           list = [...members];
         }
         if (sort === "lastName") {
@@ -122,11 +127,14 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             </div>
 
             {/* ── Heading ── */}
-            <div className="flex items-baseline justify-between">
-                <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Členové {selectedYear}</h1>
-                    <p className="text-gray-500 mt-0.5 text-sm">{members.length} členů v tomto roce</p>
-                </div>
+            <div>
+                <h1 className="text-2xl font-semibold text-gray-900">Členové {selectedYear}</h1>
+                <p className="text-gray-500 mt-0.5 text-sm">
+                    {members.length} členů
+                    {counts.review > 0 && (
+                        <span className="ml-2 text-yellow-700 font-medium">· {counts.review} ke kontrole</span>
+                    )}
+                </p>
             </div>
 
             {/* ── Filter + sort pills ── */}
@@ -136,8 +144,10 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? "bg-[#327600] text-white"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
+                                ? f.key === "review" ? "bg-yellow-500 text-white" : "bg-[#327600] text-white"
+                                : f.key === "review" && counts.review > 0
+                                    ? "bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}
                         <span className={[
@@ -174,9 +184,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
                         <p className="font-medium text-gray-900 leading-snug">{m.fullName}</p>
                         {m.email && <p className="text-sm text-gray-500 mt-0.5 truncate">{m.email}</p>}
-                        {(m.isCommittee || m.isTom || m.discountIndividual !== null || m.joinedAt || m.leftAt) && (
-                            <div className="flex flex-wrap gap-1 mt-2"><RoleBadges m={m} /></div>
-                        )}
+                        <div className="flex flex-wrap gap-1 mt-2"><MemberBadges m={m} /></div>
                     </button>
                 ))}
             </div>
@@ -211,7 +219,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                                     {m.variableSymbol ?? "—"}
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex flex-wrap gap-1"><RoleBadges m={m} /></div>
+                                    <div className="flex flex-wrap gap-1"><MemberBadges m={m} /></div>
                                 </TableCell>
                             </TableRow>
                         ))}
@@ -234,6 +242,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                 open={sheetOpen}
                 onOpenChange={setSheetOpen}
                 member={editMember}
+                selectedYear={selectedYear}
                 periodId={periodId}
                 currentYearDiscounts={currentYearDiscounts}
                 onMemberUpdated={onMemberUpdated}
