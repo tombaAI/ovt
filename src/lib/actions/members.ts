@@ -6,7 +6,6 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
-import { FIELD_LABELS } from "@/lib/member-fields";
 
 export type MemberFormState = { error: string } | { success: true } | null;
 
@@ -176,22 +175,15 @@ export async function saveMember(
 }
 
 // ── updateMemberField — inline edit jednoho pole ─────────────────────────────
-const EDITABLE_FIELDS = {
-    fullName:       (v: string) => ({ fullName: v || null }),
-    userLogin:      (v: string) => ({ userLogin: v || null }),
-    email:          (v: string) => ({ email: v || null }),
-    phone:          (v: string) => ({ phone: v || null }),
-    variableSymbol: (v: string) => ({ variableSymbol: Number(v) || null }),
-    cskNumber:      (v: string) => ({ cskNumber: Number(v) || null }),
-    note:           (v: string) => ({ note: v || null }),
-} as const;
+type EditableField = "fullName" | "userLogin" | "email" | "phone" | "variableSymbol" | "cskNumber" | "note";
+const EDITABLE_FIELD_KEYS = new Set<EditableField>(["fullName","userLogin","email","phone","variableSymbol","cskNumber","note"]);
 
 export async function updateMemberField(
     memberId: number,
-    field: keyof typeof EDITABLE_FIELDS,
+    field: EditableField,
     value: string
 ): Promise<{ error: string } | { success: true }> {
-    if (!EDITABLE_FIELDS[field]) return { error: "Neplatné pole" };
+    if (!EDITABLE_FIELD_KEYS.has(field)) return { error: "Neplatné pole" };
 
     const session = await auth();
     const changedBy = session?.user?.email ?? "unknown";
@@ -201,11 +193,30 @@ export async function updateMemberField(
         const [current] = await db.select().from(members).where(eq(members.id, memberId));
         if (!current) return { error: "Člen nenalezen" };
 
-        const patch = EDITABLE_FIELDS[field](value);
-        await db.update(members).set({ ...patch, updatedAt: new Date() }).where(eq(members.id, memberId));
+        // Build a typed patch — fullName is notNull so we skip empty values
+        let newValue: string | number | null;
+        switch (field) {
+            case "fullName":
+                if (!value.trim()) return { error: "Jméno nesmí být prázdné" };
+                newValue = value.trim();
+                break;
+            case "variableSymbol":
+            case "cskNumber":
+                newValue = Number(value) || null;
+                break;
+            default:
+                newValue = value.trim() || null;
+        }
 
-        const oldVal = str(current[field as keyof typeof current]);
-        const newVal = str(Object.values(patch)[0]);
+        // Use individual typed updates to satisfy Drizzle's strict set() types
+        if (field === "fullName") {
+            await db.update(members).set({ fullName: newValue as string, updatedAt: new Date() }).where(eq(members.id, memberId));
+        } else {
+            await db.update(members).set({ [field]: newValue, updatedAt: new Date() } as Parameters<ReturnType<typeof db.update>["set"]>[0]).where(eq(members.id, memberId));
+        }
+
+        const oldVal = str(current[field]);
+        const newVal = str(newValue);
         if (oldVal !== newVal) {
             await db.insert(auditLog).values({
                 entityType: "member", entityId: memberId, action: "update",

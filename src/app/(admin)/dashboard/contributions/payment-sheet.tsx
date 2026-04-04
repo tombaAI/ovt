@@ -9,7 +9,6 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
 import { savePayment, type ContribFormState } from "@/lib/actions/contributions";
 import type { ContribRow } from "./page";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
 
 interface Props {
     open: boolean;
@@ -17,9 +16,6 @@ interface Props {
     row: ContribRow | null;
 }
 
-const FIELD_LABELS: Record<string, string> = {
-    isPaid: "Zaplaceno", paidAmount: "Částka (Kč)", paidAt: "Datum platby", note: "Poznámka",
-};
 
 function fmt(n: number | null) {
     if (n === null) return "—";
@@ -51,7 +47,7 @@ export function PaymentSheet({ open, onOpenChange, row }: Props) {
             <SheetContent className="w-full sm:max-w-md overflow-y-auto">
                 <SheetHeader className="mb-5">
                     <SheetTitle>{row.fullName}</SheetTitle>
-                    <p className="text-sm text-gray-500">Příspěvky {CONTRIBUTION_YEAR}</p>
+                    <p className="text-sm text-gray-500">Příspěvky</p>
                 </SheetHeader>
 
                 {/* Breakdown */}

@@ -264,32 +264,26 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         });
     }
 
+    function buildFlagsFormData(isCommittee: boolean, isTom: boolean) {
+        const fd = new FormData();
+        fd.set("id", String(member!.id));
+        fd.set("full_name", member!.fullName);
+        if (isCommittee) fd.set("is_committee", "on");
+        if (isTom) fd.set("is_tom", "on");
+        if (member!.discountIndividual) fd.set("individual_discount", String(Math.abs(member!.discountIndividual!)));
+        if (member!.isActive) fd.set("is_active", "on");
+        return fd;
+    }
+
     async function toggleCommittee(checked: boolean) {
         if (!member || !periodId) return;
-        const { saveMember: _, ...rest } = await import("@/lib/actions/members");
-        // Use saveMember with form data approach — call updateMemberField via the contribution path
-        // We need the existing saveMember logic for flags, so reuse it via form submission
-        const fd = new FormData();
-        fd.set("id", String(member.id));
-        fd.set("full_name", member.fullName);
-        if (checked) fd.set("is_committee", "on");
-        if (member.isTom) fd.set("is_tom", "on");
-        if (member.discountIndividual) fd.set("individual_discount", String(Math.abs(member.discountIndividual)));
-        if (member.isActive) fd.set("is_active", "on");
-        await saveMember(null, fd);
+        await saveMember(null, buildFlagsFormData(checked, member.isTom));
         onMemberUpdated();
     }
 
     async function toggleTom(checked: boolean) {
         if (!member || !periodId) return;
-        const fd = new FormData();
-        fd.set("id", String(member.id));
-        fd.set("full_name", member.fullName);
-        if (member.isCommittee) fd.set("is_committee", "on");
-        if (checked) fd.set("is_tom", "on");
-        if (member.discountIndividual) fd.set("individual_discount", String(Math.abs(member.discountIndividual)));
-        if (member.isActive) fd.set("is_active", "on");
-        await saveMember(null, fd);
+        await saveMember(null, buildFlagsFormData(member.isCommittee, checked));
         onMemberUpdated();
     }
 
