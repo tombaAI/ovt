@@ -6,23 +6,9 @@ import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { FIELD_LABELS } from "@/lib/member-fields";
 
 export type MemberFormState = { error: string } | { success: true } | null;
-
-// ── Field labels (Czech) ─────────────────────────────────────────────────────
-const FIELD_LABELS: Record<string, string> = {
-    fullName:               "Jméno",
-    userLogin:              "Login",
-    email:                  "E-mail",
-    phone:                  "Telefon",
-    variableSymbol:         "Variabilní symbol",
-    cskNumber:              "Číslo ČSK",
-    isActive:               "Aktivní člen",
-    note:                   "Poznámka",
-    isCommittee:            "Člen výboru",
-    isTom:                  "Vedoucí TOM",
-    discountIndividual:     "Individuální sleva (Kč)",
-};
 
 export type AuditEntry = {
     id: number;
@@ -210,5 +196,3 @@ export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]>
     }));
 }
 
-// ── Exported field label helper (used in UI) ─────────────────────────────────
-export { FIELD_LABELS };

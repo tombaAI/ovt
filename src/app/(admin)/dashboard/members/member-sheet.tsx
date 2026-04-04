@@ -7,7 +7,8 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { saveMember, getMemberAuditLog, FIELD_LABELS, type MemberFormState, type AuditEntry } from "@/lib/actions/members";
+import { saveMember, getMemberAuditLog, type MemberFormState, type AuditEntry } from "@/lib/actions/members";
+import { FIELD_LABELS } from "@/lib/member-fields";
 import type { MemberWithFlags } from "./page";
 
 interface Props {
