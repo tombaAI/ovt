@@ -47,7 +47,7 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-xl overflow-y-auto overflow-x-hidden">
+            <SheetContent className="w-full sm:max-w-2xl overflow-y-auto overflow-x-hidden">
                 <SheetHeader className="mb-5">
                     <SheetTitle>{row.fullName}</SheetTitle>
                     <p className="text-sm text-gray-500">Příspěvky</p>

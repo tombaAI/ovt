@@ -346,7 +346,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
         <>
             <Sheet open={open} onOpenChange={onOpenChange}>
                 <SheetContent
-                    className="w-full sm:max-w-xl overflow-y-auto overflow-x-hidden"
+                    className="w-full sm:max-w-2xl overflow-y-auto overflow-x-hidden"
                     onOpenAutoFocus={e => e.preventDefault()}
                 >
                     {isEdit && member ? (
