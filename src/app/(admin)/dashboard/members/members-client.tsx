@@ -55,8 +55,9 @@ export function MembersClient({ members, periodId, currentYearDiscounts }: Props
     const router = useRouter();
     const [filter, setFilter]         = useState<FilterKey>("active");
     const [sort, setSort]             = useState<SortKey>("firstName");
-    const [sheetOpen, setSheetOpen]   = useState(false);
-    const [editMember, setEditMember] = useState<MemberWithFlags | null>(null);
+    const [sheetOpen, setSheetOpen]     = useState(false);
+    const [editMemberId, setEditMemberId] = useState<number | null>(null);
+    const editMember = editMemberId !== null ? (members.find(m => m.id === editMemberId) ?? null) : null;
 
     const counts = useMemo(() => ({
         active:     members.filter(m => m.isActive).length,
@@ -87,8 +88,8 @@ export function MembersClient({ members, periodId, currentYearDiscounts }: Props
 
     const onMemberUpdated = useCallback(() => { router.refresh(); }, [router]);
 
-    function openDetail(m: MemberWithFlags) { setEditMember(m); setSheetOpen(true); }
-    function openAdd()                       { setEditMember(null); setSheetOpen(true); }
+    function openDetail(m: MemberWithFlags) { setEditMemberId(m.id); setSheetOpen(true); }
+    function openAdd()                       { setEditMemberId(null); setSheetOpen(true); }
 
     return (
         <div className="space-y-3">
