@@ -346,17 +346,17 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
         <>
             <Sheet open={open} onOpenChange={onOpenChange}>
                 <SheetContent
-                    className="w-full sm:max-w-2xl overflow-y-auto overflow-x-hidden"
+                    className="w-full sm:max-w-3xl overflow-y-auto overflow-x-hidden px-5 pb-8"
                     onOpenAutoFocus={e => e.preventDefault()}
                 >
                     {isEdit && member ? (
                         <>
-                            <SheetHeader className="mb-4">
-                                <SheetTitle className="leading-tight">{member.fullName}</SheetTitle>
+                            <SheetHeader className="px-0 pt-5 pb-4 mb-2">
+                                <SheetTitle className="text-lg leading-tight">{member.fullName}</SheetTitle>
                             </SheetHeader>
 
                             {/* Inline edit fields */}
-                            <div className="bg-white rounded-xl border px-4 mb-4">
+                            <div className="rounded-xl border px-4 mb-4">
                                 <InlineField label="Jméno"       value={member.fullName}                        fieldId="fullName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("fullName")} />
                                 <InlineField label="Login"       value={member.userLogin}  placeholder="(nezadáno)" fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
                                 <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} />
@@ -368,8 +368,8 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
 
                             {/* Current year flags */}
                             {member.hasContrib && (
-                                <div className="bg-white rounded-xl border px-4 py-3 mb-4 space-y-3">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                                <div className="rounded-xl border px-4 py-3 mb-4 space-y-3">
+                                    <p className="text-sm font-semibold text-gray-700">
                                         Příspěvky {CONTRIBUTION_YEAR}
                                     </p>
 
@@ -450,9 +450,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                             <Separator className="mb-4" />
                             <div className="mb-4">
                                 <div className="flex items-center justify-between mb-3">
-                                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                        Historie členství
-                                    </p>
+                                    <p className="text-sm font-semibold text-gray-700">Historie členství</p>
                                     {member.membershipReviewed
                                         ? <span className="text-xs text-[#327600] font-medium">✓ Zkontrolováno</span>
                                         : <span className="text-xs text-yellow-600 font-medium">Ke kontrole</span>
@@ -469,7 +467,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                             <Separator className="mb-4" />
                             <button
                                 onClick={() => setShowHistory(v => !v)}
-                                className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 font-semibold uppercase tracking-wide w-full text-left">
+                                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left">
                                 <span>{showHistory ? "▾" : "▸"}</span>
                                 Historie změn
                             </button>
@@ -478,7 +476,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                     ) : (
                         /* ── Create new member ── */
                         <>
-                            <SheetHeader className="mb-6">
+                            <SheetHeader className="px-0 pt-5 pb-4 mb-4">
                                 <SheetTitle>Přidat člena</SheetTitle>
                             </SheetHeader>
                             <form action={formAction} className="space-y-4">

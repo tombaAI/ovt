@@ -59,7 +59,7 @@ export function InlineField({ label, value, type = "text", placeholder, fieldId,
     return (
         <div className="border-b last:border-0 py-3">
             <div className="flex flex-col sm:flex-row sm:items-start sm:gap-4">
-                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide sm:w-36 sm:pt-1 shrink-0 mb-1 sm:mb-0">
+                <p className="text-sm font-medium text-gray-500 sm:w-28 sm:pt-0.5 shrink-0 mb-0.5 sm:mb-0">
                     {label}
                 </p>
 

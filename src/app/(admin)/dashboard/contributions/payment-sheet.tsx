@@ -47,17 +47,16 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="w-full sm:max-w-2xl overflow-y-auto overflow-x-hidden">
-                <SheetHeader className="mb-5">
+            <SheetContent className="w-full sm:max-w-3xl overflow-y-auto overflow-x-hidden px-5 pb-8">
+                <SheetHeader className="px-0 pt-5 pb-4 mb-2">
                     <SheetTitle>{row.fullName}</SheetTitle>
-                    <p className="text-sm text-gray-500">Příspěvky</p>
                 </SheetHeader>
 
                 {/* Breakdown */}
                 {breakdown.length > 0 && (
-                    <div className="bg-gray-50 rounded-lg p-3 text-sm space-y-0.5 mb-5">
+                    <div className="rounded-xl border p-4 text-sm space-y-1 mb-5">
                         {breakdown.map((b, i) => <p key={i} className="text-gray-600">{b}</p>)}
-                        <Separator className="my-1.5" />
+                        <Separator className="my-2" />
                         <p className="font-semibold text-gray-900">
                             Celkem: {fmt(row.amountTotal)}
                         </p>
