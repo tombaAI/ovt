@@ -175,6 +175,141 @@ export async function saveMember(
     }
 }
 
+// ── updateMemberField — inline edit jednoho pole ─────────────────────────────
+const EDITABLE_FIELDS = {
+    fullName:       (v: string) => ({ fullName: v || null }),
+    userLogin:      (v: string) => ({ userLogin: v || null }),
+    email:          (v: string) => ({ email: v || null }),
+    phone:          (v: string) => ({ phone: v || null }),
+    variableSymbol: (v: string) => ({ variableSymbol: Number(v) || null }),
+    cskNumber:      (v: string) => ({ cskNumber: Number(v) || null }),
+    note:           (v: string) => ({ note: v || null }),
+} as const;
+
+export async function updateMemberField(
+    memberId: number,
+    field: keyof typeof EDITABLE_FIELDS,
+    value: string
+): Promise<{ error: string } | { success: true }> {
+    if (!EDITABLE_FIELDS[field]) return { error: "Neplatné pole" };
+
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    try {
+        const [current] = await db.select().from(members).where(eq(members.id, memberId));
+        if (!current) return { error: "Člen nenalezen" };
+
+        const patch = EDITABLE_FIELDS[field](value);
+        await db.update(members).set({ ...patch, updatedAt: new Date() }).where(eq(members.id, memberId));
+
+        const oldVal = str(current[field as keyof typeof current]);
+        const newVal = str(Object.values(patch)[0]);
+        if (oldVal !== newVal) {
+            await db.insert(auditLog).values({
+                entityType: "member", entityId: memberId, action: "update",
+                changes: { [field]: { old: oldVal, new: newVal } },
+                changedBy,
+            });
+        }
+
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+// ── changeMemberStatus — změna aktivního stavu s povinnou poznámkou ──────────
+export async function changeMemberStatus(
+    memberId: number,
+    newIsActive: boolean,
+    note: string
+): Promise<{ error: string } | { success: true }> {
+    if (!note.trim()) return { error: "Poznámka je povinná" };
+
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    try {
+        const [current] = await db.select().from(members).where(eq(members.id, memberId));
+        if (!current) return { error: "Člen nenalezen" };
+        if (current.isActive === newIsActive) return { success: true };
+
+        await db.update(members)
+            .set({ isActive: newIsActive, updatedAt: new Date() })
+            .where(eq(members.id, memberId));
+
+        await db.insert(auditLog).values({
+            entityType: "member", entityId: memberId, action: "status_change",
+            changes: {
+                isActive: { old: str(current.isActive), new: str(newIsActive) },
+                statusNote: { old: null, new: note.trim() },
+            },
+            changedBy,
+        });
+
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+// ── setIndividualDiscount ─────────────────────────────────────────────────────
+export async function setIndividualDiscount(
+    memberId: number,
+    periodId: number,
+    amount: number | null,   // null = zrušení slevy
+    note: string,
+    validUntilYear: number | null
+): Promise<{ error: string } | { success: true }> {
+    if (amount !== null && !note.trim()) return { error: "Poznámka je povinná" };
+    if (amount !== null && amount <= 0) return { error: "Částka musí být kladná" };
+
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    try {
+        const [contrib] = await db.select()
+            .from(memberContributions)
+            .where(and(eq(memberContributions.memberId, memberId), eq(memberContributions.periodId, periodId)));
+        if (!contrib) return { error: "Příspěvkový záznam nenalezen" };
+
+        const patch = {
+            discountIndividual:          amount !== null ? -Math.abs(amount) : null,
+            discountIndividualNote:      amount !== null ? note.trim() : null,
+            discountIndividualValidUntil: amount !== null ? validUntilYear : null,
+        };
+
+        await db.update(memberContributions).set(patch).where(eq(memberContributions.id, contrib.id));
+
+        await db.insert(auditLog).values({
+            entityType: "member", entityId: memberId, action: "discount_change",
+            changes: {
+                discountIndividual: {
+                    old: str(contrib.discountIndividual),
+                    new: amount !== null ? str(-Math.abs(amount)) : null,
+                },
+                discountNote:       { old: contrib.discountIndividualNote, new: patch.discountIndividualNote },
+                validUntil:         { old: str(contrib.discountIndividualValidUntil), new: str(validUntilYear) },
+            },
+            changedBy,
+        });
+
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
 // ── getMemberAuditLog ────────────────────────────────────────────────────────
 export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]> {
     const db = getDb();

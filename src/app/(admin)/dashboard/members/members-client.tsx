@@ -1,15 +1,15 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import {
-    Table, TableBody, TableCell, TableHead, TableHeader, TableRow
-} from "@/components/ui/table";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags } from "./page";
 
 type FilterKey = "active" | "inactive" | "all" | "committee" | "tom" | "individual";
+type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "active",     label: "Aktivní"            },
@@ -20,20 +20,22 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "all",        label: "Všichni"            },
 ];
 
+function lastName(fullName: string) {
+    const parts = fullName.trim().split(/\s+/);
+    return parts.at(-1) ?? fullName;
+}
+
 interface Props {
     members: MemberWithFlags[];
+    periodId: number | null;
     currentYearDiscounts: { committee: number; tom: number } | null;
 }
 
 function RoleBadges({ m }: { m: MemberWithFlags }) {
     return (
         <>
-            {m.isCommittee && (
-                <Badge className="bg-amber-100 text-amber-700 border-0 text-xs font-normal">Výbor</Badge>
-            )}
-            {m.isTom && (
-                <Badge className="bg-blue-100 text-blue-700 border-0 text-xs font-normal">TOM</Badge>
-            )}
+            {m.isCommittee && <Badge className="bg-amber-100 text-amber-700 border-0 text-xs font-normal">Výbor</Badge>}
+            {m.isTom       && <Badge className="bg-blue-100 text-blue-700 border-0 text-xs font-normal">TOM</Badge>}
             {m.discountIndividual !== null && (
                 <Badge className="bg-purple-100 text-purple-700 border-0 text-xs font-normal">
                     Sleva {Math.abs(m.discountIndividual)} Kč
@@ -49,8 +51,10 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
         : <Badge variant="secondary" className="text-xs font-normal">Neaktivní</Badge>;
 }
 
-export function MembersClient({ members, currentYearDiscounts }: Props) {
+export function MembersClient({ members, periodId, currentYearDiscounts }: Props) {
+    const router = useRouter();
     const [filter, setFilter]         = useState<FilterKey>("active");
+    const [sort, setSort]             = useState<SortKey>("firstName");
     const [sheetOpen, setSheetOpen]   = useState(false);
     const [editMember, setEditMember] = useState<MemberWithFlags | null>(null);
 
@@ -64,23 +68,31 @@ export function MembersClient({ members, currentYearDiscounts }: Props) {
     }), [members]);
 
     const filtered = useMemo(() => {
+        let list: MemberWithFlags[];
         switch (filter) {
-            case "active":     return members.filter(m => m.isActive);
-            case "inactive":   return members.filter(m => !m.isActive);
-            case "committee":  return members.filter(m => m.isCommittee);
-            case "tom":        return members.filter(m => m.isTom);
-            case "individual": return members.filter(m => m.discountIndividual !== null);
-            default:           return members;
+            case "active":     list = members.filter(m => m.isActive); break;
+            case "inactive":   list = members.filter(m => !m.isActive); break;
+            case "committee":  list = members.filter(m => m.isCommittee); break;
+            case "tom":        list = members.filter(m => m.isTom); break;
+            case "individual": list = members.filter(m => m.discountIndividual !== null); break;
+            default:           list = [...members];
         }
-    }, [members, filter]);
+        if (sort === "lastName") {
+            list = [...list].sort((a, b) =>
+                lastName(a.fullName).localeCompare(lastName(b.fullName), "cs")
+            );
+        }
+        return list;
+    }, [members, filter, sort]);
 
-    function openEdit(m: MemberWithFlags) { setEditMember(m); setSheetOpen(true); }
-    function openAdd()                    { setEditMember(null); setSheetOpen(true); }
+    const onMemberUpdated = useCallback(() => { router.refresh(); }, [router]);
+
+    function openDetail(m: MemberWithFlags) { setEditMember(m); setSheetOpen(true); }
+    function openAdd()                       { setEditMember(null); setSheetOpen(true); }
 
     return (
         <div className="space-y-3">
-
-            {/* Filter pills — horizontal scroll on mobile */}
+            {/* Filter + sort pills */}
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
                 {FILTERS.map(f => (
                     <button key={f.key} onClick={() => setFilter(f.key)}
@@ -99,46 +111,51 @@ export function MembersClient({ members, currentYearDiscounts }: Props) {
                         </span>
                     </button>
                 ))}
+
+                <div className="w-px bg-gray-200 shrink-0 mx-1 hidden md:block" />
+
+                {(["firstName", "lastName"] as SortKey[]).map(s => (
+                    <button key={s} onClick={() => setSort(s)}
+                        className={[
+                            "inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
+                            sort === s
+                                ? "bg-gray-700 text-white"
+                                : "bg-white text-gray-500 border border-gray-200 hover:bg-gray-50",
+                        ].join(" ")}>
+                        {s === "firstName" ? "↑ Jméno" : "↑ Příjmení"}
+                    </button>
+                ))}
             </div>
 
-            {/* ── Mobile: card list ─────────────────────────────────── */}
+            {/* ── Mobile: cards ── */}
             <div className="md:hidden space-y-2">
                 {filtered.length === 0 && (
-                    <div className="text-center text-gray-400 py-12 text-sm">
-                        Žádní členové pro tento filtr
-                    </div>
+                    <p className="text-center text-gray-400 py-12 text-sm">Žádní členové</p>
                 )}
                 {filtered.map(m => (
-                    <button key={m.id} onClick={() => openEdit(m)}
+                    <button key={m.id} onClick={() => openDetail(m)}
                         className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
                         <div className="flex items-start justify-between gap-2">
                             <div className="min-w-0">
                                 <p className="font-medium text-gray-900 leading-snug">{m.fullName}</p>
-                                {(m.email || m.userLogin) && (
-                                    <p className="text-sm text-gray-500 mt-0.5 truncate">
-                                        {m.email ?? m.userLogin}
-                                    </p>
-                                )}
+                                {m.email && <p className="text-sm text-gray-500 mt-0.5 truncate">{m.email}</p>}
                             </div>
                             <StatusBadge isActive={m.isActive} />
                         </div>
                         {(m.isCommittee || m.isTom || m.discountIndividual !== null) && (
-                            <div className="flex flex-wrap gap-1 mt-2">
-                                <RoleBadges m={m} />
-                            </div>
+                            <div className="flex flex-wrap gap-1 mt-2"><RoleBadges m={m} /></div>
                         )}
                     </button>
                 ))}
             </div>
 
-            {/* ── Desktop: table ────────────────────────────────────── */}
+            {/* ── Desktop: table ── */}
             <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
                             <TableHead className="w-12 text-center">ID</TableHead>
                             <TableHead>Jméno</TableHead>
-                            <TableHead>Login</TableHead>
                             <TableHead className="hidden lg:table-cell">E-mail</TableHead>
                             <TableHead className="hidden xl:table-cell text-right">VS</TableHead>
                             <TableHead>Role / sleva</TableHead>
@@ -149,16 +166,16 @@ export function MembersClient({ members, currentYearDiscounts }: Props) {
                     <TableBody>
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={8} className="text-center text-gray-400 py-10">
-                                    Žádní členové pro tento filtr
+                                <TableCell colSpan={7} className="text-center text-gray-400 py-10">
+                                    Žádní členové
                                 </TableCell>
                             </TableRow>
                         )}
                         {filtered.map(m => (
-                            <TableRow key={m.id} className="hover:bg-gray-50/60">
+                            <TableRow key={m.id} className="hover:bg-gray-50/60 cursor-pointer"
+                                onClick={() => openDetail(m)}>
                                 <TableCell className="text-center text-gray-400 text-xs font-mono">{m.id}</TableCell>
                                 <TableCell className="font-medium">{m.fullName}</TableCell>
-                                <TableCell className="text-gray-500 text-sm">{m.userLogin ?? "—"}</TableCell>
                                 <TableCell className="hidden lg:table-cell text-gray-500 text-sm">{m.email ?? "—"}</TableCell>
                                 <TableCell className="hidden xl:table-cell text-right font-mono text-sm text-gray-500">
                                     {m.variableSymbol ?? "—"}
@@ -170,8 +187,8 @@ export function MembersClient({ members, currentYearDiscounts }: Props) {
                                 <TableCell>
                                     <Button variant="ghost" size="sm"
                                         className="text-gray-400 hover:text-gray-700 h-7 px-2"
-                                        onClick={() => openEdit(m)}>
-                                        Upravit
+                                        onClick={e => { e.stopPropagation(); openDetail(m); }}>
+                                        Detail
                                     </Button>
                                 </TableCell>
                             </TableRow>
@@ -180,14 +197,12 @@ export function MembersClient({ members, currentYearDiscounts }: Props) {
                 </Table>
             </div>
 
-            {/* FAB — mobile only */}
+            {/* FAB on mobile */}
             <button onClick={openAdd}
                 className="md:hidden fixed bottom-5 right-5 z-40 w-14 h-14 rounded-full bg-[#327600] text-white text-2xl shadow-lg flex items-center justify-center active:scale-95 transition-transform">
                 +
             </button>
-
-            {/* Desktop add button */}
-            <div className="hidden md:flex justify-end -mt-1">
+            <div className="hidden md:flex justify-end">
                 <Button onClick={openAdd} size="sm" className="bg-[#327600] hover:bg-[#2a6400]">
                     + Přidat člena
                 </Button>
@@ -197,7 +212,9 @@ export function MembersClient({ members, currentYearDiscounts }: Props) {
                 open={sheetOpen}
                 onOpenChange={setSheetOpen}
                 member={editMember}
+                periodId={periodId}
                 currentYearDiscounts={currentYearDiscounts}
+                onMemberUpdated={onMemberUpdated}
             />
         </div>
     );

@@ -78,7 +78,11 @@ export default async function MembersPage() {
                 </p>
             </div>
 
-            <MembersClient members={rows} currentYearDiscounts={currentYearDiscounts} />
+            <MembersClient
+                members={rows}
+                periodId={period?.id ?? null}
+                currentYearDiscounts={currentYearDiscounts}
+            />
         </div>
     );
 }

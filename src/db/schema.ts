@@ -73,6 +73,8 @@ export const memberContributions = appSchema.table(
         paidAt:             date("paid_at"),
         isPaid:             boolean("is_paid"),
         note:               text("note"),
+        discountIndividualNote:       text("discount_individual_note"),
+        discountIndividualValidUntil: smallint("discount_individual_valid_until"),
     },
     (t) => [
         index("member_contributions_member_idx").on(t.memberId),
