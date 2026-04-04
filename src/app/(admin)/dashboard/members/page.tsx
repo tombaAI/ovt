@@ -1,8 +1,13 @@
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { eq, asc, desc } from "drizzle-orm";
 import { MembersClient } from "./members-client";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
+
+export type PeriodTab = {
+    id: number;
+    year: number;
+};
 
 export type MemberWithFlags = {
     id: number;
@@ -14,75 +19,81 @@ export type MemberWithFlags = {
     cskNumber: number | null;
     isActive: boolean;
     note: string | null;
-    // 2026 contribution data
+    // Year-specific
     isCommittee: boolean;
     isTom: boolean;
     discountIndividual: number | null;
-    isPaid2026: boolean | null;
-    amountTotal2026: number | null;
-    hasContrib2026: boolean;
+    isPaid: boolean | null;
+    amountTotal: number | null;
+    joinedAt: string | null;
+    leftAt: string | null;
+    hasContrib: boolean;
 };
 
-export default async function MembersPage() {
+export default async function MembersPage(props: {
+    searchParams: Promise<{ year?: string }>;
+}) {
+    const { year: yearParam } = await props.searchParams;
     const db = getDb();
 
-    // Load current period
-    const [period] = await db.select()
+    const allPeriods = await db
+        .select({ id: contributionPeriods.id, year: contributionPeriods.year })
         .from(contributionPeriods)
-        .where(eq(contributionPeriods.year, CONTRIBUTION_YEAR));
+        .orderBy(desc(contributionPeriods.year));
 
-    // Fetch all members
-    const allMembers = await db.select().from(members).orderBy(asc(members.fullName));
+    const selectedYear = Number(yearParam) || CONTRIBUTION_YEAR;
+    const period = allPeriods.find(p => p.year === selectedYear) ?? allPeriods[0] ?? null;
 
-    // Fetch 2026 contributions
-    const contributions = period
-        ? await db.select().from(memberContributions).where(eq(memberContributions.periodId, period.id))
-        : [];
+    let rows: MemberWithFlags[] = [];
+    let currentYearDiscounts: { committee: number; tom: number } | null = null;
 
-    const contribMap = new Map(contributions.map(c => [c.memberId, c]));
+    if (period) {
+        const [pd] = await db
+            .select({ discountCommittee: contributionPeriods.discountCommittee, discountTom: contributionPeriods.discountTom })
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, period.id));
 
-    const rows: MemberWithFlags[] = allMembers.map(m => {
-        const c = contribMap.get(m.id) ?? null;
-        return {
-            id:               m.id,
-            fullName:         m.fullName,
-            userLogin:        m.userLogin,
-            email:            m.email,
-            phone:            m.phone,
-            variableSymbol:   m.variableSymbol,
-            cskNumber:        m.cskNumber,
-            isActive:         m.isActive,
-            note:             m.note,
-            isCommittee:      Boolean(c?.discountCommittee),
-            isTom:            Boolean(c?.discountTom),
-            discountIndividual: c?.discountIndividual ?? null,
-            isPaid2026:       c?.isPaid ?? null,
-            amountTotal2026:  c?.amountTotal ?? null,
-            hasContrib2026:   Boolean(c),
-        };
-    });
+        if (pd) currentYearDiscounts = { committee: pd.discountCommittee, tom: pd.discountTom };
 
-    const currentYearDiscounts = period
-        ? { committee: period.discountCommittee, tom: period.discountTom }
-        : null;
+        const contributions = await db
+            .select({
+                id:                 members.id,
+                fullName:           members.fullName,
+                userLogin:          members.userLogin,
+                email:              members.email,
+                phone:              members.phone,
+                variableSymbol:     members.variableSymbol,
+                cskNumber:          members.cskNumber,
+                isActive:           members.isActive,
+                note:               members.note,
+                discountCommittee:  memberContributions.discountCommittee,
+                discountTom:        memberContributions.discountTom,
+                discountIndividual: memberContributions.discountIndividual,
+                isPaid:             memberContributions.isPaid,
+                amountTotal:        memberContributions.amountTotal,
+                joinedAt:           memberContributions.joinedAt,
+                leftAt:             memberContributions.leftAt,
+            })
+            .from(memberContributions)
+            .innerJoin(members, eq(memberContributions.memberId, members.id))
+            .where(eq(memberContributions.periodId, period.id))
+            .orderBy(asc(members.fullName));
 
-    const active   = rows.filter(m => m.isActive).length;
-    const inactive = rows.length - active;
+        rows = contributions.map(c => ({
+            ...c,
+            isCommittee: Boolean(c.discountCommittee),
+            isTom:       Boolean(c.discountTom),
+            hasContrib:  true,
+        }));
+    }
 
     return (
-        <div className="space-y-6">
-            <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Členové</h1>
-                <p className="text-gray-500 mt-1 text-sm">
-                    {active} aktivních · {inactive} neaktivních · {rows.length} celkem
-                </p>
-            </div>
-
-            <MembersClient
-                members={rows}
-                periodId={period?.id ?? null}
-                currentYearDiscounts={currentYearDiscounts}
-            />
-        </div>
+        <MembersClient
+            members={rows}
+            periods={allPeriods}
+            selectedYear={period?.year ?? CONTRIBUTION_YEAR}
+            periodId={period?.id ?? null}
+            currentYearDiscounts={currentYearDiscounts}
+        />
     );
 }

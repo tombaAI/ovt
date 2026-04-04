@@ -367,6 +367,47 @@ export async function setContributionFlags(
     }
 }
 
+// ── setMembershipDates — track mid-year join / leave dates ───────────────────
+export async function setMembershipDates(
+    memberId: number,
+    periodId: number,
+    joinedAt: string | null,
+    leftAt: string | null,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    try {
+        const [contrib] = await db.select()
+            .from(memberContributions)
+            .where(and(eq(memberContributions.memberId, memberId), eq(memberContributions.periodId, periodId)));
+        if (!contrib) return { error: "Příspěvkový záznam nenalezen" };
+
+        await db.update(memberContributions).set({
+            joinedAt: joinedAt || null,
+            leftAt:   leftAt   || null,
+        }).where(eq(memberContributions.id, contrib.id));
+
+        const changes = diffObjects(
+            { joinedAt: contrib.joinedAt, leftAt: contrib.leftAt },
+            { joinedAt: joinedAt || null, leftAt: leftAt || null }
+        );
+        if (Object.keys(changes).length > 0) {
+            await db.insert(auditLog).values({
+                entityType: "member", entityId: memberId, action: "update",
+                changes, changedBy,
+            });
+        }
+
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
 // ── getMemberAuditLog ────────────────────────────────────────────────────────
 export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]> {
     const db = getDb();

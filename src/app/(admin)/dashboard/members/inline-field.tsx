@@ -5,7 +5,7 @@ import { useState } from "react";
 interface Props {
     label: string;
     value: string | null;
-    type?: "text" | "email" | "tel" | "number";
+    type?: "text" | "email" | "tel" | "number" | "date";
     placeholder?: string;
     fieldId: string;
     activeField: string | null;
@@ -13,11 +13,19 @@ interface Props {
     onSave: (value: string) => Promise<{ error?: string } | { success: true }>;
 }
 
+function fmtDate(iso: string) {
+    // "2025-06-01" → "1. 6. 2025"
+    const [y, m, d] = iso.split("-");
+    return `${Number(d)}. ${Number(m)}. ${y}`;
+}
+
 export function InlineField({ label, value, type = "text", placeholder, fieldId, activeField, onActiveFieldChange, onSave }: Props) {
     const editing = activeField === fieldId;
     const [draft, setDraft]   = useState(value ?? "");
     const [saving, setSaving] = useState(false);
     const [error, setError]   = useState<string | null>(null);
+
+    const displayValue = type === "date" && value ? fmtDate(value) : value;
 
     function startEdit() {
         setDraft(value ?? "");
@@ -91,8 +99,8 @@ export function InlineField({ label, value, type = "text", placeholder, fieldId,
                         disabled={activeField !== null}
                         className="flex-1 text-left text-sm rounded-md px-1 -mx-1 py-0.5 hover:bg-blue-50 transition-colors group disabled:cursor-default disabled:hover:bg-transparent"
                     >
-                        {value
-                            ? <span className="text-gray-900 group-hover:text-blue-700 group-disabled:group-hover:text-gray-900">{value}</span>
+                        {displayValue
+                            ? <span className="text-gray-900 group-hover:text-blue-700 group-disabled:group-hover:text-gray-900">{displayValue}</span>
                             : <span className="text-gray-400 italic group-hover:text-blue-500 group-disabled:group-hover:text-gray-400">{placeholder ?? "(nezadáno)"}</span>
                         }
                     </button>

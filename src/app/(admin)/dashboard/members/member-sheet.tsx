@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { InlineField } from "./inline-field";
 import {
     updateMemberField, changeMemberStatus, setIndividualDiscount,
-    setContributionFlags, getMemberAuditLog, saveMember,
+    setContributionFlags, setMembershipDates, getMemberAuditLog, saveMember,
     type MemberFormState, type AuditEntry,
 } from "@/lib/actions/members";
 import { FIELD_LABELS } from "@/lib/member-fields";
@@ -315,7 +315,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                             </div>
 
                             {/* Current year flags */}
-                            {member.hasContrib2026 && (
+                            {member.hasContrib && (
                                 <div className="bg-white rounded-xl border px-4 py-3 mb-4 space-y-3">
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
                                         Příspěvky {CONTRIBUTION_YEAR}
@@ -342,6 +342,36 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                             {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.tom} Kč)</span>}
                                         </Label>
                                     </div>
+
+                                    <Separator />
+
+                                    {/* Membership dates for this year */}
+                                    <InlineField
+                                        label="Vstup do roku"
+                                        value={member.joinedAt}
+                                        type="date"
+                                        placeholder="(od začátku roku)"
+                                        fieldId="joinedAt"
+                                        activeField={activeField}
+                                        onActiveFieldChange={setActiveField}
+                                        onSave={v => setMembershipDates(member.id, periodId!, v || null, member.leftAt).then(r => {
+                                            if ("success" in r) onMemberUpdated();
+                                            return r;
+                                        })}
+                                    />
+                                    <InlineField
+                                        label="Ukončení v roku"
+                                        value={member.leftAt}
+                                        type="date"
+                                        placeholder="(do konce roku)"
+                                        fieldId="leftAt"
+                                        activeField={activeField}
+                                        onActiveFieldChange={setActiveField}
+                                        onSave={v => setMembershipDates(member.id, periodId!, member.joinedAt, v || null).then(r => {
+                                            if ("success" in r) onMemberUpdated();
+                                            return r;
+                                        })}
+                                    />
 
                                     <Separator />
 

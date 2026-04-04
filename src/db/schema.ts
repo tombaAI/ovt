@@ -76,6 +76,8 @@ export const memberContributions = appSchema.table(
         note:               text("note"),
         discountIndividualNote:       text("discount_individual_note"),
         discountIndividualValidUntil: smallint("discount_individual_valid_until"),
+        joinedAt:                     date("joined_at"),
+        leftAt:                       date("left_at"),
     },
     (t) => [
         index("member_contributions_member_idx").on(t.memberId),
