@@ -1,8 +1,12 @@
 import {
     boolean,
+    date,
     index,
+    integer,
     jsonb,
     pgSchema,
+    serial,
+    smallint,
     text,
     timestamp,
     uuid
@@ -17,6 +21,65 @@ export const adminUsers = appSchema.table("admin_users", {
     isActive: boolean("is_active").notNull().default(true),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
 });
+
+// ── Domain tables ────────────────────────────────────────────────────────────
+
+export const members = appSchema.table("members", {
+    id:             integer("id").primaryKey(),
+    userLogin:      text("user_login"),
+    email:          text("email"),
+    phone:          text("phone"),
+    fullName:       text("full_name").notNull(),
+    variableSymbol: integer("variable_symbol"),
+    cskNumber:      integer("csk_number"),
+    isActive:       boolean("is_active").notNull().default(true),
+    note:           text("note"),
+    createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const contributionPeriods = appSchema.table("contribution_periods", {
+    id:                  serial("id").primaryKey(),
+    year:                smallint("year").notNull().unique(),
+    amountBase:          integer("amount_base").notNull(),
+    amountBoat1:         integer("amount_boat1").notNull().default(0),
+    amountBoat2:         integer("amount_boat2").notNull().default(0),
+    amountBoat3:         integer("amount_boat3").notNull().default(0),
+    discountCommittee:   integer("discount_committee").notNull().default(0),
+    discountTom:         integer("discount_tom").notNull().default(0),
+    brigadeSurcharge:    integer("brigade_surcharge").notNull().default(0),
+    dueDate:             date("due_date"),
+    bankAccount:         text("bank_account").notNull().default("2701772934/2010"),
+    createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const memberContributions = appSchema.table(
+    "member_contributions",
+    {
+        id:                 serial("id").primaryKey(),
+        memberId:           integer("member_id").notNull().references(() => members.id),
+        periodId:           integer("period_id").notNull().references(() => contributionPeriods.id),
+        amountTotal:        integer("amount_total"),
+        amountBase:         integer("amount_base"),
+        amountBoat1:        integer("amount_boat1"),
+        amountBoat2:        integer("amount_boat2"),
+        amountBoat3:        integer("amount_boat3"),
+        discountCommittee:  integer("discount_committee"),
+        discountTom:        integer("discount_tom"),
+        discountIndividual: integer("discount_individual"),
+        brigadeSurcharge:   integer("brigade_surcharge"),
+        paidAmount:         integer("paid_amount"),
+        paidAt:             date("paid_at"),
+        isPaid:             boolean("is_paid"),
+        note:               text("note"),
+    },
+    (t) => [
+        index("member_contributions_member_idx").on(t.memberId),
+        index("member_contributions_period_idx").on(t.periodId),
+    ]
+);
+
+// ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(
     "mail_events",
