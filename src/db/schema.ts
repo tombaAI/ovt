@@ -79,6 +79,23 @@ export const memberContributions = appSchema.table(
     ]
 );
 
+export const auditLog = appSchema.table(
+    "audit_log",
+    {
+        id:         serial("id").primaryKey(),
+        entityType: text("entity_type").notNull(),
+        entityId:   integer("entity_id").notNull(),
+        action:     text("action").notNull(),
+        changes:    jsonb("changes").notNull().default({}),
+        changedBy:  text("changed_by").notNull(),
+        changedAt:  timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("audit_log_entity_idx").on(t.entityType, t.entityId),
+        index("audit_log_changed_at_idx").on(t.changedAt.desc()),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(

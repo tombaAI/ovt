@@ -1,24 +1,73 @@
 "use client";
 
-import { useEffect, useActionState } from "react";
+import { useEffect, useState, useActionState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { saveMember, type MemberFormState } from "@/lib/actions/members";
+import { saveMember, getMemberAuditLog, FIELD_LABELS, type MemberFormState, type AuditEntry } from "@/lib/actions/members";
 import type { MemberWithFlags } from "./page";
 
 interface Props {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    member: MemberWithFlags | null;   // null = create new
+    member: MemberWithFlags | null;
     currentYearDiscounts: { committee: number; tom: number } | null;
+}
+
+function formatDate(d: Date) {
+    return new Intl.DateTimeFormat("cs-CZ", {
+        day: "2-digit", month: "2-digit", year: "numeric",
+        hour: "2-digit", minute: "2-digit",
+    }).format(new Date(d));
+}
+
+function AuditHistory({ memberId }: { memberId: number }) {
+    const [log, setLog]       = useState<AuditEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        getMemberAuditLog(memberId).then(entries => {
+            setLog(entries);
+            setLoading(false);
+        });
+    }, [memberId]);
+
+    if (loading) return <p className="text-xs text-gray-400">Načítám historii…</p>;
+    if (log.length === 0) return <p className="text-xs text-gray-400">Žádné záznamy</p>;
+
+    return (
+        <div className="space-y-3">
+            {log.map(entry => (
+                <div key={entry.id} className="text-xs border rounded-md p-2.5 space-y-1.5 bg-gray-50">
+                    <div className="flex items-center justify-between gap-2 text-gray-500">
+                        <span className="font-medium text-gray-700 truncate">{entry.changedBy}</span>
+                        <span className="shrink-0">{formatDate(entry.changedAt)}</span>
+                    </div>
+                    {Object.entries(entry.changes).map(([field, diff]) => (
+                        <div key={field} className="flex gap-1 flex-wrap">
+                            <span className="text-gray-500">{FIELD_LABELS[field] ?? field}:</span>
+                            {diff.old !== null && (
+                                <span className="line-through text-red-400">{diff.old}</span>
+                            )}
+                            {diff.old !== null && diff.new !== null && <span className="text-gray-400">→</span>}
+                            {diff.new !== null && (
+                                <span className="text-green-600">{diff.new}</span>
+                            )}
+                            {diff.new === null && <span className="text-gray-400">(odstraněno)</span>}
+                        </div>
+                    ))}
+                </div>
+            ))}
+        </div>
+    );
 }
 
 export function MemberSheet({ open, onOpenChange, member, currentYearDiscounts }: Props) {
     const [state, formAction, isPending] = useActionState<MemberFormState, FormData>(saveMember, null);
+    const [showHistory, setShowHistory]  = useState(false);
 
     useEffect(() => {
         if (state && "success" in state) {
@@ -26,7 +75,12 @@ export function MemberSheet({ open, onOpenChange, member, currentYearDiscounts }
         }
     }, [state, onOpenChange]);
 
-    const isEdit = Boolean(member);
+    // Reset history visibility when member changes
+    useEffect(() => {
+        setShowHistory(false);
+    }, [member?.id]);
+
+    const isEdit    = Boolean(member);
     const hasContrib = Boolean(member?.hasContrib2026);
 
     return (
@@ -89,7 +143,6 @@ export function MemberSheet({ open, onOpenChange, member, currentYearDiscounts }
                         <Label htmlFor="is_active" className="cursor-pointer">Aktivní člen</Label>
                     </div>
 
-                    {/* 2026 specific flags — only for members with existing contribution */}
                     {isEdit && hasContrib && (
                         <>
                             <Separator />
@@ -145,7 +198,8 @@ export function MemberSheet({ open, onOpenChange, member, currentYearDiscounts }
                     )}
 
                     <div className="flex gap-2 pt-2">
-                        <Button type="submit" disabled={isPending} className="flex-1 bg-[#327600] hover:bg-[#2a6400]">
+                        <Button type="submit" disabled={isPending}
+                            className="flex-1 bg-[#327600] hover:bg-[#2a6400]">
                             {isPending ? "Ukládám…" : "Uložit"}
                         </Button>
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
@@ -153,6 +207,26 @@ export function MemberSheet({ open, onOpenChange, member, currentYearDiscounts }
                         </Button>
                     </div>
                 </form>
+
+                {/* Audit history — only for existing members */}
+                {isEdit && member && (
+                    <>
+                        <Separator className="my-6" />
+                        <button
+                            type="button"
+                            onClick={() => setShowHistory(v => !v)}
+                            className="flex items-center gap-1.5 text-xs text-gray-500 hover:text-gray-800 font-medium uppercase tracking-wide w-full text-left"
+                        >
+                            <span>{showHistory ? "▾" : "▸"}</span>
+                            Historie změn
+                        </button>
+                        {showHistory && (
+                            <div className="mt-3">
+                                <AuditHistory memberId={member.id} />
+                            </div>
+                        )}
+                    </>
+                )}
             </SheetContent>
         </Sheet>
     );
