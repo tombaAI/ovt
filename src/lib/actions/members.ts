@@ -321,6 +321,52 @@ export async function setIndividualDiscount(
     }
 }
 
+// ── setContributionFlags — toggle výbor/TOM without touching member fields ───
+export async function setContributionFlags(
+    memberId: number,
+    periodId: number,
+    isCommittee: boolean,
+    isTom: boolean
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    try {
+        const [period] = await db.select()
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, periodId));
+        if (!period) return { error: "Příspěvkové období nenalezeno" };
+
+        const [contrib] = await db.select()
+            .from(memberContributions)
+            .where(and(eq(memberContributions.memberId, memberId), eq(memberContributions.periodId, periodId)));
+        if (!contrib) return { error: "Příspěvkový záznam nenalezen" };
+
+        await db.update(memberContributions).set({
+            discountCommittee: isCommittee ? -period.discountCommittee : null,
+            discountTom:       isTom       ? -period.discountTom       : null,
+        }).where(eq(memberContributions.id, contrib.id));
+
+        const flagChanges = diffObjects(
+            { isCommittee: Boolean(contrib.discountCommittee), isTom: Boolean(contrib.discountTom) },
+            { isCommittee, isTom }
+        );
+        if (Object.keys(flagChanges).length > 0) {
+            await db.insert(auditLog).values({
+                entityType: "member", entityId: memberId, action: "update",
+                changes: flagChanges, changedBy,
+            });
+        }
+
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
 // ── getMemberAuditLog ────────────────────────────────────────────────────────
 export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]> {
     const db = getDb();

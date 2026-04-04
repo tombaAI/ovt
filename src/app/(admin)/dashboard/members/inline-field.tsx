@@ -1,27 +1,28 @@
 "use client";
 
-import { useState, useRef } from "react";
+import { useState } from "react";
 
 interface Props {
     label: string;
     value: string | null;
     type?: "text" | "email" | "tel" | "number";
     placeholder?: string;
+    fieldId: string;
+    activeField: string | null;
+    onActiveFieldChange: (fieldId: string | null) => void;
     onSave: (value: string) => Promise<{ error?: string } | { success: true }>;
 }
 
-export function InlineField({ label, value, type = "text", placeholder, onSave }: Props) {
-    const [editing, setEditing]   = useState(false);
-    const [draft, setDraft]       = useState(value ?? "");
-    const [saving, setSaving]     = useState(false);
-    const [error, setError]       = useState<string | null>(null);
-    const inputRef                = useRef<HTMLInputElement>(null);
+export function InlineField({ label, value, type = "text", placeholder, fieldId, activeField, onActiveFieldChange, onSave }: Props) {
+    const editing = activeField === fieldId;
+    const [draft, setDraft]   = useState(value ?? "");
+    const [saving, setSaving] = useState(false);
+    const [error, setError]   = useState<string | null>(null);
 
     function startEdit() {
         setDraft(value ?? "");
         setError(null);
-        setEditing(true);
-        // autofocus handled by autoFocus prop below
+        onActiveFieldChange(fieldId);
     }
 
     async function handleSave() {
@@ -31,13 +32,13 @@ export function InlineField({ label, value, type = "text", placeholder, onSave }
         if ("error" in result) {
             setError(result.error ?? "Chyba");
         } else {
-            setEditing(false);
+            onActiveFieldChange(null);
             setError(null);
         }
     }
 
     function handleCancel() {
-        setEditing(false);
+        onActiveFieldChange(null);
         setDraft(value ?? "");
         setError(null);
     }
@@ -49,24 +50,22 @@ export function InlineField({ label, value, type = "text", placeholder, onSave }
 
     return (
         <div className="border-b last:border-0 py-3">
-            {/* Mobile: stacked | sm+: side-by-side */}
             <div className="flex flex-col sm:flex-row sm:items-start sm:gap-4">
                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide sm:w-36 sm:pt-1 shrink-0 mb-1 sm:mb-0">
                     {label}
                 </p>
 
                 {editing ? (
-                    <div className="flex-1">
+                    <div className="flex-1 min-w-0">
                         <div className="flex items-center gap-2">
                             <input
-                                ref={inputRef}
                                 autoFocus
                                 type={type}
                                 value={draft}
                                 onChange={e => setDraft(e.target.value)}
                                 onKeyDown={handleKeyDown}
                                 placeholder={placeholder}
-                                className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#327600]/40 focus:border-[#327600]"
+                                className="flex-1 min-w-0 border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#327600]/40 focus:border-[#327600]"
                             />
                             <button
                                 onClick={handleSave}
@@ -89,11 +88,12 @@ export function InlineField({ label, value, type = "text", placeholder, onSave }
                 ) : (
                     <button
                         onClick={startEdit}
-                        className="flex-1 text-left text-sm rounded-md px-1 -mx-1 py-0.5 hover:bg-blue-50 transition-colors group"
+                        disabled={activeField !== null}
+                        className="flex-1 text-left text-sm rounded-md px-1 -mx-1 py-0.5 hover:bg-blue-50 transition-colors group disabled:cursor-default disabled:hover:bg-transparent"
                     >
                         {value
-                            ? <span className="text-gray-900 group-hover:text-blue-700">{value}</span>
-                            : <span className="text-gray-400 italic group-hover:text-blue-500">{placeholder ?? "(nezadáno)"}</span>
+                            ? <span className="text-gray-900 group-hover:text-blue-700 group-disabled:group-hover:text-gray-900">{value}</span>
+                            : <span className="text-gray-400 italic group-hover:text-blue-500 group-disabled:group-hover:text-gray-400">{placeholder ?? "(nezadáno)"}</span>
                         }
                     </button>
                 )}

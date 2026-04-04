@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input";
 import { InlineField } from "./inline-field";
 import {
     updateMemberField, changeMemberStatus, setIndividualDiscount,
-    getMemberAuditLog, saveMember,
+    setContributionFlags, getMemberAuditLog, saveMember,
     type MemberFormState, type AuditEntry,
 } from "@/lib/actions/members";
 import { FIELD_LABELS } from "@/lib/member-fields";
@@ -245,6 +245,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
     const [committeePending, startCommitteeTransition] = useTransition();
     const [tomPending, startTomTransition] = useTransition();
+    const [activeField, setActiveField] = useState<string | null>(null);
 
     // New member form (create only)
     const [state, formAction, isPending] = useActionState<MemberFormState, FormData>(saveMember, null);
@@ -252,7 +253,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         if (state && "success" in state) { onOpenChange(false); onMemberUpdated(); }
     }, [state, onOpenChange, onMemberUpdated]);
 
-    useEffect(() => { setShowHistory(false); }, [member?.id]);
+    useEffect(() => { setShowHistory(false); setActiveField(null); }, [member?.id]);
 
     const isEdit = Boolean(member);
 
@@ -264,35 +265,23 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         });
     }
 
-    function buildFlagsFormData(isCommittee: boolean, isTom: boolean) {
-        const fd = new FormData();
-        fd.set("id", String(member!.id));
-        fd.set("full_name", member!.fullName);
-        if (isCommittee) fd.set("is_committee", "on");
-        if (isTom) fd.set("is_tom", "on");
-        if (member!.discountIndividual) fd.set("individual_discount", String(Math.abs(member!.discountIndividual!)));
-        if (member!.isActive) fd.set("is_active", "on");
-        return fd;
-    }
-
     async function toggleCommittee(checked: boolean) {
         if (!member || !periodId) return;
-        await saveMember(null, buildFlagsFormData(checked, member.isTom));
-        onMemberUpdated();
+        const r = await setContributionFlags(member.id, periodId, checked, member.isTom);
+        if ("success" in r) onMemberUpdated();
     }
 
     async function toggleTom(checked: boolean) {
         if (!member || !periodId) return;
-        await saveMember(null, buildFlagsFormData(member.isCommittee, checked));
-        onMemberUpdated();
+        const r = await setContributionFlags(member.id, periodId, member.isCommittee, checked);
+        if ("success" in r) onMemberUpdated();
     }
 
     return (
         <>
             <Sheet open={open} onOpenChange={onOpenChange}>
                 <SheetContent
-                    className="w-full sm:max-w-md overflow-y-auto"
-                    // Disable auto-focus to prevent keyboard on mobile
+                    className="w-full sm:max-w-md overflow-y-auto overflow-x-hidden"
                     onOpenAutoFocus={e => e.preventDefault()}
                 >
                     {isEdit && member ? (
@@ -316,26 +305,26 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
 
                             {/* Inline edit fields */}
                             <div className="bg-white rounded-xl border px-4 mb-4">
-                                <InlineField label="Jméno" value={member.fullName} onSave={fieldSaver("fullName")} />
-                                <InlineField label="Login" value={member.userLogin} placeholder="(nezadáno)" onSave={fieldSaver("userLogin")} />
-                                <InlineField label="E-mail" value={member.email} type="email" onSave={fieldSaver("email")} />
-                                <InlineField label="Telefon" value={member.phone} type="tel" onSave={fieldSaver("phone")} />
-                                <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" onSave={fieldSaver("variableSymbol")} />
-                                <InlineField label="Číslo ČSK" value={member.cskNumber?.toString() ?? null} type="number" onSave={fieldSaver("cskNumber")} />
-                                <InlineField label="Poznámka" value={member.note} placeholder="(žádná)" onSave={fieldSaver("note")} />
+                                <InlineField label="Jméno"       value={member.fullName}                        fieldId="fullName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("fullName")} />
+                                <InlineField label="Login"       value={member.userLogin}  placeholder="(nezadáno)" fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
+                                <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} />
+                                <InlineField label="Telefon"     value={member.phone}      type="tel"               fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")} />
+                                <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
+                                <InlineField label="Číslo ČSK"   value={member.cskNumber?.toString() ?? null}     type="number" fieldId="cskNumber"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} />
+                                <InlineField label="Poznámka"    value={member.note}       placeholder="(žádná)"    fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
                             </div>
 
                             {/* Current year flags */}
                             {member.hasContrib2026 && (
                                 <div className="bg-white rounded-xl border px-4 py-3 mb-4 space-y-3">
                                     <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                                        Nastavení {CONTRIBUTION_YEAR}
+                                        Příspěvky {CONTRIBUTION_YEAR}
                                     </p>
 
                                     <div className="flex items-center gap-2">
                                         <Checkbox id="chk-committee"
                                             checked={member.isCommittee}
-                                            disabled={committeePending}
+                                            disabled={committeePending || activeField !== null}
                                             onCheckedChange={v => startCommitteeTransition(() => toggleCommittee(Boolean(v)))} />
                                         <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
                                             Člen výboru
@@ -346,7 +335,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                     <div className="flex items-center gap-2">
                                         <Checkbox id="chk-tom"
                                             checked={member.isTom}
-                                            disabled={tomPending}
+                                            disabled={tomPending || activeField !== null}
                                             onCheckedChange={v => startTomTransition(() => toggleTom(Boolean(v)))} />
                                         <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
                                             Vedoucí TOM
