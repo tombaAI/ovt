@@ -1,6 +1,7 @@
 import { signOut } from "@/auth";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 import type { ReactNode } from "react";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -15,7 +16,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 </div>
 
                 <nav className="flex-1 flex items-center gap-1 ml-4">
-                    {/* navigace přibude s dalšími sekcemi */}
+                    <Link
+                        href="/dashboard"
+                        className="text-white/70 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors"
+                    >
+                        Přehled
+                    </Link>
+                    <Link
+                        href="/dashboard/members"
+                        className="text-white/70 hover:text-white text-sm px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors"
+                    >
+                        Členové
+                    </Link>
                 </nav>
 
                 <div className="flex items-center gap-3 ml-auto">
