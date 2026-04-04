@@ -1,9 +1,8 @@
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods } from "@/db/schema";
-import { eq, and, asc } from "drizzle-orm";
+import { eq, asc } from "drizzle-orm";
 import { MembersClient } from "./members-client";
-
-const CURRENT_YEAR = 2026;
+import { CONTRIBUTION_YEAR } from "@/lib/constants";
 
 export type MemberWithFlags = {
     id: number;
@@ -30,7 +29,7 @@ export default async function MembersPage() {
     // Load current period
     const [period] = await db.select()
         .from(contributionPeriods)
-        .where(eq(contributionPeriods.year, CURRENT_YEAR));
+        .where(eq(contributionPeriods.year, CONTRIBUTION_YEAR));
 
     // Fetch all members
     const allMembers = await db.select().from(members).orderBy(asc(members.fullName));

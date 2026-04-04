@@ -38,6 +38,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
                     Členové
                 </Link>
+                <Link href="/dashboard/contributions"
+                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
+                    Příspěvky
+                </Link>
             </nav>
 
             <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
