@@ -96,6 +96,24 @@ export const membershipYears = appSchema.table(
     (t) => [primaryKey({ columns: [t.memberId, t.year] })]
 );
 
+export const payments = appSchema.table(
+    "payments",
+    {
+        id:        serial("id").primaryKey(),
+        contribId: integer("contrib_id").notNull().references(() => memberContributions.id),
+        memberId:  integer("member_id").notNull().references(() => members.id),
+        amount:    integer("amount").notNull(),
+        paidAt:    date("paid_at"),
+        note:      text("note"),
+        createdBy: text("created_by").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("payments_contrib_idx").on(t.contribId),
+        index("payments_member_idx").on(t.memberId),
+    ]
+);
+
 export const auditLog = appSchema.table(
     "audit_log",
     {
