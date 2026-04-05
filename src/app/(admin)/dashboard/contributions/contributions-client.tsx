@@ -7,7 +7,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PaymentSheet } from "./payment-sheet";
 import type { ContribRow, PeriodTab, PeriodDetail, PeriodStatus } from "./page";
 
-type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid";
+type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "issues",    label: "Problémy"    },
@@ -15,6 +15,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "underpaid", label: "Nedoplatek"  },
     { key: "overpaid",  label: "Přeplatek"   },
     { key: "paid",      label: "Zaplaceno"   },
+    { key: "todo",      label: "S úkolem"    },
     { key: "all",       label: "Všichni"     },
 ];
 
@@ -71,11 +72,13 @@ export function ContributionsClient({ periods, period, rows }: Props) {
         underpaid: rows.filter(r => r.status === "underpaid").length,
         unpaid:    rows.filter(r => r.status === "unpaid").length,
         issues:    rows.filter(r => r.status !== "paid").length,
+        todo:      rows.filter(r => r.todoNote !== null).length,
     }), [rows]);
 
     const filtered = useMemo(() => {
         if (filter === "all")    return rows;
         if (filter === "issues") return rows.filter(r => r.status !== "paid");
+        if (filter === "todo")   return rows.filter(r => r.todoNote !== null);
         return rows.filter(r => r.status === filter);
     }, [rows, filter]);
 
@@ -159,8 +162,10 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? "bg-[#327600] text-white"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
+                                ? f.key === "todo" ? "bg-orange-500 text-white" : "bg-[#327600] text-white"
+                                : f.key === "todo" && counts.todo > 0
+                                    ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}
                         <span className={[
@@ -231,7 +236,14 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                                 <TableRow key={r.contribId}
                                     className="hover:bg-gray-50/60 cursor-pointer"
                                     onClick={() => openEdit(r)}>
-                                    <TableCell className="font-medium">{r.fullName}</TableCell>
+                                    <TableCell className="font-medium">
+                                        <span>{r.fullName}</span>
+                                        {r.todoNote && (
+                                            <span className="ml-2 text-xs text-orange-600 font-normal truncate max-w-[160px] inline-block align-middle">
+                                                {r.todoNote}
+                                            </span>
+                                        )}
+                                    </TableCell>
                                     <TableCell className="text-right font-mono text-sm">{fmt(r.amountTotal)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm">{fmt(r.paidAmount)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm hidden lg:table-cell">

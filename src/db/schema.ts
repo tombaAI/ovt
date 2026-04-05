@@ -33,9 +33,9 @@ export const members = appSchema.table("members", {
     fullName:       text("full_name").notNull(),
     variableSymbol: integer("variable_symbol"),
     cskNumber:      integer("csk_number"),
-    isActive:            boolean("is_active").notNull().default(true),
     membershipReviewed:  boolean("membership_reviewed").notNull().default(false),
     note:                text("note"),
+    todoNote:            text("todo_note"),
     createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -52,7 +52,6 @@ export const contributionPeriods = appSchema.table("contribution_periods", {
     brigadeSurcharge:    integer("brigade_surcharge").notNull().default(0),
     dueDate:             date("due_date"),
     bankAccount:         text("bank_account").notNull().default("2701772934/2010"),
-    isDraft:             boolean("is_draft").notNull().default(false),
     status:              text("status", { enum: ["draft", "confirmed", "collecting", "closed"] }).notNull().default("collecting"),
     createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -78,8 +77,7 @@ export const memberContributions = appSchema.table(
         note:               text("note"),
         discountIndividualNote:       text("discount_individual_note"),
         discountIndividualValidUntil: smallint("discount_individual_valid_until"),
-        joinedAt:                     date("joined_at"),
-        leftAt:                       date("left_at"),
+        todoNote:                     text("todo_note"),
     },
     (t) => [
         index("member_contributions_member_idx").on(t.memberId),

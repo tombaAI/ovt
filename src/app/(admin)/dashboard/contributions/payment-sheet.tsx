@@ -1,13 +1,14 @@
 "use client";
 
-import { useEffect, useActionState } from "react";
+import { useEffect, useState, useActionState } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Separator } from "@/components/ui/separator";
-import { savePayment, type ContribFormState } from "@/lib/actions/contributions";
+import { Textarea } from "@/components/ui/textarea";
+import { savePayment, setContributionTodo, type ContribFormState } from "@/lib/actions/contributions";
 import type { ContribRow } from "./page";
 
 interface Props {
@@ -15,6 +16,37 @@ interface Props {
     onOpenChange: (open: boolean) => void;
     row: ContribRow | null;
     onPaymentUpdated: () => void;
+}
+
+function TodoSection({ currentNote, onSave }: {
+    currentNote: string | null;
+    onSave: (note: string | null) => Promise<void>;
+}) {
+    const [text, setText]     = useState(currentNote ?? "");
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => { setText(currentNote ?? ""); }, [currentNote]);
+
+    async function handleSave() { setSaving(true); await onSave(text.trim() || null); setSaving(false); }
+    async function handleResolve() { setSaving(true); await onSave(null); setSaving(false); }
+
+    return (
+        <div className={["rounded-xl border px-4 py-3 mb-5 space-y-2", currentNote ? "border-orange-200 bg-orange-50/40" : ""].join(" ")}>
+            <p className="text-sm font-semibold text-gray-700">Úkol k řešení</p>
+            <Textarea value={text} onChange={e => setText(e.target.value)}
+                placeholder="Popište co je potřeba udělat…" rows={3} className="text-sm resize-none" />
+            <div className="flex gap-2">
+                <Button size="sm" onClick={handleSave} disabled={saving} className="bg-[#327600] hover:bg-[#2a6400]">
+                    {saving ? "Ukládám…" : "Uložit"}
+                </Button>
+                {currentNote && (
+                    <Button size="sm" variant="outline" onClick={handleResolve} disabled={saving}>
+                        ✓ Vyřešeno
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
 }
 
 function fmt(n: number | null) {
@@ -62,6 +94,14 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
                         </p>
                     </div>
                 )}
+
+                <TodoSection
+                    currentNote={row.todoNote}
+                    onSave={async (note) => {
+                        const r = await setContributionTodo(row.contribId, note);
+                        if (r && "success" in r) onPaymentUpdated();
+                    }}
+                />
 
                 <form action={formAction} className="space-y-4">
                     <input type="hidden" name="contrib_id" value={row.contribId} />

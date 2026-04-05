@@ -59,7 +59,6 @@ export async function saveMember(
         phone:          (formData.get("phone") as string)?.trim()        || null,
         variableSymbol: Number(formData.get("variable_symbol")) || null,
         cskNumber:      Number(formData.get("csk_number"))      || null,
-        isActive:       formData.get("is_active") === "on",
         note:           (formData.get("note") as string)?.trim()         || null,
     };
 
@@ -84,7 +83,6 @@ export async function saveMember(
                     phone:          current.phone,
                     variableSymbol: current.variableSymbol,
                     cskNumber:      current.cskNumber,
-                    isActive:       current.isActive,
                     note:           current.note,
                 },
                 memberData
@@ -155,6 +153,9 @@ export async function saveMember(
 
             await db.insert(members).values({ id: nextId, ...memberData });
 
+            // Auto-enroll in the current contribution year
+            await db.insert(membershipYears).values({ memberId: nextId, year: CONTRIBUTION_YEAR });
+
             await db.insert(auditLog).values({
                 entityType: "member",
                 entityId:   nextId,
@@ -224,44 +225,6 @@ export async function updateMemberField(
                 changedBy,
             });
         }
-
-        revalidatePath("/dashboard/members");
-        return { success: true };
-    } catch (e) {
-        console.error(e);
-        return { error: "Chyba při ukládání" };
-    }
-}
-
-// ── changeMemberStatus — změna aktivního stavu s povinnou poznámkou ──────────
-export async function changeMemberStatus(
-    memberId: number,
-    newIsActive: boolean,
-    note: string
-): Promise<{ error: string } | { success: true }> {
-    if (!note.trim()) return { error: "Poznámka je povinná" };
-
-    const session = await auth();
-    const changedBy = session?.user?.email ?? "unknown";
-    const db = getDb();
-
-    try {
-        const [current] = await db.select().from(members).where(eq(members.id, memberId));
-        if (!current) return { error: "Člen nenalezen" };
-        if (current.isActive === newIsActive) return { success: true };
-
-        await db.update(members)
-            .set({ isActive: newIsActive, updatedAt: new Date() })
-            .where(eq(members.id, memberId));
-
-        await db.insert(auditLog).values({
-            entityType: "member", entityId: memberId, action: "status_change",
-            changes: {
-                isActive: { old: str(current.isActive), new: str(newIsActive) },
-                statusNote: { old: null, new: note.trim() },
-            },
-            changedBy,
-        });
 
         revalidatePath("/dashboard/members");
         return { success: true };
@@ -488,6 +451,37 @@ export async function saveMembershipHistory(
             changedBy,
         });
 
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+// ── setMemberTodo ─────────────────────────────────────────────────────────────
+export async function setMemberTodo(
+    memberId: number,
+    note: string | null
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+    try {
+        const [current] = await db.select({ todoNote: members.todoNote })
+            .from(members).where(eq(members.id, memberId));
+        if (!current) return { error: "Člen nenalezen" };
+
+        await db.update(members).set({ todoNote: note }).where(eq(members.id, memberId));
+
+        if (current.todoNote !== note) {
+            await db.insert(auditLog).values({
+                entityType: "member", entityId: memberId,
+                action: note ? "todo_set" : "todo_resolved",
+                changes: { todoNote: { old: current.todoNote, new: note } },
+                changedBy,
+            });
+        }
         revalidatePath("/dashboard/members");
         return { success: true };
     } catch (e) {

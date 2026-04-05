@@ -19,6 +19,7 @@ export type MemberWithFlags = {
     cskNumber: number | null;
     membershipReviewed: boolean;
     note: string | null;
+    todoNote: string | null;
     // Year-specific (from membership_years)
     fromDate: string | null;
     toDate: string | null;
@@ -70,6 +71,7 @@ export default async function MembersPage(props: {
             cskNumber:          members.cskNumber,
             membershipReviewed: members.membershipReviewed,
             note:               members.note,
+            todoNote:           members.todoNote,
             fromDate:           membershipYears.fromDate,
             toDate:             membershipYears.toDate,
             // Financial data — null when no contrib record (LEFT JOIN)
@@ -102,6 +104,7 @@ export default async function MembersPage(props: {
         cskNumber:          r.cskNumber,
         membershipReviewed: r.membershipReviewed,
         note:               r.note,
+        todoNote:           r.todoNote,
         fromDate:           r.fromDate,
         toDate:             r.toDate,
         isCommittee:        Boolean(r.discountCommittee),

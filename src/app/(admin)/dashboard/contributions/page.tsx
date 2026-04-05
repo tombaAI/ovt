@@ -41,6 +41,7 @@ export type ContribRow = {
     paidAt: string | null;
     isPaid: boolean | null;
     note: string | null;
+    todoNote: string | null;
     status: "paid" | "overpaid" | "underpaid" | "unpaid";
 };
 
@@ -107,6 +108,7 @@ export default async function ContributionsPage(props: {
             paidAt:             memberContributions.paidAt,
             isPaid:             memberContributions.isPaid,
             note:               memberContributions.note,
+            todoNote:           memberContributions.todoNote,
         })
         .from(memberContributions)
         .innerJoin(members, eq(memberContributions.memberId, members.id))

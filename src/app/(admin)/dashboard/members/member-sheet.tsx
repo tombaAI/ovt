@@ -16,7 +16,7 @@ import {
     updateMemberField, setIndividualDiscount,
     setContributionFlags, setMembershipDates,
     getMemberHistory, saveMembershipHistory,
-    getMemberAuditLog, saveMember,
+    getMemberAuditLog, saveMember, setMemberTodo,
     type MemberFormState, type AuditEntry, type MemberYearRecord,
 } from "@/lib/actions/members";
 import { FIELD_LABELS } from "@/lib/member-fields";
@@ -166,6 +166,57 @@ function DiscountDialog({
     );
 }
 
+// ── Todo section ─────────────────────────────────────────────────────────────
+function TodoSection({ currentNote, onSave }: {
+    currentNote: string | null;
+    onSave: (note: string | null) => Promise<void>;
+}) {
+    const [text, setText]   = useState(currentNote ?? "");
+    const [saving, setSaving] = useState(false);
+    const [error, setError]   = useState<string | null>(null);
+
+    useEffect(() => { setText(currentNote ?? ""); setError(null); }, [currentNote]);
+
+    async function handleSave() {
+        setSaving(true);
+        await onSave(text.trim() || null);
+        setSaving(false);
+    }
+    async function handleResolve() {
+        setSaving(true);
+        await onSave(null);
+        setSaving(false);
+    }
+
+    return (
+        <div className={[
+            "rounded-xl border px-4 py-3 mb-4 space-y-2",
+            currentNote ? "border-orange-200 bg-orange-50/40" : "",
+        ].join(" ")}>
+            <p className="text-sm font-semibold text-gray-700">Úkol k řešení</p>
+            <Textarea
+                value={text}
+                onChange={e => { setText(e.target.value); setError(null); }}
+                placeholder="Popište co je potřeba udělat…"
+                rows={3}
+                className="text-sm resize-none"
+            />
+            {error && <p className="text-xs text-red-600">{error}</p>}
+            <div className="flex gap-2">
+                <Button size="sm" onClick={handleSave} disabled={saving}
+                    className="bg-[#327600] hover:bg-[#2a6400]">
+                    {saving ? "Ukládám…" : "Uložit"}
+                </Button>
+                {currentNote && (
+                    <Button size="sm" variant="outline" onClick={handleResolve} disabled={saving}>
+                        ✓ Vyřešeno
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
+
 // ── Membership history review ─────────────────────────────────────────────────
 type YearRowState = {
     year: number;
@@ -310,6 +361,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
     const [committeePending, startCommitteeTransition] = useTransition();
     const [tomPending, startTomTransition] = useTransition();
+    const [toggleError, setToggleError] = useState<string | null>(null);
     const [activeField, setActiveField] = useState<string | null>(null);
 
     // New member form (create only)
@@ -331,15 +383,21 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
     }
 
     async function toggleCommittee(checked: boolean) {
-        if (!member || !periodId) return;
+        if (!member) return;
+        if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
+        setToggleError(null);
         const r = await setContributionFlags(member.id, periodId, checked, member.isTom);
         if ("success" in r) onMemberUpdated();
+        else setToggleError(r.error);
     }
 
     async function toggleTom(checked: boolean) {
-        if (!member || !periodId) return;
+        if (!member) return;
+        if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
+        setToggleError(null);
         const r = await setContributionFlags(member.id, periodId, member.isCommittee, checked);
         if ("success" in r) onMemberUpdated();
+        else setToggleError(r.error);
     }
 
     return (
@@ -366,6 +424,15 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                 <InlineField label="Poznámka"    value={member.note}       placeholder="(žádná)"    fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
                             </div>
 
+                            {/* Todo */}
+                            <TodoSection
+                                currentNote={member.todoNote}
+                                onSave={async (note) => {
+                                    const r = await setMemberTodo(member.id, note);
+                                    if ("success" in r) onMemberUpdated();
+                                }}
+                            />
+
                             {/* Current year flags */}
                             {member.hasContrib && (
                                 <div className="rounded-xl border px-4 py-3 mb-4 space-y-3">
@@ -376,8 +443,8 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                     <div className="flex items-center gap-2">
                                         <Checkbox id="chk-committee"
                                             checked={member.isCommittee}
-                                            disabled={committeePending || activeField !== null}
-                                            onCheckedChange={v => startCommitteeTransition(() => toggleCommittee(Boolean(v)))} />
+                                            disabled={committeePending}
+                                            onCheckedChange={v => startCommitteeTransition(async () => { await toggleCommittee(Boolean(v)); })} />
                                         <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
                                             Člen výboru
                                             {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.committee} Kč)</span>}
@@ -387,8 +454,8 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                     <div className="flex items-center gap-2">
                                         <Checkbox id="chk-tom"
                                             checked={member.isTom}
-                                            disabled={tomPending || activeField !== null}
-                                            onCheckedChange={v => startTomTransition(() => toggleTom(Boolean(v)))} />
+                                            disabled={tomPending}
+                                            onCheckedChange={v => startTomTransition(async () => { await toggleTom(Boolean(v)); })} />
                                         <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
                                             Vedoucí TOM
                                             {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.tom} Kč)</span>}
@@ -424,6 +491,10 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                             return r;
                                         })}
                                     />
+
+                                    {toggleError && (
+                                        <p className="text-xs text-red-600">{toggleError}</p>
+                                    )}
 
                                     <Separator />
 

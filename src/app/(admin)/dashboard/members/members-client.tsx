@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags, PeriodTab } from "./page";
 
-type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "review";
+type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "review" | "todo";
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -18,6 +18,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "individual", label: "Individuální sleva" },
     { key: "partial",    label: "Část roku"          },
     { key: "review",     label: "Ke kontrole"        },
+    { key: "todo",       label: "S úkolem"           },
 ];
 
 function lastName(fullName: string) {
@@ -63,6 +64,11 @@ function MemberBadges({ m }: { m: MemberWithFlags }) {
                     Ke kontrole
                 </Badge>
             )}
+            {m.todoNote && (
+                <Badge className="bg-orange-100 text-orange-700 border border-orange-200 text-xs font-normal max-w-[200px] truncate">
+                    {m.todoNote}
+                </Badge>
+            )}
         </>
     );
 }
@@ -88,6 +94,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
         individual: members.filter(m => m.discountIndividual !== null).length,
         partial:    members.filter(m => m.fromDate !== null || m.toDate !== null).length,
         review:     members.filter(m => !m.membershipReviewed).length,
+        todo:       members.filter(m => m.todoNote !== null).length,
     }), [members]);
 
     const filtered = useMemo(() => {
@@ -98,6 +105,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             case "individual": list = members.filter(m => m.discountIndividual !== null); break;
             case "partial":    list = members.filter(m => m.fromDate !== null || m.toDate !== null); break;
             case "review":     list = members.filter(m => !m.membershipReviewed); break;
+            case "todo":       list = members.filter(m => m.todoNote !== null); break;
             default:           list = [...members];
         }
         if (sort === "lastName") {
@@ -144,9 +152,13 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "review" ? "bg-yellow-500 text-white" : "bg-[#327600] text-white"
+                                ? f.key === "review" ? "bg-yellow-500 text-white"
+                                  : f.key === "todo" ? "bg-orange-500 text-white"
+                                  : "bg-[#327600] text-white"
                                 : f.key === "review" && counts.review > 0
                                     ? "bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100"
+                                : f.key === "todo" && counts.todo > 0
+                                    ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}
