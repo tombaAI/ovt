@@ -8,6 +8,12 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 See `zadani/popis_zadani_1.txt` for the full product spec (in Czech).
 
+## Workflow
+
+**Every completed task ends with `git commit` + `git push` to `main`.** Vercel auto-deploys from main, the user checks the result in the browser immediately. Never leave finished work uncommitted.
+
+SQL migrations (`supabase/migrations/`) are applied manually by the user via Neon SQL Editor — always tell the user which file to run and what it does.
+
 ## Commands
 
 ```bash
@@ -18,7 +24,7 @@ npm run db:push      # push Drizzle schema changes to Neon (dev/staging)
 npm run db:studio    # Drizzle Studio — local DB browser
 ```
 
-No test runner configured yet.
+Pre-commit hook runs `npm run lint && npx tsc --noEmit` — always verify clean before committing.
 
 ## Stack
 
@@ -26,92 +32,108 @@ No test runner configured yet.
 |---|---|
 | Framework | Next.js 15 App Router + TypeScript |
 | UI | shadcn/ui + Tailwind CSS |
-| Database ORM | Drizzle ORM (`drizzle-orm` + `drizzle-kit`) |
+| Database ORM | Drizzle ORM |
 | Database | Neon PostgreSQL (via `postgres` npm package) |
 | Auth | Auth.js v5 (`next-auth@beta`) — Google OAuth only |
-| Forms | React Hook Form + Zod |
 | Email | Resend |
-| Deploy | Vercel |
+| Deploy | Vercel (auto-deploy from main) |
 
-## Architecture
+## File structure
 
 ```
 src/
   auth.ts               # Auth.js config — Google provider, signIn callback
   middleware.ts          # Route protection: /dashboard/* requires auth
   app/
-    layout.tsx           # Root layout (html/body, SpeedInsights)
-    page.tsx             # Redirects / → /dashboard
     (admin)/             # Route group: protected admin pages
-      layout.tsx         # Admin header (OVT nav bar, user name, logout)
+      layout.tsx         # Admin header (nav bar, user name, logout)
       dashboard/
-        page.tsx         # /dashboard — admin home
-    login/
-      page.tsx           # /login — Google sign-in button
-    health/
-      page.tsx           # /health — public runtime status page (no auth)
-    api/
-      auth/[...nextauth]/route.ts  # Auth.js handler
-      health/            # JSON health endpoints (all force-dynamic)
-      email/test/        # Test email sender
+        page.tsx         # /dashboard home — member + contribution counts
+        members/         # Member management
+          page.tsx           # Server: queries membership_years + member_contributions
+          members-client.tsx # Client: filter pills, sort, table, sheet trigger
+          member-sheet.tsx   # Detail/edit sheet (inline fields, flags, todo, history)
+          inline-field.tsx   # Controlled inline-edit field component
+        contributions/   # Contribution management
+          page.tsx           # Server: queries member_contributions + payments aggregate
+          contributions-client.tsx
+          payment-sheet.tsx  # Detail sheet: payment list, add payment, todo
   lib/
     db.ts                # Drizzle client singleton (globalThis.__ovtDb)
-    email.ts             # Resend client + email mode detection
-    health.ts            # Shared health check functions (used by page + API)
-    runtime-env.ts       # RuntimeFlags — reads all env vars
+    actions/
+      members.ts         # All member server actions
+      contributions.ts   # Contribution + payment server actions
+    member-fields.ts     # Czech field labels for audit log display
+    constants.ts         # CONTRIBUTION_YEAR
   db/
-    schema.ts            # Drizzle schema (appSchema = pgSchema("app"))
+    schema.ts            # Drizzle schema — all tables
   components/
-    ui/                  # shadcn/ui components (auto-generated, don't edit)
+    ui/                  # shadcn/ui (do not edit — reinstall via CLI)
 ```
 
-### Auth flow
+## Database schema (app.* PostgreSQL schema)
 
-`src/auth.ts` uses JWT sessions (no DB adapter). The `signIn` callback queries `app.admin_users` — if the Google email is not there with `is_active = true`, sign-in is rejected. Adding an admin = insert a row into `app.admin_users`.
+All tables live in the `app` schema. Schema defined in `src/db/schema.ts`.
 
-### DB client (`src/lib/db.ts`)
+| Table | Purpose |
+|---|---|
+| `members` | Core member data (name, login, email, phone, var. symbol, CSK number, note, todo_note) |
+| `membership_years` | Per-year membership record (memberId, year, fromDate, toDate) — source of truth for "who was a member in year X" |
+| `contribution_periods` | One row per year (amounts, discounts, status: draft/confirmed/collecting/closed) |
+| `member_contributions` | Prescription per member per period (amounts, discounts, todo_note) |
+| `payments` | Individual payment transactions linked to member_contributions (amount, paidAt, note) |
+| `audit_log` | Change history for all member/payment operations |
+| `admin_users` | Admin access list (email whitelist for Google OAuth) |
+| `mail_events` | Outbound email audit trail |
 
-Drizzle over `postgres` package with `globalThis` singleton. SSL auto-detected: off for localhost, `require` otherwise. `max: 1` pool for serverless.
+### Key design decisions
 
-### Health checks
+- **`membership_years` is the source of truth** for member lists. The members page queries `membership_years INNER JOIN members LEFT JOIN member_contributions` for the selected year.
+- **`payments` is the source of truth for payment state.** `paidTotal = SUM(payments.amount)` for a contribution; `isPaid` is derived, not stored. Old columns `paid_amount/paid_at/is_paid` still exist in DB but are unused by the app (to be dropped via `20260405_210000_drop_payment_columns.sql` after confirming production is stable).
+- **`contribution_periods.status`** lifecycle: `draft → confirmed → collecting → closed`.
+- **Audit log**: every field change, payment add/delete, todo set/resolved is logged to `audit_log` with `entityType="member"`, `entityId=memberId`.
 
-`src/lib/health.ts` contains `checkDatabase()` and `checkEmail()` — used both by the `/health` page (server-side) and `/api/health/db` route.
+### Migration files (supabase/migrations/)
 
-### Email modes
+Applied in order — do NOT apply the drop-payment-columns migration until verifying the app works correctly with the new payments table.
 
-`src/lib/email.ts` — three modes from env vars:
-- `disabled` — no `RESEND_API_KEY`
-- `test` — API key + no `MAIL_FROM` → sends via `onboarding@resend.dev`
-- `custom` — API key + `MAIL_FROM` set → production sending
+## Feature map
 
-## Environment Variables
+### Members page (`/dashboard/members`)
+- URL param `?year=X` selects the year tab
+- Filter pills: Všichni / Výbor / Vedoucí TOM / Individuální sleva / Část roku / Ke kontrole / **S úkolem**
+- Sort: Jméno / Příjmení
+- Click row → opens `MemberSheet`
 
-| Variable | Required | Purpose |
-|---|---|---|
-| `DATABASE_URL` | Yes | Neon PostgreSQL connection string |
-| `AUTH_SECRET` | Yes | JWT signing secret (`npx auth secret`) |
-| `AUTH_GOOGLE_ID` | Yes | Google OAuth Client ID |
-| `AUTH_GOOGLE_SECRET` | Yes | Google OAuth Client Secret |
-| `ADMIN_EMAILS` | Yes | Comma-separated admin emails (used in /api/health) |
-| `APP_BASE_URL` | Optional | Full app URL for email links |
-| `RESEND_API_KEY` | Optional | Enables email sending via Resend |
-| `MAIL_FROM` | Optional | Custom from address (enables `custom` email mode) |
-| `MAIL_REPLY_TO` | Optional | Reply-to address |
-| `MAIL_TEST_TO` | Optional | Override recipient for test emails |
+### Member detail sheet
+- Inline field editing (one field at a time, Enter to save, Esc to cancel)
+- Checkboxes: Člen výboru / Vedoucí TOM (update `member_contributions.discount_committee/tom`)
+- Membership dates for selected year (`membership_years.from_date/to_date`)
+- Individual discount dialog
+- **Todo section**: textarea → save (sets `members.todo_note`) / "Vyřešeno" (clears it)
+- Membership history review: table 2019–present, per-year checkboxes + dates
+- Audit history (collapsible)
 
-## Database
+### Contributions page (`/dashboard/contributions`)
+- URL param `?year=X` selects the year tab with lifecycle badge
+- Filter pills: Problémy / Nezaplaceno / Nedoplatek / Přeplatek / Zaplaceno / **S úkolem** / Všichni
+- Click row → opens `PaymentSheet`
 
-Schema lives in `src/db/schema.ts` (Drizzle). All tables are in the `app` PostgreSQL schema.
+### Payment detail sheet
+- Prescription breakdown
+- **Payment list**: individual payments from `payments` table, each deletable
+- **Add payment form**: amount + date + note
+- Paid total vs. prescription with balance (přeplatek/nedoplatek)
+- **Todo section**: same pattern as member todo
 
-SQL migrations live in `supabase/migrations/` — apply manually via Neon SQL Editor. Drizzle is used for ORM queries, not for running migrations in production.
+## Auth flow
 
-For schema changes during development: edit `src/db/schema.ts` → `npm run db:push`.
+`src/auth.ts` uses JWT sessions. The `signIn` callback checks `app.admin_users` — if email not found with `is_active = true`, login is rejected.
 
 ## Design
 
-OVT brand colors used in Tailwind classes:
-- Primary green: `#327600`
-- Nav charcoal: `#26272b`
-- Sage accent: `#82b965`
+OVT brand colors: primary green `#327600`, nav charcoal `#26272b`, sage `#82b965`.
 
-shadcn/ui components use Zinc base color with CSS variables. Do not edit files in `src/components/ui/` directly — reinstall via `npx shadcn@latest add <component>`.
+Sheet width: `sm:max-w-3xl`. Sheet padding: `px-5 pb-8` on SheetContent, `px-0 pt-5 pb-4` override on SheetHeader.
+
+shadcn/ui components use Zinc base. The Sheet component has its built-in `sm:max-w-sm` removed to allow width override via className.
