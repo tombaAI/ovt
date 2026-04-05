@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods } from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { members, memberContributions, contributionPeriods, payments } from "@/db/schema";
+import { eq, asc, desc, inArray } from "drizzle-orm";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
 import { ContributionsClient } from "./contributions-client";
 
@@ -23,6 +23,14 @@ export type PeriodDetail = PeriodTab & {
     dueDate: string | null;
 };
 
+export type Payment = {
+    id: number;
+    amount: number;
+    paidAt: string | null;
+    note: string | null;
+    createdBy: string;
+};
+
 export type ContribRow = {
     contribId: number;
     memberId: number;
@@ -37,20 +45,18 @@ export type ContribRow = {
     discountTom: number | null;
     discountIndividual: number | null;
     brigadeSurcharge: number | null;
-    paidAmount: number | null;
-    paidAt: string | null;
-    isPaid: boolean | null;
-    note: string | null;
     todoNote: string | null;
+    // Derived from payments table
+    payments: Payment[];
+    paidTotal: number;
+    lastPaidAt: string | null;
     status: "paid" | "overpaid" | "underpaid" | "unpaid";
 };
 
-function calcStatus(row: Pick<ContribRow, "isPaid" | "paidAmount" | "amountTotal">): ContribRow["status"] {
-    if (!row.isPaid) return "unpaid";
-    const paid  = row.paidAmount ?? 0;
-    const total = row.amountTotal ?? 0;
-    if (paid === total) return "paid";
-    if (paid > total)  return "overpaid";
+function calcStatus(paidTotal: number, amountTotal: number | null): ContribRow["status"] {
+    if (paidTotal === 0 || amountTotal === null) return "unpaid";
+    if (paidTotal === amountTotal) return "paid";
+    if (paidTotal > amountTotal) return "overpaid";
     return "underpaid";
 }
 
@@ -89,7 +95,7 @@ export default async function ContributionsPage(props: {
     const requestedYear = Number(searchParams.year) || CONTRIBUTION_YEAR;
     const period = (allPeriods.find(p => p.year === requestedYear) ?? allPeriods[0]) as PeriodDetail;
 
-    const rows = await db
+    const contribs = await db
         .select({
             contribId:          memberContributions.id,
             memberId:           memberContributions.memberId,
@@ -104,10 +110,6 @@ export default async function ContributionsPage(props: {
             discountTom:        memberContributions.discountTom,
             discountIndividual: memberContributions.discountIndividual,
             brigadeSurcharge:   memberContributions.brigadeSurcharge,
-            paidAmount:         memberContributions.paidAmount,
-            paidAt:             memberContributions.paidAt,
-            isPaid:             memberContributions.isPaid,
-            note:               memberContributions.note,
             todoNote:           memberContributions.todoNote,
         })
         .from(memberContributions)
@@ -115,7 +117,43 @@ export default async function ContributionsPage(props: {
         .where(eq(memberContributions.periodId, period.id))
         .orderBy(asc(members.fullName));
 
-    const data: ContribRow[] = rows.map(r => ({ ...r, status: calcStatus(r) }));
+    // Fetch all payments for these contributions in one query
+    const contribIds = contribs.map(c => c.contribId);
+    const paymentRows = contribIds.length > 0
+        ? await db
+            .select({
+                id:        payments.id,
+                contribId: payments.contribId,
+                amount:    payments.amount,
+                paidAt:    payments.paidAt,
+                note:      payments.note,
+                createdBy: payments.createdBy,
+            })
+            .from(payments)
+            .where(inArray(payments.contribId, contribIds))
+            .orderBy(asc(payments.paidAt))
+        : [];
+
+    // Group payments by contribId
+    const paymentsByContrib = paymentRows.reduce((acc, p) => {
+        (acc[p.contribId] ??= []).push(p);
+        return acc;
+    }, {} as Record<number, typeof paymentRows>);
+
+    const data: ContribRow[] = contribs.map(c => {
+        const pays = paymentsByContrib[c.contribId] ?? [];
+        const paidTotal = pays.reduce((s, p) => s + p.amount, 0);
+        const lastPaidAt = pays.length > 0
+            ? pays.reduce((latest, p) => (p.paidAt && (!latest || p.paidAt > latest) ? p.paidAt : latest), null as string | null)
+            : null;
+        return {
+            ...c,
+            payments: pays,
+            paidTotal,
+            lastPaidAt,
+            status: calcStatus(paidTotal, c.amountTotal),
+        };
+    });
 
     return (
         <ContributionsClient

@@ -39,8 +39,8 @@ function fmt(n: number | null) {
 }
 
 function diff(row: ContribRow): number | null {
-    if (row.paidAmount === null || row.amountTotal === null) return null;
-    return row.paidAmount - row.amountTotal;
+    if (row.amountTotal === null) return null;
+    return row.paidTotal - row.amountTotal;
 }
 
 interface Props {
@@ -83,7 +83,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
     }, [rows, filter]);
 
     const stats = useMemo(() => ({
-        collected: rows.reduce((s, r) => s + (r.paidAmount ?? 0), 0),
+        collected: rows.reduce((s, r) => s + r.paidTotal, 0),
         expected:  rows.reduce((s, r) => s + (r.amountTotal ?? 0), 0),
     }), [rows]);
 
@@ -195,14 +195,14 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-sm text-gray-500">
                                 <span>Předpis: <strong className="text-gray-800">{fmt(r.amountTotal)}</strong></span>
-                                <span>Zaplaceno: <strong className="text-gray-800">{fmt(r.paidAmount)}</strong></span>
+                                <span>Zaplaceno: <strong className="text-gray-800">{fmt(r.paidTotal)}</strong></span>
                                 {d !== null && d !== 0 && (
                                     <span className={d > 0 ? "text-orange-600" : "text-red-600"}>
                                         {d > 0 ? `+${d.toLocaleString("cs-CZ")}` : d.toLocaleString("cs-CZ")} Kč
                                     </span>
                                 )}
                             </div>
-                            {r.paidAt && <p className="text-xs text-gray-400 mt-1">{r.paidAt}</p>}
+                            {r.lastPaidAt && <p className="text-xs text-gray-400 mt-1">{r.lastPaidAt}</p>}
                         </button>
                     );
                 })}
@@ -245,7 +245,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right font-mono text-sm">{fmt(r.amountTotal)}</TableCell>
-                                    <TableCell className="text-right font-mono text-sm">{fmt(r.paidAmount)}</TableCell>
+                                    <TableCell className="text-right font-mono text-sm">{fmt(r.paidTotal)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm hidden lg:table-cell">
                                         {d === null || d === 0 ? "—" : (
                                             <span className={d > 0 ? "text-orange-600" : "text-red-600"}>
@@ -254,7 +254,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                                         )}
                                     </TableCell>
                                     <TableCell className="text-sm text-gray-500 hidden lg:table-cell">
-                                        {r.paidAt ?? "—"}
+                                        {r.lastPaidAt ?? "—"}
                                     </TableCell>
                                     <TableCell>
                                         <Badge className={`${sb.cls} text-xs font-normal`}>{sb.label}</Badge>
