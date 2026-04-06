@@ -4,6 +4,7 @@ import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags, PeriodTab } from "./page";
@@ -77,8 +78,11 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
     const router = useRouter();
     const [filter, setFilter]             = useState<FilterKey>("all");
     const [sort, setSort]                 = useState<SortKey>("firstName");
+    const [searchText, setSearchText]     = useState("");
     const [sheetOpen, setSheetOpen]       = useState(false);
     const [editMemberId, setEditMemberId] = useState<number | null>(null);
+
+    const isAllYears = selectedYear === 0;
 
     const editMember = editMemberId !== null ? (members.find(m => m.id === editMemberId) ?? null) : null;
 
@@ -108,13 +112,21 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             case "todo":       list = members.filter(m => m.todoNote !== null); break;
             default:           list = [...members];
         }
+        if (searchText.trim()) {
+            const q = searchText.trim().toLowerCase();
+            list = list.filter(m =>
+                m.fullName.toLowerCase().includes(q) ||
+                (m.userLogin?.toLowerCase().includes(q) ?? false) ||
+                (m.email?.toLowerCase().includes(q) ?? false)
+            );
+        }
         if (sort === "lastName") {
             list = [...list].sort((a, b) =>
                 lastName(a.fullName).localeCompare(lastName(b.fullName), "cs")
             );
         }
         return list;
-    }, [members, filter, sort]);
+    }, [members, filter, sort, searchText]);
 
     return (
         <div className="space-y-4">
@@ -132,11 +144,23 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         {p.year}
                     </button>
                 ))}
+                <button
+                    onClick={() => router.push("/dashboard/members?year=all")}
+                    className={[
+                        "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
+                        isAllYears
+                            ? "bg-[#26272b] text-white"
+                            : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
+                    ].join(" ")}>
+                    Všichni
+                </button>
             </div>
 
             {/* ── Heading ── */}
             <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Členové {selectedYear}</h1>
+                <h1 className="text-2xl font-semibold text-gray-900">
+                    {isAllYears ? "Všichni členové" : `Členové ${selectedYear}`}
+                </h1>
                 <p className="text-gray-500 mt-0.5 text-sm">
                     {members.length} členů
                     {counts.review > 0 && (
@@ -145,9 +169,17 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                 </p>
             </div>
 
+            {/* ── Text search ── */}
+            <Input
+                placeholder="Hledat podle jména, loginu nebo e-mailu…"
+                value={searchText}
+                onChange={e => setSearchText(e.target.value)}
+                className="max-w-sm"
+            />
+
             {/* ── Filter + sort pills ── */}
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
-                {FILTERS.map(f => (
+                {FILTERS.filter(f => !isAllYears || ["all", "review", "todo"].includes(f.key)).map(f => (
                     <button key={f.key} onClick={() => setFilter(f.key)}
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
@@ -196,7 +228,14 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
                         <p className="font-medium text-gray-900 leading-snug">{m.fullName}</p>
                         {m.email && <p className="text-sm text-gray-500 mt-0.5 truncate">{m.email}</p>}
-                        <div className="flex flex-wrap gap-1 mt-2"><MemberBadges m={m} /></div>
+                        <div className="flex flex-wrap gap-1 mt-2">
+                            {isAllYears
+                                ? m.memberYears?.map(y => (
+                                    <Badge key={y} className="bg-gray-100 text-gray-600 border-0 text-xs font-normal">{y}</Badge>
+                                ))
+                                : <MemberBadges m={m} />
+                            }
+                        </div>
                     </button>
                 ))}
             </div>
@@ -210,7 +249,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                             <TableHead>Jméno</TableHead>
                             <TableHead className="hidden lg:table-cell">E-mail</TableHead>
                             <TableHead className="hidden xl:table-cell text-right">VS</TableHead>
-                            <TableHead>Role / členství</TableHead>
+                            <TableHead>{isAllYears ? "Roky" : "Role / členství"}</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -231,7 +270,14 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                                     {m.variableSymbol ?? "—"}
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex flex-wrap gap-1"><MemberBadges m={m} /></div>
+                                    <div className="flex flex-wrap gap-1">
+                                        {isAllYears
+                                            ? m.memberYears?.map(y => (
+                                                <Badge key={y} className="bg-gray-100 text-gray-600 border-0 text-xs font-normal">{y}</Badge>
+                                            ))
+                                            : <MemberBadges m={m} />
+                                        }
+                                    </div>
                                 </TableCell>
                             </TableRow>
                         ))}
