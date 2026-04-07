@@ -1,43 +1,34 @@
 import { NextRequest, NextResponse } from "next/server";
-import { eq } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
-import { members } from "@/db/schema";
+import { tjMembers } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
-interface SyncMember {
-    csk?:         string | null;
-    jmeno:        string;
-    prijmeni:     string;
-    email?:       string;
-    telefon?:     string;
-    datum_naroz?: string;
-    rc?:          string;
-    gender?:      string;
-    adresa?:      string;
-    obec?:        string;
-    psc?:         string;
+interface PaRow {
+    csk?:          string | null;
+    jmeno?:        string | null;
+    prijmeni?:     string | null;
+    email?:        string | null;
+    telefon?:      string | null;
+    datum_naroz?:  string | null;
+    rc?:           string | null;
+    gender?:       string | null;
+    adresa?:       string | null;
+    obec?:         string | null;
+    psc?:          string | null;
+    radek_odeslan?: string | null;
 }
 
-interface SyncResult {
-    total:    number;
-    updated:  number;
-    notFound: number;
-    skipped:  number;
-}
-
-// "Filip (Pilín)" → { firstName: "Filip", nickname: "Pilín" }
-function parseNameAndNickname(jmeno: string): { firstName: string; nickname: string | null } {
+// "Filip (Pilín)" → { jmeno: "Filip", nickname: "Pilín" }
+function parseNickname(jmeno: string): { jmeno: string; nickname: string | null } {
     const match = jmeno.match(/^(.+?)\s*\((.+?)\)(.*)?$/);
-    if (match) {
-        return { firstName: (match[1] + (match[3] ?? "")).trim(), nickname: match[2].trim() };
-    }
-    return { firstName: jmeno.trim(), nickname: null };
+    if (match) return { jmeno: (match[1] + (match[3] ?? "")).trim(), nickname: match[2].trim() };
+    return { jmeno: jmeno.trim(), nickname: null };
 }
 
-// Excel serial date (např. "36728") nebo ISO string → "YYYY-MM-DD" nebo null
-function parseExcelDate(value: string | undefined): string | null {
+// Excel serial nebo ISO string → "YYYY-MM-DD" nebo null
+function parseDate(value: string | null | undefined): string | null {
     if (!value) return null;
     const num = Number(value);
     if (!isNaN(num) && num > 1000) {
@@ -47,55 +38,58 @@ function parseExcelDate(value: string | undefined): string | null {
     return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
 }
 
-async function upsertMembers(rows: SyncMember[]): Promise<SyncResult> {
+function isAuthorized(request: NextRequest): boolean {
+    const secret = process.env.CRON_SECRET;
+    if (!secret) return true;
+    return request.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: number }> {
     const db = getDb();
-    let updated = 0, notFound = 0, skipped = 0;
+    let upserted = 0, skipped = 0;
 
     for (const row of rows) {
-        const cskNumber = row.csk?.trim() || null;
-        if (!cskNumber) { skipped++; continue; }
+        const csk = row.csk?.trim() || null;
+        if (!csk) { skipped++; continue; }
 
-        const { firstName, nickname } = parseNameAndNickname(row.jmeno ?? "");
-        const fullName = [firstName, row.prijmeni].filter(Boolean).join(" ").trim();
-        if (!fullName) { skipped++; continue; }
-
-        const existing = await db
-            .select({ id: members.id })
-            .from(members)
-            .where(eq(members.cskNumber, cskNumber))
-            .limit(1);
-
-        if (existing.length === 0) { notFound++; continue; }
-
+        const { jmeno, nickname } = parseNickname(row.jmeno ?? "");
         const addressParts = [row.adresa, row.obec, row.psc].filter(Boolean);
-        const address = addressParts.length > 0 ? addressParts.join(", ") : null;
 
-        await db.update(members)
-            .set({
-                fullName,
-                nickname:    nickname ?? undefined,
-                email:       row.email   || null,
-                phone:       row.telefon || null,
-                birthDate:   parseExcelDate(row.datum_naroz),
-                birthNumber: row.rc      || null,
-                gender:      row.gender  || null,
-                address,
-                updatedAt:   new Date(),
-            })
-            .where(eq(members.cskNumber, cskNumber));
-        updated++;
+        await db.insert(tjMembers).values({
+            cskNumber:    csk,
+            jmeno,
+            prijmeni:     row.prijmeni?.trim() || null,
+            nickname,
+            email:        row.email?.trim()    || null,
+            phone:        row.telefon?.trim()  || null,
+            birthDate:    parseDate(row.datum_naroz),
+            birthNumber:  row.rc?.trim()       || null,
+            gender:       row.gender?.trim()   || null,
+            address:      addressParts.length > 0 ? addressParts.join(", ") : null,
+            radekOdeslan: parseDate(row.radek_odeslan),
+            syncedAt:     new Date(),
+        }).onConflictDoUpdate({
+            target: tjMembers.cskNumber,
+            set: {
+                jmeno,
+                prijmeni:     row.prijmeni?.trim() || null,
+                nickname,
+                email:        row.email?.trim()    || null,
+                phone:        row.telefon?.trim()  || null,
+                birthDate:    parseDate(row.datum_naroz),
+                birthNumber:  row.rc?.trim()       || null,
+                gender:       row.gender?.trim()   || null,
+                address:      addressParts.length > 0 ? addressParts.join(", ") : null,
+                radekOdeslan: parseDate(row.radek_odeslan),
+                syncedAt:     new Date(),
+            },
+        });
+        upserted++;
     }
 
-    return { total: rows.length, updated, notFound, skipped };
+    return { upserted, skipped };
 }
 
-function isAuthorized(request: NextRequest): boolean {
-    const cronSecret = process.env.CRON_SECRET;
-    if (!cronSecret) return true;
-    return request.headers.get("authorization") === `Bearer ${cronSecret}`;
-}
-
-// Vercel cron — čte soubor z GitHub a spustí upsert
 export async function GET(request: NextRequest) {
     if (!isAuthorized(request)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -112,28 +106,21 @@ export async function GET(request: NextRequest) {
         { headers: { Authorization: `Bearer ${token}`, Accept: "application/vnd.github.v3+json" }, cache: "no-store" }
     );
 
-    if (res.status === 404) {
-        return NextResponse.json({ ok: true, message: "sync/members.json ještě neexistuje", total: 0 });
-    }
-    if (!res.ok) {
-        return NextResponse.json({ ok: false, error: `GitHub API chyba: ${res.status}` }, { status: 500 });
-    }
+    if (res.status === 404) return NextResponse.json({ ok: true, message: "sync/members.json ještě neexistuje", upserted: 0 });
+    if (!res.ok) return NextResponse.json({ ok: false, error: `GitHub API chyba: ${res.status}` }, { status: 500 });
 
-    const data    = await res.json();
-    const content = Buffer.from(data.content, "base64").toString("utf-8");
-    const rows: SyncMember[] = JSON.parse(content);
-
-    const result = await upsertMembers(rows);
-    return NextResponse.json({ ok: true, ...result });
+    const data = await res.json();
+    const rows: PaRow[] = JSON.parse(Buffer.from(data.content, "base64").toString("utf-8"));
+    const result = await upsertRows(rows);
+    return NextResponse.json({ ok: true, total: rows.length, ...result });
 }
 
-// GitHub Actions → POST s polem členů přímo v body
 export async function POST(request: NextRequest) {
     if (!isAuthorized(request)) {
         return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
     }
 
-    let rows: SyncMember[];
+    let rows: PaRow[];
     try {
         rows = await request.json();
         if (!Array.isArray(rows)) throw new Error("Očekáváno pole");
@@ -141,6 +128,6 @@ export async function POST(request: NextRequest) {
         return NextResponse.json({ ok: false, error: "Neplatný JSON" }, { status: 400 });
     }
 
-    const result = await upsertMembers(rows);
-    return NextResponse.json({ ok: true, ...result });
+    const result = await upsertRows(rows);
+    return NextResponse.json({ ok: true, total: rows.length, ...result });
 }

@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git commit -m ':*)"
+    ],
+    "additionalDirectories": [
+      "/Users/ext93895/work/ovt-sync/.github/workflows"
+    ]
+  }
+}

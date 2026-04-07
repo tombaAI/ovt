@@ -47,6 +47,23 @@ export const members = appSchema.table("members", {
     updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const tjMembers = appSchema.table("tj_members", {
+    id:           serial("id").primaryKey(),
+    cskNumber:    text("csk_number").unique(),
+    jmeno:        text("jmeno"),
+    prijmeni:     text("prijmeni"),
+    nickname:     text("nickname"),
+    email:        text("email"),
+    phone:        text("phone"),
+    birthDate:    date("birth_date"),
+    birthNumber:  text("birth_number"),
+    gender:       text("gender"),
+    address:      text("address"),
+    radekOdeslan: date("radek_odeslan"),
+    syncedAt:     timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+    createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const contributionPeriods = appSchema.table("contribution_periods", {
     id:                  serial("id").primaryKey(),
     year:                smallint("year").notNull().unique(),
