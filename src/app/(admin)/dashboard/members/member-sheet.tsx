@@ -289,45 +289,64 @@ function TodoSection({ currentNote, onSave }: {
     );
 }
 
-// ── Membership history (read-only) ────────────────────────────────────────────
+// ── Contribution history ──────────────────────────────────────────────────────
 function fmt(n: number | null) {
     if (n === null) return "—";
     return n.toLocaleString("cs-CZ") + " Kč";
 }
 
-function MembershipHistory({ memberId }: { memberId: number }) {
+function ContributionHistory({ memberId }: { memberId: number }) {
     const [rows, setRows] = useState<MemberYearRecord[] | null>(null);
 
     useEffect(() => {
-        getMemberHistory(memberId).then(data => setRows([...data].reverse()));
+        getMemberHistory(memberId).then(setRows);
     }, [memberId]);
 
     if (!rows) return <p className="text-xs text-gray-400 py-2">Načítám…</p>;
+    if (rows.length === 0) return <p className="text-xs text-gray-400 py-2">Žádné záznamy</p>;
 
     return (
         <div className="overflow-x-auto -mx-4 px-4">
-            <table className="w-full text-sm min-w-[320px]">
+            <table className="w-full text-sm min-w-[360px]">
                 <thead>
                     <tr className="border-b text-xs font-semibold text-gray-500 uppercase tracking-wide">
                         <th className="text-left pb-2 pr-3">Rok</th>
-                        <th className="text-center pb-2 pr-3">Člen</th>
                         <th className="text-right pb-2 pr-3">Předpis</th>
+                        <th className="text-right pb-2 pr-3">Zaplaceno</th>
+                        <th className="text-right pb-2">Stav</th>
                     </tr>
                 </thead>
                 <tbody>
-                    {rows.map(r => (
-                        <tr key={r.year} className={["border-b last:border-0", !r.isMember ? "opacity-40" : ""].join(" ")}>
-                            <td className="py-1.5 pr-3 font-semibold text-gray-800">
-                                {r.year}
-                                {r.isEntryYear && <span className="ml-1.5 text-[10px] text-green-600 font-normal">vstup</span>}
-                                {r.isExitYear  && <span className="ml-1.5 text-[10px] text-red-500 font-normal">odchod</span>}
-                            </td>
-                            <td className="py-1.5 pr-3 text-center">
-                                {r.isMember ? "✓" : <span className="text-gray-300">—</span>}
-                            </td>
-                            <td className="py-1.5 pr-3 text-right font-mono text-gray-600 text-xs">{fmt(r.amountTotal)}</td>
-                        </tr>
-                    ))}
+                    {rows.map(r => {
+                        const balance = r.hasContrib && r.amountTotal !== null
+                            ? r.paidTotal - r.amountTotal
+                            : null;
+                        return (
+                            <tr key={r.year} className="border-b last:border-0">
+                                <td className="py-1.5 pr-3 font-semibold text-gray-800">{r.year}</td>
+                                {r.hasContrib ? (
+                                    <>
+                                        <td className="py-1.5 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.amountTotal)}</td>
+                                        <td className="py-1.5 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.paidTotal)}</td>
+                                        <td className="py-1.5 text-right text-xs font-medium">
+                                            {balance === null && <span className="text-gray-400">—</span>}
+                                            {balance === 0   && <span className="text-green-600">OK</span>}
+                                            {balance !== null && balance > 0 && (
+                                                <span className="text-blue-600">+{balance.toLocaleString("cs-CZ")} Kč</span>
+                                            )}
+                                            {balance !== null && balance < 0 && (
+                                                <span className="text-red-600">{balance.toLocaleString("cs-CZ")} Kč</span>
+                                            )}
+                                        </td>
+                                    </>
+                                ) : (
+                                    <td colSpan={3} className="py-1.5 pl-2 text-xs font-medium text-amber-600">
+                                        ⚠ Chybí předpis
+                                    </td>
+                                )}
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
@@ -346,8 +365,8 @@ interface Props {
 }
 
 export function MemberSheet({ open, onOpenChange, member, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
-    const [showHistory, setShowHistory]         = useState(false);
-    const [showMemberHistory, setShowMemberHistory] = useState(false);
+    const [showHistory, setShowHistory]               = useState(false);
+    const [showContribHistory, setShowContribHistory] = useState(false);
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
     const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
     const [committeePending, startCommitteeTransition] = useTransition();
@@ -362,7 +381,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
 
     useEffect(() => {
         setShowHistory(false);
-        setShowMemberHistory(false);
+        setShowContribHistory(false);
         setActiveField(null);
     }, [member?.id]);
 
@@ -495,19 +514,16 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                 </div>
                             )}
 
-                            {/* Historie členství */}
+                            {/* Příspěvky po rocích */}
                             <Separator className="mb-4" />
                             <div className="mb-4">
                                 <button
-                                    onClick={() => setShowMemberHistory(v => !v)}
+                                    onClick={() => setShowContribHistory(v => !v)}
                                     className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left mb-2">
-                                    <span>{showMemberHistory ? "▾" : "▸"}</span>
-                                    Historie členství
-                                    {!member.membershipReviewed && (
-                                        <span className="ml-2 text-xs text-yellow-600 font-normal">Ke kontrole</span>
-                                    )}
+                                    <span>{showContribHistory ? "▾" : "▸"}</span>
+                                    Příspěvky po rocích
                                 </button>
-                                {showMemberHistory && <MembershipHistory memberId={member.id} />}
+                                {showContribHistory && <ContributionHistory memberId={member.id} />}
                             </div>
 
                             {/* Ukončit členství */}

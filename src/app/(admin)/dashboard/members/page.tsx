@@ -17,7 +17,6 @@ export type MemberWithFlags = {
     phone: string | null;
     variableSymbol: number | null;
     cskNumber: number | null;
-    membershipReviewed: boolean;
     note: string | null;
     todoNote: string | null;
     // Member date range (always present)
@@ -86,7 +85,6 @@ export default async function MembersPage(props: {
                 phone:              members.phone,
                 variableSymbol:     members.variableSymbol,
                 cskNumber:          members.cskNumber,
-                membershipReviewed: members.membershipReviewed,
                 note:               members.note,
                 todoNote:           members.todoNote,
                 memberFrom:         members.memberFrom,
@@ -122,7 +120,6 @@ export default async function MembersPage(props: {
                 phone:              members.phone,
                 variableSymbol:     members.variableSymbol,
                 cskNumber:          members.cskNumber,
-                membershipReviewed: members.membershipReviewed,
                 note:               members.note,
                 todoNote:           members.todoNote,
                 memberFrom:         members.memberFrom,
@@ -165,7 +162,6 @@ export default async function MembersPage(props: {
                 phone:              r.phone,
                 variableSymbol:     r.variableSymbol,
                 cskNumber:          r.cskNumber,
-                membershipReviewed: r.membershipReviewed,
                 note:               r.note,
                 todoNote:           r.todoNote,
                 memberFrom:         mFrom,

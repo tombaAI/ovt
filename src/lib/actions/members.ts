@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods, auditLog } from "@/db/schema";
+import { members, memberContributions, contributionPeriods, auditLog, payments } from "@/db/schema";
 import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
@@ -376,16 +376,13 @@ export async function terminateMembership(
     }
 }
 
-// ── getMemberHistory — per-year overview 2019–present ────────────────────────
-const REVIEW_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025] as const;
+// ── getMemberHistory — contribution overview per year of membership ───────────
 
 export type MemberYearRecord = {
     year: number;
-    isMember: boolean;
-    isEntryYear: boolean;
-    isExitYear: boolean;
+    hasContrib: boolean;
     amountTotal: number | null;
-    paidTotal: number | null;
+    paidTotal: number;
 };
 
 export async function getMemberHistory(memberId: number): Promise<MemberYearRecord[]> {
@@ -400,32 +397,42 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
     const fromYear = parseInt((member.memberFrom as unknown as string).slice(0, 4));
     const toYear   = member.memberTo ? parseInt((member.memberTo as unknown as string).slice(0, 4)) : null;
 
-    const finRows = await db
+    // All contribution periods within the member's active years
+    const allPeriods = await db
+        .select({ id: contributionPeriods.id, year: contributionPeriods.year })
+        .from(contributionPeriods);
+
+    const relevantPeriods = allPeriods.filter(p =>
+        p.year >= fromYear && (toYear === null || p.year <= toYear)
+    );
+
+    if (relevantPeriods.length === 0) return [];
+
+    // Contributions for this member with payment totals
+    const contribs = await db
         .select({
-            year:        contributionPeriods.year,
+            periodId:    memberContributions.periodId,
             amountTotal: memberContributions.amountTotal,
-            paidTotal:   sql<number>`coalesce(sum(0), 0)`, // placeholder — payments aggregated separately
+            paidTotal:   sql<number>`coalesce(sum(${payments.amount}), 0)`,
         })
         .from(memberContributions)
-        .innerJoin(contributionPeriods, eq(memberContributions.periodId, contributionPeriods.id))
-        .where(eq(memberContributions.memberId, memberId));
+        .leftJoin(payments, eq(payments.contribId, memberContributions.id))
+        .where(eq(memberContributions.memberId, memberId))
+        .groupBy(memberContributions.id, memberContributions.periodId, memberContributions.amountTotal);
 
-    const finMap = new Map(finRows.map(r => [r.year, r]));
+    const contribMap = new Map(contribs.map(c => [c.periodId, c]));
 
-    return REVIEW_YEARS.map(year => {
-        const isMember    = year >= fromYear && (toYear === null || year <= toYear);
-        const isEntryYear = year === fromYear;
-        const isExitYear  = toYear !== null && year === toYear;
-        const fin         = finMap.get(year) ?? null;
-        return {
-            year,
-            isMember,
-            isEntryYear,
-            isExitYear,
-            amountTotal: fin?.amountTotal ?? null,
-            paidTotal:   null, // payments aggregate loaded separately in sheet
-        };
-    });
+    return relevantPeriods
+        .map(p => {
+            const contrib = contribMap.get(p.id);
+            return {
+                year:        p.year,
+                hasContrib:  Boolean(contrib),
+                amountTotal: contrib?.amountTotal ?? null,
+                paidTotal:   contrib ? Number(contrib.paidTotal) : 0,
+            };
+        })
+        .sort((a, b) => b.year - a.year);
 }
 
 // ── setMemberTodo ─────────────────────────────────────────────────────────────
