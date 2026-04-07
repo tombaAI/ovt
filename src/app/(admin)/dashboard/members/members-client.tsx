@@ -13,7 +13,7 @@ type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "todo"
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
-    { key: "all",        label: "Všichni"            },
+    { key: "all",        label: "Aktivní"            },
     { key: "committee",  label: "Výbor"              },
     { key: "tom",        label: "Vedoucí TOM"        },
     { key: "individual", label: "Individuální sleva" },
@@ -113,7 +113,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
     function openAdd()                       { setEditMemberId(null); setSheetOpen(true); }
 
     const counts = useMemo(() => ({
-        all:        members.length,
+        all:        members.filter(m => m.memberTo === null).length,
         committee:  members.filter(m => m.isCommittee).length,
         tom:        members.filter(m => m.isTom).length,
         individual: members.filter(m => m.discountIndividual !== null).length,
@@ -131,7 +131,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             case "partial":    list = members.filter(m => m.fromDate !== null || m.toDate !== null); break;
             case "todo":       list = members.filter(m => m.todoNote !== null); break;
             case "terminated": list = members.filter(m => m.memberTo !== null); break;
-            default:           list = [...members];
+            default:           list = members.filter(m => m.memberTo === null);
         }
         if (searchText.trim()) {
             const q = searchText.trim().toLowerCase();
