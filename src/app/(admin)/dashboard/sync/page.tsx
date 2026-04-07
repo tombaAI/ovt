@@ -3,8 +3,8 @@ import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { members, tjMembers } from "@/db/schema";
 import { SyncClient } from "./sync-client";
-import type { SyncUpdatableField } from "@/lib/actions/sync";
-import { SYNC_UPDATABLE_FIELDS } from "@/lib/actions/sync";
+import type { SyncUpdatableField } from "@/lib/sync-config";
+import { SYNC_UPDATABLE_FIELDS } from "@/lib/sync-config";
 
 export const dynamic = "force-dynamic";
 

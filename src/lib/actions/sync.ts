@@ -6,23 +6,10 @@ import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import { members, tjMembers, auditLog } from "@/db/schema";
-
-// ── Typy ─────────────────────────────────────────────────────────────────────
+import type { SyncUpdatableField } from "@/lib/sync-config";
 
 export type SyncActionResult = { error: string } | { success: true };
-
-export const SYNC_UPDATABLE_FIELDS = {
-    email:       "Email",
-    phone:       "Telefon",
-    address:     "Adresa",
-    birthDate:   "Datum narození",
-    birthNumber: "Rodné číslo",
-    gender:      "Pohlaví",
-    nickname:    "Přezdívka",
-    fullName:    "Celé jméno",
-} as const;
-
-export type SyncUpdatableField = keyof typeof SYNC_UPDATABLE_FIELDS;
+export type { SyncUpdatableField };
 
 // ── importFromTj ──────────────────────────────────────────────────────────────
 // Vytvoří nový members záznam z dat tj_members
