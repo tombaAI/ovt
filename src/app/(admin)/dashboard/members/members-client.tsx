@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags, PeriodTab } from "./page";
 
-type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "todo" | "terminated";
+type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "todo";
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -17,9 +17,8 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "committee",  label: "Výbor"              },
     { key: "tom",        label: "Vedoucí TOM"        },
     { key: "individual", label: "Individuální sleva" },
-    { key: "partial",    label: "Vstup/odchod"       },
+    { key: "partial",    label: "Vstup / ukončení"   },
     { key: "todo",       label: "S úkolem"           },
-    { key: "terminated", label: "Ukončení"           },
 ];
 
 function lastName(fullName: string) {
@@ -119,7 +118,6 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
         individual: members.filter(m => m.discountIndividual !== null).length,
         partial:    members.filter(m => m.fromDate !== null || m.toDate !== null).length,
         todo:       members.filter(m => m.todoNote !== null).length,
-        terminated: members.filter(m => m.toDate !== null).length,
     }), [members]);
 
     const filtered = useMemo(() => {
@@ -130,7 +128,6 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             case "individual": list = members.filter(m => m.discountIndividual !== null); break;
             case "partial":    list = members.filter(m => m.fromDate !== null || m.toDate !== null); break;
             case "todo":       list = members.filter(m => m.todoNote !== null); break;
-            case "terminated": list = members.filter(m => m.memberTo !== null); break;
             default:           list = members.filter(m => m.memberTo === null);
         }
         if (searchText.trim()) {
@@ -197,18 +194,15 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
 
             {/* ── Filter + sort pills ── */}
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
-                {FILTERS.filter(f => !isAllYears || ["all", "todo", "terminated"].includes(f.key)).map(f => (
+                {FILTERS.filter(f => !isAllYears || ["all", "todo"].includes(f.key)).map(f => (
                     <button key={f.key} onClick={() => setFilter(f.key)}
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "todo"       ? "bg-orange-500 text-white"
-                                  : f.key === "terminated" ? "bg-red-600 text-white"
+                                ? f.key === "todo" ? "bg-orange-500 text-white"
                                   : "bg-[#327600] text-white"
                                 : f.key === "todo" && counts.todo > 0
                                     ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
-                                : f.key === "terminated" && counts.terminated > 0
-                                    ? "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}
