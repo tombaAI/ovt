@@ -21,6 +21,13 @@ UPDATE app.members SET
     WHERE id = 44; -- CSK 559026
 
 UPDATE app.members SET
+        phone = '737003673',
+        birth_date = '1964-01-19',
+        birth_number = '640119/1731',
+        gender = 'Muž'
+    WHERE id = 71; -- Adam Chochola (CSK dle opravy v DB)
+
+UPDATE app.members SET
         phone = '777877447',
         birth_date = '1986-07-23',
         birth_number = '860723/0005',
@@ -135,7 +142,9 @@ UPDATE app.members SET
 UPDATE app.members SET
         phone = '722062484',
         birth_date = '2001-08-18',
-        gender = 'Muž'
+        birth_number = '010818/0050',
+        gender = 'Muž',
+        todo_note = 'Zkontrolovat RČ — shoduje se s Vojtěchem Kopřivou (010818/0050), pravděpodobný překlep v evidenci VT.'
     WHERE id = 74; -- CSK 560639
 
 UPDATE app.members SET
@@ -196,7 +205,9 @@ UPDATE app.members SET
 UPDATE app.members SET
         phone = '722226963',
         birth_date = '2001-08-18',
-        gender = 'Muž'
+        birth_number = '010818/0050',
+        gender = 'Muž',
+        todo_note = 'Zkontrolovat RČ — shoduje se s Lukášem Kopřivou (010818/0050), pravděpodobný překlep v evidenci VT.'
     WHERE id = 93; -- CSK 560640
 
 UPDATE app.members SET
