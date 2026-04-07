@@ -16,7 +16,7 @@ export type MemberWithFlags = {
     email: string | null;
     phone: string | null;
     variableSymbol: number | null;
-    cskNumber: number | null;
+    cskNumber: string | null;
     note: string | null;
     todoNote: string | null;
     // Member date range (always present)

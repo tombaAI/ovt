@@ -62,8 +62,8 @@ export async function GET(request: NextRequest) {
     let updated = 0, inserted = 0, skipped = 0;
 
     for (const row of syncData) {
-        const cskNumber = row.csk ? parseInt(row.csk) : null;
-        if (!cskNumber || isNaN(cskNumber)) { skipped++; continue; }
+        const cskNumber = row.csk?.trim() || null;
+        if (!cskNumber) { skipped++; continue; }
 
         const fullName = [row.jmeno, row.prijmeni].filter(Boolean).join(" ").trim();
         if (!fullName) { skipped++; continue; }
@@ -87,8 +87,9 @@ export async function GET(request: NextRequest) {
                 .where(eq(members.cskNumber, cskNumber));
             updated++;
         } else {
+            const idNum = parseInt(cskNumber, 10);
             await db.insert(members).values({
-                id: cskNumber,
+                id: isNaN(idNum) ? undefined as unknown as number : idNum,
                 fullName,
                 email: row.email || null,
                 phone: row.telefon || null,

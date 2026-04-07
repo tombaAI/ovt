@@ -58,7 +58,7 @@ export async function saveMember(
         email:          (formData.get("email") as string)?.trim()        || null,
         phone:          (formData.get("phone") as string)?.trim()        || null,
         variableSymbol: Number(formData.get("variable_symbol")) || null,
-        cskNumber:      Number(formData.get("csk_number"))      || null,
+        cskNumber:      (formData.get("csk_number") as string)?.trim() || null,
         note:           (formData.get("note") as string)?.trim()         || null,
     };
 
@@ -208,8 +208,10 @@ export async function updateMemberField(
                 newValue = value.trim();
                 break;
             case "variableSymbol":
-            case "cskNumber":
                 newValue = Number(value) || null;
+                break;
+            case "cskNumber":
+                newValue = value.trim() || null;
                 break;
             default:
                 newValue = value.trim() || null;
