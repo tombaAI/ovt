@@ -100,7 +100,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
         partial:    members.filter(m => m.fromDate !== null || m.toDate !== null).length,
         review:     members.filter(m => !m.membershipReviewed).length,
         todo:       members.filter(m => m.todoNote !== null).length,
-        terminated: members.filter(m => m.memberTo !== null).length,
+        terminated: members.filter(m => m.toDate !== null).length,
     }), [members]);
 
     const filtered = useMemo(() => {
