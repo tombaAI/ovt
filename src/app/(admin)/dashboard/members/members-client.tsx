@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -77,17 +77,29 @@ function MemberBadges({ m }: { m: MemberWithFlags }) {
 
 export function MembersClient({ members, periods, selectedYear, periodId, currentYearDiscounts }: Props) {
     const router = useRouter();
+    const [isPending, startTransition]    = useTransition();
+    const [pendingYear, setPendingYear]   = useState<number | null>(null);
     const [filter, setFilter]             = useState<FilterKey>("all");
     const [sort, setSort]                 = useState<SortKey>("firstName");
     const [searchText, setSearchText]     = useState("");
     const [sheetOpen, setSheetOpen]       = useState(false);
     const [editMemberId, setEditMemberId] = useState<number | null>(null);
 
-    const isAllYears = selectedYear === 0;
+    // Zobrazíme kliknutý rok okamžitě, bez čekání na server
+    const displayYear = isPending && pendingYear !== null ? pendingYear : selectedYear;
+    const isAllYears  = displayYear === 0;
 
     const editMember = editMemberId !== null ? (members.find(m => m.id === editMemberId) ?? null) : null;
 
     const onMemberUpdated = useCallback(() => { router.refresh(); }, [router]);
+
+    function navigateYear(year: number) {
+        setPendingYear(year);
+        setFilter("all");
+        startTransition(() => {
+            router.push(`/dashboard/members?year=${year === 0 ? "all" : year}`);
+        });
+    }
 
     function openDetail(m: MemberWithFlags) { setEditMemberId(m.id); setSheetOpen(true); router.refresh(); }
     function openAdd()                       { setEditMemberId(null); setSheetOpen(true); }
@@ -137,10 +149,10 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
                 {periods.map(p => (
                     <button key={p.year}
-                        onClick={() => router.push(`/dashboard/members?year=${p.year}`)}
+                        onClick={() => navigateYear(p.year)}
                         className={[
                             "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                            p.year === selectedYear
+                            p.year === displayYear
                                 ? "bg-[#26272b] text-white"
                                 : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
@@ -148,10 +160,10 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                     </button>
                 ))}
                 <button
-                    onClick={() => router.push("/dashboard/members?year=all")}
+                    onClick={() => navigateYear(0)}
                     className={[
                         "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                        isAllYears
+                        displayYear === 0
                             ? "bg-[#26272b] text-white"
                             : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                     ].join(" ")}>
@@ -162,7 +174,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             {/* ── Heading ── */}
             <div>
                 <h1 className="text-2xl font-semibold text-gray-900">
-                    {isAllYears ? "Všichni členové" : `Členové ${selectedYear}`}
+                    {isAllYears ? "Všichni členové" : `Členové ${displayYear}`}
                 </h1>
                 <p className="text-gray-500 mt-0.5 text-sm">
                     {members.length} členů
@@ -225,7 +237,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             </div>
 
             {/* ── Mobile: cards ── */}
-            <div className="md:hidden space-y-2">
+            <div className={`md:hidden space-y-2 transition-opacity duration-150 ${isPending ? "opacity-40 pointer-events-none" : ""}`}>
                 {filtered.length === 0 && (
                     <p className="text-center text-gray-400 py-12 text-sm">Žádní členové</p>
                 )}
@@ -247,7 +259,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             </div>
 
             {/* ── Desktop: table ── */}
-            <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
+            <div className={`hidden md:block rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-40" : ""}`}>
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
