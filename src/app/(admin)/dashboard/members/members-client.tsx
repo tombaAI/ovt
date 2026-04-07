@@ -41,6 +41,20 @@ interface Props {
     currentYearDiscounts: { committee: number; tom: number } | null;
 }
 
+function YearBadges({ years }: { years: number[] }) {
+    const visible = years.length > 3 ? years.slice(-3) : years;
+    return (
+        <>
+            {years.length > 3 && (
+                <Badge className="bg-gray-100 text-gray-400 border-0 text-xs font-normal tracking-widest px-1.5">···</Badge>
+            )}
+            {visible.map(y => (
+                <Badge key={y} className="bg-gray-100 text-gray-600 border-0 text-xs font-normal">{y}</Badge>
+            ))}
+        </>
+    );
+}
+
 function MemberBadges({ m }: { m: MemberWithFlags }) {
     return (
         <>
@@ -248,9 +262,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         {m.email && <p className="text-sm text-gray-500 mt-0.5 truncate">{m.email}</p>}
                         <div className="flex flex-wrap gap-1 mt-2">
                             {isAllYears
-                                ? m.memberYears?.map(y => (
-                                    <Badge key={y} className="bg-gray-100 text-gray-600 border-0 text-xs font-normal">{y}</Badge>
-                                ))
+                                ? <YearBadges years={m.memberYears ?? []} />
                                 : <MemberBadges m={m} />
                             }
                         </div>
@@ -290,9 +302,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                                 <TableCell>
                                     <div className="flex flex-wrap gap-1">
                                         {isAllYears
-                                            ? m.memberYears?.map(y => (
-                                                <Badge key={y} className="bg-gray-100 text-gray-600 border-0 text-xs font-normal">{y}</Badge>
-                                            ))
+                                            ? <YearBadges years={m.memberYears ?? []} />
                                             : <MemberBadges m={m} />
                                         }
                                     </div>
