@@ -179,8 +179,8 @@ export async function saveMember(
 }
 
 // ── updateMemberField — inline edit jednoho pole ─────────────────────────────
-type EditableField = "fullName" | "userLogin" | "email" | "phone" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
-const EDITABLE_FIELD_KEYS = new Set<EditableField>(["fullName","userLogin","email","phone","variableSymbol","cskNumber","note","memberFrom"]);
+type EditableField = "fullName" | "nickname" | "userLogin" | "email" | "phone" | "gender" | "address" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
+const EDITABLE_FIELD_KEYS = new Set<EditableField>(["fullName","nickname","userLogin","email","phone","gender","address","variableSymbol","cskNumber","note","memberFrom"]);
 
 export async function updateMemberField(
     memberId: number,

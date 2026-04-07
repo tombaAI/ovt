@@ -17,6 +17,11 @@ export type MemberWithFlags = {
     phone: string | null;
     variableSymbol: number | null;
     cskNumber: string | null;
+    nickname: string | null;
+    gender: string | null;
+    address: string | null;
+    birthDate: string | null;
+    birthNumber: string | null;
     note: string | null;
     todoNote: string | null;
     // Member date range (always present)
@@ -85,6 +90,11 @@ export default async function MembersPage(props: {
                 phone:              members.phone,
                 variableSymbol:     members.variableSymbol,
                 cskNumber:          members.cskNumber,
+                nickname:           members.nickname,
+                gender:             members.gender,
+                address:            members.address,
+                birthDate:          members.birthDate,
+                birthNumber:        members.birthNumber,
                 note:               members.note,
                 todoNote:           members.todoNote,
                 memberFrom:         members.memberFrom,
@@ -99,6 +109,7 @@ export default async function MembersPage(props: {
             memberFrom:         r.memberFrom as unknown as string,
             memberTo:           r.memberTo as unknown as string | null,
             memberToNote:       r.memberToNote,
+            birthDate:          r.birthDate as unknown as string | null,
             fromDate:           null,
             toDate:             null,
             isCommittee:        false,
@@ -120,6 +131,11 @@ export default async function MembersPage(props: {
                 phone:              members.phone,
                 variableSymbol:     members.variableSymbol,
                 cskNumber:          members.cskNumber,
+                nickname:           members.nickname,
+                gender:             members.gender,
+                address:            members.address,
+                birthDate:          members.birthDate,
+                birthNumber:        members.birthNumber,
                 note:               members.note,
                 todoNote:           members.todoNote,
                 memberFrom:         members.memberFrom,
@@ -162,6 +178,11 @@ export default async function MembersPage(props: {
                 phone:              r.phone,
                 variableSymbol:     r.variableSymbol,
                 cskNumber:          r.cskNumber,
+                nickname:           r.nickname,
+                gender:             r.gender,
+                address:            r.address,
+                birthDate:          r.birthDate as unknown as string | null,
+                birthNumber:        r.birthNumber,
                 note:               r.note,
                 todoNote:           r.todoNote,
                 memberFrom:         mFrom,

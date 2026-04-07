@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState, useTransition, useActionState } from "react";
+import { useEffect, useState, useTransition, useActionState, useCallback } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
@@ -353,6 +354,37 @@ function ContributionHistory({ memberId }: { memberId: number }) {
     );
 }
 
+// ── Sensitive data section ────────────────────────────────────────────────────
+function SensitiveDataSection({ member }: { member: MemberWithFlags }) {
+    const [visible, setVisible] = useState(false);
+    const toggle = useCallback(() => setVisible(v => !v), []);
+
+    return (
+        <div className="rounded-xl border px-4 py-3 mb-4">
+            <button
+                onClick={toggle}
+                className="flex items-center gap-2 w-full text-left"
+                type="button"
+            >
+                <span className="text-sm font-semibold text-gray-700">Osobní údaje (GDPR)</span>
+                <span className="ml-auto text-gray-400 hover:text-gray-700 transition-colors">
+                    {visible ? <EyeOff size={16} /> : <Eye size={16} />}
+                </span>
+            </button>
+            {visible && (
+                <div className="mt-3 space-y-2 text-sm">
+                    <div className="grid grid-cols-[120px_1fr] gap-x-3 gap-y-1.5">
+                        <span className="text-gray-500 self-center">Datum narození</span>
+                        <span className="font-medium">{fmtDateShort(member.birthDate) ?? "—"}</span>
+                        <span className="text-gray-500 self-center">Rodné číslo</span>
+                        <span className="font-medium font-mono">{member.birthNumber ?? "—"}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Main detail sheet ─────────────────────────────────────────────────────────
 interface Props {
     open: boolean;
@@ -444,14 +476,20 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                             {/* Inline edit fields */}
                             <div className="rounded-xl border px-4 mb-4">
                                 <InlineField label="Jméno"       value={member.fullName}                        fieldId="fullName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("fullName")} />
+                                <InlineField label="Přezdívka"   value={member.nickname}   placeholder="(žádná)"    fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")} />
                                 <InlineField label="Login"       value={member.userLogin}  placeholder="(nezadáno)" fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
                                 <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} />
                                 <InlineField label="Telefon"     value={member.phone}      type="tel"               fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")} />
+                                <InlineField label="Pohlaví"     value={member.gender}     placeholder="(nezadáno)" fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")} />
+                                <InlineField label="Adresa"      value={member.address}    placeholder="(nezadáno)" fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")} />
                                 <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
-                                <InlineField label="Číslo ČSK"   value={member.cskNumber?.toString() ?? null}     type="number" fieldId="cskNumber"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} />
+                                <InlineField label="Číslo ČSK"   value={member.cskNumber ?? null}                  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} />
                                 <InlineField label="Poznámka"    value={member.note}       placeholder="(žádná)"    fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
                                 <InlineField label="Člen od"     value={member.memberFrom} type="date"              fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} />
                             </div>
+
+                            {/* Citlivé údaje — skryté za očíčkem */}
+                            <SensitiveDataSection member={member} />
 
                             {/* Todo */}
                             <TodoSection

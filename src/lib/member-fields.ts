@@ -1,9 +1,12 @@
 /** Česká jména polí pro zobrazení v audit logu */
 export const FIELD_LABELS: Record<string, string> = {
     fullName:               "Jméno",
+    nickname:               "Přezdívka",
     userLogin:              "Login",
     email:                  "E-mail",
     phone:                  "Telefon",
+    gender:                 "Pohlaví",
+    address:                "Adresa",
     variableSymbol:         "Variabilní symbol",
     cskNumber:              "Číslo ČSK",
     note:                   "Poznámka",
