@@ -7,15 +7,17 @@ import { members } from "@/db/schema";
 export const dynamic = "force-dynamic";
 
 interface SyncMember {
-    csk:             string;
-    jmeno:           string;
-    prijmeni:        string;
-    email?:          string;
-    telefon?:        string;
-    datum_narozeni?: string;
-    rodne_cislo?:    string;
-    pohlavi?:        string;
-    adresa?:         string;
+    csk?:         string | null;
+    jmeno:        string;
+    prijmeni:     string;
+    email?:       string;
+    telefon?:     string;
+    datum_naroz?: string;
+    rc?:          string;
+    gender?:      string;
+    adresa?:      string;
+    obec?:        string;
+    psc?:         string;
 }
 
 interface SyncResult {
@@ -65,16 +67,19 @@ async function upsertMembers(rows: SyncMember[]): Promise<SyncResult> {
 
         if (existing.length === 0) { notFound++; continue; }
 
+        const addressParts = [row.adresa, row.obec, row.psc].filter(Boolean);
+        const address = addressParts.length > 0 ? addressParts.join(", ") : null;
+
         await db.update(members)
             .set({
                 fullName,
                 nickname:    nickname ?? undefined,
-                email:       row.email    || null,
-                phone:       row.telefon  || null,
-                birthDate:   parseExcelDate(row.datum_narozeni),
-                birthNumber: row.rodne_cislo  || null,
-                gender:      row.pohlavi      || null,
-                address:     row.adresa       || null,
+                email:       row.email   || null,
+                phone:       row.telefon || null,
+                birthDate:   parseExcelDate(row.datum_naroz),
+                birthNumber: row.rc      || null,
+                gender:      row.gender  || null,
+                address,
                 updatedAt:   new Date(),
             })
             .where(eq(members.cskNumber, cskNumber));
