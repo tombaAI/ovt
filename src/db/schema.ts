@@ -5,7 +5,6 @@ import {
     integer,
     jsonb,
     pgSchema,
-    primaryKey,
     serial,
     smallint,
     text,
@@ -36,6 +35,9 @@ export const members = appSchema.table("members", {
     membershipReviewed:  boolean("membership_reviewed").notNull().default(false),
     note:                text("note"),
     todoNote:            text("todo_note"),
+    memberFrom:          date("member_from").notNull(),
+    memberTo:            date("member_to"),
+    memberToNote:        text("member_to_note"),
     createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -85,16 +87,6 @@ export const memberContributions = appSchema.table(
     ]
 );
 
-export const membershipYears = appSchema.table(
-    "membership_years",
-    {
-        memberId: integer("member_id").notNull().references(() => members.id),
-        year:     smallint("year").notNull(),
-        fromDate: date("from_date"),
-        toDate:   date("to_date"),
-    },
-    (t) => [primaryKey({ columns: [t.memberId, t.year] })]
-);
 
 export const payments = appSchema.table(
     "payments",

@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods, membershipYears } from "@/db/schema";
-import { eq, sql } from "drizzle-orm";
+import { members, memberContributions, contributionPeriods } from "@/db/schema";
+import { eq, sql, isNull, lte, and, or } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import Link from "next/link";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
@@ -15,9 +15,15 @@ export default async function DashboardPage() {
         total:  sql<number>`count(*)`,
     }).from(members);
 
+    // Aktivní v daném roce: member_from <= rok-12-31 AND (member_to IS NULL OR member_to >= rok-01-01)
     const [activeCounts] = await db.select({
         active: sql<number>`count(*)`,
-    }).from(membershipYears).where(eq(membershipYears.year, CONTRIBUTION_YEAR));
+    }).from(members).where(
+        and(
+            lte(members.memberFrom, `${CONTRIBUTION_YEAR}-12-31`),
+            or(isNull(members.memberTo), sql`${members.memberTo} >= ${CONTRIBUTION_YEAR + '-01-01'}`)
+        )
+    );
 
     const [period] = await db.select({ id: contributionPeriods.id })
         .from(contributionPeriods)

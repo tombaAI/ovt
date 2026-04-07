@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags, PeriodTab } from "./page";
 
-type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "review" | "todo";
+type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "review" | "todo" | "terminated";
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -17,9 +17,10 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "committee",  label: "Výbor"              },
     { key: "tom",        label: "Vedoucí TOM"        },
     { key: "individual", label: "Individuální sleva" },
-    { key: "partial",    label: "Část roku"          },
+    { key: "partial",    label: "Vstup/odchod"       },
     { key: "review",     label: "Ke kontrole"        },
     { key: "todo",       label: "S úkolem"           },
+    { key: "terminated", label: "Ukončení"           },
 ];
 
 function lastName(fullName: string) {
@@ -52,12 +53,12 @@ function MemberBadges({ m }: { m: MemberWithFlags }) {
             )}
             {m.fromDate && (
                 <Badge className="bg-green-100 text-green-700 border-0 text-xs font-normal">
-                    od {fmtDate(m.fromDate)}
+                    vstup {fmtDate(m.fromDate)}
                 </Badge>
             )}
             {m.toDate && (
-                <Badge className="bg-orange-100 text-orange-700 border-0 text-xs font-normal">
-                    do {fmtDate(m.toDate)}
+                <Badge className="bg-red-100 text-red-700 border-0 text-xs font-normal">
+                    odchod {fmtDate(m.toDate)}
                 </Badge>
             )}
             {!m.membershipReviewed && (
@@ -99,6 +100,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
         partial:    members.filter(m => m.fromDate !== null || m.toDate !== null).length,
         review:     members.filter(m => !m.membershipReviewed).length,
         todo:       members.filter(m => m.todoNote !== null).length,
+        terminated: members.filter(m => m.memberTo !== null).length,
     }), [members]);
 
     const filtered = useMemo(() => {
@@ -110,6 +112,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             case "partial":    list = members.filter(m => m.fromDate !== null || m.toDate !== null); break;
             case "review":     list = members.filter(m => !m.membershipReviewed); break;
             case "todo":       list = members.filter(m => m.todoNote !== null); break;
+            case "terminated": list = members.filter(m => m.memberTo !== null); break;
             default:           list = [...members];
         }
         if (searchText.trim()) {
@@ -179,18 +182,21 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
 
             {/* ── Filter + sort pills ── */}
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
-                {FILTERS.filter(f => !isAllYears || ["all", "review", "todo"].includes(f.key)).map(f => (
+                {FILTERS.filter(f => !isAllYears || ["all", "review", "todo", "terminated"].includes(f.key)).map(f => (
                     <button key={f.key} onClick={() => setFilter(f.key)}
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "review" ? "bg-yellow-500 text-white"
-                                  : f.key === "todo" ? "bg-orange-500 text-white"
+                                ? f.key === "review"     ? "bg-yellow-500 text-white"
+                                  : f.key === "todo"     ? "bg-orange-500 text-white"
+                                  : f.key === "terminated" ? "bg-red-600 text-white"
                                   : "bg-[#327600] text-white"
                                 : f.key === "review" && counts.review > 0
                                     ? "bg-yellow-50 text-yellow-700 border border-yellow-300 hover:bg-yellow-100"
                                 : f.key === "todo" && counts.todo > 0
                                     ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
+                                : f.key === "terminated" && counts.terminated > 0
+                                    ? "bg-red-50 text-red-700 border border-red-200 hover:bg-red-100"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}

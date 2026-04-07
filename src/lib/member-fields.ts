@@ -8,9 +8,13 @@ export const FIELD_LABELS: Record<string, string> = {
     cskNumber:              "Číslo ČSK",
     note:                   "Poznámka",
     todoNote:               "Úkol k řešení",
+    memberFrom:             "Člen od",
+    memberTo:               "Člen do",
+    memberToNote:           "Důvod ukončení",
     isCommittee:            "Člen výboru",
     isTom:                  "Vedoucí TOM",
     discountIndividual:     "Individuální sleva (Kč)",
+    membership_terminated:  "Ukončení členství",
     // payment fields
     isPaid:                 "Zaplaceno",
     paidAmount:             "Částka (Kč)",

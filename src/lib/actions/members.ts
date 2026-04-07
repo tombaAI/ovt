@@ -1,8 +1,8 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods, membershipYears, auditLog } from "@/db/schema";
-import { eq, and, sql, desc, inArray } from "drizzle-orm";
+import { members, memberContributions, contributionPeriods, auditLog } from "@/db/schema";
+import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
@@ -74,7 +74,6 @@ export async function saveMember(
                 .set({ ...memberData, updatedAt: new Date() })
                 .where(eq(members.id, id));
 
-            // Basic field audit
             const memberChanges = diffObjects(
                 {
                     fullName:       current.fullName,
@@ -117,7 +116,6 @@ export async function saveMember(
                         discountIndividual: newDiscIndividual,
                     }).where(eq(memberContributions.id, contrib.id));
 
-                    // Audit contribution flag changes
                     const flagChanges = diffObjects(
                         {
                             isCommittee:        Boolean(contrib.discountCommittee),
@@ -147,21 +145,26 @@ export async function saveMember(
             }
         } else {
             // ── CREATE ────────────────────────────────────────────────────
+            const memberFromRaw = (formData.get("member_from") as string)?.trim();
+            if (!memberFromRaw) return { error: "Datum vstupu je povinné" };
+
             const [{ nextId }] = await db.select({
                 nextId: sql<number>`coalesce(max(${members.id}), 0) + 1`
             }).from(members);
 
-            await db.insert(members).values({ id: nextId, ...memberData });
-
-            // Auto-enroll in the current contribution year
-            await db.insert(membershipYears).values({ memberId: nextId, year: CONTRIBUTION_YEAR });
+            await db.insert(members).values({
+                id: nextId,
+                ...memberData,
+                memberFrom: memberFromRaw,
+            });
 
             await db.insert(auditLog).values({
                 entityType: "member",
                 entityId:   nextId,
                 action:     "create",
                 changes:    Object.fromEntries(
-                    Object.entries(memberData).map(([k, v]) => [k, { old: null, new: str(v) }])
+                    Object.entries({ ...memberData, memberFrom: memberFromRaw })
+                        .map(([k, v]) => [k, { old: null, new: str(v) }])
                 ),
                 changedBy,
             });
@@ -176,8 +179,8 @@ export async function saveMember(
 }
 
 // ── updateMemberField — inline edit jednoho pole ─────────────────────────────
-type EditableField = "fullName" | "userLogin" | "email" | "phone" | "variableSymbol" | "cskNumber" | "note";
-const EDITABLE_FIELD_KEYS = new Set<EditableField>(["fullName","userLogin","email","phone","variableSymbol","cskNumber","note"]);
+type EditableField = "fullName" | "userLogin" | "email" | "phone" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
+const EDITABLE_FIELD_KEYS = new Set<EditableField>(["fullName","userLogin","email","phone","variableSymbol","cskNumber","note","memberFrom"]);
 
 export async function updateMemberField(
     memberId: number,
@@ -194,11 +197,14 @@ export async function updateMemberField(
         const [current] = await db.select().from(members).where(eq(members.id, memberId));
         if (!current) return { error: "Člen nenalezen" };
 
-        // Build a typed patch — fullName is notNull so we skip empty values
         let newValue: string | number | null;
         switch (field) {
             case "fullName":
                 if (!value.trim()) return { error: "Jméno nesmí být prázdné" };
+                newValue = value.trim();
+                break;
+            case "memberFrom":
+                if (!value.trim()) return { error: "Datum vstupu nesmí být prázdné" };
                 newValue = value.trim();
                 break;
             case "variableSymbol":
@@ -209,9 +215,10 @@ export async function updateMemberField(
                 newValue = value.trim() || null;
         }
 
-        // Use individual typed updates to satisfy Drizzle's strict set() types
         if (field === "fullName") {
             await db.update(members).set({ fullName: newValue as string, updatedAt: new Date() }).where(eq(members.id, memberId));
+        } else if (field === "memberFrom") {
+            await db.update(members).set({ memberFrom: newValue as string, updatedAt: new Date() }).where(eq(members.id, memberId));
         } else {
             await db.update(members).set({ [field]: newValue, updatedAt: new Date() } as Parameters<ReturnType<typeof db.update>["set"]>[0]).where(eq(members.id, memberId));
         }
@@ -238,7 +245,7 @@ export async function updateMemberField(
 export async function setIndividualDiscount(
     memberId: number,
     periodId: number,
-    amount: number | null,   // null = zrušení slevy
+    amount: number | null,
     note: string,
     validUntilYear: number | null
 ): Promise<{ error: string } | { success: true }> {
@@ -284,7 +291,7 @@ export async function setIndividualDiscount(
     }
 }
 
-// ── setContributionFlags — toggle výbor/TOM without touching member fields ───
+// ── setContributionFlags ──────────────────────────────────────────────────────
 export async function setContributionFlags(
     memberId: number,
     periodId: number,
@@ -330,28 +337,34 @@ export async function setContributionFlags(
     }
 }
 
-// ── setMembershipDates — quick inline edit for a single year ─────────────────
-export async function setMembershipDates(
+// ── terminateMembership ───────────────────────────────────────────────────────
+export async function terminateMembership(
     memberId: number,
-    year: number,
-    fromDate: string | null,
-    toDate: string | null,
+    toDate: string,
+    note: string,
 ): Promise<{ error: string } | { success: true }> {
+    if (!toDate) return { error: "Datum ukončení je povinné" };
+    if (!note.trim()) return { error: "Komentář je povinný" };
+
     const session = await auth();
     const changedBy = session?.user?.email ?? "unknown";
     const db = getDb();
 
     try {
-        await db.insert(membershipYears)
-            .values({ memberId, year, fromDate: fromDate || null, toDate: toDate || null })
-            .onConflictDoUpdate({
-                target: [membershipYears.memberId, membershipYears.year],
-                set: { fromDate: fromDate || null, toDate: toDate || null },
-            });
+        const [current] = await db.select({ memberTo: members.memberTo })
+            .from(members).where(eq(members.id, memberId));
+        if (!current) return { error: "Člen nenalezen" };
+
+        await db.update(members)
+            .set({ memberTo: toDate, memberToNote: note.trim(), updatedAt: new Date() })
+            .where(eq(members.id, memberId));
 
         await db.insert(auditLog).values({
-            entityType: "member", entityId: memberId, action: "update",
-            changes: { membershipDates: { old: null, new: `${year}: ${fromDate ?? "—"} – ${toDate ?? "—"}` } },
+            entityType: "member", entityId: memberId, action: "membership_terminated",
+            changes: {
+                memberTo:     { old: current.memberTo ?? null, new: toDate },
+                memberToNote: { old: null, new: note.trim() },
+            },
             changedBy,
         });
 
@@ -363,100 +376,56 @@ export async function setMembershipDates(
     }
 }
 
-// ── getMemberHistory — per-year overview 2019–2025 ───────────────────────────
+// ── getMemberHistory — per-year overview 2019–present ────────────────────────
 const REVIEW_YEARS = [2019, 2020, 2021, 2022, 2023, 2024, 2025] as const;
 
 export type MemberYearRecord = {
     year: number;
     isMember: boolean;
-    fromDate: string | null;
-    toDate: string | null;
+    isEntryYear: boolean;
+    isExitYear: boolean;
     amountTotal: number | null;
-    paidAmount: number | null;
-    isPaid: boolean | null;
+    paidTotal: number | null;
 };
 
 export async function getMemberHistory(memberId: number): Promise<MemberYearRecord[]> {
     const db = getDb();
 
-    const myRows = await db.select()
-        .from(membershipYears)
-        .where(eq(membershipYears.memberId, memberId));
+    const [member] = await db
+        .select({ memberFrom: members.memberFrom, memberTo: members.memberTo })
+        .from(members).where(eq(members.id, memberId));
+
+    if (!member) return [];
+
+    const fromYear = parseInt((member.memberFrom as unknown as string).slice(0, 4));
+    const toYear   = member.memberTo ? parseInt((member.memberTo as unknown as string).slice(0, 4)) : null;
 
     const finRows = await db
         .select({
             year:        contributionPeriods.year,
             amountTotal: memberContributions.amountTotal,
-            paidAmount:  memberContributions.paidAmount,
-            isPaid:      memberContributions.isPaid,
+            paidTotal:   sql<number>`coalesce(sum(0), 0)`, // placeholder — payments aggregated separately
         })
         .from(memberContributions)
         .innerJoin(contributionPeriods, eq(memberContributions.periodId, contributionPeriods.id))
         .where(eq(memberContributions.memberId, memberId));
 
-    const myMap  = new Map(myRows.map(r => [r.year, r]));
     const finMap = new Map(finRows.map(r => [r.year, r]));
 
     return REVIEW_YEARS.map(year => {
-        const my  = myMap.get(year)  ?? null;
-        const fin = finMap.get(year) ?? null;
+        const isMember    = year >= fromYear && (toYear === null || year <= toYear);
+        const isEntryYear = year === fromYear;
+        const isExitYear  = toYear !== null && year === toYear;
+        const fin         = finMap.get(year) ?? null;
         return {
             year,
-            isMember:    my !== null,
-            fromDate:    my?.fromDate ?? null,
-            toDate:      my?.toDate   ?? null,
+            isMember,
+            isEntryYear,
+            isExitYear,
             amountTotal: fin?.amountTotal ?? null,
-            paidAmount:  fin?.paidAmount  ?? null,
-            isPaid:      fin?.isPaid      ?? null,
+            paidTotal:   null, // payments aggregate loaded separately in sheet
         };
     });
-}
-
-// ── saveMembershipHistory — bulk upsert from review tool ─────────────────────
-export async function saveMembershipHistory(
-    memberId: number,
-    years: { year: number; isMember: boolean; fromDate: string | null; toDate: string | null }[],
-    markReviewed: boolean,
-): Promise<{ error: string } | { success: true }> {
-    const session = await auth();
-    const changedBy = session?.user?.email ?? "unknown";
-    const db = getDb();
-
-    try {
-        // Delete all review-range rows then re-insert
-        await db.delete(membershipYears).where(
-            and(
-                eq(membershipYears.memberId, memberId),
-                inArray(membershipYears.year, REVIEW_YEARS as unknown as number[])
-            )
-        );
-
-        const toInsert = years
-            .filter(y => y.isMember)
-            .map(y => ({ memberId, year: y.year, fromDate: y.fromDate || null, toDate: y.toDate || null }));
-
-        if (toInsert.length > 0) {
-            await db.insert(membershipYears).values(toInsert);
-        }
-
-        if (markReviewed) {
-            await db.update(members)
-                .set({ membershipReviewed: true })
-                .where(eq(members.id, memberId));
-        }
-
-        await db.insert(auditLog).values({
-            entityType: "member", entityId: memberId, action: "membership_review",
-            changes: { reviewedYears: { old: null, new: years.filter(y => y.isMember).map(y => y.year).join(", ") } },
-            changedBy,
-        });
-
-        revalidatePath("/dashboard/members");
-        return { success: true };
-    } catch (e) {
-        console.error(e);
-        return { error: "Chyba při ukládání" };
-    }
 }
 
 // ── setMemberTodo ─────────────────────────────────────────────────────────────
@@ -510,4 +479,3 @@ export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]>
         changedAt: r.changedAt,
     }));
 }
-
