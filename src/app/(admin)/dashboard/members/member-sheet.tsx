@@ -475,6 +475,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
     const [tomPending, startTomTransition] = useTransition();
     const [toggleError, setToggleError] = useState<string | null>(null);
     const [activeField, setActiveField] = useState<string | null>(null);
+    const [tjDiffs, setTjDiffs]         = useState<Record<string, string | null>>({});
 
     const [state, formAction, isPending] = useActionState<MemberFormState, FormData>(saveMember, null);
     useEffect(() => {
@@ -485,13 +486,31 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         setShowHistory(false);
         setShowContribHistory(false);
         setActiveField(null);
-    }, [member?.id]);
+        setTjDiffs({});
+        if (member?.hasTjDiffs) {
+            getMemberTjDiffs(member.id).then(diffs => {
+                setTjDiffs(Object.fromEntries(diffs.map(d => [d.field, d.tjValue])));
+            });
+        }
+    }, [member?.id, member?.hasTjDiffs]);
 
     const isEdit = Boolean(member);
 
     function fieldSaver(field: Parameters<typeof updateMemberField>[1]) {
         return (value: string) => updateMemberField(member!.id, field, value).then(r => {
             if ("success" in r) onMemberUpdated();
+            return r;
+        });
+    }
+
+    function tjAcceptor(field: Parameters<typeof updateMemberFieldFromTj>[1]) {
+        const tjVal = tjDiffs[field];
+        if (tjVal === undefined) return undefined;
+        return () => updateMemberFieldFromTj(member!.id, field, tjVal).then(r => {
+            if ("success" in r) {
+                setTjDiffs(prev => { const next = { ...prev }; delete next[field]; return next; });
+                onMemberUpdated();
+            }
             return r;
         });
     }
@@ -545,15 +564,15 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
 
                             {/* Inline edit fields */}
                             <div className="rounded-xl border px-4 mb-4">
-                                <InlineField label="Jméno"       value={member.fullName}                        fieldId="fullName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("fullName")} />
-                                <InlineField label="Přezdívka"   value={member.nickname}   placeholder="(žádná)"    fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")} />
+                                <InlineField label="Jméno"       value={member.fullName}                        fieldId="fullName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("fullName")}       tjValue={tjDiffs["fullName"]}    onTjAccept={tjAcceptor("fullName")} />
+                                <InlineField label="Přezdívka"   value={member.nickname}   placeholder="(žádná)"    fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")}   tjValue={tjDiffs["nickname"]}    onTjAccept={tjAcceptor("nickname")} />
                                 <InlineField label="Login"       value={member.userLogin}  placeholder="(nezadáno)" fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
-                                <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} />
-                                <InlineField label="Telefon"     value={member.phone}      type="tel"               fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")} />
-                                <InlineField label="Pohlaví"     value={member.gender}     placeholder="(nezadáno)" fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")} />
-                                <InlineField label="Adresa"      value={member.address}    placeholder="(nezadáno)" fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")} />
+                                <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")}       tjValue={tjDiffs["email"]}       onTjAccept={tjAcceptor("email")} />
+                                <InlineField label="Telefon"     value={member.phone}      type="tel"               fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")}       tjValue={tjDiffs["phone"]}       onTjAccept={tjAcceptor("phone")} />
+                                <InlineField label="Pohlaví"     value={member.gender}     placeholder="(nezadáno)" fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")}      tjValue={tjDiffs["gender"]}      onTjAccept={tjAcceptor("gender")} />
+                                <InlineField label="Adresa"      value={member.address}    placeholder="(nezadáno)" fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")}     tjValue={tjDiffs["address"]}     onTjAccept={tjAcceptor("address")} />
                                 <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
-                                <InlineField label="Číslo ČSK"   value={member.cskNumber ?? null}                  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} />
+                                <InlineField label="Číslo ČSK"   value={member.cskNumber ?? null}                  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")}   tjValue={tjDiffs["cskNumber"]}   onTjAccept={tjAcceptor("cskNumber")} />
                                 <InlineField label="Poznámka"    value={member.note}       placeholder="(žádná)"    fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
                                 <InlineField label="Člen od"     value={member.memberFrom} type="date"              fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} />
                             </div>

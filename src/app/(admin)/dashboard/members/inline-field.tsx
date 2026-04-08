@@ -11,6 +11,8 @@ interface Props {
     activeField: string | null;
     onActiveFieldChange: (fieldId: string | null) => void;
     onSave: (value: string) => Promise<{ error?: string } | { success: true }>;
+    tjValue?: string | null;
+    onTjAccept?: () => Promise<{ error?: string } | { success: true }>;
 }
 
 function fmtDate(iso: string) {
@@ -19,11 +21,14 @@ function fmtDate(iso: string) {
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
-export function InlineField({ label, value, type = "text", placeholder, fieldId, activeField, onActiveFieldChange, onSave }: Props) {
+export function InlineField({ label, value, type = "text", placeholder, fieldId, activeField, onActiveFieldChange, onSave, tjValue, onTjAccept }: Props) {
     const editing = activeField === fieldId;
-    const [draft, setDraft]   = useState(value ?? "");
-    const [saving, setSaving] = useState(false);
-    const [error, setError]   = useState<string | null>(null);
+    const [draft, setDraft]       = useState(value ?? "");
+    const [saving, setSaving]     = useState(false);
+    const [error, setError]       = useState<string | null>(null);
+    const [accepting, setAccepting] = useState(false);
+
+    const hasTjDiff = onTjAccept !== undefined && tjValue !== undefined && tjValue !== value;
 
     const displayValue = type === "date" && value ? fmtDate(value) : value;
 
@@ -55,6 +60,15 @@ export function InlineField({ label, value, type = "text", placeholder, fieldId,
         if (e.key === "Enter") handleSave();
         if (e.key === "Escape") handleCancel();
     }
+
+    async function handleTjAccept() {
+        if (!onTjAccept) return;
+        setAccepting(true);
+        await onTjAccept();
+        setAccepting(false);
+    }
+
+    const tjDisplay = type === "date" && tjValue ? fmtDate(tjValue) : tjValue;
 
     return (
         <div className="border-b last:border-0 py-3">
@@ -94,16 +108,32 @@ export function InlineField({ label, value, type = "text", placeholder, fieldId,
                         {error && <p className="text-xs text-red-600 mt-1">{error}</p>}
                     </div>
                 ) : (
-                    <button
-                        onClick={startEdit}
-                        disabled={activeField !== null}
-                        className="flex-1 text-left text-sm rounded-md px-1 -mx-1 py-0.5 hover:bg-blue-50 transition-colors group disabled:cursor-default disabled:hover:bg-transparent"
-                    >
-                        {displayValue
-                            ? <span className="text-gray-900 group-hover:text-blue-700 group-disabled:group-hover:text-gray-900">{displayValue}</span>
-                            : <span className="text-gray-400 italic group-hover:text-blue-500 group-disabled:group-hover:text-gray-400">{placeholder ?? "(nezadáno)"}</span>
-                        }
-                    </button>
+                    <div className="flex-1 min-w-0">
+                        <button
+                            onClick={startEdit}
+                            disabled={activeField !== null}
+                            className="w-full text-left text-sm rounded-md px-1 -mx-1 py-0.5 hover:bg-blue-50 transition-colors group disabled:cursor-default disabled:hover:bg-transparent"
+                        >
+                            {displayValue
+                                ? <span className="text-gray-900 group-hover:text-blue-700 group-disabled:group-hover:text-gray-900">{displayValue}</span>
+                                : <span className="text-gray-400 italic group-hover:text-blue-500 group-disabled:group-hover:text-gray-400">{placeholder ?? "(nezadáno)"}</span>
+                            }
+                        </button>
+                        {hasTjDiff && (
+                            <div className="flex items-center gap-2 mt-1 pl-1">
+                                <span className="text-xs text-sky-600">
+                                    TJ: <span className="font-medium">{tjDisplay ?? "(prázdné)"}</span>
+                                </span>
+                                <button
+                                    onClick={handleTjAccept}
+                                    disabled={accepting || activeField !== null}
+                                    className="text-xs text-sky-600 border border-sky-300 rounded px-1.5 py-0.5 hover:bg-sky-50 disabled:opacity-50 shrink-0"
+                                >
+                                    {accepting ? "…" : "← Přijmout"}
+                                </button>
+                            </div>
+                        )}
+                    </div>
                 )}
             </div>
         </div>
