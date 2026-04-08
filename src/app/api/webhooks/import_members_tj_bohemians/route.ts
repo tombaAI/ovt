@@ -23,6 +23,8 @@ interface PaRow {
 }
 
 // ── Dekódování citlivých polí ─────────────────────────────────────────────────
+// PA zakóduje: substituce číslic/lomítka/pomlčky → base64
+// Zde dekódujeme: base64 → zpětná substituce
 
 const RC_REVERSE: Record<string, string> = {
     N:'0', P:'1', R:'2', S:'3', T:'4', V:'5', W:'6', X:'7', Y:'8', Z:'9', Q:'/',
@@ -35,24 +37,18 @@ function reverseSubst(s: string, map: Record<string, string>): string {
     return s.split("").map(c => map[c] ?? c).join("");
 }
 
-// key = base64( base64(partA[0..7]) + partB[7..11] )  — RC split 7+4
+// key = base64(subst(rc))
 function decodeKey(key: string): string | null {
     try {
-        const combined  = Buffer.from(key, "base64").toString("utf8");   // 16 chars
-        const partAb64  = combined.substring(0, 12);                     // base64 of 7 chars = 12
-        const partB     = combined.substring(12);                        // 4 chars
-        const obfuscated = Buffer.from(partAb64, "base64").toString("utf8") + partB;
+        const obfuscated = Buffer.from(key, "base64").toString("utf8");
         return reverseSubst(obfuscated, RC_REVERSE);
     } catch { return null; }
 }
 
-// hash = base64( base64(partA[0..4]) + partB[4..10] )  — datum split 4+6
+// hash = base64(subst(datum))
 function decodeHash(hash: string): string | null {
     try {
-        const combined  = Buffer.from(hash, "base64").toString("utf8");  // 14 chars
-        const partAb64  = combined.substring(0, 8);                      // base64 of 4 chars = 8
-        const partB     = combined.substring(8);                         // 6 chars
-        const obfuscated = Buffer.from(partAb64, "base64").toString("utf8") + partB;
+        const obfuscated = Buffer.from(hash, "base64").toString("utf8");
         return reverseSubst(obfuscated, DATE_REVERSE);
     } catch { return null; }
 }
