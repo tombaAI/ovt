@@ -18,10 +18,10 @@ jobs:
       - name: POST to OVT webhook
         env:
           OVT_URL: ${{ secrets.OVT_URL }}
-          OVT_SYNC_SECRET: ${{ secrets.OVT_SYNC_SECRET }}
+          IMPORT_SECRET_TJ: ${{ secrets.IMPORT_SECRET_TJ }}
         run: |
           curl -fsS -X POST \
             -H "Content-Type: application/json" \
-            -H "Authorization: Bearer $OVT_SYNC_SECRET" \
+            -H "Authorization: Bearer $IMPORT_SECRET_TJ" \
             --data @/tmp/members.json \
             "${OVT_URL}/api/webhooks/import_members_tj_bohemians"

@@ -125,8 +125,8 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
 }
 
 export async function POST(request: NextRequest) {
-    if (!isWebhookAuthorized(request)) {
-        console.warn("[webhook/tj-members] Unauthorized request from", request.headers.get("x-forwarded-for") ?? "unknown");
+    if (!isWebhookAuthorized(request, "IMPORT_SECRET_TJ")) {
+        console.warn("[webhook/import_members_tj_bohemians] Unauthorized from", request.headers.get("x-forwarded-for") ?? "unknown");
         return unauthorizedResponse();
     }
 
