@@ -10,6 +10,7 @@ interface PaRow {
     csk?:           string | null;
     jmeno?:         string | null;
     prijmeni?:      string | null;
+    prezdivka?:     string | null;
     email?:         string | null;
     telefon?:       string | null;
     // Citlivá pole zasílaná zakódovaně (substituce + vrstvené base64)
@@ -85,7 +86,8 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
         const csk = row.csk?.trim() || null;
         if (!csk) { skipped++; continue; }
 
-        const { jmeno, nickname } = parseNickname(row.jmeno ?? "");
+        const { jmeno, nickname: parsedNickname } = parseNickname(row.jmeno ?? "");
+        const nickname = row.prezdivka?.trim() || parsedNickname;
         const addressParts = [row.adresa, row.obec, row.psc].filter(Boolean);
 
         const birthNumber = row.key  ? decodeKey(row.key)   : null;
