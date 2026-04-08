@@ -24,12 +24,11 @@ interface PaRow {
 
 // ── Dekódování citlivých polí ─────────────────────────────────────────────────
 // PA pipeline:
-//   1. padLeft na 13 znaků znakem '#'
-//   2. subst číslic/separátoru → písmena (0→N, 1→P, ..., 9→Z, /→Q resp. -→L)
-//   3. base64
-//   4. odebrat trailing '=' (vždy 2 pro 13-char vstup)
-//   5. URL-safe: +→-, /→_
-// Dekódujeme v opačném pořadí; výstup je vždy 18 znaků.
+//   1. subst číslic/separátoru → písmena (0→N, 1→P, ..., 9→Z, /→Q resp. -→L)
+//   2. base64
+//   3. odebrat trailing '='
+//   4. URL-safe: +→-, /→_
+// Dekódujeme v opačném pořadí.
 
 const RC_REVERSE: Record<string, string> = {
     N:'0', P:'1', R:'2', S:'3', T:'4', V:'5', W:'6', X:'7', Y:'8', Z:'9', Q:'/',
@@ -53,8 +52,7 @@ function decodeField(encoded: string, revMap: Record<string, string>): string | 
         const subst  = Buffer.from(b64, "base64").toString("utf8");
         // 4. Zpětná substituce číslic
         const result = reverseSubst(subst, revMap);
-        // 5. Odebrat '#' padding (padStart z PA)
-        return result.replace(/^#+/, "") || null;
+        return result || null;
     } catch { return null; }
 }
 
