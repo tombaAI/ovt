@@ -23,8 +23,14 @@ interface PaRow {
 }
 
 // ── Dekódování citlivých polí ─────────────────────────────────────────────────
-// PA zakóduje: substituce číslic/lomítka/pomlčky → base64
-// Zde dekódujeme: base64 → zpětná substituce
+// PA pipeline (4 vrstvy):
+//   1. subst číslic/separátoru → písmena
+//   2. base64
+//   3. subst base64 speciálních znaků: = → J, + → K, / → M
+//   4. base64
+// Zde dekódujeme v opačném pořadí.
+
+const MIDDLE_REVERSE: Record<string, string> = { J: '=', K: '+', M: '/' };
 
 const RC_REVERSE: Record<string, string> = {
     N:'0', P:'1', R:'2', S:'3', T:'4', V:'5', W:'6', X:'7', Y:'8', Z:'9', Q:'/',
@@ -37,21 +43,17 @@ function reverseSubst(s: string, map: Record<string, string>): string {
     return s.split("").map(c => map[c] ?? c).join("");
 }
 
-// key = base64(subst(rc))
-function decodeKey(key: string): string | null {
+function decodeField(encoded: string, finalMap: Record<string, string>): string | null {
     try {
-        const obfuscated = Buffer.from(key, "base64").toString("utf8");
-        return reverseSubst(obfuscated, RC_REVERSE);
+        const midObf   = Buffer.from(encoded, "base64").toString("utf8");
+        const innerB64 = reverseSubst(midObf, MIDDLE_REVERSE);
+        const digitObf = Buffer.from(innerB64, "base64").toString("utf8");
+        return reverseSubst(digitObf, finalMap);
     } catch { return null; }
 }
 
-// hash = base64(subst(datum))
-function decodeHash(hash: string): string | null {
-    try {
-        const obfuscated = Buffer.from(hash, "base64").toString("utf8");
-        return reverseSubst(obfuscated, DATE_REVERSE);
-    } catch { return null; }
-}
+const decodeKey  = (v: string) => decodeField(v, RC_REVERSE);
+const decodeHash = (v: string) => decodeField(v, DATE_REVERSE);
 
 // "Filip (Pilín)" → { jmeno: "Filip", nickname: "Pilín" }
 function parseNickname(jmeno: string): { jmeno: string; nickname: string | null } {
