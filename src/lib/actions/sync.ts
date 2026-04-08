@@ -5,7 +5,7 @@ import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { members, tjMembers, auditLog } from "@/db/schema";
+import { members, importMembersTjBohemians, auditLog } from "@/db/schema";
 import type { SyncUpdatableField } from "@/lib/sync-config";
 
 export type SyncActionResult = { error: string } | { success: true };
@@ -19,7 +19,7 @@ export async function importFromTj(tjMemberId: number): Promise<SyncActionResult
     const changedBy = session?.user?.email ?? "sync";
     const db = getDb();
 
-    const [tj] = await db.select().from(tjMembers).where(eq(tjMembers.id, tjMemberId));
+    const [tj] = await db.select().from(importMembersTjBohemians).where(eq(importMembersTjBohemians.id, tjMemberId));
     if (!tj) return { error: "TJ člen nenalezen" };
 
     const fullName = [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim();
@@ -49,11 +49,11 @@ export async function importFromTj(tjMemberId: number): Promise<SyncActionResult
         entityType: "member",
         entityId:   nextId,
         action:     "import_from_tj",
-        changes:    { source: { old: null, new: `tj_members#${tjMemberId}` } },
+        changes:    { source: { old: null, new: `import_members_tj_bohemians#${tjMemberId}` } },
         changedBy,
     });
 
-    revalidatePath("/dashboard/sync");
+    revalidatePath("/dashboard/imports/members-tj");
     revalidatePath("/dashboard/members");
     return { success: true };
 }
@@ -88,7 +88,7 @@ export async function updateMemberFieldFromTj(
         changedBy,
     });
 
-    revalidatePath("/dashboard/sync");
+    revalidatePath("/dashboard/imports/members-tj");
     revalidatePath("/dashboard/members");
     return { success: true };
 }

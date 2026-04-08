@@ -47,7 +47,7 @@ export const members = appSchema.table("members", {
     updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-export const tjMembers = appSchema.table("tj_members", {
+export const importMembersTjBohemians = appSchema.table("import_members_tj_bohemians", {
     id:           serial("id").primaryKey(),
     cskNumber:    text("csk_number").unique(),
     jmeno:        text("jmeno"),

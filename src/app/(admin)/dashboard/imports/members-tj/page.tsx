@@ -1,8 +1,8 @@
 import { sql } from "drizzle-orm";
 
 import { getDb } from "@/lib/db";
-import { members, tjMembers } from "@/db/schema";
-import { SyncClient } from "./sync-client";
+import { members, importMembersTjBohemians } from "@/db/schema";
+import { MembersTjClient } from "./members-tj-client";
 import type { SyncUpdatableField } from "@/lib/sync-config";
 import { SYNC_UPDATABLE_FIELDS } from "@/lib/sync-config";
 
@@ -48,7 +48,7 @@ function asStr(v: unknown): string | null {
     return String(v);
 }
 
-function computeDiffs(tj: typeof tjMembers.$inferSelect, m: typeof members.$inferSelect): FieldDiff[] {
+function computeDiffs(tj: typeof importMembersTjBohemians.$inferSelect, m: typeof members.$inferSelect): FieldDiff[] {
     const comparisons: Array<[SyncUpdatableField, unknown, unknown]> = [
         ["email",       tj.email,       m.email],
         ["phone",       tj.phone,       m.phone],
@@ -76,7 +76,7 @@ export default async function SyncPage() {
     const db = getDb();
 
     // 1. Nespárovaní: v TJ, ale ne v naší DB (žádný member se stejným CSK)
-    const tjAll = await db.select().from(tjMembers).orderBy(tjMembers.prijmeni);
+    const tjAll = await db.select().from(importMembersTjBohemians).orderBy(importMembersTjBohemians.prijmeni);
     const membersAll = await db.select().from(members);
 
     const memberByCsk = new Map(
@@ -117,7 +117,7 @@ export default async function SyncPage() {
         .sort((a, b) => a.fullName.localeCompare(b.fullName, "cs"));
 
     // Čas posledního syncu
-    const [lastSync] = await db.select({ at: sql<string>`max(synced_at)` }).from(tjMembers);
+    const [lastSync] = await db.select({ at: sql<string>`max(synced_at)` }).from(importMembersTjBohemians);
 
     return (
         <div className="space-y-4">
@@ -133,7 +133,7 @@ export default async function SyncPage() {
                 </div>
             </div>
 
-            <SyncClient
+            <MembersTjClient
                 unmatched={unmatched}
                 matched={matched}
                 onlyOurs={onlyOurs}

@@ -107,7 +107,7 @@ function ImportButton({ tjId }: { tjId: number }) {
 
 // ── Hlavní komponent ──────────────────────────────────────────────────────────
 
-export function SyncClient({ unmatched, matched, onlyOurs }: {
+export function MembersTjClient({ unmatched, matched, onlyOurs }: {
     unmatched: UnmatchedRow[];
     matched:   MatchedRow[];
     onlyOurs:  OnlyOursRow[];

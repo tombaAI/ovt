@@ -42,9 +42,9 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
                     Příspěvky
                 </Link>
-                <Link href="/dashboard/sync"
+                <Link href="/dashboard/imports"
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Sync TJ
+                    Import dat
                 </Link>
             </nav>
 
