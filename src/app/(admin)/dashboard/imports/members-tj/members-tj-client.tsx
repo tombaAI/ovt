@@ -5,7 +5,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
-import { importFromTj, updateMemberFieldFromTj } from "@/lib/actions/sync";
+import { importFromTj, updateMemberFieldFromTj, deleteImportRow } from "@/lib/actions/sync";
 import type { UnmatchedRow, MatchedRow, OnlyOursRow, FieldDiff } from "./page";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -93,6 +93,28 @@ function DiffSheet({ row, onClose }: { row: MatchedRow; onClose: () => void }) {
     );
 }
 
+// ── DeleteImportButton ────────────────────────────────────────────────────────
+
+function DeleteImportButton({ tjId }: { tjId: number }) {
+    const [pending, startTransition] = useTransition();
+    const [done, setDone] = useState(false);
+
+    if (done) return <span className="text-xs text-muted-foreground">Odstraněno</span>;
+
+    function handleDelete() {
+        startTransition(async () => {
+            const res = await deleteImportRow(tjId);
+            if ("success" in res) setDone(true);
+        });
+    }
+
+    return (
+        <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive hover:text-destructive" disabled={pending} onClick={handleDelete}>
+            {pending ? "…" : "Odstranit"}
+        </Button>
+    );
+}
+
 // ── ImportButton ──────────────────────────────────────────────────────────────
 
 function ImportButton({ tjId }: { tjId: number }) {
@@ -168,7 +190,10 @@ export function MembersTjClient({ unmatched, matched, onlyOurs }: {
                                             <td className="px-3 py-2.5 text-muted-foreground hidden md:table-cell">{fmt(row.email)}</td>
                                             <td className="px-3 py-2.5 text-muted-foreground hidden lg:table-cell">{fmtDate(row.radekOdeslan)}</td>
                                             <td className="px-3 py-2.5 text-right">
-                                                <ImportButton tjId={row.tjId} />
+                                                <div className="flex items-center justify-end gap-1">
+                                                    <DeleteImportButton tjId={row.tjId} />
+                                                    <ImportButton tjId={row.tjId} />
+                                                </div>
                                             </td>
                                         </tr>
                                     ))}

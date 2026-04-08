@@ -11,6 +11,18 @@ import type { SyncUpdatableField } from "@/lib/sync-config";
 export type SyncActionResult = { error: string } | { success: true };
 export type { SyncUpdatableField };
 
+// ── deleteImportRow ────────────────────────────────────────────────────────────
+// Smaže stale záznam z import tabulky (např. duplicit bez ČSK po opravě jména)
+
+export async function deleteImportRow(tjMemberId: number): Promise<SyncActionResult> {
+    await auth();
+    const db = getDb();
+    const result = await db.delete(importMembersTjBohemians).where(eq(importMembersTjBohemians.id, tjMemberId));
+    if (!result) return { error: "Záznam nenalezen" };
+    revalidatePath("/dashboard/imports/members-tj");
+    return { success: true };
+}
+
 // ── importFromTj ──────────────────────────────────────────────────────────────
 // Vytvoří nový members záznam z dat tj_members
 
