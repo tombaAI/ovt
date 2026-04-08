@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
-import { eq, and, isNull } from "drizzle-orm";
+import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { importMembersTjBohemians } from "@/db/schema";
 import { isWebhookAuthorized, unauthorizedResponse } from "@/app/api/webhooks/_auth";
@@ -79,62 +79,44 @@ function parseDate(value: string | null | undefined): string | null {
     return isNaN(d.getTime()) ? null : d.toISOString().split("T")[0];
 }
 
-async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: number }> {
+async function replaceAll(rows: PaRow[]): Promise<{ inserted: number; skipped: number }> {
     const db = getDb();
-    let upserted = 0, skipped = 0;
+
+    // Sestavit nové záznamy
+    const toInsert: (typeof importMembersTjBohemians.$inferInsert)[] = [];
+    let skipped = 0;
 
     for (const row of rows) {
         const csk = row.csk?.trim() || null;
-
         const { jmeno, nickname: parsedNickname } = parseNickname(row.jmeno ?? "");
         const nickname = row.prezdivka?.trim() || parsedNickname;
+
+        if (!csk && !jmeno && !row.prijmeni?.trim()) { skipped++; continue; }
+
         const addressParts = [row.adresa, row.obec, row.psc].filter(Boolean);
-
-        const birthNumber = row.key  ? decodeKey(row.key)   : null;
-        const birthDate   = row.hash ? parseDate(decodeHash(row.hash) ?? undefined) : null;
-
-        const values = {
+        toInsert.push({
+            cskNumber:    csk,
             jmeno,
             prijmeni:     row.prijmeni?.trim()    || null,
             nickname,
             email:        row.email?.trim()        || null,
             phone:        row.telefon?.trim()      || null,
-            birthDate,
-            birthNumber,
+            birthDate:    row.hash ? parseDate(decodeHash(row.hash) ?? undefined) : null,
+            birthNumber:  row.key  ? decodeKey(row.key) : null,
             gender:       row.gender?.trim()       || null,
             address:      addressParts.length > 0 ? addressParts.join(", ") : null,
             radekOdeslan: parseDate(row.radek_odeslan),
             syncedAt:     new Date(),
-        };
-
-        if (csk) {
-            // Záznamy s ČSK: upsert přes csk_number
-            await db.insert(importMembersTjBohemians)
-                .values({ cskNumber: csk, ...values })
-                .onConflictDoUpdate({ target: importMembersTjBohemians.cskNumber, set: values });
-        } else {
-            // Záznamy bez ČSK: upsert přes jmeno + prijmeni
-            if (!jmeno && !values.prijmeni) { skipped++; continue; }
-            const [existing] = await db
-                .select({ id: importMembersTjBohemians.id })
-                .from(importMembersTjBohemians)
-                .where(and(
-                    isNull(importMembersTjBohemians.cskNumber),
-                    eq(importMembersTjBohemians.jmeno,    jmeno ?? ""),
-                    eq(importMembersTjBohemians.prijmeni, values.prijmeni ?? ""),
-                ));
-            if (existing) {
-                await db.update(importMembersTjBohemians)
-                    .set(values)
-                    .where(eq(importMembersTjBohemians.id, existing.id));
-            } else {
-                await db.insert(importMembersTjBohemians).values({ cskNumber: null, ...values });
-            }
-        }
-        upserted++;
+        });
     }
 
-    return { upserted, skipped };
+    // Přepsat tabulku v transakci: TRUNCATE + INSERT
+    await db.execute(sql`TRUNCATE TABLE app.import_members_tj_bohemians RESTART IDENTITY`);
+    if (toInsert.length > 0) {
+        await db.insert(importMembersTjBohemians).values(toInsert);
+    }
+
+    return { inserted: toInsert.length, skipped };
 }
 
 export async function POST(request: NextRequest) {
@@ -153,11 +135,11 @@ export async function POST(request: NextRequest) {
     }
 
     try {
-        const result = await upsertRows(rows);
-        console.log(`[webhook/tj-members] OK — total=${rows.length} upserted=${result.upserted} skipped=${result.skipped}`);
+        const result = await replaceAll(rows);
+        console.log(`[webhook/tj-members] OK — total=${rows.length} inserted=${result.inserted} skipped=${result.skipped}`);
         return NextResponse.json({ ok: true, total: rows.length, ...result });
     } catch (err) {
-        console.error("[webhook/tj-members] Upsert failed:", err);
+        console.error("[webhook/tj-members] Replace failed:", err);
         return NextResponse.json({ ok: false, error: "Chyba při ukládání dat" }, { status: 500 });
     }
 }
