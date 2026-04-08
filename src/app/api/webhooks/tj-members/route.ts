@@ -12,13 +12,49 @@ interface PaRow {
     prijmeni?:      string | null;
     email?:         string | null;
     telefon?:       string | null;
-    datum_naroz?:   string | null;
-    rc?:            string | null;
+    // Citlivá pole zasílaná zakódovaně (substituce + vrstvené base64)
+    key?:           string | null;  // rodné číslo
+    hash?:          string | null;  // datum narození
     gender?:        string | null;
     adresa?:        string | null;
     obec?:          string | null;
     psc?:           string | null;
     radek_odeslan?: string | null;
+}
+
+// ── Dekódování citlivých polí ─────────────────────────────────────────────────
+
+const RC_REVERSE: Record<string, string> = {
+    N:'0', P:'1', R:'2', S:'3', T:'4', V:'5', W:'6', X:'7', Y:'8', Z:'9', Q:'/',
+};
+const DATE_REVERSE: Record<string, string> = {
+    N:'0', P:'1', R:'2', S:'3', T:'4', V:'5', W:'6', X:'7', Y:'8', Z:'9', L:'-',
+};
+
+function reverseSubst(s: string, map: Record<string, string>): string {
+    return s.split("").map(c => map[c] ?? c).join("");
+}
+
+// key = base64( base64(partA[0..7]) + partB[7..11] )  — RC split 7+4
+function decodeKey(key: string): string | null {
+    try {
+        const combined  = Buffer.from(key, "base64").toString("utf8");   // 16 chars
+        const partAb64  = combined.substring(0, 12);                     // base64 of 7 chars = 12
+        const partB     = combined.substring(12);                        // 4 chars
+        const obfuscated = Buffer.from(partAb64, "base64").toString("utf8") + partB;
+        return reverseSubst(obfuscated, RC_REVERSE);
+    } catch { return null; }
+}
+
+// hash = base64( base64(partA[0..4]) + partB[4..10] )  — datum split 4+6
+function decodeHash(hash: string): string | null {
+    try {
+        const combined  = Buffer.from(hash, "base64").toString("utf8");  // 14 chars
+        const partAb64  = combined.substring(0, 8);                      // base64 of 4 chars = 8
+        const partB     = combined.substring(8);                         // 6 chars
+        const obfuscated = Buffer.from(partAb64, "base64").toString("utf8") + partB;
+        return reverseSubst(obfuscated, DATE_REVERSE);
+    } catch { return null; }
 }
 
 // "Filip (Pilín)" → { jmeno: "Filip", nickname: "Pilín" }
@@ -50,6 +86,9 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
         const { jmeno, nickname } = parseNickname(row.jmeno ?? "");
         const addressParts = [row.adresa, row.obec, row.psc].filter(Boolean);
 
+        const birthNumber = row.key  ? decodeKey(row.key)   : null;
+        const birthDate   = row.hash ? parseDate(decodeHash(row.hash) ?? undefined) : null;
+
         await db.insert(importMembersTjBohemians).values({
             cskNumber:    csk,
             jmeno,
@@ -57,8 +96,8 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
             nickname,
             email:        row.email?.trim()        || null,
             phone:        row.telefon?.trim()      || null,
-            birthDate:    parseDate(row.datum_naroz),
-            birthNumber:  row.rc?.trim()           || null,
+            birthDate,
+            birthNumber,
             gender:       row.gender?.trim()       || null,
             address:      addressParts.length > 0 ? addressParts.join(", ") : null,
             radekOdeslan: parseDate(row.radek_odeslan),
@@ -71,8 +110,8 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
                 nickname,
                 email:        row.email?.trim()        || null,
                 phone:        row.telefon?.trim()      || null,
-                birthDate:    parseDate(row.datum_naroz),
-                birthNumber:  row.rc?.trim()           || null,
+                birthDate,
+                birthNumber,
                 gender:       row.gender?.trim()       || null,
                 address:      addressParts.length > 0 ? addressParts.join(", ") : null,
                 radekOdeslan: parseDate(row.radek_odeslan),
