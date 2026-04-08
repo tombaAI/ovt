@@ -54,15 +54,26 @@ function AuditHistory({ memberId }: { memberId: number }) {
     if (loading) return <p className="text-xs text-gray-400">Načítám historii…</p>;
     if (log.length === 0) return <p className="text-xs text-gray-400">Žádné záznamy</p>;
 
+    const isTjAction = (action: string) => action === "import_from_tj" || action === "update_from_tj";
+
     return (
         <div className="space-y-2">
             {log.map(entry => (
                 <div key={entry.id} className="text-xs border rounded-lg p-2.5 bg-gray-50 space-y-1.5">
                     <div className="flex items-center justify-between gap-2 text-gray-500">
-                        <span className="font-medium text-gray-700 truncate">{entry.changedBy}</span>
+                        <div className="flex items-center gap-1.5 min-w-0">
+                            <span className="font-medium text-gray-700 truncate">{entry.changedBy}</span>
+                            {isTjAction(entry.action) && (
+                                <span className="shrink-0 px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                    import TJ Bohemians
+                                </span>
+                            )}
+                        </div>
                         <span className="shrink-0">{formatDate(entry.changedAt)}</span>
                     </div>
-                    {Object.entries(entry.changes).map(([field, diff]) => (
+                    {Object.entries(entry.changes)
+                        .filter(([field]) => field !== "source")
+                        .map(([field, diff]) => (
                         <div key={field} className="flex gap-1 flex-wrap">
                             <span className="text-gray-500">{FIELD_LABELS[field] ?? field}:</span>
                             {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
