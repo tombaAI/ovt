@@ -59,6 +59,7 @@ function computeDiffs(tj: typeof importMembersTjBohemians.$inferSelect, m: typeo
         ["birthNumber", tj.birthNumber, m.birthNumber],
         ["gender",      tj.gender,      m.gender],
         ["nickname",    tj.nickname,    m.nickname],
+        ["cskNumber",   tj.cskNumber,   m.cskNumber],
         ["fullName",    [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim() || null, m.fullName],
     ];
 
@@ -128,7 +129,16 @@ export default async function SyncPage() {
             }
         }
     }
-    matched.sort((a, b) => a.fullName.localeCompare(b.fullName, "cs"));
+    // Deduplikace: pokud dva TJ záznamy míří na stejného člena (typicky starý bez ČSK
+    // a nový s ČSK), zachovej ten s ČSK (nebo ten s více diffs jako fallback)
+    const matchedDeduped = new Map<number, MatchedRow>();
+    for (const row of matched) {
+        const existing = matchedDeduped.get(row.memberId);
+        if (!existing || (!existing.cskNumber && row.cskNumber) || row.diffs.length > existing.diffs.length) {
+            matchedDeduped.set(row.memberId, row);
+        }
+    }
+    const matchedFinal = [...matchedDeduped.values()].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs"));
 
     // Jen v naší DB (mají CSK, ale v TJ importu není)
     const tjCskSet = new Set(tjAll.map(tj => tj.cskNumber).filter(Boolean));
@@ -160,7 +170,7 @@ export default async function SyncPage() {
 
             <MembersTjClient
                 unmatched={unmatched}
-                matched={matched}
+                matched={matchedFinal}
                 onlyOurs={onlyOurs}
             />
         </div>

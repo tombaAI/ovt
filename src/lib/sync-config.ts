@@ -7,6 +7,7 @@ export const SYNC_UPDATABLE_FIELDS = {
     gender:      "Pohlaví",
     nickname:    "Přezdívka",
     fullName:    "Celé jméno",
+    cskNumber:   "Číslo ČSK",
 } as const;
 
 export type SyncUpdatableField = keyof typeof SYNC_UPDATABLE_FIELDS;
