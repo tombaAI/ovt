@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 
+import { eq, and, isNull } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { importMembersTjBohemians } from "@/db/schema";
 import { isWebhookAuthorized, unauthorizedResponse } from "@/app/api/webhooks/_auth";
@@ -84,7 +85,6 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
 
     for (const row of rows) {
         const csk = row.csk?.trim() || null;
-        if (!csk) { skipped++; continue; }
 
         const { jmeno, nickname: parsedNickname } = parseNickname(row.jmeno ?? "");
         const nickname = row.prezdivka?.trim() || parsedNickname;
@@ -93,8 +93,7 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
         const birthNumber = row.key  ? decodeKey(row.key)   : null;
         const birthDate   = row.hash ? parseDate(decodeHash(row.hash) ?? undefined) : null;
 
-        await db.insert(importMembersTjBohemians).values({
-            cskNumber:    csk,
+        const values = {
             jmeno,
             prijmeni:     row.prijmeni?.trim()    || null,
             nickname,
@@ -106,22 +105,32 @@ async function upsertRows(rows: PaRow[]): Promise<{ upserted: number; skipped: n
             address:      addressParts.length > 0 ? addressParts.join(", ") : null,
             radekOdeslan: parseDate(row.radek_odeslan),
             syncedAt:     new Date(),
-        }).onConflictDoUpdate({
-            target: importMembersTjBohemians.cskNumber,
-            set: {
-                jmeno,
-                prijmeni:     row.prijmeni?.trim()    || null,
-                nickname,
-                email:        row.email?.trim()        || null,
-                phone:        row.telefon?.trim()      || null,
-                birthDate,
-                birthNumber,
-                gender:       row.gender?.trim()       || null,
-                address:      addressParts.length > 0 ? addressParts.join(", ") : null,
-                radekOdeslan: parseDate(row.radek_odeslan),
-                syncedAt:     new Date(),
-            },
-        });
+        };
+
+        if (csk) {
+            // Záznamy s ČSK: upsert přes csk_number
+            await db.insert(importMembersTjBohemians)
+                .values({ cskNumber: csk, ...values })
+                .onConflictDoUpdate({ target: importMembersTjBohemians.cskNumber, set: values });
+        } else {
+            // Záznamy bez ČSK: upsert přes jmeno + prijmeni
+            if (!jmeno && !values.prijmeni) { skipped++; continue; }
+            const [existing] = await db
+                .select({ id: importMembersTjBohemians.id })
+                .from(importMembersTjBohemians)
+                .where(and(
+                    isNull(importMembersTjBohemians.cskNumber),
+                    eq(importMembersTjBohemians.jmeno,    jmeno ?? ""),
+                    eq(importMembersTjBohemians.prijmeni, values.prijmeni ?? ""),
+                ));
+            if (existing) {
+                await db.update(importMembersTjBohemians)
+                    .set(values)
+                    .where(eq(importMembersTjBohemians.id, existing.id));
+            } else {
+                await db.insert(importMembersTjBohemians).values({ cskNumber: null, ...values });
+            }
+        }
         upserted++;
     }
 
