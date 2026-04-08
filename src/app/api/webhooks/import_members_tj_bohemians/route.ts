@@ -23,14 +23,13 @@ interface PaRow {
 }
 
 // ── Dekódování citlivých polí ─────────────────────────────────────────────────
-// PA pipeline (4 vrstvy):
-//   1. subst číslic/separátoru → písmena
-//   2. base64
-//   3. subst base64 speciálních znaků: = → J, + → K, / → M
-//   4. base64
-// Zde dekódujeme v opačném pořadí.
-
-const MIDDLE_REVERSE: Record<string, string> = { J: '=', K: '+', M: '/' };
+// PA pipeline:
+//   1. padLeft na 13 znaků znakem '#'
+//   2. subst číslic/separátoru → písmena (0→N, 1→P, ..., 9→Z, /→Q resp. -→L)
+//   3. base64
+//   4. odebrat trailing '=' (vždy 2 pro 13-char vstup)
+//   5. URL-safe: +→-, /→_
+// Dekódujeme v opačném pořadí; výstup je vždy 18 znaků.
 
 const RC_REVERSE: Record<string, string> = {
     N:'0', P:'1', R:'2', S:'3', T:'4', V:'5', W:'6', X:'7', Y:'8', Z:'9', Q:'/',
@@ -43,12 +42,19 @@ function reverseSubst(s: string, map: Record<string, string>): string {
     return s.split("").map(c => map[c] ?? c).join("");
 }
 
-function decodeField(encoded: string, finalMap: Record<string, string>): string | null {
+function decodeField(encoded: string, revMap: Record<string, string>): string | null {
     try {
-        const midObf   = Buffer.from(encoded, "base64").toString("utf8");
-        const innerB64 = reverseSubst(midObf, MIDDLE_REVERSE);
-        const digitObf = Buffer.from(innerB64, "base64").toString("utf8");
-        return reverseSubst(digitObf, finalMap);
+        // 1. URL-safe zpět na standardní base64
+        const b64raw = encoded.replace(/-/g, "+").replace(/_/g, "/");
+        // 2. Doplnit padding
+        const rem    = b64raw.length % 4;
+        const b64    = b64raw + (rem === 0 ? "" : "=".repeat(4 - rem));
+        // 3. Dekódovat base64
+        const subst  = Buffer.from(b64, "base64").toString("utf8");
+        // 4. Zpětná substituce číslic
+        const result = reverseSubst(subst, revMap);
+        // 5. Odebrat '#' padding (padStart z PA)
+        return result.replace(/^#+/, "") || null;
     } catch { return null; }
 }
 
