@@ -46,7 +46,7 @@ function yearEnd(year: number)   { return `${year}-12-31`; }
 
 function computeMemberYears(memberFrom: string, memberTo: string | null): number[] {
     const fromYear = parseInt(memberFrom.slice(0, 4));
-    const toYear   = memberTo ? parseInt(memberTo.slice(0, 4)) : CONTRIBUTION_YEAR;
+    const toYear   = memberTo ? parseInt(memberTo.slice(0, 4)) : new Date().getFullYear();
     const years: number[] = [];
     for (let y = fromYear; y <= toYear; y++) years.push(y);
     return years;
