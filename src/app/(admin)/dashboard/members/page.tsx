@@ -1,8 +1,9 @@
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods } from "@/db/schema";
+import { members, memberContributions, contributionPeriods, importMembersTjBohemians } from "@/db/schema";
 import { eq, asc, desc, and, lte, isNull, or, sql } from "drizzle-orm";
 import { MembersClient } from "./members-client";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import type { SyncUpdatableField } from "@/lib/sync-config";
 
 export type PeriodTab = {
     id: number;
@@ -39,6 +40,7 @@ export type MemberWithFlags = {
     amountTotal: number | null;
     hasContrib: boolean;
     memberYears?: number[]; // only in all-years view
+    hasTjDiffs: boolean;
 };
 
 function yearStart(year: number) { return `${year}-01-01`; }
@@ -80,6 +82,40 @@ export default async function MembersPage(props: {
 
     const actualYear = isAllYears ? 0 : (period?.year ?? selectedYear);
 
+    // Načíst TJ import tabulku pro výpočet hasTjDiffs
+    const tjAll = await db.select().from(importMembersTjBohemians);
+    const tjByCsk  = new Map(tjAll.filter(r => r.cskNumber).map(r => [r.cskNumber!, r]));
+    const tjByName = new Map(tjAll.map(r => [
+        [r.jmeno, r.prijmeni].filter(Boolean).join(" ").trim().toLowerCase(), r
+    ]));
+
+    function computeHasTjDiffs(m: {
+        id: number; fullName: string; cskNumber: string | null;
+        email: string | null; phone: string | null; address: string | null;
+        birthDate: string | null; birthNumber: string | null;
+        gender: string | null; nickname: string | null;
+    }): boolean {
+        const tj = m.cskNumber
+            ? tjByCsk.get(m.cskNumber)
+            : tjByName.get(m.fullName.trim().toLowerCase());
+        if (!tj) return false;
+        const checks: Array<[SyncUpdatableField, unknown, unknown]> = [
+            ["email",       tj.email,       m.email],
+            ["phone",       tj.phone,       m.phone],
+            ["address",     tj.address,     m.address],
+            ["birthDate",   tj.birthDate,   m.birthDate],
+            ["birthNumber", tj.birthNumber, m.birthNumber],
+            ["gender",      tj.gender,      m.gender],
+            ["nickname",    tj.nickname,    m.nickname],
+            ["cskNumber",   tj.cskNumber,   m.cskNumber],
+            ["fullName",    [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim() || null, m.fullName],
+        ];
+        return checks.some(([, tjVal, mVal]) => {
+            const a = tjVal === null || tjVal === undefined ? null : String(tjVal);
+            const b = mVal  === null || mVal  === undefined ? null : String(mVal);
+            return a !== b;
+        });
+    }
     if (isAllYears) {
         const membersResult = await db
             .select({
@@ -119,6 +155,7 @@ export default async function MembersPage(props: {
             amountTotal:        null,
             hasContrib:         false,
             memberYears:        computeMemberYears(r.memberFrom as unknown as string, r.memberTo as unknown as string | null),
+            hasTjDiffs:         computeHasTjDiffs({ ...r, birthDate: r.birthDate as unknown as string | null }),
         }));
     } else {
         // Členové aktivní v daném roce: member_from <= rok-12-31 AND (member_to IS NULL OR member_to >= rok-01-01)
@@ -196,6 +233,12 @@ export default async function MembersPage(props: {
                 isPaid:             r.isPaid,
                 amountTotal:        r.amountTotal,
                 hasContrib:         r.contribId !== null,
+                hasTjDiffs:         computeHasTjDiffs({
+                    id: r.id, fullName: r.fullName, cskNumber: r.cskNumber,
+                    email: r.email, phone: r.phone, address: r.address,
+                    birthDate: r.birthDate as unknown as string | null,
+                    birthNumber: r.birthNumber, gender: r.gender, nickname: r.nickname,
+                }),
             };
         });
     }

@@ -20,6 +20,7 @@ import {
     getMemberHistory, getMemberAuditLog, saveMember, setMemberTodo,
     type MemberFormState, type AuditEntry, type MemberYearRecord,
 } from "@/lib/actions/members";
+import { getMemberTjDiffs, updateMemberFieldFromTj, type TjDiff } from "@/lib/actions/sync";
 import { FIELD_LABELS } from "@/lib/member-fields";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
 import type { MemberWithFlags } from "./page";
@@ -86,6 +87,64 @@ function AuditHistory({ memberId }: { memberId: number }) {
                     ))}
                 </div>
             ))}
+        </div>
+    );
+}
+
+// ── TJ diffs section ─────────────────────────────────────────────────────────
+function TjDiffsSection({ memberId, onApplied }: { memberId: number; onApplied: () => void }) {
+    const [diffs, setDiffs]     = useState<TjDiff[] | null>(null);
+    const [done, setDone]       = useState<Set<string>>(new Set());
+    const [pending, startTrans] = useTransition();
+
+    useEffect(() => {
+        getMemberTjDiffs(memberId).then(setDiffs);
+    }, [memberId]);
+
+    if (diffs === null) return <p className="text-xs text-gray-400 mt-1">Načítám…</p>;
+
+    const remaining = diffs.filter(d => !done.has(d.field));
+    if (remaining.length === 0) return (
+        <p className="text-xs text-[#327600] font-medium mt-1">Vše přijato.</p>
+    );
+
+    function apply(diff: TjDiff) {
+        startTrans(async () => {
+            const res = await updateMemberFieldFromTj(memberId, diff.field, diff.tjValue);
+            if ("success" in res) {
+                setDone(prev => new Set([...prev, diff.field]));
+                onApplied();
+            }
+        });
+    }
+
+    return (
+        <div className="border rounded-md overflow-hidden mt-2">
+            <table className="w-full text-xs">
+                <thead>
+                    <tr className="bg-sky-50 border-b">
+                        <th className="text-left px-3 py-2 font-medium text-sky-800 w-28">Pole</th>
+                        <th className="text-left px-3 py-2 font-medium text-sky-800">Naše data</th>
+                        <th className="text-left px-3 py-2 font-medium text-sky-800">TJ Bohemians</th>
+                        <th className="w-16" />
+                    </tr>
+                </thead>
+                <tbody>
+                    {remaining.map(diff => (
+                        <tr key={diff.field} className="border-b last:border-0 hover:bg-muted/30">
+                            <td className="px-3 py-2 text-muted-foreground font-medium">{diff.label}</td>
+                            <td className="px-3 py-2 text-foreground/50 line-through">{diff.ourValue ?? "—"}</td>
+                            <td className="px-3 py-2 font-medium text-sky-700">{diff.tjValue ?? "—"}</td>
+                            <td className="px-3 py-2 text-right">
+                                <Button size="sm" variant="outline" className="h-6 text-xs px-2"
+                                    disabled={pending} onClick={() => apply(diff)}>
+                                    ← Přijmout
+                                </Button>
+                            </td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 }
@@ -587,6 +646,23 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                             className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
                                             Ukončit členství…
                                         </Button>
+                                    </div>
+                                </>
+                            )}
+
+                            {/* TJ diffs */}
+                            {member.hasTjDiffs && (
+                                <>
+                                    <Separator className="mb-4" />
+                                    <div className="mb-4">
+                                        <div className="flex items-center justify-between">
+                                            <p className="text-sm font-medium text-sky-700">Nepřijaté změny ze synchronizace TJ</p>
+                                            <a href="/dashboard/imports/members-tj"
+                                                className="text-xs text-sky-600 hover:underline">
+                                                Otevřít import →
+                                            </a>
+                                        </div>
+                                        <TjDiffsSection memberId={member.id} onApplied={onMemberUpdated} />
                                     </div>
                                 </>
                             )}
