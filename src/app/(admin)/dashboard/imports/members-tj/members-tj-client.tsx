@@ -39,7 +39,17 @@ function DiffSheet({ row, onClose }: { row: MatchedRow; onClose: () => void }) {
             <SheetContent className="sm:max-w-2xl px-5 pb-8">
                 <SheetHeader className="px-0 pt-5 pb-4">
                     <SheetTitle>{row.fullName}</SheetTitle>
-                    <p className="text-sm text-muted-foreground">ČSK {row.cskNumber}</p>
+                    <div className="flex items-center gap-2 flex-wrap">
+                        {row.cskNumber
+                            ? <p className="text-sm text-muted-foreground">ČSK {row.cskNumber}</p>
+                            : <p className="text-sm text-muted-foreground">Bez ČSK čísla</p>
+                        }
+                        {row.matchedByName && (
+                            <span className="px-1.5 py-0.5 rounded text-[11px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                párováno podle jména
+                            </span>
+                        )}
+                    </div>
                 </SheetHeader>
 
                 {remaining.length === 0 ? (
@@ -187,8 +197,17 @@ export function MembersTjClient({ unmatched, matched, onlyOurs }: {
                                     {matched.map(row => (
                                         <tr key={row.memberId} className="border-b last:border-0 hover:bg-muted/30 cursor-pointer"
                                             onClick={() => setDiffRow(row)}>
-                                            <td className="px-3 py-2.5 font-medium">{row.fullName}</td>
-                                            <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{row.cskNumber}</td>
+                                            <td className="px-3 py-2.5 font-medium">
+                                                <div className="flex items-center gap-1.5 flex-wrap">
+                                                    {row.fullName}
+                                                    {row.matchedByName && (
+                                                        <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
+                                                            párováno jménem
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </td>
+                                            <td className="px-3 py-2.5 text-muted-foreground hidden sm:table-cell">{row.cskNumber ?? "—"}</td>
                                             <td className="px-3 py-2.5">
                                                 <div className="flex flex-wrap gap-1">
                                                     {row.diffs.map(d => (
