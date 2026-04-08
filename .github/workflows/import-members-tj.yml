@@ -1,0 +1,27 @@
+name: Import členů TJ Bohemians
+
+on:
+  repository_dispatch:
+    types: [import-members-tj]
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mask and write payload
+        env:
+          PAYLOAD: ${{ toJson(github.event.client_payload.members) }}
+        run: |
+          echo "::add-mask::$PAYLOAD"
+          printf '%s' "$PAYLOAD" > /tmp/members.json
+
+      - name: POST to OVT webhook
+        env:
+          OVT_URL: ${{ secrets.OVT_URL }}
+          OVT_SYNC_SECRET: ${{ secrets.OVT_SYNC_SECRET }}
+        run: |
+          curl -fsS -X POST \
+            -H "Content-Type: application/json" \
+            -H "Authorization: Bearer $OVT_SYNC_SECRET" \
+            --data @/tmp/members.json \
+            "${OVT_URL}/api/webhooks/import_members_tj_bohemians"
