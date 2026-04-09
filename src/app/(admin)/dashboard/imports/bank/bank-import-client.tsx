@@ -12,12 +12,14 @@ import type { BankTransactionRow } from "@/lib/actions/bank";
 
 interface Props {
     transactions: BankTransactionRow[];
+    years: number[];
+    selectedYear: number;
 }
 
-// Default: posledních 12 měsíců
+// Default resync range: posledních 90 dní
 function defaultFrom(): string {
     const d = new Date();
-    d.setFullYear(d.getFullYear() - 1);
+    d.setDate(d.getDate() - 89);
     return d.toISOString().substring(0, 10);
 }
 function defaultTo(): string {
@@ -34,9 +36,10 @@ function formatAmount(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 0 }).format(amount);
 }
 
-export function BankImportClient({ transactions }: Props) {
+export function BankImportClient({ transactions, years, selectedYear }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
+    const [pendingYear, setPendingYear] = useState<number | null>(null);
 
     // Resync form state
     const [resyncFrom, setResyncFrom] = useState(defaultFrom);
@@ -44,12 +47,20 @@ export function BankImportClient({ transactions }: Props) {
     const [resyncMsg,  setResyncMsg]  = useState<string | null>(null);
     const [resyncPending, startResync] = useTransition();
 
+    function navigateYear(year: number) {
+        setPendingYear(year);
+        startTransition(() => {
+            router.push(`/dashboard/imports/bank?year=${year}`);
+        });
+    }
+
+    const displayYear = pendingYear ?? selectedYear;
+
     function handleSyncLast() {
         startTransition(async () => {
             try {
-                const result = await syncBankTransactionsLast();
+                await syncBankTransactionsLast();
                 router.refresh();
-                console.log("Sync hotov:", result);
             } catch (err) {
                 console.error("Sync selhal:", err);
             }
@@ -79,10 +90,27 @@ export function BankImportClient({ transactions }: Props) {
     }
 
     return (
-        <div className="space-y-6">
-            {/* Ovládací panel */}
+        <div className="space-y-4">
+            {/* ── Year tabs ── */}
+            {years.length > 0 && (
+                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
+                    {years.map(y => (
+                        <button key={y}
+                            onClick={() => navigateYear(y)}
+                            className={[
+                                "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
+                                y === displayYear
+                                    ? "bg-[#26272b] text-white"
+                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
+                            ].join(" ")}>
+                            {y}
+                        </button>
+                    ))}
+                </div>
+            )}
+
+            {/* ── Ovládací panel ── */}
             <div className="flex flex-wrap gap-6 items-end">
-                {/* Inkrementální sync */}
                 <div className="flex items-center gap-2">
                     <Button
                         size="sm"
@@ -96,7 +124,6 @@ export function BankImportClient({ transactions }: Props) {
                     <span className="text-xs text-muted-foreground">Od posledního stažení</span>
                 </div>
 
-                {/* Resync za období */}
                 <div className="flex items-end gap-2 border rounded-lg px-3 py-2 bg-gray-50">
                     <div className="space-y-1">
                         <Label className="text-xs">Od</Label>
@@ -136,7 +163,7 @@ export function BankImportClient({ transactions }: Props) {
                 </div>
             </div>
 
-            {/* Tabulka transakcí */}
+            {/* ── Tabulka transakcí ── */}
             <div className="rounded-lg border overflow-x-auto">
                 <table className="w-full text-sm">
                     <thead>
@@ -146,15 +173,15 @@ export function BankImportClient({ transactions }: Props) {
                             <th className="text-left px-3 py-2 font-medium">VS</th>
                             <th className="text-left px-3 py-2 font-medium">Protistrana</th>
                             <th className="text-left px-3 py-2 font-medium">Zpráva / Typ</th>
-                            <th className="text-left px-3 py-2 font-medium">Člen (párování)</th>
-                            <th className="text-left px-3 py-2 font-medium">Platba v DB</th>
+                            <th className="text-left px-3 py-2 font-medium">Člen</th>
+                            <th className="text-left px-3 py-2 font-medium">Platba v DB ({selectedYear})</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y">
                         {transactions.length === 0 && (
                             <tr>
                                 <td colSpan={7} className="px-3 py-8 text-center text-muted-foreground text-sm">
-                                    Žádné transakce. Spusťte synchronizaci.
+                                    Žádné transakce pro rok {selectedYear}. Spusťte synchronizaci.
                                 </td>
                             </tr>
                         )}
@@ -185,12 +212,20 @@ export function BankImportClient({ transactions }: Props) {
                                     }
                                 </td>
                                 <td className="px-3 py-2 text-xs">
-                                    {tx.matchedPaymentId
-                                        ? <Badge className="text-xs bg-green-100 text-green-800 border-green-200 font-normal">
-                                            {tx.matchedPaymentAmount != null ? formatAmount(tx.matchedPaymentAmount) : `#${tx.matchedPaymentId}`}
-                                          </Badge>
-                                        : <span className="text-muted-foreground">—</span>
-                                    }
+                                    {tx.matchedPaymentId ? (
+                                        <div className="flex flex-col gap-0.5">
+                                            <Badge className="text-xs bg-green-100 text-green-800 border-green-200 font-normal w-fit">
+                                                {tx.matchedPaymentAmount != null ? formatAmount(tx.matchedPaymentAmount) : `#${tx.matchedPaymentId}`}
+                                            </Badge>
+                                            {tx.matchedPaymentDate && (
+                                                <span className="text-muted-foreground">{tx.matchedPaymentDate}</span>
+                                            )}
+                                        </div>
+                                    ) : tx.matchedMemberId ? (
+                                        <span className="text-amber-600 text-xs">člen bez platby</span>
+                                    ) : (
+                                        <span className="text-muted-foreground">—</span>
+                                    )}
                                 </td>
                             </tr>
                         ))}
@@ -199,7 +234,7 @@ export function BankImportClient({ transactions }: Props) {
             </div>
             {transactions.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                    Zobrazeno {transactions.length} transakcí. Párování přes variabilní symbol → člen → platba.
+                    {transactions.length} transakcí v roce {selectedYear}. Platba v DB = záznam v tabulce payments se shodným členem a rokem platby.
                 </p>
             )}
         </div>

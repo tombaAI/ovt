@@ -1,17 +1,23 @@
-import { sql } from "drizzle-orm";
 import { getDb } from "@/lib/db";
 import { bankTransactions } from "@/db/schema";
-import { loadBankTransactions } from "@/lib/actions/bank";
+import { sql } from "drizzle-orm";
+import { loadBankTransactions, loadBankTransactionYears } from "@/lib/actions/bank";
 import { BankImportClient } from "./bank-import-client";
+import { CONTRIBUTION_YEAR } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
-export default async function BankImportPage() {
+export default async function BankImportPage(props: {
+    searchParams: Promise<{ year?: string }>;
+}) {
+    const { year: yearParam } = await props.searchParams;
     const db = getDb();
 
-    // Statistiky
+    const years = await loadBankTransactionYears();
+    const selectedYear = Number(yearParam) || (years[0] ?? CONTRIBUTION_YEAR);
+
     const [stats] = await db.select({
-        total:   sql<number>`count(*)`,
+        total:    sql<number>`count(*)`,
         lastDate: sql<string>`max(date)`,
         syncedAt: sql<string>`max(synced_at)`,
     }).from(bankTransactions);
@@ -20,8 +26,7 @@ export default async function BankImportPage() {
         ? new Date(stats.syncedAt).toLocaleString("cs-CZ", { timeZone: "Europe/Prague" })
         : null;
 
-    // Načteme posledních 500 transakcí pro zobrazení
-    const transactions = await loadBankTransactions({ limit: 500 });
+    const transactions = await loadBankTransactions(selectedYear);
 
     return (
         <div className="space-y-4">
@@ -35,7 +40,11 @@ export default async function BankImportPage() {
                 </p>
             </div>
 
-            <BankImportClient transactions={transactions} />
+            <BankImportClient
+                transactions={transactions}
+                years={years}
+                selectedYear={selectedYear}
+            />
         </div>
     );
 }

@@ -30,6 +30,7 @@ export type BankTransactionRow = {
     matchedMemberName: string | null;
     matchedPaymentId: number | null;
     matchedPaymentAmount: number | null;
+    matchedPaymentDate: string | null;
 };
 
 // ── Uložení transakcí (deduplikace přes fio_id) ───────────────────────────────
@@ -112,17 +113,24 @@ export async function syncBankTransactionsByPeriod(from: string, to: string): Pr
 }
 
 /**
- * Načte transakce z bank_transactions pro zobrazení v UI + porovná s payments.
- * Vrací transakce seřazené od nejnovějších, s informací o existujícím záznamu v payments.
+ * Vrátí seznam roků pro které máme bankovní transakce, sestupně.
  */
-export async function loadBankTransactions(opts?: {
-    from?: string;
-    to?: string;
-    limit?: number;
-}): Promise<BankTransactionRow[]> {
+export async function loadBankTransactionYears(): Promise<number[]> {
+    const db = getDb();
+    const rows = await db.execute(
+        sql`SELECT DISTINCT EXTRACT(YEAR FROM date)::int AS year FROM app.bank_transactions ORDER BY year DESC`
+    );
+    return (rows as unknown as Array<{ year: number }>).map(r => r.year);
+}
+
+/**
+ * Načte transakce z bank_transactions pro zobrazení v UI + porovná s payments.
+ * Párování plateb je omezeno na stejný rok jako bankovní transakce.
+ */
+export async function loadBankTransactions(year: number): Promise<BankTransactionRow[]> {
     const db = getDb();
 
-    let query = db
+    const rows = await db
         .select({
             id:                  bankTransactions.id,
             fioId:               bankTransactions.fioId,
@@ -136,29 +144,19 @@ export async function loadBankTransactions(opts?: {
             type:                bankTransactions.type,
         })
         .from(bankTransactions)
-        .$dynamic();
-
-    if (opts?.from && opts?.to) {
-        query = query.where(and(
-            gte(bankTransactions.date, opts.from),
-            lte(bankTransactions.date, opts.to),
-        ));
-    } else if (opts?.from) {
-        query = query.where(gte(bankTransactions.date, opts.from));
-    }
-
-    const rows = await query
-        .orderBy(desc(bankTransactions.date))
-        .limit(opts?.limit ?? 500);
+        .where(and(
+            gte(bankTransactions.date, `${year}-01-01`),
+            lte(bankTransactions.date, `${year}-12-31`),
+        ))
+        .orderBy(desc(bankTransactions.date));
 
     if (rows.length === 0) return [];
 
-    // Párování přes variable_symbol — najdeme členy a jejich platby v jednom dotazu
-    const vsList = rows
-        .map(r => r.variableSymbol)
-        .filter((v): v is string => v !== null && v !== "");
-
     // Mapa VS → člen
+    const vsList = [...new Set(
+        rows.map(r => r.variableSymbol).filter((v): v is string => v !== null && v !== "")
+    )];
+
     const membersByVs = new Map<string, { memberId: number; fullName: string }>();
     if (vsList.length > 0) {
         const memberRows = await db
@@ -172,31 +170,37 @@ export async function loadBankTransactions(opts?: {
         }
     }
 
-    // Mapa VS → platba (bereme první nalezenu, řazeno od nejnovější)
+    // Mapa memberId → platba ve stejném roce jako transakce
+    // Klíč: `${memberId}` — bereme první platbu daného člena v daném roce (řazeno paidAt desc)
     const memberIds = [...new Set([...membersByVs.values()].map(m => m.memberId))];
-    const paymentsByMemberId = new Map<number, { paymentId: number; amount: number }>();
+    const paymentsByMemberId = new Map<number, { paymentId: number; amount: number; paidAt: string | null }>();
     if (memberIds.length > 0) {
         const paymentRows = await db
-            .select({ memberId: payments.memberId, id: payments.id, amount: payments.amount })
+            .select({ memberId: payments.memberId, id: payments.id, amount: payments.amount, paidAt: payments.paidAt })
             .from(payments)
-            .where(inArray(payments.memberId, memberIds))
-            .orderBy(desc(payments.createdAt));
+            .where(and(
+                inArray(payments.memberId, memberIds),
+                gte(payments.paidAt, `${year}-01-01`),
+                lte(payments.paidAt, `${year}-12-31`),
+            ))
+            .orderBy(desc(payments.paidAt));
         for (const p of paymentRows) {
             if (!paymentsByMemberId.has(p.memberId)) {
-                paymentsByMemberId.set(p.memberId, { paymentId: p.id, amount: p.amount });
+                paymentsByMemberId.set(p.memberId, { paymentId: p.id, amount: p.amount, paidAt: p.paidAt as unknown as string | null });
             }
         }
     }
 
     return rows.map(row => {
-        const member = row.variableSymbol ? membersByVs.get(row.variableSymbol) : undefined;
+        const member  = row.variableSymbol ? membersByVs.get(row.variableSymbol) : undefined;
         const payment = member ? paymentsByMemberId.get(member.memberId) : undefined;
         return {
             ...row,
-            matchedMemberId:     member?.memberId ?? null,
-            matchedMemberName:   member?.fullName ?? null,
-            matchedPaymentId:    payment?.paymentId ?? null,
+            matchedMemberId:      member?.memberId ?? null,
+            matchedMemberName:    member?.fullName ?? null,
+            matchedPaymentId:     payment?.paymentId ?? null,
             matchedPaymentAmount: payment?.amount ?? null,
+            matchedPaymentDate:   payment?.paidAt ?? null,
         };
     });
 }
