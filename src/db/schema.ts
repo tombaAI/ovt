@@ -184,6 +184,34 @@ export const importHistory = appSchema.table("import_history", {
     importedAt:            timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+// ── Bank sync tables ─────────────────────────────────────────────────────────
+
+export const bankTransactions = appSchema.table(
+    "bank_transactions",
+    {
+        id:                   serial("id").primaryKey(),
+        fioId:                integer("fio_id").notNull().unique(),
+        date:                 date("date").notNull(),
+        amount:               integer("amount").notNull(),
+        currency:             text("currency").notNull().default("CZK"),
+        variableSymbol:       text("variable_symbol"),
+        constantSymbol:       text("constant_symbol"),
+        specificSymbol:       text("specific_symbol"),
+        counterpartyAccount:  text("counterparty_account"),
+        counterpartyName:     text("counterparty_name"),
+        message:              text("message"),
+        userIdentification:   text("user_identification"),
+        type:                 text("type"),
+        comment:              text("comment"),
+        rawData:              jsonb("raw_data").notNull().default({}),
+        syncedAt:             timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("bank_transactions_date_idx").on(t.date),
+        index("bank_transactions_vs_idx").on(t.variableSymbol),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(

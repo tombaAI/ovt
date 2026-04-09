@@ -24,6 +24,11 @@ const RECURRING: ImportItem[] = [
         title:       "Členové TJ Bohemians",
         description: "Data z evidence vodní turistiky přicházejí automaticky přes Power Automate → webhook.",
     },
+    {
+        href:        "/dashboard/imports/bank",
+        title:       "Platby z banky (Fio)",
+        description: "Inkrementální synchronizace plateb z Fio bankovního účtu. Cron každý den v 6:00, ruční sync k dispozici.",
+    },
 ];
 
 const ONETIME: ImportItem[] = [
