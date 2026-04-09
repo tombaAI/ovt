@@ -14,7 +14,21 @@ interface Props {
     transactions: BankTransactionRow[];
 }
 
-const CURRENT_YEAR = new Date().getFullYear();
+// Default: posledních 12 měsíců
+function defaultFrom(): string {
+    const d = new Date();
+    d.setFullYear(d.getFullYear() - 1);
+    return d.toISOString().substring(0, 10);
+}
+function defaultTo(): string {
+    return new Date().toISOString().substring(0, 10);
+}
+
+// Kolik 365denních chunků pokryje rozsah (pro varování o době trvání)
+function countChunks(from: string, to: string): number {
+    const ms = new Date(to).getTime() - new Date(from).getTime();
+    return Math.ceil(ms / (365 * 86400_000));
+}
 
 function formatAmount(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 0 }).format(amount);
@@ -25,8 +39,8 @@ export function BankImportClient({ transactions }: Props) {
     const [isPending, startTransition] = useTransition();
 
     // Resync form state
-    const [resyncFrom, setResyncFrom] = useState(`${CURRENT_YEAR - 1}-01-01`);
-    const [resyncTo,   setResyncTo]   = useState(`${CURRENT_YEAR}-12-31`);
+    const [resyncFrom, setResyncFrom] = useState(defaultFrom);
+    const [resyncTo,   setResyncTo]   = useState(defaultTo);
     const [resyncMsg,  setResyncMsg]  = useState<string | null>(null);
     const [resyncPending, startResync] = useTransition();
 
@@ -109,8 +123,13 @@ export function BankImportClient({ transactions }: Props) {
                         disabled={resyncPending}
                     >
                         <Download size={14} className={resyncPending ? "animate-spin mr-1.5" : "mr-1.5"} />
-                        Resync za období
+                        {resyncPending ? "Načítám…" : "Resync za období"}
                     </Button>
+                    {!resyncPending && countChunks(resyncFrom, resyncTo) > 1 && (
+                        <span className="text-xs text-amber-600">
+                            Rozsah &gt;1 rok — bude trvat ~{countChunks(resyncFrom, resyncTo) * 31}s (Fio rate limit)
+                        </span>
+                    )}
                     {resyncMsg && (
                         <span className="text-xs text-muted-foreground max-w-xs">{resyncMsg}</span>
                     )}

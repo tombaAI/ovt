@@ -74,13 +74,41 @@ export async function syncBankTransactionsLast(): Promise<SyncResult> {
 }
 
 /**
- * Resync za zvolené období. Vhodné pro počáteční naplnění nebo opravu dat.
+ * Resync za zvolené období. Fio API povoluje max 365 dní na request —
+ * delší rozsah automaticky rozdělíme do chunků.
  */
 export async function syncBankTransactionsByPeriod(from: string, to: string): Promise<SyncResult> {
-    const txs = await fetchFioByPeriod(from, to);
-    const result = await upsertTransactions(txs);
+    const fromDate = new Date(from);
+    const toDate   = new Date(to);
+
+    // Rozděl na max 365denní chunky
+    const chunks: Array<{ from: string; to: string }> = [];
+    let cursor = fromDate;
+    while (cursor <= toDate) {
+        const chunkEnd = new Date(cursor);
+        chunkEnd.setDate(chunkEnd.getDate() + 364);
+        if (chunkEnd > toDate) chunkEnd.setTime(toDate.getTime());
+        chunks.push({
+            from: cursor.toISOString().substring(0, 10),
+            to:   chunkEnd.toISOString().substring(0, 10),
+        });
+        cursor = new Date(chunkEnd);
+        cursor.setDate(cursor.getDate() + 1);
+    }
+
+    let total = 0, inserted = 0, skipped = 0;
+    for (const chunk of chunks) {
+        const txs = await fetchFioByPeriod(chunk.from, chunk.to);
+        const r   = await upsertTransactions(txs);
+        total    += r.total;
+        inserted += r.inserted;
+        skipped  += r.skipped;
+        // Fio rate limit: 1 req / 30s — při více chuncích počkáme
+        if (chunks.length > 1) await new Promise(res => setTimeout(res, 31_000));
+    }
+
     revalidatePath("/dashboard/imports/bank");
-    return result;
+    return { total, inserted, skipped };
 }
 
 /**
