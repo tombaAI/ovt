@@ -67,14 +67,16 @@ export default async function DashboardPage() {
                     </Card>
                 </Link>
 
-                <Card className="opacity-50">
-                    <CardHeader className="pb-2">
-                        <p className="text-sm font-medium text-gray-500">Finance</p>
-                    </CardHeader>
-                    <CardContent>
-                        <p className="text-xs text-gray-400">Připravujeme…</p>
-                    </CardContent>
-                </Card>
+                <Link href="/dashboard/imports">
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <p className="text-sm font-medium text-gray-500">Import &amp; synchronizace</p>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-xs text-gray-400">CSV importy, TJ Bohemians, mapování, historie</p>
+                        </CardContent>
+                    </Card>
+                </Link>
             </div>
         </div>
     );
