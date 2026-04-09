@@ -34,7 +34,8 @@ export type Payment = {
 export type ContribRow = {
     contribId: number;
     memberId: number;
-    fullName: string;
+    firstName: string;
+    lastName: string;
     variableSymbol: number | null;
     amountTotal: number | null;
     amountBase: number | null;
@@ -99,7 +100,8 @@ export default async function ContributionsPage(props: {
         .select({
             contribId:          memberContributions.id,
             memberId:           memberContributions.memberId,
-            fullName:           members.fullName,
+            firstName:          members.firstName,
+            lastName:           members.lastName,
             variableSymbol:     members.variableSymbol,
             amountTotal:        memberContributions.amountTotal,
             amountBase:         memberContributions.amountBase,
@@ -115,7 +117,7 @@ export default async function ContributionsPage(props: {
         .from(memberContributions)
         .innerJoin(members, eq(memberContributions.memberId, members.id))
         .where(eq(memberContributions.periodId, period.id))
-        .orderBy(asc(members.fullName));
+        .orderBy(asc(members.lastName), asc(members.firstName));
 
     // Fetch all payments for these contributions in one query
     const contribIds = contribs.map(c => c.contribId);

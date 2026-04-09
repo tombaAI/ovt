@@ -22,10 +22,6 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "tjdiffs",    label: "Změny z TJ"         },
 ];
 
-function lastName(fullName: string) {
-    const parts = fullName.trim().split(/\s+/);
-    return parts.at(-1) ?? fullName;
-}
 
 function fmtDate(iso: string) {
     const [y, m, d] = iso.split("-");
@@ -141,14 +137,15 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
         if (searchText.trim()) {
             const q = searchText.trim().toLowerCase();
             list = list.filter(m =>
-                m.fullName.toLowerCase().includes(q) ||
+                `${m.firstName} ${m.lastName}`.toLowerCase().includes(q) ||
+                m.lastName.toLowerCase().includes(q) ||
                 (m.userLogin?.toLowerCase().includes(q) ?? false) ||
                 (m.email?.toLowerCase().includes(q) ?? false)
             );
         }
         if (sort === "lastName") {
             list = [...list].sort((a, b) =>
-                lastName(a.fullName).localeCompare(lastName(b.fullName), "cs")
+                a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs")
             );
         }
         return list;
@@ -249,7 +246,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                 {filtered.map(m => (
                     <button key={m.id} onClick={() => openDetail(m)}
                         className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
-                        <p className="font-medium text-gray-900 leading-snug">{m.fullName}</p>
+                        <p className="font-medium text-gray-900 leading-snug">{m.firstName} {m.lastName}</p>
                         {m.email && <p className="text-sm text-gray-500 mt-0.5 truncate">{m.email}</p>}
                         <div className="flex flex-wrap gap-1 mt-2">
                             {isAllYears
@@ -285,7 +282,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                             <TableRow key={m.id} className="hover:bg-gray-50/60 cursor-pointer"
                                 onClick={() => openDetail(m)}>
                                 <TableCell className="text-center text-gray-400 text-xs font-mono">{m.id}</TableCell>
-                                <TableCell className="font-medium">{m.fullName}</TableCell>
+                                <TableCell className="font-medium">{m.firstName} {m.lastName}</TableCell>
                                 <TableCell className="hidden lg:table-cell text-gray-500 text-sm">{m.email ?? "—"}</TableCell>
                                 <TableCell className="hidden xl:table-cell text-right font-mono text-sm text-gray-500">
                                     {m.variableSymbol ?? "—"}

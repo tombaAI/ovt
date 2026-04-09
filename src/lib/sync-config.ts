@@ -1,4 +1,6 @@
 export const SYNC_UPDATABLE_FIELDS = {
+    firstName:   "Jméno",
+    lastName:    "Příjmení",
     email:       "Email",
     phone:       "Telefon",
     address:     "Adresa",
@@ -6,7 +8,6 @@ export const SYNC_UPDATABLE_FIELDS = {
     birthNumber: "Rodné číslo",
     gender:      "Pohlaví",
     nickname:    "Přezdívka",
-    fullName:    "Celé jméno",
     cskNumber:   "Číslo ČSK",
 } as const;
 

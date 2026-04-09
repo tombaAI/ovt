@@ -198,7 +198,7 @@ function DiscountDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-sm">
                 <DialogHeader>
-                    <DialogTitle>Individuální sleva — {member.fullName}</DialogTitle>
+                    <DialogTitle>Individuální sleva — {member.firstName} {member.lastName}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
                     {currentDiscount && (
@@ -278,7 +278,7 @@ function TerminateDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Ukončení členství — {member.fullName}</DialogTitle>
+                    <DialogTitle>Ukončení členství — {member.firstName} {member.lastName}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 py-2">
                     <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800 space-y-1">
@@ -546,7 +546,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                         <>
                             <SheetHeader className="px-0 pt-5 pb-4 mb-2">
                                 <div className="flex items-start justify-between gap-2">
-                                    <SheetTitle className="text-lg leading-tight">{member.fullName}</SheetTitle>
+                                    <SheetTitle className="text-lg leading-tight">{member.firstName} {member.lastName}</SheetTitle>
                                     {isTerminated && (
                                         <Badge className="bg-red-100 text-red-700 border-0 shrink-0">Ukončen</Badge>
                                     )}
@@ -564,7 +564,8 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
 
                             {/* Inline edit fields */}
                             <div className="rounded-xl border px-4 mb-4">
-                                <InlineField label="Jméno"       value={member.fullName}                        fieldId="fullName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("fullName")}       tjValue={tjDiffs["fullName"]}    onTjAccept={tjAcceptor("fullName")} />
+                                <InlineField label="Jméno"     value={member.firstName}                       fieldId="firstName"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
+                                <InlineField label="Příjmení"  value={member.lastName}                        fieldId="lastName"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")}  tjValue={tjDiffs["lastName"]}  onTjAccept={tjAcceptor("lastName")} />
                                 <InlineField label="Přezdívka"   value={member.nickname}   placeholder="(žádná)"    fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")}   tjValue={tjDiffs["nickname"]}    onTjAccept={tjAcceptor("nickname")} />
                                 <InlineField label="Login"       value={member.userLogin}  placeholder="(nezadáno)" fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
                                 <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")}       tjValue={tjDiffs["email"]}       onTjAccept={tjAcceptor("email")} />
@@ -703,8 +704,13 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                 <SheetTitle>Přidat člena</SheetTitle>
                             </SheetHeader>
                             <form action={formAction} className="space-y-4">
-                                <div className="space-y-1.5"><Label htmlFor="full_name">Jméno *</Label>
-                                    <Input id="full_name" name="full_name" required />
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5"><Label htmlFor="first_name">Jméno *</Label>
+                                        <Input id="first_name" name="first_name" required />
+                                    </div>
+                                    <div className="space-y-1.5"><Label htmlFor="last_name">Příjmení *</Label>
+                                        <Input id="last_name" name="last_name" required />
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5"><Label htmlFor="user_login">Login</Label>

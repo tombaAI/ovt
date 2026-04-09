@@ -40,7 +40,7 @@ export async function getMemberTjDiffs(memberId: number): Promise<TjDiff[]> {
             .where(eq(importMembersTjBohemians.cskNumber, m.cskNumber));
     }
     if (!tj) {
-        const nameLower = m.fullName.trim().toLowerCase();
+        const nameLower = `${m.firstName} ${m.lastName}`.trim().toLowerCase();
         const all = await db.select().from(importMembersTjBohemians)
             .where(or(isNull(importMembersTjBohemians.cskNumber)));
         tj = all.find(r =>
@@ -50,6 +50,8 @@ export async function getMemberTjDiffs(memberId: number): Promise<TjDiff[]> {
     if (!tj) return [];
 
     const comparisons: Array<[SyncUpdatableField, unknown, unknown]> = [
+        ["firstName",   tj.jmeno,       m.firstName],
+        ["lastName",    tj.prijmeni,    m.lastName],
         ["email",       tj.email,       m.email],
         ["phone",       tj.phone,       m.phone],
         ["address",     tj.address,     m.address],
@@ -58,7 +60,6 @@ export async function getMemberTjDiffs(memberId: number): Promise<TjDiff[]> {
         ["gender",      tj.gender,      m.gender],
         ["nickname",    tj.nickname,    m.nickname],
         ["cskNumber",   tj.cskNumber,   m.cskNumber],
-        ["fullName",    [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim() || null, m.fullName],
     ];
 
     return comparisons
@@ -94,8 +95,9 @@ export async function importFromTj(tjMemberId: number): Promise<SyncActionResult
     const [tj] = await db.select().from(importMembersTjBohemians).where(eq(importMembersTjBohemians.id, tjMemberId));
     if (!tj) return { error: "TJ člen nenalezen" };
 
-    const fullName = [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim();
-    if (!fullName) return { error: "Chybí jméno" };
+    const firstName = (tj.jmeno  ?? "").trim();
+    const lastName  = (tj.prijmeni ?? "").trim();
+    if (!firstName && !lastName) return { error: "Chybí jméno" };
 
     const [{ nextId }] = await db.select({
         nextId: sql<number>`coalesce(max(${members.id}), 0) + 1`
@@ -105,7 +107,9 @@ export async function importFromTj(tjMemberId: number): Promise<SyncActionResult
 
     await db.insert(members).values({
         id:          nextId,
-        fullName,
+        firstName,
+        lastName,
+        fullName:    [firstName, lastName].filter(Boolean).join(" "),
         nickname:    tj.nickname,
         email:       tj.email,
         phone:       tj.phone,
@@ -145,12 +149,14 @@ export async function updateMemberFieldFromTj(
     const [current] = await db.select().from(members).where(eq(members.id, memberId));
     if (!current) return { error: "Člen nenalezen" };
 
-    const oldValue = String(current[field] ?? "");
+    const oldValue = String(current[field as keyof typeof current] ?? "");
     const newValue = value ?? null;
 
-    await db.update(members)
-        .set({ [field]: newValue, updatedAt: new Date() })
-        .where(eq(members.id, memberId));
+    const patch: Record<string, unknown> = { [field]: newValue, updatedAt: new Date() };
+    if (field === "firstName") patch.fullName = `${newValue ?? ""} ${current.lastName}`.trim();
+    if (field === "lastName")  patch.fullName = `${current.firstName} ${newValue ?? ""}`.trim();
+
+    await db.update(members).set(patch as Parameters<ReturnType<typeof db.update>["set"]>[0]).where(eq(members.id, memberId));
 
     await db.insert(auditLog).values({
         entityType: "member",

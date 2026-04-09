@@ -1,6 +1,8 @@
 /** Česká jména polí pro zobrazení v audit logu */
 export const FIELD_LABELS: Record<string, string> = {
-    fullName:               "Jméno",
+    firstName:              "Jméno",
+    lastName:               "Příjmení",
+    fullName:               "Celé jméno",   // legacy audit záznamy
     nickname:               "Přezdívka",
     userLogin:              "Login",
     email:                  "E-mail",

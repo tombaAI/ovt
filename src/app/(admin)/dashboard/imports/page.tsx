@@ -3,9 +3,24 @@ import { ArrowRight } from "lucide-react";
 
 const IMPORTS = [
     {
+        href:        "/dashboard/imports/csv",
+        title:       "Import CSV / ČSK data",
+        description: "Nahrát CSV soubor, namapovat sloupce a porovnat s databází členů. Podporuje uložená mapování.",
+    },
+    {
         href:        "/dashboard/imports/members-tj",
         title:       "Členové TJ Bohemians",
         description: "Synchronizace dat z evidence vodní turistiky (Power Automate → webhook).",
+    },
+    {
+        href:        "/dashboard/imports/profiles",
+        title:       "Uložená mapování",
+        description: "Správa profilů pro opakované CSV importy — název, poznámka, mapování sloupců.",
+    },
+    {
+        href:        "/dashboard/imports/history",
+        title:       "Historie importů",
+        description: "Log provedených importů — čas, autor, přijaté změny.",
     },
 ] as const;
 

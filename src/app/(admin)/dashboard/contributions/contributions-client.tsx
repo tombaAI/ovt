@@ -190,7 +190,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                         <button key={r.contribId} onClick={() => openEdit(r)}
                             className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
                             <div className="flex items-start justify-between gap-2">
-                                <p className="font-medium text-gray-900">{r.fullName}</p>
+                                <p className="font-medium text-gray-900">{r.firstName} {r.lastName}</p>
                                 <Badge className={`${sb.cls} text-xs font-normal shrink-0`}>{sb.label}</Badge>
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-sm text-gray-500">
@@ -237,7 +237,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                                     className="hover:bg-gray-50/60 cursor-pointer"
                                     onClick={() => openEdit(r)}>
                                     <TableCell className="font-medium">
-                                        <span>{r.fullName}</span>
+                                        <span>{r.firstName} {r.lastName}</span>
                                         {r.todoNote && (
                                             <span className="ml-2 text-xs text-orange-600 font-normal truncate max-w-[160px] inline-block align-middle">
                                                 {r.todoNote}

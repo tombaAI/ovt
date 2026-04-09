@@ -47,13 +47,17 @@ export async function saveMember(
     const changedBy = session?.user?.email ?? "unknown";
     const db = getDb();
 
-    const fullName = (formData.get("full_name") as string)?.trim();
-    if (!fullName) return { error: "Jméno je povinné" };
+    const firstName = (formData.get("first_name") as string)?.trim();
+    const lastName  = (formData.get("last_name")  as string)?.trim();
+    if (!firstName) return { error: "Jméno je povinné" };
+    if (!lastName)  return { error: "Příjmení je povinné" };
 
     const idRaw = formData.get("id") as string;
 
     const memberData = {
-        fullName,
+        firstName,
+        lastName,
+        fullName:       `${firstName} ${lastName}`,
         userLogin:      (formData.get("user_login") as string)?.trim()  || null,
         email:          (formData.get("email") as string)?.trim()        || null,
         phone:          (formData.get("phone") as string)?.trim()        || null,
@@ -76,7 +80,8 @@ export async function saveMember(
 
             const memberChanges = diffObjects(
                 {
-                    fullName:       current.fullName,
+                    firstName:      current.firstName,
+                    lastName:       current.lastName,
                     userLogin:      current.userLogin,
                     email:          current.email,
                     phone:          current.phone,
@@ -84,7 +89,16 @@ export async function saveMember(
                     cskNumber:      current.cskNumber,
                     note:           current.note,
                 },
-                memberData
+                {
+                    firstName:      memberData.firstName,
+                    lastName:       memberData.lastName,
+                    userLogin:      memberData.userLogin,
+                    email:          memberData.email,
+                    phone:          memberData.phone,
+                    variableSymbol: memberData.variableSymbol,
+                    cskNumber:      memberData.cskNumber,
+                    note:           memberData.note,
+                }
             );
 
             // Current year contribution flags
@@ -179,8 +193,8 @@ export async function saveMember(
 }
 
 // ── updateMemberField — inline edit jednoho pole ─────────────────────────────
-type EditableField = "fullName" | "nickname" | "userLogin" | "email" | "phone" | "gender" | "address" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
-const EDITABLE_FIELD_KEYS = new Set<EditableField>(["fullName","nickname","userLogin","email","phone","gender","address","variableSymbol","cskNumber","note","memberFrom"]);
+type EditableField = "firstName" | "lastName" | "nickname" | "userLogin" | "email" | "phone" | "gender" | "address" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
+const EDITABLE_FIELD_KEYS = new Set<EditableField>(["firstName","lastName","nickname","userLogin","email","phone","gender","address","variableSymbol","cskNumber","note","memberFrom"]);
 
 export async function updateMemberField(
     memberId: number,
@@ -199,8 +213,9 @@ export async function updateMemberField(
 
         let newValue: string | number | null;
         switch (field) {
-            case "fullName":
-                if (!value.trim()) return { error: "Jméno nesmí být prázdné" };
+            case "firstName":
+            case "lastName":
+                if (!value.trim()) return { error: field === "firstName" ? "Jméno nesmí být prázdné" : "Příjmení nesmí být prázdné" };
                 newValue = value.trim();
                 break;
             case "memberFrom":
@@ -217,8 +232,11 @@ export async function updateMemberField(
                 newValue = value.trim() || null;
         }
 
-        if (field === "fullName") {
-            await db.update(members).set({ fullName: newValue as string, updatedAt: new Date() }).where(eq(members.id, memberId));
+        if (field === "firstName" || field === "lastName") {
+            const updated = field === "firstName"
+                ? { firstName: newValue as string, fullName: `${newValue} ${current.lastName}`, updatedAt: new Date() }
+                : { lastName:  newValue as string, fullName: `${current.firstName} ${newValue}`, updatedAt: new Date() };
+            await db.update(members).set(updated).where(eq(members.id, memberId));
         } else if (field === "memberFrom") {
             await db.update(members).set({ memberFrom: newValue as string, updatedAt: new Date() }).where(eq(members.id, memberId));
         } else {

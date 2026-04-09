@@ -26,10 +26,12 @@ export const adminUsers = appSchema.table("admin_users", {
 
 export const members = appSchema.table("members", {
     id:             integer("id").primaryKey(),
+    firstName:      text("first_name").notNull(),
+    lastName:       text("last_name").notNull(),
+    fullName:       text("full_name").notNull(),   // kept in sync: firstName + " " + lastName
     userLogin:      text("user_login"),
     email:          text("email"),
     phone:          text("phone"),
-    fullName:       text("full_name").notNull(),
     nickname:       text("nickname"),
     variableSymbol: integer("variable_symbol"),
     cskNumber:      text("csk_number"),
@@ -144,6 +146,43 @@ export const auditLog = appSchema.table(
         index("audit_log_changed_at_idx").on(t.changedAt.desc()),
     ]
 );
+
+// ── Import tables ────────────────────────────────────────────────────────────
+
+export type ImportMapping = { sourceCol: string; targetField: string };
+export type ImportMatchKey = { sourceCol: string; targetField: string };
+
+export const importProfiles = appSchema.table("import_profiles", {
+    id:              serial("id").primaryKey(),
+    name:            text("name").notNull(),
+    note:            text("note"),
+    fileFormat:      text("file_format").notNull().default("csv"),
+    delimiter:       text("delimiter"),
+    encoding:        text("encoding"),
+    headerRowIndex:  integer("header_row_index").notNull().default(0),
+    matchKeys:       jsonb("match_keys").notNull().default([]),
+    mappings:        jsonb("mappings").notNull().default([]),
+    createdBy:       text("created_by").notNull(),
+    createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt:       timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const importHistory = appSchema.table("import_history", {
+    id:                    serial("id").primaryKey(),
+    profileId:             integer("profile_id").references(() => importProfiles.id, { onDelete: "set null" }),
+    profileNameSnapshot:   text("profile_name_snapshot"),
+    filename:              text("filename").notNull(),
+    encodingDetected:      text("encoding_detected"),
+    recordsTotal:          integer("records_total").notNull().default(0),
+    recordsMatched:        integer("records_matched").notNull().default(0),
+    recordsNewCandidates:  integer("records_new_candidates").notNull().default(0),
+    recordsWithDiffs:      integer("records_with_diffs").notNull().default(0),
+    recordsOnlyInDb:       integer("records_only_in_db").notNull().default(0),
+    changesApplied:        jsonb("changes_applied").notNull().default([]),
+    membersAdded:          jsonb("members_added").notNull().default([]),
+    importedBy:            text("imported_by").notNull(),
+    importedAt:            timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 // ── System tables ────────────────────────────────────────────────────────────
 

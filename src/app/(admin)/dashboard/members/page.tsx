@@ -12,7 +12,8 @@ export type PeriodTab = {
 
 export type MemberWithFlags = {
     id: number;
-    fullName: string;
+    firstName: string;
+    lastName: string;
     userLogin: string | null;
     email: string | null;
     phone: string | null;
@@ -90,16 +91,19 @@ export default async function MembersPage(props: {
     ]));
 
     function computeHasTjDiffs(m: {
-        id: number; fullName: string; cskNumber: string | null;
+        id: number; firstName: string; lastName: string; cskNumber: string | null;
         email: string | null; phone: string | null; address: string | null;
         birthDate: string | null; birthNumber: string | null;
         gender: string | null; nickname: string | null;
     }): boolean {
+        const nameLower = `${m.firstName} ${m.lastName}`.trim().toLowerCase();
         const tj = m.cskNumber
             ? tjByCsk.get(m.cskNumber)
-            : tjByName.get(m.fullName.trim().toLowerCase());
+            : tjByName.get(nameLower);
         if (!tj) return false;
         const checks: Array<[SyncUpdatableField, unknown, unknown]> = [
+            ["firstName",   tj.jmeno,       m.firstName],
+            ["lastName",    tj.prijmeni,    m.lastName],
             ["email",       tj.email,       m.email],
             ["phone",       tj.phone,       m.phone],
             ["address",     tj.address,     m.address],
@@ -108,7 +112,6 @@ export default async function MembersPage(props: {
             ["gender",      tj.gender,      m.gender],
             ["nickname",    tj.nickname,    m.nickname],
             ["cskNumber",   tj.cskNumber,   m.cskNumber],
-            ["fullName",    [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim() || null, m.fullName],
         ];
         return checks.some(([, tjVal, mVal]) => {
             const a = tjVal === null || tjVal === undefined ? null : String(tjVal);
@@ -120,7 +123,8 @@ export default async function MembersPage(props: {
         const membersResult = await db
             .select({
                 id:                 members.id,
-                fullName:           members.fullName,
+                firstName:          members.firstName,
+                lastName:           members.lastName,
                 userLogin:          members.userLogin,
                 email:              members.email,
                 phone:              members.phone,
@@ -138,7 +142,7 @@ export default async function MembersPage(props: {
                 memberToNote:       members.memberToNote,
             })
             .from(members)
-            .orderBy(asc(members.fullName));
+            .orderBy(asc(members.lastName), asc(members.firstName));
 
         rows = membersResult.map(r => ({
             ...r,
@@ -162,7 +166,8 @@ export default async function MembersPage(props: {
         const result = await db
             .select({
                 id:                 members.id,
-                fullName:           members.fullName,
+                firstName:          members.firstName,
+                lastName:           members.lastName,
                 userLogin:          members.userLogin,
                 email:              members.email,
                 phone:              members.phone,
@@ -199,17 +204,17 @@ export default async function MembersPage(props: {
                     or(isNull(members.memberTo), sql`${members.memberTo} >= ${yearStart(actualYear)}`)
                 )
             )
-            .orderBy(asc(members.fullName));
+            .orderBy(asc(members.lastName), asc(members.firstName));
 
         rows = result.map(r => {
             const mFrom = r.memberFrom as unknown as string;
             const mTo   = r.memberTo   as unknown as string | null;
-            // Badge se zobrazí jen pokud událost (vstup/odchod) nastala právě v tomto roce
             const fromDate = mFrom && mFrom.startsWith(`${actualYear}`) ? mFrom : null;
             const toDate   = mTo   && mTo.startsWith(`${actualYear}`)   ? mTo   : null;
             return {
                 id:                 r.id,
-                fullName:           r.fullName,
+                firstName:          r.firstName,
+                lastName:           r.lastName,
                 userLogin:          r.userLogin,
                 email:              r.email,
                 phone:              r.phone,
@@ -234,7 +239,7 @@ export default async function MembersPage(props: {
                 amountTotal:        r.amountTotal,
                 hasContrib:         r.contribId !== null,
                 hasTjDiffs:         computeHasTjDiffs({
-                    id: r.id, fullName: r.fullName, cskNumber: r.cskNumber,
+                    id: r.id, firstName: r.firstName, lastName: r.lastName, cskNumber: r.cskNumber,
                     email: r.email, phone: r.phone, address: r.address,
                     birthDate: r.birthDate as unknown as string | null,
                     birthNumber: r.birthNumber, gender: r.gender, nickname: r.nickname,

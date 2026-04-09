@@ -112,7 +112,7 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="w-full sm:max-w-3xl overflow-y-auto overflow-x-hidden px-5 pb-8">
                 <SheetHeader className="px-0 pt-5 pb-4 mb-2">
-                    <SheetTitle>{row.fullName}</SheetTitle>
+                    <SheetTitle>{row.firstName} {row.lastName}</SheetTitle>
                 </SheetHeader>
 
                 {/* Prescription breakdown */}

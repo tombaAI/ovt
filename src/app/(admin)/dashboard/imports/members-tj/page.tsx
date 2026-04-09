@@ -31,7 +31,8 @@ export type FieldDiff = {
 
 export type MatchedRow = {
     memberId:      number;
-    fullName:      string;
+    firstName:     string;
+    lastName:      string;
     cskNumber:     string | null;
     matchedByName: boolean;
     diffs:         FieldDiff[];
@@ -39,7 +40,8 @@ export type MatchedRow = {
 
 export type OnlyOursRow = {
     id:        number;
-    fullName:  string;
+    firstName: string;
+    lastName:  string;
     cskNumber: string;
 };
 
@@ -60,7 +62,8 @@ function computeDiffs(tj: typeof importMembersTjBohemians.$inferSelect, m: typeo
         ["gender",      tj.gender,      m.gender],
         ["nickname",    tj.nickname,    m.nickname],
         ["cskNumber",   tj.cskNumber,   m.cskNumber],
-        ["fullName",    [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim() || null, m.fullName],
+        ["firstName",   tj.jmeno,       m.firstName],
+        ["lastName",    tj.prijmeni,    m.lastName],
     ];
 
     return comparisons
@@ -82,7 +85,7 @@ export default async function SyncPage() {
     const membersAll = await db.select().from(members);
 
     const memberByCsk  = new Map(membersAll.filter(m => m.cskNumber).map(m => [m.cskNumber!, m]));
-    const memberByName = new Map(membersAll.map(m => [m.fullName.trim().toLowerCase(), m]));
+    const memberByName = new Map(membersAll.map(m => [`${m.firstName} ${m.lastName}`.trim().toLowerCase(), m]));
 
     // Pomocná funkce: najdi člena pro TJ záznam (CSK → jméno → null)
     function findMember(tj: typeof tjAll[number]): { member: typeof membersAll[number]; byName: boolean } | null {
@@ -90,9 +93,9 @@ export default async function SyncPage() {
             const m = memberByCsk.get(tj.cskNumber);
             if (m) return { member: m, byName: false };
         }
-        const fullName = [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim().toLowerCase();
-        if (fullName) {
-            const m = memberByName.get(fullName);
+        const nameLower = [tj.jmeno, tj.prijmeni].filter(Boolean).join(" ").trim().toLowerCase();
+        if (nameLower) {
+            const m = memberByName.get(nameLower);
             if (m) return { member: m, byName: true };
         }
         return null;
@@ -121,7 +124,8 @@ export default async function SyncPage() {
             if (diffs.length > 0) {
                 matched.push({
                     memberId:      found.member.id,
-                    fullName:      found.member.fullName,
+                    firstName:     found.member.firstName,
+                    lastName:      found.member.lastName,
                     cskNumber:     tj.cskNumber,
                     matchedByName: found.byName,
                     diffs,
@@ -138,14 +142,14 @@ export default async function SyncPage() {
             matchedDeduped.set(row.memberId, row);
         }
     }
-    const matchedFinal = [...matchedDeduped.values()].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs"));
+    const matchedFinal = [...matchedDeduped.values()].sort((a, b) => a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs"));
 
     // Jen v naší DB (mají CSK, ale v TJ importu není)
     const tjCskSet = new Set(tjAll.map(tj => tj.cskNumber).filter(Boolean));
     const onlyOurs: OnlyOursRow[] = membersAll
         .filter(m => m.cskNumber && !tjCskSet.has(m.cskNumber))
-        .map(m => ({ id: m.id, fullName: m.fullName, cskNumber: m.cskNumber! }))
-        .sort((a, b) => a.fullName.localeCompare(b.fullName, "cs"));
+        .map(m => ({ id: m.id, firstName: m.firstName, lastName: m.lastName, cskNumber: m.cskNumber! }))
+        .sort((a, b) => a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs"));
 
     // Čas posledního syncu – Neon ukládá v UTC, převedeme na CET/CEST
     const [lastSync] = await db.select({ at: sql<string>`max(synced_at)` }).from(importMembersTjBohemians);

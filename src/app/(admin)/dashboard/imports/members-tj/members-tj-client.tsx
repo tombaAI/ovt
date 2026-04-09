@@ -38,7 +38,7 @@ function DiffSheet({ row, onClose }: { row: MatchedRow; onClose: () => void }) {
         <Sheet open onOpenChange={open => !open && onClose()}>
             <SheetContent className="sm:max-w-2xl px-5 pb-8">
                 <SheetHeader className="px-0 pt-5 pb-4">
-                    <SheetTitle>{row.fullName}</SheetTitle>
+                    <SheetTitle>{row.firstName} {row.lastName}</SheetTitle>
                     <div className="flex items-center gap-2 flex-wrap">
                         {row.cskNumber
                             ? <p className="text-sm text-muted-foreground">ČSK {row.cskNumber}</p>
@@ -224,7 +224,7 @@ export function MembersTjClient({ unmatched, matched, onlyOurs }: {
                                             onClick={() => setDiffRow(row)}>
                                             <td className="px-3 py-2.5 font-medium">
                                                 <div className="flex items-center gap-1.5 flex-wrap">
-                                                    {row.fullName}
+                                                    {row.firstName} {row.lastName}
                                                     {row.matchedByName && (
                                                         <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200">
                                                             párováno jménem
@@ -273,7 +273,7 @@ export function MembersTjClient({ unmatched, matched, onlyOurs }: {
                                     <tbody>
                                         {onlyOurs.map(row => (
                                             <tr key={row.id} className="border-b last:border-0">
-                                                <td className="px-3 py-2.5">{row.fullName}</td>
+                                                <td className="px-3 py-2.5">{row.firstName} {row.lastName}</td>
                                                 <td className="px-3 py-2.5 text-muted-foreground">{row.cskNumber}</td>
                                             </tr>
                                         ))}
