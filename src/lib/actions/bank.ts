@@ -86,7 +86,7 @@ export async function syncBankTransactionsByPeriod(from: string, to: string): Pr
     let cursor = fromDate;
     while (cursor <= toDate) {
         const chunkEnd = new Date(cursor);
-        chunkEnd.setDate(chunkEnd.getDate() + 359); // max 360 dní (Fio limit ~365, s rezervou)
+        chunkEnd.setDate(chunkEnd.getDate() + 89); // max 90 dní (Fio API limit)
         if (chunkEnd > toDate) chunkEnd.setTime(toDate.getTime());
         chunks.push({
             from: cursor.toISOString().substring(0, 10),

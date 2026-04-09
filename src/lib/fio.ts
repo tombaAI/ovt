@@ -74,7 +74,12 @@ async function fioFetch(url: string): Promise<FioTransaction[]> {
         res = await fetch(url);
     }
 
-    if (!res.ok) throw new Error(`Fio API chyba: ${res.status} ${res.statusText}`);
+    if (!res.ok) {
+        const body = await res.text().catch(() => "(nepodařilo se načíst tělo odpovědi)");
+        const msg = `Fio API chyba: ${res.status} ${res.statusText} — ${body.substring(0, 300)}`;
+        console.error("[fio]", msg);
+        throw new Error(msg);
+    }
     return parseResponse(await res.json());
 }
 

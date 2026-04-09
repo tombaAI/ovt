@@ -24,10 +24,10 @@ function defaultTo(): string {
     return new Date().toISOString().substring(0, 10);
 }
 
-// Kolik 365denních chunků pokryje rozsah (pro varování o době trvání)
+// Kolik 90denních chunků pokryje rozsah (pro varování o době trvání)
 function countChunks(from: string, to: string): number {
     const ms = new Date(to).getTime() - new Date(from).getTime();
-    return Math.ceil(ms / (365 * 86400_000));
+    return Math.ceil(ms / (90 * 86400_000));
 }
 
 function formatAmount(amount: number) {
@@ -127,7 +127,7 @@ export function BankImportClient({ transactions }: Props) {
                     </Button>
                     {!resyncPending && countChunks(resyncFrom, resyncTo) > 1 && (
                         <span className="text-xs text-amber-600">
-                            Rozsah &gt;1 rok — bude trvat ~{countChunks(resyncFrom, resyncTo) * 31}s (Fio rate limit)
+                            Více chunků ({countChunks(resyncFrom, resyncTo)} × 90 dní) — bude trvat ~{countChunks(resyncFrom, resyncTo) * 35}s
                         </span>
                     )}
                     {resyncMsg && (
