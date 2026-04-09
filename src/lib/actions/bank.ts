@@ -2,7 +2,7 @@
 
 import { getDb } from "@/lib/db";
 import { bankTransactions, members, payments } from "@/db/schema";
-import { sql, desc, and, gte, lte } from "drizzle-orm";
+import { sql, desc, and, gte, lte, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { fetchFioByPeriod, fetchFioLast, type FioTransaction } from "@/lib/fio";
 
@@ -164,7 +164,7 @@ export async function loadBankTransactions(opts?: {
         const memberRows = await db
             .select({ variableSymbol: members.variableSymbol, id: members.id, fullName: members.fullName })
             .from(members)
-            .where(sql`${members.variableSymbol}::text = ANY(${vsList})`);
+            .where(inArray(sql`${members.variableSymbol}::text`, vsList));
         for (const m of memberRows) {
             if (m.variableSymbol != null) {
                 membersByVs.set(String(m.variableSymbol), { memberId: m.id, fullName: m.fullName });
@@ -179,7 +179,7 @@ export async function loadBankTransactions(opts?: {
         const paymentRows = await db
             .select({ memberId: payments.memberId, id: payments.id, amount: payments.amount })
             .from(payments)
-            .where(sql`${payments.memberId} = ANY(${memberIds})`)
+            .where(inArray(payments.memberId, memberIds))
             .orderBy(desc(payments.createdAt));
         for (const p of paymentRows) {
             if (!paymentsByMemberId.has(p.memberId)) {
