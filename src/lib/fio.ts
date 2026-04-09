@@ -60,6 +60,24 @@ function parseResponse(json: any): FioTransaction[] {
     return transactions.map(parseRow);
 }
 
+// ── Interní fetch s retry na 409 (rate limit) ────────────────────────────────
+
+const RATE_LIMIT_WAIT_MS = 35_000; // Fio rate limit: 1 req / 30s, čekáme 35s pro jistotu
+
+async function fioFetch(url: string): Promise<FioTransaction[]> {
+    let res = await fetch(url);
+
+    if (res.status === 409) {
+        // Rate limit — počkáme a zkusíme znovu jednou
+        console.log("[fio] 409 rate limit, čekám 35s a opakuji...");
+        await new Promise(r => setTimeout(r, RATE_LIMIT_WAIT_MS));
+        res = await fetch(url);
+    }
+
+    if (!res.ok) throw new Error(`Fio API chyba: ${res.status} ${res.statusText}`);
+    return parseResponse(await res.json());
+}
+
 // ── Veřejné funkce ────────────────────────────────────────────────────────────
 
 function getToken(): string {
@@ -70,14 +88,12 @@ function getToken(): string {
 
 /**
  * Načte platby za dané období (YYYY-MM-DD).
- * Vhodné pro resync za konkrétní rozsah.
+ * Max rozsah: 360 dní (Fio limit je nominálně 365, ale inclusivní počítání může přesáhnout).
  */
 export async function fetchFioByPeriod(from: string, to: string): Promise<FioTransaction[]> {
     const token = getToken();
     const url = `${FIO_BASE}/periods/${token}/${from}/${to}/transactions.json`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Fio API chyba: ${res.status} ${res.statusText}`);
-    return parseResponse(await res.json());
+    return fioFetch(url);
 }
 
 /**
@@ -87,7 +103,5 @@ export async function fetchFioByPeriod(from: string, to: string): Promise<FioTra
 export async function fetchFioLast(): Promise<FioTransaction[]> {
     const token = getToken();
     const url = `${FIO_BASE}/last/${token}/transactions.json`;
-    const res = await fetch(url);
-    if (!res.ok) throw new Error(`Fio API chyba: ${res.status} ${res.statusText}`);
-    return parseResponse(await res.json());
+    return fioFetch(url);
 }
