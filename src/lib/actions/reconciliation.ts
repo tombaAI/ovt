@@ -344,42 +344,129 @@ export async function createCashPaymentOnContrib(input: {
 
 /**
  * Spustí auto-matcher na všechny 'unmatched' záznamy v ledgeru.
- * Volat po backfill nebo z UI tlačítka.
+ *
+ * Implementace: 3 bulk SQL operace místo N×5 sekvenčních round-tripů.
+ *
+ * 1. CTE query — najde všechny kandidáty a určí akci (confirmed / suggested)
+ * 2. Bulk INSERT do payment_allocations
+ * 3. Bulk UPDATE payment_ledger statusů
  */
 export async function runAutoMatchAll(): Promise<{ matched: number; suggested: number }> {
     await auth();
     const db = getDb();
 
-    const unmatched = await db
-        .select({
-            id:             paymentLedger.id,
-            variableSymbol: paymentLedger.variableSymbol,
-            amount:         paymentLedger.amount,
-            paidAt:         paymentLedger.paidAt,
-        })
-        .from(paymentLedger)
-        .where(eq(paymentLedger.reconciliationStatus, "unmatched"));
+    // 1. Jeden dotaz najde všechny kandidáty pro párování
+    //    Podmínky (stejná logika jako autoMatchLedgerEntry):
+    //    - ledger je unmatched, má VS
+    //    - VS odpovídá přesně jednomu členu
+    //    - člen má předpis pro rok platby
+    //    - předpis má amount_total
+    const candidates = await db.execute<{
+        ledger_id:   number;
+        member_id:   number;
+        contrib_id:  number;
+        amount:      string;
+        remaining:   string;
+        action:      "confirmed" | "suggested";
+    }>(sql`
+        WITH unmatched AS (
+            SELECT id, variable_symbol, amount, paid_at
+            FROM app.payment_ledger
+            WHERE reconciliation_status = 'unmatched'
+              AND variable_symbol IS NOT NULL
+              AND variable_symbol <> ''
+        ),
+        unique_members AS (
+            SELECT variable_symbol::text AS vs, id AS member_id
+            FROM app.members
+            WHERE variable_symbol IS NOT NULL
+              AND (
+                  SELECT count(*) FROM app.members m2
+                  WHERE m2.variable_symbol::text = app.members.variable_symbol::text
+              ) = 1
+        ),
+        contribs AS (
+            SELECT mc.id AS contrib_id, mc.member_id, mc.amount_total,
+                   cp.year
+            FROM app.member_contributions mc
+            JOIN app.contribution_periods cp ON cp.id = mc.period_id
+            WHERE mc.amount_total IS NOT NULL AND mc.amount_total > 0
+        ),
+        confirmed_paid AS (
+            SELECT pa.contrib_id, coalesce(sum(pa.amount), 0) AS paid
+            FROM app.payment_allocations pa
+            JOIN app.payment_ledger pl ON pl.id = pa.ledger_id
+            WHERE pl.reconciliation_status = 'confirmed'
+            GROUP BY pa.contrib_id
+        ),
+        candidates AS (
+            SELECT
+                u.id                                              AS ledger_id,
+                um.member_id,
+                c.contrib_id,
+                u.amount,
+                c.amount_total - coalesce(cp2.paid, 0)           AS remaining
+            FROM unmatched u
+            JOIN unique_members um ON um.vs = u.variable_symbol
+            JOIN contribs c ON c.member_id = um.member_id
+              AND c.year = EXTRACT(YEAR FROM u.paid_at)
+            LEFT JOIN confirmed_paid cp2 ON cp2.contrib_id = c.contrib_id
+            WHERE c.amount_total - coalesce(cp2.paid, 0) > 0
+        )
+        SELECT
+            ledger_id,
+            member_id,
+            contrib_id,
+            amount::text,
+            remaining::text,
+            CASE WHEN abs(amount - remaining) < 0.001 THEN 'confirmed' ELSE 'suggested' END AS action
+        FROM candidates
+    `);
 
-    let matched = 0;
+    if (candidates.length === 0) {
+        revalidatePath("/dashboard/payments");
+        return { matched: 0, suggested: 0 };
+    }
+
+    const now = new Date().toISOString();
+    let matched   = 0;
     let suggested = 0;
 
-    for (const entry of unmatched) {
-        const before = entry;
-        await autoMatchLedgerEntry(
-            db,
-            entry.id,
-            entry.variableSymbol,
-            Number(entry.amount),            // numeric → string z Drizzle, převedeme
-            entry.paidAt as unknown as string,
-            "auto-match",
-        );
-        // Přečti výsledný stav
-        const [updated] = await db
-            .select({ reconciliationStatus: paymentLedger.reconciliationStatus })
-            .from(paymentLedger)
-            .where(eq(paymentLedger.id, before.id));
-        if (updated?.reconciliationStatus === "confirmed") matched++;
-        if (updated?.reconciliationStatus === "suggested") suggested++;
+    // 2. Bulk INSERT alokací — po skupinách podle akce
+    for (const c of candidates) {
+        const isConfirmed = c.action === "confirmed";
+        await db.execute(sql`
+            INSERT INTO app.payment_allocations
+                (ledger_id, contrib_id, member_id, amount, is_suggested, confirmed_by, confirmed_at, created_by)
+            VALUES (
+                ${c.ledger_id}, ${c.contrib_id}, ${c.member_id}, ${c.amount}::numeric,
+                ${!isConfirmed},
+                ${isConfirmed ? "auto-match" : null},
+                ${isConfirmed ? now : null},
+                'auto-match'
+            )
+            ON CONFLICT DO NOTHING
+        `);
+        if (isConfirmed) matched++; else suggested++;
+    }
+
+    // 3. Bulk UPDATE ledger statusů
+    const confirmedIds = candidates.filter(c => c.action === "confirmed").map(c => c.ledger_id);
+    const suggestedIds = candidates.filter(c => c.action === "suggested").map(c => c.ledger_id);
+
+    if (confirmedIds.length > 0) {
+        await db.execute(sql`
+            UPDATE app.payment_ledger
+            SET reconciliation_status = 'confirmed', updated_at = now()
+            WHERE id = ANY(${sql.raw(`ARRAY[${confirmedIds.join(",")}]`)}::int[])
+        `);
+    }
+    if (suggestedIds.length > 0) {
+        await db.execute(sql`
+            UPDATE app.payment_ledger
+            SET reconciliation_status = 'suggested', updated_at = now()
+            WHERE id = ANY(${sql.raw(`ARRAY[${suggestedIds.join(",")}]`)}::int[])
+        `);
     }
 
     revalidatePath("/dashboard/payments");
