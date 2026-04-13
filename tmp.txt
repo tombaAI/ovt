@@ -1,0 +1,96 @@
+{
+ "jmeno": @{item()?['jméno']},
+ "prijmeni": @{item()?['příjmení']},
+ "gender": @{item()?['pohlaví']},
+ "email": @{item()?['e-mail sportovec']},
+ "telefon": @{item()?['telefon sportovec']},
+ "adresa": @{item()?['adresa bydliště']},
+ "obec": @{item()?['obec']},
+ "psc": @{item()?['PSČ']},
+ "csk": @{item()?['další informace (číslo ČSK)']},
+ "radek_odeslan": @{item()?['odesláno']},
+ "key": @{base64(concat(
+  base64(substring(
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+      item()?['rodné číslo'],
+      '0','N'),'1','P'),'2','R'),'3','S'),'4','T'),'5','V'),
+      '6','W'),'7','X'),'8','Y'),'9','Z'),'/','Q'),
+    0, 7)),
+  substring(
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+      item()?['rodné číslo'],
+      '0','N'),'1','P'),'2','R'),'3','S'),'4','T'),'5','V'),
+      '6','W'),'7','X'),'8','Y'),'9','Z'),'/','Q'),
+    7, 4)
+))},
+ "hash": @{base64(concat(
+  base64(substring(
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+      item()?['datum narození'],
+      '0','N'),'1','P'),'2','R'),'3','S'),'4','T'),'5','V'),
+      '6','W'),'7','X'),'8','Y'),'9','Z'),'-','L'),
+    0, 4)),
+  substring(
+    replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(replace(
+      item()?['datum narození'],
+      '0','N'),'1','P'),'2','R'),'3','S'),'4','T'),'5','V'),
+      '6','W'),'7','X'),'8','Y'),'9','Z'),'-','L'),
+    4, 6)
+))},
+ "rc": @{item()?['rodné číslo']},
+ "datu": @{item()?['datum narození']}
+}
+
+data:
+[
+    {"jmeno":"Vašek","prijmeni":"Hořejší","gender":"Muž","email":"vasek.horejsi@gmail.com","telefon":"731536173","adresa":"Španielova 1267, Praha 6","obec":"Česká republika","psc":"","csk":"560313","radek_odeslan":"","key":"VGs1T1dGSlFVVTVVVGxBSg==","hash":"VTFkWVVsa0o="},
+    {"jmeno":"Vojtěch","prijmeni":"Kopřiva","gender":"Muž","email":"vojta1379@gmail.com","telefon":"722226963","adresa":"","obec":"Česká republika","psc":"","csk":"560640","radek_odeslan":"","key":"VGxCT1dWQlpVVTVPVms0Sg==","hash":"VTFoUVVsQUo="},
+    {"jmeno":"Lukáš","prijmeni":"Kopřiva","gender":"Muž","email":"Kopriva.Luky@seznam.cz","telefon":"722062484","adresa":"","obec":"Česká republika","psc":"","csk":"560639","radek_odeslan":"","key":"VGxCT1dWQlpVVTVPVms0Sg==","hash":"VTFoUVVsQUo="},
+    {"jmeno":"Filip (Pilín)","prijmeni":"Klusáček","gender":"Muž","email":"prodavacpita@gmail.com","telefon":"773235730","adresa":"Jurkovičova , 970/10","obec":"Česká republika","psc":"14900","csk":"560637","radek_odeslan":"45775.8154861111","key":"VGxkUVRrNVpVVlJVVjFRSg==","hash":"VTFsYVdsa0o="}
+    {"jmeno":"Jiří ","prijmeni":"Procházka ","gender":"Muž","email":"jiraprochyna@gmail.com","telefon":"723901190","adresa":"Nad Zavážkou, 1206/1","obec":"Česká republika","psc":"14300","csk":"001126","radek_odeslan":"45778.3589699074","key":"VGxkUVRsSllVVlJYV1ZnSg==","hash":"VTFwT1VGZ0o="},
+    {"jmeno":"Gríša","prijmeni":"Vodička","gender":"Muž","email":"vodig9@gmail.com","telefon":"731546080","adresa":"","obec":"Česká republika","psc":"","csk":"556138","radek_odeslan":"","key":"VkZaT1VsQlRVVnBXVWdKSg==","hash":"VUZkVVdWQUo="},
+    {"jmeno":"Jáchym","prijmeni":"Kopřiva","gender":"Muž","email":"jachym.kopriva@seznam.cz","telefon":"602224269","adresa":"f","obec":"Česká republika","psc":"","csk":"556116","radek_odeslan":"","key":"VmxCT1VsSlRVVTVPV1FKSg==","hash":"VUZsWFdWSUo="},
+    {"jmeno":"Pavel","prijmeni":"Šálek","gender":"Muž","email":"essalek@seznam.cz","telefon":"725314682","adresa":"","obec":"Česká republika","psc":"","csk":"556132","radek_odeslan":"","key":"VmxoT1ZGQlpVVTVPVmxNSg==","hash":"VWs1YVVsa0o="},
+    {"jmeno":"Miroslav","prijmeni":"Ptáček","gender":"Muž","email":"ptacek@edaruma.cz","telefon":"604373044","adresa":"","obec":"Česká republika","psc":"","csk":"556128","radek_odeslan":"","key":"VjFKT1VFNVhVVkJUVTFvSg==","hash":"VWxKWFZsSUo="},
+    {"jmeno":"Adam","prijmeni":"Chochola","gender":"Muž","email":"achola@email.cz","telefon":"737003673","adresa":"","obec":"Česká republika","psc":"14200","csk":"557186","radek_odeslan":"","key":"VjFST1VGQmFVVkJZVTFBSg==","hash":"VWxOVFdsWUo="},
+    {"jmeno":"Zbyněk","prijmeni":"Herynek","gender":"Muž","email":"hovado@volny.cz","telefon":"603585978","adresa":"","obec":"Česká republika","psc":"","csk":"556107","radek_odeslan":"","key":"VjFST1ZsTk9VVTVPVjFjSg==","hash":"VWxOV1VsZ0o="},
+    {"jmeno":"Václav","prijmeni":"Machálek","gender":"Muž","email":"vaclavmachalek@seznam.cz","telefon":"","adresa":"","obec":"Česká republika","psc":"","csk":"556124","radek_odeslan":"","key":"VjFkUVRrNVdVVkJYVGxJSg==","hash":"VWxSVFdWWUo="},
+    {"jmeno":"Jiří (Karas)","prijmeni":"Vodička","gender":"Muž","email":"jivodicka@cpoj.cz","telefon":"723402813","adresa":"","obec":"Česká republika","psc":"","csk":"556137","radek_odeslan":"","key":"V0ZCT1UxQlFVVTVPVGxNSg==","hash":"VWxkT1RsTUo="},
+    {"jmeno":"Robert","prijmeni":"Riedl","gender":"Muž","email":"robert.riedl@seznam.cz","telefon":"736531382","adresa":"U Háječku, 533","obec":"Česká republika","psc":"25216","csk":"559488","radek_odeslan":"45802.6085532407","key":"V0ZKT1UwNWFVVTVUVWxNSg==","hash":"VWxkVFYxZ0o="},
+    {"jmeno":"Marie","prijmeni":"Hořejší","gender":"Žena","email":"strach50@seznam.cz","telefon":"737233396","adresa":"Španielova 1267, Praha 6","obec":"Česká republika","psc":"","csk":"560311","radek_odeslan":"","key":"V0ZKWFVsSlVVVTVUVGxRSg==","hash":"VWxkWFZsZ0o="},
+    {"jmeno":"Marek","prijmeni":"Hořejší","gender":"Muž","email":"marek.horejsi@gmail.com","telefon":"737233205","adresa":"Španielova 1267, Praha 6","obec":"Česká republika","psc":"","csk":"560312","radek_odeslan":"","key":"V0ZST1ZsSlFVVmRZV2xnSg==","hash":"VWxoUVdFNEo="}
+    {"jmeno":"Milan","prijmeni":"Hrabák","gender":"Muž","email":"hrabak.milan@seznam.cz","telefon":"777855448","adresa":"Kopřivnická 615, Praha 18","obec":"Česká republika","psc":"19900","csk":"556111","radek_odeslan":"","key":"V0ZST1drNVdVVTVTVjFRSg==","hash":"VWxoU1dGZ0o="},
+    {"jmeno":"Jan","prijmeni":"Kukla","gender":"Muž","email":"autobuskukla@gmail.com","telefon":"602357897","adresa":"","obec":"Česká republika","psc":"","csk":"557189","radek_odeslan":"","key":"V0ZaT1YwNVVVVTVUVGs0Sg==","hash":"VWxoV1ZGb0o="},
+    {"jmeno":"Tomas","prijmeni":"Jirousek","gender":"Muž","email":"Tomajiro@gmail.com","telefon":"602150727","adresa":"Na Výspě , 1823/64","obec":"Česká republika","psc":"14700","csk":"556908","radek_odeslan":"45773.853125","key":"V0ZkT1VsSllVVlJUVjFBSg==","hash":"VWxoWlVGZ0o="},
+    {"jmeno":"Petr (Hugo)","prijmeni":"Novák","gender":"Muž","email":"oguh1@seznam.cz","telefon":"731971195","adresa":"","obec":"Česká republika","psc":"","csk":"557191","radek_odeslan":"","key":"V0ZkT1ZrNVdVVTVVVmxNSg==","hash":"VWxoWldWWUo="},
+    {"jmeno":"Aleš","prijmeni":"Němec","gender":"Muž","email":"nemecales@seznam.cz","telefon":"777172228","adresa":"","obec":"Česká republika","psc":"","csk":"557686","radek_odeslan":"","key":"V0ZsT1UxSlNVVTVPV2xZSg==","hash":"VWxsV1dGQUo="},
+    {"jmeno":"Zdeněk","prijmeni":"Elis","gender":"Muž","email":"zdenek.elis@gmail.com","telefon":"724101862","adresa":"","obec":"Česká republika","psc":"","csk":"560795","radek_odeslan":"","key":"V0ZsT1dFNWFVVkpVVjFvSg==","hash":"VWxsWFdVNEo="},
+    {"jmeno":"Kateřina","prijmeni":"Měrková","gender":"Žena","email":"ca.usmev@seznam.cz","telefon":"603826397","adresa":"","obec":"Česká republika","psc":"","csk":"560111","radek_odeslan":"","key":"V0ZsV1ZFNVhVVTVRVmxvSg==","hash":"VWxsV1dWY0o="},
+    {"jmeno":"Jan","prijmeni":"Hnátek","gender":"Muž","email":"jan@hnátek.eu","telefon":"777178758","adresa":"Peroutkova, 2","obec":"Česká republika","psc":"15000","csk":"559651","radek_odeslan":"45477.3947453704","key":"V0ZwT1VsQlpVVTVTV0ZZSg==","hash":"VWxsYVRsUUo="},
+    {"jmeno":"Martin","prijmeni":"Karabec","gender":"Muž","email":"karabec@centrum.cz","telefon":"604112158","adresa":"","obec":"Česká republika","psc":"","csk":"557188","radek_odeslan":"","key":"V0ZwT1dFNVNVVlJUV1ZvSg==","hash":"VWxwT1Uxa0o="},
+    {"jmeno":"Zuzana","prijmeni":"Čermáková","gender":"Žena","email":"zuzka.malkova@centrum.cz","telefon":"777589577","adresa":"","obec":"Česká republika","psc":"","csk":"556125","radek_odeslan":"","key":"V1ZCV1dsSlFVVTVRVjFvSg==","hash":"VWxwWlZrNEo="},
+    {"jmeno":"Klára","prijmeni":"Matějková","gender":"Žena","email":"klaramach@centrum.cz","telefon":"721984052","adresa":"","obec":"Česká republika","psc":"","csk":"561075","radek_odeslan":"","key":"V1ZCWFRsQlVVVlpVVWxJSg==","hash":"VWxwWldGTUo="},
+    {"jmeno":"Tomáš","prijmeni":"Bauer","gender":"Muž","email":"tomas.bauer@centrum.cz","telefon":"724102093","adresa":"","obec":"Česká republika","psc":"25217","csk":"556101","radek_odeslan":"","key":"V1ZOT1dWQlpVVTVTVmxRSg==","hash":"VTA1V1ZGY0o="},
+    {"jmeno":"Martina","prijmeni":"Hlaváčková","gender":"Žena","email":"martinkac1@seznam.cz","telefon":"602345627","adresa":"","obec":"Česká republika","psc":"","csk":"556108","radek_odeslan":"","key":"V1ZOV1dVNVdVVkpaVTFZSg==","hash":"VTA1V1UxTUo="},
+    {"jmeno":"Štěpán","prijmeni":"Klepač","gender":"Muž","email":"stepan.klepac@gmail.com","telefon":"25988576","adresa":"","obec":"Česká republika","psc":"","csk":"556063","radek_odeslan":"","key":"V1ZST1dGQlNVVTVTVUZjSg==","hash":"VTA1WldGWUo="},
+    {"jmeno":"Lina","prijmeni":"Procházková","gender":"Žena","email":"lina.prochazkova@gmail.com","telefon":"775211644","adresa":"","obec":"Česká republika","psc":"","csk":"557192","radek_odeslan":"","key":"V1ZaV1YxSlpVVTVPVmxBSg==","hash":"VTFCU1VsY0o="},
+    {"jmeno":"Marek","prijmeni":"Veselý","gender":"Muž","email":"marek_vesely@seznam.cz","telefon":"777572269","adresa":"","obec":"Česká republika","psc":"","csk":"556097","radek_odeslan":"","key":"V1ZkT1ZGQlVVVTVRVjA0Sg==","hash":"VTFCV1VGY0o="},
+    {"jmeno":"Tomáš","prijmeni":"Matějka","gender":"Muž","email":"tomikormidelnik@gmail.com","telefon":"777877447","adresa":"Školská 50, Kosoř","obec":"Česká republika","psc":"25300","csk":"556072","radek_odeslan":"","key":"V1ZkT1dGSlRVVTVPVGxZSg==","hash":"VTFCWFVGY0o="},
+    {"jmeno":"Eva","prijmeni":"Matějková","gender":"Žena","email":"evareznice@gmail.com","telefon":"602185750","adresa":"","obec":"Česká republika","psc":"","csk":"559868","radek_odeslan":"","key":"V1ZsV1UwNVNVVTVZVmxvSg==","hash":"VTFKU1RsUUo="},
+    {"jmeno":"Barbora","prijmeni":"Kostková","gender":"Žena","email":"barborakostkova@gmail.com","telefon":"775238898","adresa":"Hrudickova 2110/10, Praha 4","obec":"Česká republika","psc":"14800","csk":"559074","radek_odeslan":"","key":"V1ZsV1dWSlpVVTVRVmxjSg==","hash":"VTFKVFdWTUo="},
+    {"jmeno":"Jan (Off)","prijmeni":"Vais","gender":"Muž","email":"honzavais+ovt@gmail.com","telefon":"608456978","adresa":"","obec":"Česká republika","psc":"","csk":"556093","radek_odeslan":"","key":"V2xCT1ZsQmFVVTVRVGxZSg==","hash":"VTFOVFdGZ0o="},
+    {"jmeno":"Vít","prijmeni":"Skála","gender":"Muž","email":"rocky131@centrum.cz","telefon":"605246358","adresa":"","obec":"Česká republika","psc":"","csk":"556082","radek_odeslan":"","key":"V2xKT1VGSk9VVTVRVjFJSg==","hash":"VTFOWFVsTUo="},
+    {"jmeno":"Michal","prijmeni":"Menčík","gender":"Muž","email":"mencmi@seznam.cz","telefon":"602839266","adresa":"","obec":"Česká republika","psc":"","csk":"559026","radek_odeslan":"","key":"V2xSUVRsSlpVVTVVVGxnSg==","hash":"VTFSWFUxWUo="},
+    {"jmeno":"Martina","prijmeni":"Kříž","gender":"Muž","email":"kriz.martinek@seznam.cz","telefon":"739426282","adresa":"","obec":"Česká republika","psc":"","csk":"559018","radek_odeslan":"","key":"V2xsUVVsSlNVVTVVV2xZSg==","hash":"VTFkUVZsQUo="},
+    {"jmeno":"Štěpán","prijmeni":"Hořejší","gender":"Muž","email":"stepan.horejsi@gmail.com","telefon":"731536172","adresa":"Španielova 1267, Praha 6","obec":"Česká republika","psc":"","csk":"559013","radek_odeslan":"","key":"V2xwT1ZsSlRVVTVVVGxBSg==","hash":"VTFkU1dWTUo="},
+    {"jmeno":"Filip","prijmeni":"Havlíček","gender":"Muž","email":"filiphavlicek6@gmail.com","telefon":"736225580","adresa":"U Elektrárny 265, Vrané nad Vltavou","obec":"Česká republika","psc":"25246","csk":"559572","radek_odeslan":"","key":"V2xwUVVsSk9VVTVRV1ZrSg==","hash":"VTFkV1VGUUo="},
+    {"jmeno":"Barbora","prijmeni":"Bernardová","gender":"Žena","email":"barbora.bernardova@centrum.cz","telefon":"736515346","adresa":"","obec":"Česká republika","psc":"","csk":"560631","radek_odeslan":"","key":null,"hash":null},
+    {"jmeno":"Jakub","prijmeni":"Chochola","gender":"Muž","email":"jakub.chochola@email.cz","telefon":"604986016","adresa":"","obec":"Česká republika","psc":"","csk":"557680","radek_odeslan":"","key":null,"hash":null},
+    {"jmeno":"Karolína","prijmeni":"Chvojková","gender":"Žena","email":"ka.ch@seznam.cz","telefon":"773080644","adresa":"","obec":"Česká republika","psc":"","csk":"559014","radek_odeslan":"","key":null,"hash":null},
+    {"jmeno":"Kateřina","prijmeni":"Klepačová","gender":"Žena","email":"katerina.salkova@gmail.com","telefon":"773474688","adresa":"","obec":"Česká republika","psc":"","csk":"556086","radek_odeslan":"","key":null,"hash":null},
+    {"jmeno":"Jiří ","prijmeni":"Klíma","gender":"Muž","email":"klima@jh-inst.cas.cz","telefon":"776840647","adresa":"","obec":"Česká republika","psc":"","csk":"556065","radek_odeslan":"","key":null,"hash":null},
+    {"jmeno":"Jan","prijmeni":"Klíma","gender":"Muž","email":"uuzivatel44@gmail.com","telefon":"774540346","adresa":"","obec":"Česká republika","psc":"","csk":"560645","radek_odeslan":"","key":null,"hash":null},
+    {"jmeno":"Alžběta","prijmeni":"Poštůlková","gender":"Žena","email":"alzbetapostulkova@seznam.cz","telefon":"731730974","adresa":"Novohradecká 5, Praha 4","obec":"Česká republika","psc":"","csk":"557883","radek_odeslan":"","key":null,"hash":"VTFkVVUxZ0o="},
+    {"jmeno":"Matěj","prijmeni":"Měrka","gender":"Muž","email":"merkamatej1@gmail.com","telefon":"736120037","adresa":"Na smejkalce , 215e","obec":"Česká republika","psc":"25166","csk":"560782","radek_odeslan":"46107.8326736111","key":"VGxoT1VsSlhVVlJZVWxrSg==","hash":"VTFwUVUxb0o="},
+    {"jmeno":"Petra","prijmeni":"Chocholová","gender":"Žena","email":"nyvltka@seznam.cz","telefon":"605355032","adresa":"Doležalova , 1043","obec":"Česká republika","psc":"19800","csk":"202885","radek_odeslan":"46112.3746527778","key":"V2xCV1ZrNVpVVk5aV1ZNSg==","hash":"VTFOVFYxY0o="},
+    {"jmeno":"Karolina","prijmeni":"Kotovska ","gender":"Žena","email":"karolina@kotovsky.cz","telefon":"777337305","adresa":"Leopoldova , 2042/26","obec":"Česká republika","psc":"14900","csk":"","radek_odeslan":"46119.8386342593","key":"V0U1WFRsQllUbHBVVWdKSg==","hash":"VWxaWlZsa0o="}]

@@ -1,5 +1,5 @@
 import { getDb } from "@/lib/db";
-import { bankTransactions } from "@/db/schema";
+import { fioBankTransactions } from "@/db/schema";
 import { sql } from "drizzle-orm";
 import { loadBankTransactions, loadBankTransactionYears } from "@/lib/actions/bank";
 import { BankImportClient } from "./bank-import-client";
@@ -20,7 +20,7 @@ export default async function BankImportPage(props: {
         total:    sql<number>`count(*)`,
         lastDate: sql<string>`max(date)`,
         syncedAt: sql<string>`max(synced_at)`,
-    }).from(bankTransactions);
+    }).from(fioBankTransactions);
 
     const lastSyncStr = stats.syncedAt
         ? new Date(stats.syncedAt).toLocaleString("cs-CZ", { timeZone: "Europe/Prague" })

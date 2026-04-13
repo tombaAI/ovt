@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { bankTransactions, members, payments } from "@/db/schema";
+import { fioBankTransactions, members, payments } from "@/db/schema";
 import { sql, desc, and, gte, lte, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { fetchFioByPeriod, fetchFioLast, type FioTransaction } from "@/lib/fio";
@@ -45,7 +45,7 @@ async function upsertTransactions(txs: FioTransaction[], createdBy = "fio-sync")
 
     for (const tx of txs) {
         const result = await db.execute(sql`
-            INSERT INTO app.bank_transactions
+            INSERT INTO app.fio_bank_transactions
                 (fio_id, date, amount, currency, variable_symbol, constant_symbol, specific_symbol,
                  counterparty_account, counterparty_name, message, user_identification, type, comment, raw_data)
             VALUES
@@ -137,7 +137,7 @@ export async function syncBankTransactionsByPeriod(from: string, to: string): Pr
 export async function loadBankTransactionYears(): Promise<number[]> {
     const db = getDb();
     const rows = await db.execute(
-        sql`SELECT DISTINCT EXTRACT(YEAR FROM date)::int AS year FROM app.bank_transactions ORDER BY year DESC`
+        sql`SELECT DISTINCT EXTRACT(YEAR FROM date)::int AS year FROM app.fio_bank_transactions ORDER BY year DESC`
     );
     return (rows as unknown as Array<{ year: number }>).map(r => r.year);
 }
@@ -151,23 +151,23 @@ export async function loadBankTransactions(year: number): Promise<BankTransactio
 
     const rows = await db
         .select({
-            id:                  bankTransactions.id,
-            fioId:               bankTransactions.fioId,
-            date:                bankTransactions.date,
-            amount:              bankTransactions.amount,
-            currency:            bankTransactions.currency,
-            variableSymbol:      bankTransactions.variableSymbol,
-            counterpartyAccount: bankTransactions.counterpartyAccount,
-            counterpartyName:    bankTransactions.counterpartyName,
-            message:             bankTransactions.message,
-            type:                bankTransactions.type,
+            id:                  fioBankTransactions.id,
+            fioId:               fioBankTransactions.fioId,
+            date:                fioBankTransactions.date,
+            amount:              fioBankTransactions.amount,
+            currency:            fioBankTransactions.currency,
+            variableSymbol:      fioBankTransactions.variableSymbol,
+            counterpartyAccount: fioBankTransactions.counterpartyAccount,
+            counterpartyName:    fioBankTransactions.counterpartyName,
+            message:             fioBankTransactions.message,
+            type:                fioBankTransactions.type,
         })
-        .from(bankTransactions)
+        .from(fioBankTransactions)
         .where(and(
-            gte(bankTransactions.date, `${year}-01-01`),
-            lte(bankTransactions.date, `${year}-12-31`),
+            gte(fioBankTransactions.date, `${year}-01-01`),
+            lte(fioBankTransactions.date, `${year}-12-31`),
         ))
-        .orderBy(desc(bankTransactions.date));
+        .orderBy(desc(fioBankTransactions.date));
 
     if (rows.length === 0) return [];
 
@@ -215,6 +215,7 @@ export async function loadBankTransactions(year: number): Promise<BankTransactio
         const payment = member ? paymentsByMemberId.get(member.memberId) : undefined;
         return {
             ...row,
+            amount:               Number(row.amount), // numeric → string z Drizzle
             matchedMemberId:      member?.memberId ?? null,
             matchedMemberName:    member?.fullName ?? null,
             matchedPaymentId:     payment?.paymentId ?? null,

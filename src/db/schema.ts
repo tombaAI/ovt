@@ -4,6 +4,7 @@ import {
     index,
     integer,
     jsonb,
+    numeric,
     pgSchema,
     serial,
     smallint,
@@ -111,7 +112,6 @@ export const memberContributions = appSchema.table(
     ]
 );
 
-
 export const payments = appSchema.table(
     "payments",
     {
@@ -187,15 +187,19 @@ export const importHistory = appSchema.table("import_history", {
     importedAt:            timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
-// ── Bank sync tables ─────────────────────────────────────────────────────────
+// ── Fio Bank sync tables ──────────────────────────────────────────────────────
 
-export const bankTransactions = appSchema.table(
-    "bank_transactions",
+/**
+ * Staging tabulka pro Fio API synchronizaci.
+ * Přejmenováno z bank_transactions → fio_bank_transactions (migrace 20260413).
+ */
+export const fioBankTransactions = appSchema.table(
+    "fio_bank_transactions",
     {
         id:                   serial("id").primaryKey(),
         fioId:                integer("fio_id").notNull().unique(),
         date:                 date("date").notNull(),
-        amount:               integer("amount").notNull(),
+        amount:               numeric("amount", { precision: 10, scale: 2 }).notNull(),
         currency:             text("currency").notNull().default("CZK"),
         variableSymbol:       text("variable_symbol"),
         constantSymbol:       text("constant_symbol"),
@@ -210,8 +214,8 @@ export const bankTransactions = appSchema.table(
         syncedAt:             timestamp("synced_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
-        index("bank_transactions_date_idx").on(t.date),
-        index("bank_transactions_vs_idx").on(t.variableSymbol),
+        index("fio_bank_transactions_date_idx").on(t.date),
+        index("fio_bank_transactions_vs_idx").on(t.variableSymbol),
     ]
 );
 
@@ -229,14 +233,14 @@ export const bankImportTransactions = appSchema.table(
         profileId:           integer("profile_id").references(() => importProfiles.id, { onDelete: "set null" }),
         externalKey:         text("external_key").notNull(),
         paidAt:              date("paid_at"),
-        amount:              integer("amount"),              // celé Kč, kladné = příchozí
+        amount:              numeric("amount", { precision: 10, scale: 2 }),
         currency:            text("currency").notNull().default("CZK"),
         variableSymbol:      text("variable_symbol"),
         counterpartyAccount: text("counterparty_account"),
         counterpartyName:    text("counterparty_name"),
         message:             text("message"),
         rawData:             jsonb("raw_data").notNull().default({}),
-        ledgerId:            integer("ledger_id"),           // FK doplněn po vytvoření payment_ledger
+        ledgerId:            integer("ledger_id"),
         createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
@@ -246,18 +250,18 @@ export const bankImportTransactions = appSchema.table(
 
 /**
  * Jednotný platební ledger — kanonický zdroj pravdy pro všechny přijaté platby.
- * source_type: 'fio' | 'file_import' | 'cash'
+ * source_type: 'fio_bank' | 'file_import' | 'cash'
  */
 export const paymentLedger = appSchema.table(
     "payment_ledger",
     {
         id:                   serial("id").primaryKey(),
-        sourceType:           text("source_type", { enum: ["fio", "file_import", "cash"] }).notNull(),
-        bankTxId:             integer("bank_tx_id").unique().references(() => bankTransactions.id),
+        sourceType:           text("source_type", { enum: ["fio_bank", "file_import", "cash"] }).notNull(),
+        fioBankTxId:          integer("fio_bank_tx_id").unique().references(() => fioBankTransactions.id),
         bankImportTxId:       integer("bank_import_tx_id").unique().references(() => bankImportTransactions.id),
         importRunId:          integer("import_run_id").references(() => importHistory.id, { onDelete: "set null" }),
         paidAt:               date("paid_at").notNull(),
-        amount:               integer("amount").notNull(),   // celé Kč, vždy kladné
+        amount:               numeric("amount", { precision: 10, scale: 2 }).notNull(),
         currency:             text("currency").notNull().default("CZK"),
         variableSymbol:       text("variable_symbol"),
         counterpartyAccount:  text("counterparty_account"),
@@ -291,10 +295,10 @@ export const paymentAllocations = appSchema.table(
         ledgerId:    integer("ledger_id").notNull().references(() => paymentLedger.id),
         contribId:   integer("contrib_id").notNull().references(() => memberContributions.id),
         memberId:    integer("member_id").notNull().references(() => members.id),
-        amount:      integer("amount").notNull(),
+        amount:      numeric("amount", { precision: 10, scale: 2 }).notNull(),
         note:        text("note"),
         isSuggested: boolean("is_suggested").notNull().default(false),
-        confirmedBy: text("confirmed_by"),           // NULL = nepotvrzeno
+        confirmedBy: text("confirmed_by"),
         confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
         createdBy:   text("created_by").notNull(),
         createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -317,9 +321,9 @@ export const mailEvents = appSchema.table(
         eventType: text("event_type").notNull(),
         messageId: text("message_id"),
         fromEmail: text("from_email"),
-        toEmail: text("to_email"),
-        subject: text("subject"),
-        payload: jsonb("payload").notNull().default({}),
+        toEmail:   text("to_email"),
+        subject:   text("subject"),
+        payload:   jsonb("payload").notNull().default({}),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
     },
     (t) => [

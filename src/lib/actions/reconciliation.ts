@@ -46,6 +46,9 @@ export type LedgerRow = {
     }>;
 };
 
+// Drizzle vrací NUMERIC(10,2) jako string → helper pro INSERT (number → string)
+const dec = (v: number): string => v.toFixed(2);
+
 // ── Interní auto-matcher ──────────────────────────────────────────────────────
 
 /**
@@ -115,7 +118,7 @@ async function autoMatchLedgerEntry(
             ledgerId,
             contribId,
             memberId,
-            amount,
+            amount:      dec(amount),
             isSuggested: false,
             confirmedBy: "auto-match",
             confirmedAt: new Date(),
@@ -130,7 +133,7 @@ async function autoMatchLedgerEntry(
             ledgerId,
             contribId,
             memberId,
-            amount,               // celá platba jako návrh, admin upraví pokud potřeba
+            amount:      dec(amount),   // celá platba jako návrh, admin upraví pokud potřeba
             isSuggested: true,
             createdBy,
         });
@@ -148,7 +151,7 @@ async function autoMatchLedgerEntry(
  * Spustí auto-matcher.
  */
 export async function createLedgerFromBankTx(
-    bankTxId:   number,
+    fioBankTxId:   number,
     paidAt:     string,
     amount:     number,
     currency:   string,
@@ -164,16 +167,16 @@ export async function createLedgerFromBankTx(
     const existing = await db
         .select({ id: paymentLedger.id })
         .from(paymentLedger)
-        .where(eq(paymentLedger.bankTxId, bankTxId));
+        .where(eq(paymentLedger.fioBankTxId, fioBankTxId));
 
     if (existing.length > 0) return existing[0].id;
 
     // Vlož nový záznam
     const [inserted] = await db.insert(paymentLedger).values({
-        sourceType:          "fio",
-        bankTxId,
+        sourceType:          "fio_bank",
+        fioBankTxId,
         paidAt,
-        amount,
+        amount:               dec(amount),
         currency,
         variableSymbol:      vs,
         counterpartyAccount,
@@ -223,7 +226,7 @@ export async function createLedgerFromImportTx(
         bankImportTxId:       importTxId,
         importRunId,
         paidAt,
-        amount,
+        amount:               dec(amount),
         currency,
         variableSymbol:       vs,
         counterpartyAccount,
@@ -269,7 +272,7 @@ export async function createCashPayment(
     const [inserted] = await db.insert(paymentLedger).values({
         sourceType:           "cash",
         paidAt:               input.paidAt,
-        amount:               input.amount,
+        amount:               dec(input.amount),
         currency:             "CZK",
         note:                 input.note,
         reconciliationStatus: "unmatched",
@@ -309,7 +312,7 @@ export async function createCashPaymentOnContrib(input: {
         const [ledger] = await tx.insert(paymentLedger).values({
             sourceType:           "cash",
             paidAt:               input.paidAt,
-            amount:               input.amount,
+            amount:               dec(input.amount),
             currency:             "CZK",
             note:                 input.note,
             reconciliationStatus: "confirmed",
@@ -320,7 +323,7 @@ export async function createCashPaymentOnContrib(input: {
             ledgerId:    ledger.id,
             contribId:   input.contribId,
             memberId:    input.memberId,
-            amount:      input.amount,
+            amount:      dec(input.amount),
             note:        input.note,
             isSuggested: false,
             confirmedBy: createdBy,
@@ -363,7 +366,7 @@ export async function runAutoMatchAll(): Promise<{ matched: number; suggested: n
             db,
             entry.id,
             entry.variableSymbol,
-            entry.amount,
+            Number(entry.amount),            // numeric → string z Drizzle, převedeme
             entry.paidAt as unknown as string,
             "auto-match",
         );
@@ -424,12 +427,12 @@ export async function confirmSingleAllocation(input: {
         // Odstraň případné suggested alokace
         await tx.delete(paymentAllocations).where(eq(paymentAllocations.ledgerId, input.ledgerId));
 
-        // Vytvoř potvrzenou alokaci
+        // Vytvoř potvrzenou alokaci (ledger.amount je string z numeric, předáme přímo)
         await tx.insert(paymentAllocations).values({
             ledgerId:    input.ledgerId,
             contribId:   input.contribId,
             memberId:    input.memberId,
-            amount:      ledger.amount,
+            amount:      ledger.amount,   // string z numeric — Drizzle INSERT OK
             isSuggested: false,
             confirmedBy,
             confirmedAt: new Date(),
@@ -460,8 +463,9 @@ export async function splitPayment(input: {
     if (ledger.reconciliationStatus === "confirmed") return { error: "Platba je již potvrzena — nejdřív odpárujte" };
 
     const partsTotal = input.parts.reduce((sum, p) => sum + p.amount, 0);
-    if (partsTotal !== ledger.amount) {
-        return { error: `Součet částí (${partsTotal} Kč) se nerovná celkové částce (${ledger.amount} Kč)` };
+    const ledgerAmount = Number(ledger.amount);
+    if (Math.abs(partsTotal - ledgerAmount) > 0.001) {
+        return { error: `Součet částí (${partsTotal} Kč) se nerovná celkové částce (${ledgerAmount} Kč)` };
     }
     if (input.parts.length === 0) return { error: "Zadejte alespoň jeden řádek" };
 
@@ -475,7 +479,7 @@ export async function splitPayment(input: {
                 ledgerId:    input.ledgerId,
                 contribId:   part.contribId,
                 memberId:    part.memberId,
-                amount:      part.amount,
+                amount:      dec(part.amount),
                 note:        part.note ?? null,
                 isSuggested: false,
                 confirmedBy,
@@ -534,7 +538,7 @@ export async function ignorePayment(
 export async function loadLedgerRows(filters: {
     year?:   number;
     status?: ReconciliationStatus;
-    source?: "fio" | "file_import" | "cash";
+    source?: "fio_bank" | "file_import" | "cash";
 }): Promise<LedgerRow[]> {
     const db = getDb();
 
@@ -593,6 +597,7 @@ export async function loadLedgerRows(filters: {
 
     return rows.map(row => ({
         ...row,
+        amount:    Number(row.amount),                          // numeric → number
         paidAt:    row.paidAt as unknown as string,
         createdAt: (row.createdAt as unknown as Date).toISOString(),
         reconciliationStatus: row.reconciliationStatus as ReconciliationStatus,
@@ -601,7 +606,7 @@ export async function loadLedgerRows(filters: {
             contribId:   a.contribId,
             memberId:    a.memberId,
             memberName:  a.memberName,
-            amount:      a.amount,
+            amount:      Number(a.amount),                      // numeric → number
             isSuggested: a.isSuggested,
             confirmedBy: a.confirmedBy,
         })),

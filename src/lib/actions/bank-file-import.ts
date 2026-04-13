@@ -191,6 +191,8 @@ export async function importBankFileAction(
         const message         = getCol(row, fieldToCol.get("message") ?? "") || null;
 
         // Upsert do bank_import_transactions (idempotentní)
+        // amount jako string pro NUMERIC(10,2) sloupec
+        const amountStr = amount.toFixed(2);
         const upsertResult = await db.execute(sql`
             INSERT INTO app.bank_import_transactions
                 (import_run_id, profile_id, external_key,
@@ -199,7 +201,7 @@ export async function importBankFileAction(
                  raw_data)
             VALUES
                 (${importRunId}, ${profileId}, ${externalKey},
-                 ${paidAt}, ${amount}, 'CZK',
+                 ${paidAt}, ${amountStr}::NUMERIC, 'CZK',
                  ${vs}, ${counterpartyAcc}, ${counterpartyNm}, ${message},
                  ${JSON.stringify(row)}::jsonb)
             ON CONFLICT (profile_id, external_key) DO NOTHING
