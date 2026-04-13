@@ -112,6 +112,34 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
                 </div>
             )}
 
+            {/* Source filter pills — nadřazené status filtrům */}
+            <div className="flex gap-1.5 flex-wrap">
+                {([undefined, "fio_bank", "file_import", "cash"] as const).map(src => {
+                    const label    = src === undefined ? "Vše" : SOURCE_LABELS[src];
+                    const count    = src === undefined ? stats.total : stats[src];
+                    const isActive = src === sourceFilter;
+                    return (
+                        <button key={src ?? "all"}
+                            onClick={() => navigateSource(src)}
+                            disabled={isPending}
+                            className={[
+                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors border",
+                                isActive
+                                    ? "bg-[#26272b] text-white border-[#26272b] font-semibold"
+                                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
+                            ].join(" ")}>
+                            {label}
+                            <span className={[
+                                "rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center",
+                                isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
+                            ].join(" ")}>
+                                {count}
+                            </span>
+                        </button>
+                    );
+                })}
+            </div>
+
             {/* Status filter pills */}
             <div className="flex gap-2 flex-wrap">
                 {filterPills.map(pill => (
@@ -137,27 +165,6 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
                         )}
                     </button>
                 ))}
-            </div>
-
-            {/* Source filter pills */}
-            <div className="flex gap-2 flex-wrap">
-                {([undefined, "fio_bank", "file_import", "cash"] as const).map(src => {
-                    const label = src === undefined ? "Všechny zdroje" : SOURCE_LABELS[src];
-                    const isActive = src === sourceFilter;
-                    return (
-                        <button key={src ?? "all"}
-                            onClick={() => navigateSource(src)}
-                            disabled={isPending}
-                            className={[
-                                "inline-flex items-center px-3 py-1 rounded-full text-xs transition-colors border",
-                                isActive
-                                    ? "bg-[#26272b] text-white border-[#26272b] font-semibold"
-                                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
-                            ].join(" ")}>
-                            {label}
-                        </button>
-                    );
-                })}
             </div>
 
             {/* Tabulka */}

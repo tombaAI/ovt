@@ -15,11 +15,14 @@ import {
 export type ReconciliationStatus = "unmatched" | "suggested" | "confirmed" | "ignored";
 
 export type LedgerStats = {
-    unmatched: number;
-    suggested: number;
-    confirmed: number;
-    ignored:   number;
-    total:     number;
+    unmatched:   number;
+    suggested:   number;
+    confirmed:   number;
+    ignored:     number;
+    total:       number;
+    fio_bank:    number;
+    file_import: number;
+    cash:        number;
 };
 
 export type LedgerRow = {
@@ -387,24 +390,39 @@ export async function runAutoMatchAll(): Promise<{ matched: number; suggested: n
 
 export async function getLedgerStats(year?: number): Promise<LedgerStats> {
     const db = getDb();
-    const rows = await db
-        .select({
+    const yearCond = year ? sql`EXTRACT(YEAR FROM ${paymentLedger.paidAt}) = ${year}` : undefined;
+
+    const [statusRows, sourceRows] = await Promise.all([
+        db.select({
             status: paymentLedger.reconciliationStatus,
             count:  sql<number>`count(*)`,
         })
         .from(paymentLedger)
-        .where(year ? sql`EXTRACT(YEAR FROM ${paymentLedger.paidAt}) = ${year}` : undefined)
-        .groupBy(paymentLedger.reconciliationStatus);
+        .where(yearCond)
+        .groupBy(paymentLedger.reconciliationStatus),
 
-    const byStatus = Object.fromEntries(rows.map(r => [r.status, Number(r.count)]));
-    const total = rows.reduce((sum, r) => sum + Number(r.count), 0);
+        db.select({
+            source: paymentLedger.sourceType,
+            count:  sql<number>`count(*)`,
+        })
+        .from(paymentLedger)
+        .where(yearCond)
+        .groupBy(paymentLedger.sourceType),
+    ]);
+
+    const byStatus = Object.fromEntries(statusRows.map(r => [r.status, Number(r.count)]));
+    const bySource = Object.fromEntries(sourceRows.map(r => [r.source, Number(r.count)]));
+    const total    = statusRows.reduce((sum, r) => sum + Number(r.count), 0);
 
     return {
-        unmatched: byStatus.unmatched ?? 0,
-        suggested: byStatus.suggested ?? 0,
-        confirmed: byStatus.confirmed ?? 0,
-        ignored:   byStatus.ignored   ?? 0,
+        unmatched:   byStatus.unmatched   ?? 0,
+        suggested:   byStatus.suggested   ?? 0,
+        confirmed:   byStatus.confirmed   ?? 0,
+        ignored:     byStatus.ignored     ?? 0,
         total,
+        fio_bank:    bySource.fio_bank    ?? 0,
+        file_import: bySource.file_import ?? 0,
+        cash:        bySource.cash        ?? 0,
     };
 }
 
