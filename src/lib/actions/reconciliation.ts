@@ -102,7 +102,7 @@ async function autoMatchLedgerEntry(
 
     // 3. Zjisti kolik už je potvrzeně alokováno na tento předpis
     const [allocResult] = await db
-        .select({ allocated: sql<number>`coalesce(sum(pa.amount), 0)` })
+        .select({ allocated: sql<number>`coalesce(sum(${paymentAllocations.amount}), 0)` })
         .from(paymentAllocations)
         .innerJoin(paymentLedger, eq(paymentAllocations.ledgerId, paymentLedger.id))
         .where(and(
