@@ -9,12 +9,13 @@ import type { LedgerRow, LedgerStats, ReconciliationStatus } from "@/lib/actions
 type SourceFilter = "fio_bank" | "file_import" | "cash";
 
 interface Props {
-    rows:         LedgerRow[];
-    stats:        LedgerStats;
-    years:        number[];
-    selectedYear: number;
-    statusFilter: ReconciliationStatus | undefined;
-    sourceFilter: SourceFilter | undefined;
+    rows:            LedgerRow[];
+    stats:           LedgerStats;
+    years:           number[];
+    selectedYear:    number;
+    statusFilter:    ReconciliationStatus | undefined;
+    sourceFilter:    SourceFilter | undefined;
+    profileIdFilter: number | undefined;
 }
 
 const STATUS_LABELS: Record<ReconciliationStatus, string> = {
@@ -32,7 +33,7 @@ const STATUS_BADGE: Record<ReconciliationStatus, string> = {
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-    fio_bank:    "Fio",
+    fio_bank:    "Fio Bank",
     file_import: "Soubor",
     cash:        "Hotovost",
 };
@@ -47,7 +48,7 @@ function formatAmount(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 2 }).format(amount);
 }
 
-export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter, sourceFilter }: Props) {
+export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter, sourceFilter, profileIdFilter }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [pendingYear, setPendingYear] = useState<number | null>(null);
@@ -55,12 +56,17 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
 
     const displayYear = pendingYear ?? selectedYear;
 
-    function buildParams(overrides: { year?: number; status?: string | null; source?: string | null }) {
+    function buildParams(overrides: {
+        year?: number; status?: string | null;
+        source?: string | null; profileId?: number | null;
+    }) {
         const params = new URLSearchParams({ year: String(overrides.year ?? displayYear) });
-        const s = "status" in overrides ? overrides.status : statusFilter;
-        const src = "source" in overrides ? overrides.source : sourceFilter;
+        const s   = "status"    in overrides ? overrides.status    : statusFilter;
+        const src = "source"    in overrides ? overrides.source    : sourceFilter;
+        const pid = "profileId" in overrides ? overrides.profileId : profileIdFilter;
         if (s)   params.set("status", s);
         if (src) params.set("source", src);
+        if (pid) params.set("profileId", String(pid));
         return params.toString();
     }
 
@@ -77,10 +83,36 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
         });
     }
 
-    function navigateSource(source: SourceFilter | undefined) {
+    // Kliknutí na zdroj: "Fio Bank" → source=fio_bank, "Air Bank" → source=file_import&profileId=X
+    function navigateSource(source: SourceFilter | undefined, profileId?: number) {
         startTransition(() => {
-            router.push(`/dashboard/payments?${buildParams({ source: source ?? null })}`);
+            router.push(`/dashboard/payments?${buildParams({
+                source:    source    ?? null,
+                profileId: profileId ?? null,
+            })}`);
         });
+    }
+
+    function sourcePill(label: string, count: number, isActive: boolean, onClick: () => void) {
+        return (
+            <button key={label}
+                onClick={onClick}
+                disabled={isPending}
+                className={[
+                    "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors border",
+                    isActive
+                        ? "bg-[#26272b] text-white border-[#26272b] font-semibold"
+                        : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
+                ].join(" ")}>
+                {label}
+                <span className={[
+                    "rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center",
+                    isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
+                ].join(" ")}>
+                    {count}
+                </span>
+            </button>
+        );
     }
 
     const filterPills: Array<{ label: string; value: ReconciliationStatus | undefined; count?: number }> = [
@@ -114,30 +146,20 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
 
             {/* Source filter pills — nadřazené status filtrům */}
             <div className="flex gap-1.5 flex-wrap">
-                {([undefined, "fio_bank", "file_import", "cash"] as const).map(src => {
-                    const label    = src === undefined ? "Vše" : SOURCE_LABELS[src];
-                    const count    = src === undefined ? stats.total : stats[src];
-                    const isActive = src === sourceFilter;
-                    return (
-                        <button key={src ?? "all"}
-                            onClick={() => navigateSource(src)}
-                            disabled={isPending}
-                            className={[
-                                "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs transition-colors border",
-                                isActive
-                                    ? "bg-[#26272b] text-white border-[#26272b] font-semibold"
-                                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
-                            ].join(" ")}>
-                            {label}
-                            <span className={[
-                                "rounded-full px-1.5 py-0.5 min-w-[1.25rem] text-center",
-                                isActive ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
-                            ].join(" ")}>
-                                {count}
-                            </span>
-                        </button>
-                    );
-                })}
+                {/* Vše */}
+                {sourcePill("Vše", stats.total, !sourceFilter && !profileIdFilter, () => navigateSource(undefined))}
+                {/* Fio Bank */}
+                {stats.fio_bank > 0 && sourcePill("Fio Bank", stats.fio_bank,
+                    sourceFilter === "fio_bank" && !profileIdFilter,
+                    () => navigateSource("fio_bank"))}
+                {/* Per-profil (Air Bank, Raiffeisen, …) */}
+                {stats.profiles.map(p => sourcePill(p.name, p.count,
+                    sourceFilter === "file_import" && profileIdFilter === p.id,
+                    () => navigateSource("file_import", p.id)))}
+                {/* Hotovost */}
+                {stats.cash > 0 && sourcePill("Hotovost", stats.cash,
+                    sourceFilter === "cash",
+                    () => navigateSource("cash"))}
             </div>
 
             {/* Status filter pills */}
@@ -210,7 +232,9 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
                                 </td>
                                 <td className="px-3 py-2">
                                     <Badge className={`text-xs font-normal border ${SOURCE_BADGE[row.sourceType] ?? "bg-gray-100 text-gray-600"}`}>
-                                        {SOURCE_LABELS[row.sourceType] ?? row.sourceType}
+                                        {row.sourceType === "file_import" && row.profileName
+                                            ? row.profileName
+                                            : (SOURCE_LABELS[row.sourceType] ?? row.sourceType)}
                                     </Badge>
                                 </td>
                                 <td className="px-3 py-2">

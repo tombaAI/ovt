@@ -7,7 +7,7 @@ import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import {
     paymentLedger, paymentAllocations, bankImportTransactions,
-    memberContributions, contributionPeriods, members,
+    memberContributions, contributionPeriods, members, importProfiles,
 } from "@/db/schema";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
@@ -23,11 +23,14 @@ export type LedgerStats = {
     fio_bank:    number;
     file_import: number;
     cash:        number;
+    profiles:    Array<{ id: number; name: string; count: number }>;
 };
 
 export type LedgerRow = {
     id:                   number;
     sourceType:           string;
+    profileId:            number | null;
+    profileName:          string | null;
     paidAt:               string;
     amount:               number;
     variableSymbol:       string | null;
@@ -479,7 +482,7 @@ export async function getLedgerStats(year?: number): Promise<LedgerStats> {
     const db = getDb();
     const yearCond = year ? sql`EXTRACT(YEAR FROM ${paymentLedger.paidAt}) = ${year}` : undefined;
 
-    const [statusRows, sourceRows] = await Promise.all([
+    const [statusRows, sourceRows, profileRows] = await Promise.all([
         db.select({
             status: paymentLedger.reconciliationStatus,
             count:  sql<number>`count(*)`,
@@ -495,6 +498,17 @@ export async function getLedgerStats(year?: number): Promise<LedgerStats> {
         .from(paymentLedger)
         .where(yearCond)
         .groupBy(paymentLedger.sourceType),
+
+        db.select({
+            profileId:   importProfiles.id,
+            profileName: importProfiles.name,
+            count:       sql<number>`count(*)`,
+        })
+        .from(paymentLedger)
+        .innerJoin(bankImportTransactions, eq(paymentLedger.bankImportTxId, bankImportTransactions.id))
+        .innerJoin(importProfiles, eq(bankImportTransactions.profileId, importProfiles.id))
+        .where(and(yearCond, eq(paymentLedger.sourceType, "file_import")))
+        .groupBy(importProfiles.id, importProfiles.name),
     ]);
 
     const byStatus = Object.fromEntries(statusRows.map(r => [r.status, Number(r.count)]));
@@ -510,6 +524,7 @@ export async function getLedgerStats(year?: number): Promise<LedgerStats> {
         fio_bank:    bySource.fio_bank    ?? 0,
         file_import: bySource.file_import ?? 0,
         cash:        bySource.cash        ?? 0,
+        profiles:    profileRows.map(r => ({ id: r.profileId, name: r.profileName, count: Number(r.count) })),
     };
 }
 
@@ -642,25 +657,27 @@ export async function ignorePayment(
 // ── Výpis ledger záznamů ──────────────────────────────────────────────────────
 
 export async function loadLedgerRows(filters: {
-    year?:   number;
-    status?: ReconciliationStatus;
-    source?: "fio_bank" | "file_import" | "cash";
+    year?:      number;
+    status?:    ReconciliationStatus;
+    source?:    "fio_bank" | "file_import" | "cash";
+    profileId?: number;
 }): Promise<LedgerRow[]> {
     const db = getDb();
 
     const conditions = [];
     if (filters.year) {
-        conditions.push(
-            sql`EXTRACT(YEAR FROM ${paymentLedger.paidAt}) = ${filters.year}`
-        );
+        conditions.push(sql`EXTRACT(YEAR FROM ${paymentLedger.paidAt}) = ${filters.year}`);
     }
-    if (filters.status) conditions.push(eq(paymentLedger.reconciliationStatus, filters.status));
-    if (filters.source) conditions.push(eq(paymentLedger.sourceType, filters.source));
+    if (filters.status)    conditions.push(eq(paymentLedger.reconciliationStatus, filters.status));
+    if (filters.source)    conditions.push(eq(paymentLedger.sourceType, filters.source));
+    if (filters.profileId) conditions.push(eq(bankImportTransactions.profileId, filters.profileId));
 
     const rows = await db
         .select({
             id:                   paymentLedger.id,
             sourceType:           paymentLedger.sourceType,
+            profileId:            bankImportTransactions.profileId,
+            profileName:          importProfiles.name,
             paidAt:               paymentLedger.paidAt,
             amount:               paymentLedger.amount,
             variableSymbol:       paymentLedger.variableSymbol,
@@ -672,6 +689,8 @@ export async function loadLedgerRows(filters: {
             createdAt:            paymentLedger.createdAt,
         })
         .from(paymentLedger)
+        .leftJoin(bankImportTransactions, eq(paymentLedger.bankImportTxId, bankImportTransactions.id))
+        .leftJoin(importProfiles, eq(bankImportTransactions.profileId, importProfiles.id))
         .where(conditions.length > 0 ? and(...conditions) : undefined)
         .orderBy(sql`${paymentLedger.paidAt} DESC`);
 
@@ -703,9 +722,11 @@ export async function loadLedgerRows(filters: {
 
     return rows.map(row => ({
         ...row,
-        amount:    Number(row.amount),                          // numeric → number
-        paidAt:    row.paidAt as unknown as string,
-        createdAt: (row.createdAt as unknown as Date).toISOString(),
+        amount:      Number(row.amount),
+        profileId:   row.profileId   ?? null,
+        profileName: row.profileName ?? null,
+        paidAt:      row.paidAt as unknown as string,
+        createdAt:   (row.createdAt as unknown as Date).toISOString(),
         reconciliationStatus: row.reconciliationStatus as ReconciliationStatus,
         allocations: (allocsByLedger.get(row.id) ?? []).map(a => ({
             id:          a.id,

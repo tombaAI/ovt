@@ -13,9 +13,9 @@ const VALID_SOURCES = ["fio_bank", "file_import", "cash"] as const;
 type SourceFilter = typeof VALID_SOURCES[number];
 
 export default async function PaymentsPage(props: {
-    searchParams: Promise<{ year?: string; status?: string; source?: string }>;
+    searchParams: Promise<{ year?: string; status?: string; source?: string; profileId?: string }>;
 }) {
-    const { year: yearParam, status: statusParam, source: sourceParam } = await props.searchParams;
+    const { year: yearParam, status: statusParam, source: sourceParam, profileId: profileIdParam } = await props.searchParams;
 
     const years        = await loadLedgerYears();
     const selectedYear = Number(yearParam) || (years[0] ?? CONTRIBUTION_YEAR);
@@ -29,8 +29,10 @@ export default async function PaymentsPage(props: {
         ? (sourceParam as SourceFilter)
         : undefined;
 
+    const profileIdFilter = profileIdParam ? Number(profileIdParam) : undefined;
+
     const [rows, stats] = await Promise.all([
-        loadLedgerRows({ year: selectedYear, status: statusFilter, source: sourceFilter }),
+        loadLedgerRows({ year: selectedYear, status: statusFilter, source: sourceFilter, profileId: profileIdFilter }),
         getLedgerStats(selectedYear),
     ]);
 
@@ -54,6 +56,7 @@ export default async function PaymentsPage(props: {
                 selectedYear={selectedYear}
                 statusFilter={statusFilter}
                 sourceFilter={sourceFilter}
+                profileIdFilter={profileIdFilter}
             />
         </div>
     );
