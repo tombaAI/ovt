@@ -233,12 +233,23 @@ export async function deleteImportProfile(id: number): Promise<{ error: string }
     }
 }
 
-export async function getImportProfiles() {
+export async function getImportProfiles(type?: "member" | "bank") {
     const db = getDb();
+    if (type) {
+        return db.select().from(importProfiles)
+            .where(eq(importProfiles.profileType, type))
+            .orderBy(desc(importProfiles.updatedAt));
+    }
     return db.select().from(importProfiles).orderBy(desc(importProfiles.updatedAt));
 }
 
-export async function getImportHistory(limit = 50) {
+export async function getImportHistory(type?: "member" | "bank", limit = 50) {
     const db = getDb();
+    if (type) {
+        return db.select().from(importHistory)
+            .where(eq(importHistory.importType, type))
+            .orderBy(desc(importHistory.importedAt))
+            .limit(limit);
+    }
     return db.select().from(importHistory).orderBy(desc(importHistory.importedAt)).limit(limit);
 }

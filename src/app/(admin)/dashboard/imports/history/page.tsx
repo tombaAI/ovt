@@ -8,14 +8,14 @@ function fmtDate(d: Date) {
 }
 
 export default async function ImportHistoryPage() {
-    const history = await getImportHistory(100);
+    const history = await getImportHistory("member", 100);
 
     return (
         <div className="space-y-4">
             <div>
-                <h1 className="text-xl font-semibold">Historie importů</h1>
+                <h1 className="text-xl font-semibold">Historie — importy členů</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                    Log všech provedených importů — čas, soubor, autor a přijaté změny.
+                    Log provedených importů členské základny — čas, soubor, autor a přijaté změny.
                 </p>
             </div>
 

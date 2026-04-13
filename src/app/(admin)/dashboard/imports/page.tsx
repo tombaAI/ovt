@@ -18,65 +18,86 @@ function ImportCard({ item }: { item: ImportItem }) {
     );
 }
 
-const RECURRING: ImportItem[] = [
-    {
-        href:        "/dashboard/imports/members-tj",
-        title:       "Členové TJ Bohemians",
-        description: "Data z evidence vodní turistiky přicházejí automaticky přes Power Automate → webhook.",
-    },
-    {
-        href:        "/dashboard/imports/bank",
-        title:       "Platby z banky (Fio)",
-        description: "Inkrementální synchronizace plateb z Fio bankovního účtu. Cron každý den v 6:00, ruční sync k dispozici.",
-    },
-];
-
-const ONETIME: ImportItem[] = [
-    {
-        href:        "/dashboard/imports/csv",
-        title:       "Import CSV / ČSK data",
-        description: "Nahrát CSV soubor, namapovat sloupce a porovnat s databází členů. Podporuje uložená mapování.",
-    },
-];
-
-const TOOLS: ImportItem[] = [
-    {
-        href:        "/dashboard/imports/profiles",
-        title:       "Uložená mapování",
-        description: "Správa profilů pro opakované CSV importy — název, poznámka, mapování sloupců.",
-    },
-    {
-        href:        "/dashboard/imports/history",
-        title:       "Historie importů",
-        description: "Log provedených importů — čas, autor, přijaté změny.",
-    },
-];
-
-function Section({ title, items }: { title: string; items: ImportItem[] }) {
+function Section({ title, description, items }: { title: string; description?: string; items: ImportItem[] }) {
     return (
         <div className="space-y-2">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{title}</h2>
-            <div className="grid gap-3 sm:grid-cols-2">
+            <div>
+                <h2 className="text-sm font-semibold">{title}</h2>
+                {description && <p className="text-xs text-muted-foreground mt-0.5">{description}</p>}
+            </div>
+            <div className="grid gap-2 sm:grid-cols-2">
                 {items.map(item => <ImportCard key={item.href} item={item} />)}
             </div>
         </div>
     );
 }
 
+const PAYMENTS: ImportItem[] = [
+    {
+        href:        "/dashboard/imports/bank",
+        title:       "Platby z banky (Fio)",
+        description: "Inkrementální synchronizace plateb z Fio bankovního účtu. Cron každý den v 6:00, ruční sync k dispozici.",
+    },
+    {
+        href:        "/dashboard/imports/bank/file",
+        title:       "Import bankovního souboru",
+        description: "Nahrát CSV exportovaný z Air Bank nebo jiné banky. Transakce se uloží do platebního ledgeru.",
+    },
+    {
+        href:        "/dashboard/imports/bank/profiles",
+        title:       "Profily (bankovní importy)",
+        description: "Správa mapování sloupců pro CSV soubory z jednotlivých bank.",
+    },
+    {
+        href:        "/dashboard/imports/bank/history",
+        title:       "Historie bankovních importů",
+        description: "Log provedených importů bankovních souborů — čas, autor, počty transakcí.",
+    },
+];
+
+const MEMBERS: ImportItem[] = [
+    {
+        href:        "/dashboard/imports/members-tj",
+        title:       "Členové TJ Bohemians",
+        description: "Data z evidence vodní turistiky přicházejí automaticky přes Power Automate → webhook.",
+    },
+    {
+        href:        "/dashboard/imports/csv",
+        title:       "Import CSV / ČSK data",
+        description: "Nahrát CSV soubor s daty členů, namapovat sloupce a porovnat s databází.",
+    },
+    {
+        href:        "/dashboard/imports/profiles",
+        title:       "Profily (import členů)",
+        description: "Správa uložených mapování sloupců pro CSV soubory s daty členů.",
+    },
+    {
+        href:        "/dashboard/imports/history",
+        title:       "Historie importů členů",
+        description: "Log provedených importů členské základny — čas, autor, přijaté změny.",
+    },
+];
+
 export default function ImportsPage() {
     return (
-        <div className="space-y-6">
+        <div className="space-y-8">
             <div>
                 <h1 className="text-xl font-semibold">Import dat</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                    Správa příchozích dat z externích zdrojů. Data se ukládají do importních tabulek
-                    a do produkční databáze se přenášejí ručně po kontrole.
+                    Správa příchozích dat z externích zdrojů.
                 </p>
             </div>
 
-            <Section title="Pravidelné synchronizace" items={RECURRING} />
-            <Section title="Jednorázové importy" items={ONETIME} />
-            <Section title="Nástroje" items={TOOLS} />
+            <Section
+                title="Platby"
+                description="Příchozí platby z bankovního účtu a souborových exportů."
+                items={PAYMENTS}
+            />
+            <Section
+                title="Členská základna"
+                description="Import a synchronizace dat členů z externích registrů."
+                items={MEMBERS}
+            />
         </div>
     );
 }

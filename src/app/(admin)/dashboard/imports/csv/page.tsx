@@ -2,7 +2,7 @@ import { ImportWizard } from "./import-wizard";
 import { getImportProfiles } from "@/lib/actions/import";
 
 export default async function CsvImportPage() {
-    const profiles = await getImportProfiles();
+    const profiles = await getImportProfiles("member");
     return (
         <div className="space-y-4">
             <div>
