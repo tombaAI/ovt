@@ -156,12 +156,14 @@ export const importProfiles = appSchema.table("import_profiles", {
     id:              serial("id").primaryKey(),
     name:            text("name").notNull(),
     note:            text("note"),
+    profileType:     text("profile_type").notNull().default("member"), // 'member' | 'bank'
     fileFormat:      text("file_format").notNull().default("csv"),
     delimiter:       text("delimiter"),
     encoding:        text("encoding"),
     headerRowIndex:  integer("header_row_index").notNull().default(0),
     matchKeys:       jsonb("match_keys").notNull().default([]),
     mappings:        jsonb("mappings").notNull().default([]),
+    config:          jsonb("config").notNull().default({}),            // bank: filterColumn, dateFormat, …
     createdBy:       text("created_by").notNull(),
     createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt:       timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -169,6 +171,7 @@ export const importProfiles = appSchema.table("import_profiles", {
 
 export const importHistory = appSchema.table("import_history", {
     id:                    serial("id").primaryKey(),
+    importType:            text("import_type").notNull().default("member"),  // 'member' | 'bank'
     profileId:             integer("profile_id").references(() => importProfiles.id, { onDelete: "set null" }),
     profileNameSnapshot:   text("profile_name_snapshot"),
     filename:              text("filename").notNull(),
@@ -209,6 +212,97 @@ export const bankTransactions = appSchema.table(
     (t) => [
         index("bank_transactions_date_idx").on(t.date),
         index("bank_transactions_vs_idx").on(t.variableSymbol),
+    ]
+);
+
+// ── Payment ledger tables ─────────────────────────────────────────────────────
+
+/**
+ * Staging tabulka pro file-based bankovní importy (Air Bank, další banky).
+ * Idempotentní přes (profile_id, external_key).
+ */
+export const bankImportTransactions = appSchema.table(
+    "bank_import_transactions",
+    {
+        id:                  serial("id").primaryKey(),
+        importRunId:         integer("import_run_id").references(() => importHistory.id, { onDelete: "set null" }),
+        profileId:           integer("profile_id").references(() => importProfiles.id, { onDelete: "set null" }),
+        externalKey:         text("external_key").notNull(),
+        paidAt:              date("paid_at"),
+        amount:              integer("amount"),              // celé Kč, kladné = příchozí
+        currency:            text("currency").notNull().default("CZK"),
+        variableSymbol:      text("variable_symbol"),
+        counterpartyAccount: text("counterparty_account"),
+        counterpartyName:    text("counterparty_name"),
+        message:             text("message"),
+        rawData:             jsonb("raw_data").notNull().default({}),
+        ledgerId:            integer("ledger_id"),           // FK doplněn po vytvoření payment_ledger
+        createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("bank_import_tx_run_idx").on(t.importRunId),
+    ]
+);
+
+/**
+ * Jednotný platební ledger — kanonický zdroj pravdy pro všechny přijaté platby.
+ * source_type: 'fio' | 'file_import' | 'cash'
+ */
+export const paymentLedger = appSchema.table(
+    "payment_ledger",
+    {
+        id:                   serial("id").primaryKey(),
+        sourceType:           text("source_type", { enum: ["fio", "file_import", "cash"] }).notNull(),
+        bankTxId:             integer("bank_tx_id").unique().references(() => bankTransactions.id),
+        bankImportTxId:       integer("bank_import_tx_id").unique().references(() => bankImportTransactions.id),
+        importRunId:          integer("import_run_id").references(() => importHistory.id, { onDelete: "set null" }),
+        paidAt:               date("paid_at").notNull(),
+        amount:               integer("amount").notNull(),   // celé Kč, vždy kladné
+        currency:             text("currency").notNull().default("CZK"),
+        variableSymbol:       text("variable_symbol"),
+        counterpartyAccount:  text("counterparty_account"),
+        counterpartyName:     text("counterparty_name"),
+        message:              text("message"),
+        note:                 text("note"),
+        reconciliationStatus: text("reconciliation_status", {
+            enum: ["unmatched", "suggested", "confirmed", "ignored"],
+        }).notNull().default("unmatched"),
+        createdBy:            text("created_by").notNull(),
+        createdAt:            timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt:            timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("payment_ledger_paid_at_idx").on(t.paidAt),
+        index("payment_ledger_vs_idx").on(t.variableSymbol),
+        index("payment_ledger_status_idx").on(t.reconciliationStatus),
+        index("payment_ledger_source_idx").on(t.sourceType),
+    ]
+);
+
+/**
+ * Alokační tabulka — vazba ledger záznam → předpis příspěvku.
+ * Nahrazuje starou tabulku payments.
+ * Split = více řádků na jeden ledger záznam; součet amount = payment_ledger.amount.
+ */
+export const paymentAllocations = appSchema.table(
+    "payment_allocations",
+    {
+        id:          serial("id").primaryKey(),
+        ledgerId:    integer("ledger_id").notNull().references(() => paymentLedger.id),
+        contribId:   integer("contrib_id").notNull().references(() => memberContributions.id),
+        memberId:    integer("member_id").notNull().references(() => members.id),
+        amount:      integer("amount").notNull(),
+        note:        text("note"),
+        isSuggested: boolean("is_suggested").notNull().default(false),
+        confirmedBy: text("confirmed_by"),           // NULL = nepotvrzeno
+        confirmedAt: timestamp("confirmed_at", { withTimezone: true }),
+        createdBy:   text("created_by").notNull(),
+        createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("payment_allocations_ledger_idx").on(t.ledgerId),
+        index("payment_allocations_contrib_idx").on(t.contribId),
+        index("payment_allocations_member_idx").on(t.memberId),
     ]
 );
 

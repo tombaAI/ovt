@@ -5,6 +5,7 @@ import { bankTransactions, members, payments } from "@/db/schema";
 import { sql, desc, and, gte, lte, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { fetchFioByPeriod, fetchFioLast, type FioTransaction } from "@/lib/fio";
+import { createLedgerFromBankTx } from "./reconciliation";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -35,7 +36,7 @@ export type BankTransactionRow = {
 
 // ── Uložení transakcí (deduplikace přes fio_id) ───────────────────────────────
 
-async function upsertTransactions(txs: FioTransaction[]): Promise<SyncResult> {
+async function upsertTransactions(txs: FioTransaction[], createdBy = "fio-sync"): Promise<SyncResult> {
     if (txs.length === 0) return { inserted: 0, skipped: 0, total: 0 };
 
     const db = getDb();
@@ -53,10 +54,28 @@ async function upsertTransactions(txs: FioTransaction[]): Promise<SyncResult> {
                  ${tx.counterpartyAccount}, ${tx.counterpartyName}, ${tx.message},
                  ${tx.userIdentification}, ${tx.type}, ${tx.comment}, ${JSON.stringify(tx.rawData)}::jsonb)
             ON CONFLICT (fio_id) DO NOTHING
+            RETURNING id
         `);
-        // rowCount = 0 znamená ON CONFLICT → přeskočeno
-        const rowCount = (result as unknown as { rowCount?: number }).rowCount ?? 1;
-        if (rowCount === 0) skipped++; else inserted++;
+        const rows = result as unknown as Array<{ id: number }>;
+        if (rows.length === 0) {
+            skipped++;
+        } else {
+            inserted++;
+            // Příchozí platby (amount > 0) → také do payment_ledger + auto-match
+            if (tx.amount > 0) {
+                await createLedgerFromBankTx(
+                    rows[0].id,
+                    tx.date,
+                    tx.amount,
+                    tx.currency,
+                    tx.variableSymbol,
+                    tx.counterpartyAccount,
+                    tx.counterpartyName,
+                    tx.message,
+                    createdBy,
+                );
+            }
+        }
     }
 
     return { inserted, skipped, total: txs.length };
