@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo, useCallback } from "react";
+import { useState, useMemo, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
@@ -51,9 +51,21 @@ interface Props {
 
 export function ContributionsClient({ periods, period, rows }: Props) {
     const router = useRouter();
-    const [filter, setFilter]         = useState<FilterKey>("issues");
-    const [sheetOpen, setSheetOpen]   = useState(false);
+    const [filter, setFilter]               = useState<FilterKey>("issues");
+    const [sheetOpen, setSheetOpen]         = useState(false);
     const [editContribId, setEditContribId] = useState<number | null>(null);
+    const [isPending, startTransition]      = useTransition();
+    const [pendingYear, setPendingYear]     = useState<number | null>(null);
+
+    const displayYear = pendingYear ?? period.year;
+    void displayYear;
+
+    function navigateYear(year: number) {
+        setPendingYear(year);
+        startTransition(() => {
+            router.push(`/dashboard/contributions?year=${year}`);
+        });
+    }
 
     const editRow = editContribId !== null ? (rows.find(r => r.contribId === editContribId) ?? null) : null;
 
@@ -98,7 +110,8 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                     const isSelected = p.year === period.year;
                     return (
                         <button key={p.year}
-                            onClick={() => router.push(`/dashboard/contributions?year=${p.year}`)}
+                            onClick={() => navigateYear(p.year)}
+                            disabled={isPending}
                             className={[
                                 "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
                                 isSelected
@@ -179,7 +192,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
             </div>
 
             {/* ── Mobile cards ── */}
-            <div className="md:hidden space-y-2">
+            <div className={`md:hidden space-y-2 transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
                 {filtered.length === 0 && (
                     <p className="text-center text-gray-400 py-12 text-sm">Žádné záznamy</p>
                 )}
@@ -209,7 +222,7 @@ export function ContributionsClient({ periods, period, rows }: Props) {
             </div>
 
             {/* ── Desktop table ── */}
-            <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
+            <div className={`hidden md:block rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">

@@ -239,7 +239,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             </div>
 
             {/* ── Mobile: cards ── */}
-            <div className={`md:hidden space-y-2 transition-opacity duration-150 ${isPending ? "opacity-40 pointer-events-none" : ""}`}>
+            <div className={`md:hidden space-y-2 transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
                 {filtered.length === 0 && (
                     <p className="text-center text-gray-400 py-12 text-sm">Žádní členové</p>
                 )}
@@ -259,7 +259,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             </div>
 
             {/* ── Desktop: table ── */}
-            <div className={`hidden md:block rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-40" : ""}`}>
+            <div className={`hidden md:block rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">

@@ -9,10 +9,13 @@ import { CONTRIBUTION_YEAR } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
+const VALID_SOURCES = ["fio_bank", "file_import", "cash"] as const;
+type SourceFilter = typeof VALID_SOURCES[number];
+
 export default async function PaymentsPage(props: {
-    searchParams: Promise<{ year?: string; status?: string }>;
+    searchParams: Promise<{ year?: string; status?: string; source?: string }>;
 }) {
-    const { year: yearParam, status: statusParam } = await props.searchParams;
+    const { year: yearParam, status: statusParam, source: sourceParam } = await props.searchParams;
 
     const years        = await loadLedgerYears();
     const selectedYear = Number(yearParam) || (years[0] ?? CONTRIBUTION_YEAR);
@@ -22,9 +25,13 @@ export default async function PaymentsPage(props: {
         ? (statusParam as ReconciliationStatus)
         : undefined;
 
+    const sourceFilter = VALID_SOURCES.includes(sourceParam as SourceFilter)
+        ? (sourceParam as SourceFilter)
+        : undefined;
+
     const [rows, stats] = await Promise.all([
-        loadLedgerRows({ year: selectedYear, status: statusFilter }),
-        getLedgerStats(),
+        loadLedgerRows({ year: selectedYear, status: statusFilter, source: sourceFilter }),
+        getLedgerStats(selectedYear),
     ]);
 
     return (
@@ -32,8 +39,8 @@ export default async function PaymentsPage(props: {
             <div>
                 <h1 className="text-xl font-semibold">Platební ledger</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                    Přehled všech příchozích plateb z Fio banky, bankovních souborů a hotovosti.
-                    Celkem {stats.total} plateb —{" "}
+                    Přehled příchozích plateb z Fio banky, bankovních souborů a hotovosti
+                    za rok {selectedYear} — celkem {stats.total} plateb:{" "}
                     <span className="text-amber-600 font-medium">{stats.unmatched} nespárováno</span>,{" "}
                     <span className="text-blue-600 font-medium">{stats.suggested} ke kontrole</span>,{" "}
                     <span className="text-green-700 font-medium">{stats.confirmed} potvrzeno</span>.
@@ -46,6 +53,7 @@ export default async function PaymentsPage(props: {
                 years={years}
                 selectedYear={selectedYear}
                 statusFilter={statusFilter}
+                sourceFilter={sourceFilter}
             />
         </div>
     );

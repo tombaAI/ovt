@@ -385,7 +385,7 @@ export async function runAutoMatchAll(): Promise<{ matched: number; suggested: n
 
 // ── Statistiky ledgeru ────────────────────────────────────────────────────────
 
-export async function getLedgerStats(): Promise<LedgerStats> {
+export async function getLedgerStats(year?: number): Promise<LedgerStats> {
     const db = getDb();
     const rows = await db
         .select({
@@ -393,6 +393,7 @@ export async function getLedgerStats(): Promise<LedgerStats> {
             count:  sql<number>`count(*)`,
         })
         .from(paymentLedger)
+        .where(year ? sql`EXTRACT(YEAR FROM ${paymentLedger.paidAt}) = ${year}` : undefined)
         .groupBy(paymentLedger.reconciliationStatus);
 
     const byStatus = Object.fromEntries(rows.map(r => [r.status, Number(r.count)]));

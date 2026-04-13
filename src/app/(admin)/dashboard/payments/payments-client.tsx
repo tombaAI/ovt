@@ -6,12 +6,15 @@ import { Badge } from "@/components/ui/badge";
 import { PaymentSheet } from "./payment-sheet";
 import type { LedgerRow, LedgerStats, ReconciliationStatus } from "@/lib/actions/reconciliation";
 
+type SourceFilter = "fio_bank" | "file_import" | "cash";
+
 interface Props {
     rows:         LedgerRow[];
     stats:        LedgerStats;
     years:        number[];
     selectedYear: number;
     statusFilter: ReconciliationStatus | undefined;
+    sourceFilter: SourceFilter | undefined;
 }
 
 const STATUS_LABELS: Record<ReconciliationStatus, string> = {
@@ -44,7 +47,7 @@ function formatAmount(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 2 }).format(amount);
 }
 
-export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter }: Props) {
+export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter, sourceFilter }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [pendingYear, setPendingYear] = useState<number | null>(null);
@@ -52,20 +55,31 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter 
 
     const displayYear = pendingYear ?? selectedYear;
 
+    function buildParams(overrides: { year?: number; status?: string | null; source?: string | null }) {
+        const params = new URLSearchParams({ year: String(overrides.year ?? displayYear) });
+        const s = "status" in overrides ? overrides.status : statusFilter;
+        const src = "source" in overrides ? overrides.source : sourceFilter;
+        if (s)   params.set("status", s);
+        if (src) params.set("source", src);
+        return params.toString();
+    }
+
     function navigateYear(year: number) {
         setPendingYear(year);
         startTransition(() => {
-            const params = new URLSearchParams({ year: String(year) });
-            if (statusFilter) params.set("status", statusFilter);
-            router.push(`/dashboard/payments?${params}`);
+            router.push(`/dashboard/payments?${buildParams({ year })}`);
         });
     }
 
     function navigateStatus(status: ReconciliationStatus | undefined) {
         startTransition(() => {
-            const params = new URLSearchParams({ year: String(displayYear) });
-            if (status) params.set("status", status);
-            router.push(`/dashboard/payments?${params}`);
+            router.push(`/dashboard/payments?${buildParams({ status: status ?? null })}`);
+        });
+    }
+
+    function navigateSource(source: SourceFilter | undefined) {
+        startTransition(() => {
+            router.push(`/dashboard/payments?${buildParams({ source: source ?? null })}`);
         });
     }
 
@@ -125,8 +139,29 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter 
                 ))}
             </div>
 
+            {/* Source filter pills */}
+            <div className="flex gap-2 flex-wrap">
+                {([undefined, "fio_bank", "file_import", "cash"] as const).map(src => {
+                    const label = src === undefined ? "Všechny zdroje" : SOURCE_LABELS[src];
+                    const isActive = src === sourceFilter;
+                    return (
+                        <button key={src ?? "all"}
+                            onClick={() => navigateSource(src)}
+                            disabled={isPending}
+                            className={[
+                                "inline-flex items-center px-3 py-1 rounded-full text-xs transition-colors border",
+                                isActive
+                                    ? "bg-[#26272b] text-white border-[#26272b] font-semibold"
+                                    : "bg-white text-gray-600 border-gray-200 hover:bg-gray-50",
+                            ].join(" ")}>
+                            {label}
+                        </button>
+                    );
+                })}
+            </div>
+
             {/* Tabulka */}
-            <div className="rounded-lg border overflow-x-auto">
+            <div className={`rounded-lg border overflow-x-auto transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
                 <table className="w-full text-sm">
                     <thead>
                         <tr className="border-b bg-gray-50 text-xs text-muted-foreground">
