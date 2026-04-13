@@ -612,3 +612,95 @@ export async function loadLedgerRows(filters: {
         })),
     }));
 }
+
+// ── Roky dostupné v ledgeru ───────────────────────────────────────────────────
+
+export async function loadLedgerYears(): Promise<number[]> {
+    const db = getDb();
+    const rows = await db.execute(
+        sql`SELECT DISTINCT EXTRACT(YEAR FROM paid_at)::int AS year FROM app.payment_ledger ORDER BY year DESC`
+    );
+    return (rows as unknown as Array<{ year: number }>).map(r => r.year);
+}
+
+// ── Členové pro manuální párování ────────────────────────────────────────────
+
+export type MemberMatchCandidate = {
+    memberId:       number;
+    fullName:       string;
+    variableSymbol: number | null;
+    contribId:      number | null;
+    amountTotal:    number | null;
+    alreadyPaid:    number;
+    remaining:      number | null;
+};
+
+/**
+ * Vrátí seznam členů s jejich předpisem pro daný rok.
+ * Použití: match modal — výběr člena + předpisu při ručním párování.
+ */
+export async function loadMembersForMatch(year: number): Promise<MemberMatchCandidate[]> {
+    const db = getDb();
+
+    // Členové + jejich předpis pro rok (LEFT JOIN — člen může nemít předpis)
+    const rows = await db
+        .select({
+            memberId:       members.id,
+            fullName:       members.fullName,
+            variableSymbol: members.variableSymbol,
+            contribId:      memberContributions.id,
+            amountTotal:    memberContributions.amountTotal,
+        })
+        .from(members)
+        .leftJoin(
+            memberContributions,
+            and(
+                eq(memberContributions.memberId, members.id),
+                sql`EXISTS (
+                    SELECT 1 FROM app.contribution_periods cp
+                    WHERE cp.id = ${memberContributions.periodId}
+                    AND cp.year = ${year}
+                )`
+            )
+        )
+        .orderBy(members.fullName);
+
+    if (rows.length === 0) return [];
+
+    // Zjisti kolik je již potvrzeně alokováno na každý předpis
+    const contribIds = rows.map(r => r.contribId).filter((id): id is number => id !== null);
+    const allocMap = new Map<number, number>();
+
+    if (contribIds.length > 0) {
+        const allocRows = await db
+            .select({
+                contribId: paymentAllocations.contribId,
+                paid:      sql<number>`coalesce(sum(${paymentAllocations.amount}), 0)`,
+            })
+            .from(paymentAllocations)
+            .innerJoin(paymentLedger, eq(paymentAllocations.ledgerId, paymentLedger.id))
+            .where(and(
+                inArray(paymentAllocations.contribId, contribIds),
+                eq(paymentLedger.reconciliationStatus, "confirmed"),
+            ))
+            .groupBy(paymentAllocations.contribId);
+
+        for (const a of allocRows) {
+            allocMap.set(a.contribId, Number(a.paid));
+        }
+    }
+
+    return rows.map(r => {
+        const alreadyPaid = r.contribId ? (allocMap.get(r.contribId) ?? 0) : 0;
+        const remaining   = r.amountTotal !== null ? (r.amountTotal - alreadyPaid) : null;
+        return {
+            memberId:       r.memberId,
+            fullName:       r.fullName,
+            variableSymbol: r.variableSymbol,
+            contribId:      r.contribId,
+            amountTotal:    r.amountTotal,
+            alreadyPaid,
+            remaining,
+        };
+    });
+}
