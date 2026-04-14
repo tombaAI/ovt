@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods, payments } from "@/db/schema";
-import { eq, asc, desc, inArray } from "drizzle-orm";
+import { members, memberContributions, contributionPeriods, paymentAllocations, paymentLedger } from "@/db/schema";
+import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
 import { ContributionsClient } from "./contributions-client";
 
@@ -24,11 +24,13 @@ export type PeriodDetail = PeriodTab & {
 };
 
 export type Payment = {
-    id: number;
-    amount: number;
-    paidAt: string | null;
-    note: string | null;
-    createdBy: string;
+    allocationId: number;
+    ledgerId:     number;
+    sourceType:   string;   // 'fio_bank' | 'file_import' | 'cash'
+    amount:       number;
+    paidAt:       string | null;
+    note:         string | null;
+    confirmedBy:  string | null;
 };
 
 export type ContribRow = {
@@ -119,21 +121,27 @@ export default async function ContributionsPage(props: {
         .where(eq(memberContributions.periodId, period.id))
         .orderBy(asc(members.lastName), asc(members.firstName));
 
-    // Fetch all payments for these contributions in one query
+    // Fetch all confirmed allocations from payment_ledger for these contributions
     const contribIds = contribs.map(c => c.contribId);
     const paymentRows = contribIds.length > 0
         ? await db
             .select({
-                id:        payments.id,
-                contribId: payments.contribId,
-                amount:    payments.amount,
-                paidAt:    payments.paidAt,
-                note:      payments.note,
-                createdBy: payments.createdBy,
+                allocationId: paymentAllocations.id,
+                ledgerId:     paymentLedger.id,
+                sourceType:   paymentLedger.sourceType,
+                contribId:    paymentAllocations.contribId,
+                amount:       paymentAllocations.amount,
+                paidAt:       paymentLedger.paidAt,
+                note:         paymentAllocations.note,
+                confirmedBy:  paymentAllocations.confirmedBy,
             })
-            .from(payments)
-            .where(inArray(payments.contribId, contribIds))
-            .orderBy(asc(payments.paidAt))
+            .from(paymentAllocations)
+            .innerJoin(paymentLedger, eq(paymentAllocations.ledgerId, paymentLedger.id))
+            .where(and(
+                inArray(paymentAllocations.contribId, contribIds),
+                eq(paymentLedger.reconciliationStatus, "confirmed"),
+            ))
+            .orderBy(asc(paymentLedger.paidAt))
         : [];
 
     // Group payments by contribId
@@ -144,13 +152,21 @@ export default async function ContributionsPage(props: {
 
     const data: ContribRow[] = contribs.map(c => {
         const pays = paymentsByContrib[c.contribId] ?? [];
-        const paidTotal = pays.reduce((s, p) => s + p.amount, 0);
+        const paidTotal = pays.reduce((s, p) => s + Number(p.amount), 0);
         const lastPaidAt = pays.length > 0
             ? pays.reduce((latest, p) => (p.paidAt && (!latest || p.paidAt > latest) ? p.paidAt : latest), null as string | null)
             : null;
         return {
             ...c,
-            payments: pays,
+            payments: pays.map(p => ({
+                allocationId: p.allocationId,
+                ledgerId:     p.ledgerId,
+                sourceType:   p.sourceType,
+                amount:       Number(p.amount),
+                paidAt:       p.paidAt as unknown as string | null,
+                note:         p.note,
+                confirmedBy:  p.confirmedBy,
+            })),
             paidTotal,
             lastPaidAt,
             status: calcStatus(paidTotal, c.amountTotal),

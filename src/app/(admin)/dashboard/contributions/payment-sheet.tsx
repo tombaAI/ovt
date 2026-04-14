@@ -7,8 +7,10 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
-import { addPayment, deletePayment, setContributionTodo } from "@/lib/actions/contributions";
-import type { ContribRow } from "./page";
+import { Badge } from "@/components/ui/badge";
+import { setContributionTodo } from "@/lib/actions/contributions";
+import { createCashPaymentOnContrib, deleteContribAllocation } from "@/lib/actions/reconciliation";
+import type { ContribRow, Payment } from "./page";
 
 // ── Todo section ──────────────────────────────────────────────────────────────
 function TodoSection({ currentNote, onSave }: {
@@ -92,18 +94,25 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
     function handleAdd() {
         const amt = Number(amount);
         if (!amt || amt <= 0) { setAddError("Zadejte platnou částku"); return; }
+        if (!paidAt) { setAddError("Zadejte datum platby"); return; }
         setAddError(null);
         startAdd(async () => {
-            const r = await addPayment(safeRow.contribId, safeRow.memberId, amt, paidAt || null, note.trim() || null);
+            const r = await createCashPaymentOnContrib({
+                contribId: safeRow.contribId,
+                memberId:  safeRow.memberId,
+                amount:    amt,
+                paidAt,
+                note:      note.trim() || null,
+            });
             if ("error" in r) { setAddError(r.error); return; }
             setAmount(""); setPaidAt(""); setNote("");
             onPaymentUpdated();
         });
     }
 
-    function handleDelete(paymentId: number) {
+    function handleDelete(allocationId: number) {
         startDel(async () => {
-            const r = await deletePayment(paymentId, safeRow.memberId);
+            const r = await deleteContribAllocation(allocationId, safeRow.memberId);
             if ("success" in r) onPaymentUpdated();
         });
     }
@@ -132,20 +141,12 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
                     ) : (
                         <div className="space-y-2">
                             {row.payments.map(p => (
-                                <div key={p.id} className="flex items-center justify-between gap-3 text-sm">
-                                    <div className="flex items-baseline gap-2 min-w-0">
-                                        <span className="font-semibold text-gray-900 shrink-0">{fmt(p.amount)}</span>
-                                        {p.paidAt && <span className="text-gray-500 shrink-0">{fmtDate(p.paidAt)}</span>}
-                                        {p.note && <span className="text-gray-400 text-xs truncate">{p.note}</span>}
-                                    </div>
-                                    <button
-                                        onClick={() => handleDelete(p.id)}
-                                        disabled={delPending}
-                                        className="text-gray-300 hover:text-red-500 transition-colors shrink-0 text-base leading-none"
-                                        title="Smazat platbu">
-                                        ✕
-                                    </button>
-                                </div>
+                                <PaymentRow
+                                    key={p.allocationId}
+                                    payment={p}
+                                    onDelete={() => handleDelete(p.allocationId)}
+                                    delPending={delPending}
+                                />
                             ))}
                         </div>
                     )}
@@ -211,5 +212,45 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
                 />
             </SheetContent>
         </Sheet>
+    );
+}
+
+// ── PaymentRow — jeden řádek platby s odznakem zdroje ────────────────────────
+
+const SOURCE_BADGE: Record<string, string> = {
+    fio_bank:    "bg-violet-100 text-violet-700 border-violet-200",
+    file_import: "bg-sky-100 text-sky-700 border-sky-200",
+    cash:        "bg-orange-100 text-orange-700 border-orange-200",
+};
+const SOURCE_LABEL: Record<string, string> = {
+    fio_bank:    "Fio",
+    file_import: "Banka",
+    cash:        "Hotovost",
+};
+
+function PaymentRow({ payment, onDelete, delPending }: {
+    payment:    Payment;
+    onDelete:   () => void;
+    delPending: boolean;
+}) {
+    const p = payment;
+    return (
+        <div className="flex items-center justify-between gap-3 text-sm">
+            <div className="flex items-center gap-2 min-w-0 flex-wrap">
+                <span className="font-semibold text-gray-900 shrink-0">{fmt(p.amount)}</span>
+                {p.paidAt && <span className="text-gray-500 shrink-0">{fmtDate(p.paidAt)}</span>}
+                <Badge className={`text-xs font-normal border shrink-0 ${SOURCE_BADGE[p.sourceType] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
+                    {SOURCE_LABEL[p.sourceType] ?? p.sourceType}
+                </Badge>
+                {p.note && <span className="text-gray-400 text-xs truncate">{p.note}</span>}
+            </div>
+            <button
+                onClick={onDelete}
+                disabled={delPending}
+                className="text-gray-300 hover:text-red-500 transition-colors shrink-0 text-base leading-none"
+                title="Smazat platbu">
+                ✕
+            </button>
+        </div>
     );
 }

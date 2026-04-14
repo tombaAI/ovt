@@ -1,6 +1,6 @@
 "use server";
 
-import { eq, sql, and, inArray } from "drizzle-orm";
+import { eq, sql, and, inArray, ne } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 
 import { auth } from "@/auth";
@@ -8,6 +8,7 @@ import { getDb } from "@/lib/db";
 import {
     paymentLedger, paymentAllocations, bankImportTransactions,
     memberContributions, contributionPeriods, members, importProfiles,
+    auditLog,
 } from "@/db/schema";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
@@ -748,6 +749,128 @@ export async function loadLedgerYears(): Promise<number[]> {
         sql`SELECT DISTINCT EXTRACT(YEAR FROM paid_at)::int AS year FROM app.payment_ledger ORDER BY year DESC`
     );
     return (rows as unknown as Array<{ year: number }>).map(r => r.year);
+}
+
+// ── Smazání alokace z pohledu příspěvků ──────────────────────────────────────
+
+/**
+ * Smaže alokaci a zachová konzistenci ledgeru:
+ * - cash platba bez dalších alokací → smaže i ledger záznam
+ * - bankovní platba → vrátí ledger na 'unmatched'
+ */
+export async function deleteContribAllocation(
+    allocationId: number,
+    memberId:     number,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    const [alloc] = await db
+        .select({
+            allocationId: paymentAllocations.id,
+            ledgerId:     paymentLedger.id,
+            sourceType:   paymentLedger.sourceType,
+            amount:       paymentAllocations.amount,
+        })
+        .from(paymentAllocations)
+        .innerJoin(paymentLedger, eq(paymentAllocations.ledgerId, paymentLedger.id))
+        .where(eq(paymentAllocations.id, allocationId));
+
+    if (!alloc) return { error: "Alokace nenalezena" };
+
+    await db.transaction(async (tx) => {
+        await tx.delete(paymentAllocations).where(eq(paymentAllocations.id, allocationId));
+
+        // Kolik alokací zbývá na tomto ledger záznamu?
+        const [{ remaining }] = await tx
+            .select({ remaining: sql<number>`count(*)` })
+            .from(paymentAllocations)
+            .where(and(
+                eq(paymentAllocations.ledgerId, alloc.ledgerId),
+                ne(paymentAllocations.id, allocationId),
+            ));
+
+        if (alloc.sourceType === "cash" && Number(remaining) === 0) {
+            // Hotovostní platba bez dalších alokací → smazat celý ledger záznam
+            await tx.delete(paymentLedger).where(eq(paymentLedger.id, alloc.ledgerId));
+        } else {
+            // Bankovní platba → vrátit na unmatched
+            await tx.update(paymentLedger)
+                .set({ reconciliationStatus: "unmatched", updatedAt: new Date() })
+                .where(eq(paymentLedger.id, alloc.ledgerId));
+        }
+    });
+
+    await db.insert(auditLog).values({
+        entityType: "member",
+        entityId:   memberId,
+        action:     "payment_delete",
+        changes:    { allocationId: { old: allocationId, new: null } },
+        changedBy,
+    });
+
+    revalidatePath("/dashboard/contributions");
+    revalidatePath("/dashboard/payments");
+    return { success: true };
+}
+
+// ── Historie importů (pro Etapu C) ───────────────────────────────────────────
+
+export type ImportRunSummary = {
+    runId:       number;
+    profileName: string;
+    filename:    string;
+    importedAt:  string;
+    total:       number;
+    confirmed:   number;
+    suggested:   number;
+    unmatched:   number;
+    ignored:     number;
+};
+
+export async function getPaymentHistoryRuns(): Promise<ImportRunSummary[]> {
+    const db = getDb();
+
+    const rows = await db.execute<{
+        run_id:      number;
+        profile_name: string;
+        filename:    string;
+        imported_at: Date;
+        total:       string;
+        confirmed:   string;
+        suggested:   string;
+        unmatched:   string;
+        ignored:     string;
+    }>(sql`
+        SELECT
+            ih.id                                                                        AS run_id,
+            COALESCE(ih.profile_name_snapshot, 'Neznámý profil')                        AS profile_name,
+            ih.filename,
+            ih.imported_at,
+            COUNT(pl.id)::int                                                            AS total,
+            COUNT(CASE WHEN pl.reconciliation_status = 'confirmed' THEN 1 END)::int     AS confirmed,
+            COUNT(CASE WHEN pl.reconciliation_status = 'suggested' THEN 1 END)::int     AS suggested,
+            COUNT(CASE WHEN pl.reconciliation_status = 'unmatched' THEN 1 END)::int     AS unmatched,
+            COUNT(CASE WHEN pl.reconciliation_status = 'ignored'   THEN 1 END)::int     AS ignored
+        FROM app.import_history ih
+        LEFT JOIN app.payment_ledger pl ON pl.import_run_id = ih.id
+        WHERE ih.import_type = 'bank'
+        GROUP BY ih.id, ih.profile_name_snapshot, ih.filename, ih.imported_at
+        ORDER BY ih.imported_at DESC
+    `);
+
+    return (rows as unknown as Array<typeof rows[number]>).map(r => ({
+        runId:       r.run_id,
+        profileName: r.profile_name,
+        filename:    r.filename,
+        importedAt:  (r.imported_at as unknown as Date).toISOString(),
+        total:       Number(r.total),
+        confirmed:   Number(r.confirmed),
+        suggested:   Number(r.suggested),
+        unmatched:   Number(r.unmatched),
+        ignored:     Number(r.ignored),
+    }));
 }
 
 // ── Členové pro manuální párování ────────────────────────────────────────────
