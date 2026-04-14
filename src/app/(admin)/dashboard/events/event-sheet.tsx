@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createEvent, updateEvent, deleteEvent } from "@/lib/actions/events";
+import { createEvent, updateEvent, deleteEvent, syncEventToGcal, removeEventFromGcal } from "@/lib/actions/events";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type { EventRow, EventType, EventStatus } from "@/lib/actions/events";
 import type { MemberOption } from "@/app/(admin)/dashboard/brigades/page";
@@ -150,9 +150,18 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
         startTransition(async () => {
             try {
                 if (isNew) {
-                    await createEvent(data);
+                    const created = await createEvent(data);
+                    // Auto-sync do GCal pokud je gcalSync=true a máme termín
+                    if (gcalSync && dateFrom) {
+                        try { await syncEventToGcal(created.id); } catch { /* sync selhání nevadí */ }
+                    }
                 } else {
                     await updateEvent(event.id, data);
+                    if (gcalSync && dateFrom) {
+                        try { await syncEventToGcal(event.id); } catch { /* sync selhání nevadí */ }
+                    } else if (!gcalSync && event.gcalEventId) {
+                        try { await removeEventFromGcal(event.id); } catch { /* sync selhání nevadí */ }
+                    }
                 }
                 onSaved();
                 onOpenChange(false);
@@ -166,10 +175,62 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
         if (!event) return;
         if (!confirm(`Smazat akci „${event.name}"? Tato akce je nevratná.`)) return;
         startTransition(async () => {
+            if (event.gcalEventId) {
+                try { await removeEventFromGcal(event.id); } catch { /* ignorujeme */ }
+            }
             await deleteEvent(event.id);
             onSaved();
             onOpenChange(false);
         });
+    }
+
+    // ── GCal sync ─────────────────────────────────────────────────────────────
+    const [gcalSyncing, setGcalSyncing]   = useState(false);
+    const [gcalSyncMsg, setGcalSyncMsg]   = useState<string | null>(null);
+    const [gcalSyncedAt, setGcalSyncedAt] = useState<Date | null>(event?.gcalSyncedAt ?? null);
+    const [gcalEventId, setGcalEventId]   = useState<string | null>(event?.gcalEventId ?? null);
+
+    // Aktualizuj lokální GCal stav když se event změní (po otevření sheetu)
+    useEffect(() => {
+        setGcalSyncedAt(event?.gcalSyncedAt ?? null);
+        setGcalEventId(event?.gcalEventId ?? null);
+        setGcalSyncMsg(null);
+    }, [event]);
+
+    async function handleManualSync() {
+        if (!event) return;
+        if (!dateFrom) { setGcalSyncMsg("Nejprve nastav termín akce"); return; }
+        setGcalSyncing(true);
+        setGcalSyncMsg(null);
+        try {
+            const result = await syncEventToGcal(event.id);
+            setGcalEventId(result.gcalEventId);
+            setGcalSyncedAt(new Date());
+            setGcalSyncMsg("Synchronizováno");
+            onSaved();
+        } catch (e) {
+            setGcalSyncMsg(e instanceof Error ? e.message : "Chyba synchronizace");
+        } finally {
+            setGcalSyncing(false);
+        }
+    }
+
+    async function handleRemoveFromGcal() {
+        if (!event || !gcalEventId) return;
+        if (!confirm("Odebrat tuto akci z Google Kalendáře?")) return;
+        setGcalSyncing(true);
+        try {
+            await removeEventFromGcal(event.id);
+            setGcalEventId(null);
+            setGcalSyncedAt(null);
+            setGcalSync(false);
+            setGcalSyncMsg("Odebráno z Google Kalendáře");
+            onSaved();
+        } catch (e) {
+            setGcalSyncMsg(e instanceof Error ? e.message : "Chyba při odebírání");
+        } finally {
+            setGcalSyncing(false);
+        }
     }
 
     // ── Render ────────────────────────────────────────────────────────────────
@@ -337,26 +398,64 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
                         />
                     </div>
 
-                    <div className="flex items-center gap-3 rounded-lg border bg-gray-50 px-4 py-3">
-                        <input
-                            id="event-gcal"
-                            type="checkbox"
-                            checked={gcalSync}
-                            onChange={e => setGcalSync(e.target.checked)}
-                            className="h-4 w-4 rounded border-gray-300 accent-[#327600]"
-                        />
-                        <div>
-                            <Label htmlFor="event-gcal" className="cursor-pointer">Synchronizovat s Google Kalendářem</Label>
-                            {event?.gcalEventId && (
-                                <p className="text-xs text-gray-400 mt-0.5">
-                                    GCal ID: {event.gcalEventId}
-                                    {event.gcalSyncedAt && ` · sync ${new Date(event.gcalSyncedAt).toLocaleDateString("cs")}`}
-                                </p>
-                            )}
-                            {!event?.gcalEventId && gcalSync && (
-                                <p className="text-xs text-gray-400 mt-0.5">Sync proběhne při příštím spuštění synchronizace</p>
-                            )}
+                    {/* ── Google Kalendář ── */}
+                    <div className="rounded-lg border bg-gray-50 px-4 py-3 space-y-3">
+                        <div className="flex items-start gap-3">
+                            <input
+                                id="event-gcal"
+                                type="checkbox"
+                                checked={gcalSync}
+                                onChange={e => setGcalSync(e.target.checked)}
+                                className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[#327600]"
+                            />
+                            <div className="flex-1 min-w-0">
+                                <Label htmlFor="event-gcal" className="cursor-pointer">Synchronizovat s Google Kalendářem</Label>
+                                {gcalEventId ? (
+                                    <p className="text-xs text-green-700 mt-0.5">
+                                        ✓ V kalendáři
+                                        {gcalSyncedAt && ` · ${gcalSyncedAt.toLocaleDateString("cs")}`}
+                                    </p>
+                                ) : (
+                                    <p className="text-xs text-gray-400 mt-0.5">
+                                        {gcalSync
+                                            ? dateFrom ? "Synchronizuje se při uložení" : "Nastav nejprve termín"
+                                            : "Není v kalendáři"}
+                                    </p>
+                                )}
+                            </div>
                         </div>
+
+                        {/* Tlačítka — jen pro existující akci */}
+                        {!isNew && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    disabled={gcalSyncing || isPending || !dateFrom}
+                                    onClick={handleManualSync}
+                                    title={!dateFrom ? "Nejprve nastav termín akce" : undefined}
+                                    className="text-xs h-7">
+                                    {gcalSyncing ? "Synchronizuji…" : gcalEventId ? "Znovu synchronizovat" : "Synchronizovat nyní"}
+                                </Button>
+                                {gcalEventId && (
+                                    <Button
+                                        type="button"
+                                        variant="ghost"
+                                        size="sm"
+                                        disabled={gcalSyncing || isPending}
+                                        onClick={handleRemoveFromGcal}
+                                        className="text-xs h-7 text-red-500 hover:text-red-700 hover:bg-red-50">
+                                        Odebrat z kalendáře
+                                    </Button>
+                                )}
+                                {gcalSyncMsg && (
+                                    <span className={`text-xs ${gcalSyncMsg === "Synchronizováno" || gcalSyncMsg.startsWith("Odebráno") ? "text-green-600" : "text-red-500"}`}>
+                                        {gcalSyncMsg}
+                                    </span>
+                                )}
+                            </div>
+                        )}
                     </div>
 
                     {/* ── Poznámka ── */}

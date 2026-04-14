@@ -193,3 +193,73 @@ export async function copyEventsFromYear(fromYear: number, toYear: number): Prom
     revalidatePath("/dashboard/events");
     return { count: toInsert.length };
 }
+
+// ── Google Calendar sync ──────────────────────────────────────────────────────
+
+/**
+ * Pushne akci do Google Kalendáře (vytvoří nebo aktualizuje).
+ * Akce musí mít nastaven dateFrom, jinak vrátí chybu.
+ * Uloží gcal_event_id a gcal_synced_at do DB.
+ */
+export async function syncEventToGcal(id: number): Promise<{ gcalEventId: string }> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    const db = getDb();
+    const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    if (!event) throw new Error("Akce nenalezena");
+    if (!event.dateFrom) throw new Error("Akce nemá nastaven termín — nelze synchronizovat do Google Kalendáře");
+
+    const { upsertGcalEvent } = await import("@/lib/gcal");
+
+    const gcalId = await upsertGcalEvent(event.gcalEventId, {
+        summary:     event.name,
+        description: event.description,
+        location:    event.location,
+        dateFrom:    event.dateFrom as unknown as string,
+        dateTo:      event.dateTo   as unknown as string | null,
+        externalUrl: event.externalUrl,
+    });
+
+    await db
+        .update(events)
+        .set({ gcalEventId: gcalId, gcalSync: true, gcalSyncedAt: new Date(), updatedAt: new Date() })
+        .where(eq(events.id, id));
+
+    revalidatePath("/dashboard/events");
+    return { gcalEventId: gcalId };
+}
+
+/**
+ * Odstraní akci z Google Kalendáře a vymaže gcal_event_id z DB.
+ */
+export async function removeEventFromGcal(id: number): Promise<void> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    const db = getDb();
+    const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    if (!event?.gcalEventId) return; // není v GCal, nic neděláme
+
+    const { deleteGcalEvent } = await import("@/lib/gcal");
+    await deleteGcalEvent(event.gcalEventId);
+
+    await db
+        .update(events)
+        .set({ gcalEventId: null, gcalSync: false, gcalSyncedAt: null, updatedAt: new Date() })
+        .where(eq(events.id, id));
+
+    revalidatePath("/dashboard/events");
+}
+
+/**
+ * Načte seznam eventů z Google Kalendáře pro daný rok.
+ * Slouží pro manuální preview/import — nic neukládá do DB.
+ */
+export async function fetchGcalEvents(year: number) {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    const { listGcalEvents } = await import("@/lib/gcal");
+    return listGcalEvents(year, year);
+}
