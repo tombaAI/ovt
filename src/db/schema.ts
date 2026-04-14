@@ -310,6 +310,42 @@ export const paymentAllocations = appSchema.table(
     ]
 );
 
+// ── Brigade tables ───────────────────────────────────────────────────────────
+
+export const brigades = appSchema.table(
+    "brigades",
+    {
+        id:        serial("id").primaryKey(),
+        date:      date("date").notNull(),
+        year:      smallint("year").notNull(),
+        name:      text("name"),
+        leaderId:  integer("leader_id").references(() => members.id, { onDelete: "set null" }),
+        note:      text("note"),
+        createdBy: text("created_by").notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("brigades_year_idx").on(t.year),
+        index("brigades_date_idx").on(t.date),
+    ]
+);
+
+export const brigadeMembers = appSchema.table(
+    "brigade_members",
+    {
+        id:        serial("id").primaryKey(),
+        brigadeId: integer("brigade_id").notNull().references(() => brigades.id, { onDelete: "cascade" }),
+        memberId:  integer("member_id").notNull().references(() => members.id, { onDelete: "cascade" }),
+        note:      text("note"),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("brigade_members_brigade_idx").on(t.brigadeId),
+        index("brigade_members_member_idx").on(t.memberId),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(

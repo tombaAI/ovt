@@ -1,6 +1,7 @@
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, importMembersTjBohemians } from "@/db/schema";
 import { eq, asc, desc, and, lte, isNull, or, sql } from "drizzle-orm";
+import { getBrigadeMemberIdsByYear } from "@/lib/actions/brigades";
 import { MembersClient } from "./members-client";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
 import type { SyncUpdatableField } from "@/lib/sync-config";
@@ -42,6 +43,7 @@ export type MemberWithFlags = {
     hasContrib: boolean;
     memberYears?: number[]; // only in all-years view
     hasTjDiffs: boolean;
+    hasBrigade: boolean;    // má splněnou brigádu v selectedYear
 };
 
 function yearStart(year: number) { return `${year}-01-01`; }
@@ -82,6 +84,10 @@ export default async function MembersPage(props: {
     }
 
     const actualYear = isAllYears ? 0 : (period?.year ?? selectedYear);
+
+    // Brigády: členové, kteří splnili brigádu v roce selectedYear (ovlivní příspěvky selectedYear+1)
+    // V pohledu daného roku zobrazujeme, zda člen splnil brigádu pro TENTO rok (tj. má brigádu z předchozího roku)
+    const brigadeMembers = isAllYears ? new Set<number>() : await getBrigadeMemberIdsByYear(actualYear > 0 ? actualYear - 1 : actualYear);
 
     // Načíst TJ import tabulku pro výpočet hasTjDiffs
     const tjAll = await db.select().from(importMembersTjBohemians);
@@ -160,6 +166,7 @@ export default async function MembersPage(props: {
             hasContrib:         false,
             memberYears:        computeMemberYears(r.memberFrom as unknown as string, r.memberTo as unknown as string | null),
             hasTjDiffs:         computeHasTjDiffs({ ...r, birthDate: r.birthDate as unknown as string | null }),
+            hasBrigade:         false,
         }));
     } else {
         // Členové aktivní v daném roce: member_from <= rok-12-31 AND (member_to IS NULL OR member_to >= rok-01-01)
@@ -238,6 +245,7 @@ export default async function MembersPage(props: {
                 isPaid:             r.isPaid,
                 amountTotal:        r.amountTotal,
                 hasContrib:         r.contribId !== null,
+                hasBrigade:         brigadeMembers.has(r.id),
                 hasTjDiffs:         computeHasTjDiffs({
                     id: r.id, firstName: r.firstName, lastName: r.lastName, cskNumber: r.cskNumber,
                     email: r.email, phone: r.phone, address: r.address,

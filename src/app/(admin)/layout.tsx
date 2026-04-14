@@ -46,6 +46,10 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
                     Platby
                 </Link>
+                <Link href="/dashboard/brigades"
+                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
+                    Brigády
+                </Link>
                 <Link href="/dashboard/imports"
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
                     Import dat
