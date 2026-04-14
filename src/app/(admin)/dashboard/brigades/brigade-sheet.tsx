@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useRef, useTransition } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -16,7 +16,7 @@ import type { MemberOption } from "./page";
 interface Props {
     open: boolean;
     onOpenChange: (open: boolean) => void;
-    brigade: BrigadeRow | null;        // null = nová brigáda
+    brigade: BrigadeRow | null;
     members: BrigadeMemberRow[];
     membersLoading: boolean;
     allMembers: MemberOption[];
@@ -24,8 +24,19 @@ interface Props {
     onSaved: () => void;
 }
 
-function defaultDate(year: number) {
-    return `${year}-06-01`;
+function memberLabel(m: MemberOption) {
+    return m.nickname
+        ? `${m.lastName} ${m.firstName} (${m.nickname})`
+        : `${m.lastName} ${m.firstName}`;
+}
+
+function matchesMember(m: MemberOption, q: string) {
+    const lq = q.toLowerCase();
+    return (
+        `${m.firstName} ${m.lastName}`.toLowerCase().includes(lq) ||
+        `${m.lastName} ${m.firstName}`.toLowerCase().includes(lq) ||
+        (m.nickname?.toLowerCase().includes(lq) ?? false)
+    );
 }
 
 export function BrigadeSheet({
@@ -33,67 +44,129 @@ export function BrigadeSheet({
 }: Props) {
     const isNew = brigade === null;
 
-    const [date, setDate]     = useState("");
-    const [name, setName]     = useState("");
-    const [leaderId, setLeaderId] = useState<number | "">("");
-    const [note, setNote]     = useState("");
+    const [date, setDate]       = useState("");
+    const [name, setName]       = useState("");
+    const [leaderId, setLeaderId] = useState<number | null>(null);
+    const [note, setNote]       = useState("");
 
-    const [memberSearch, setMemberSearch] = useState("");
-    const [localMembers, setLocalMembers] = useState<BrigadeMemberRow[]>([]);
+    // Leader autocomplete
+    const [leaderText, setLeaderText]           = useState("");
+    const [leaderFocused, setLeaderFocused]     = useState(false);
+
+    // Participants
+    const [memberSearch, setMemberSearch]       = useState("");
+    const [localMembers, setLocalMembers]       = useState<BrigadeMemberRow[]>([]);
+
+    // Track which member was auto-added as leader (so we can swap on leader change)
+    const autoAddedLeaderRef = useRef<number | null>(null);
 
     const [isPending, startTransition] = useTransition();
     const [error, setError] = useState<string | null>(null);
 
-    // Sync form when opening
+    // ── Init on open ──────────────────────────────────────────────────────────
     useEffect(() => {
         if (!open) return;
+        autoAddedLeaderRef.current = null;
         if (brigade) {
             setDate(brigade.date);
             setName(brigade.name ?? "");
-            setLeaderId(brigade.leaderId ?? "");
+            setLeaderId(brigade.leaderId);
+            const leader = brigade.leaderId ? allMembers.find(m => m.id === brigade.leaderId) : null;
+            setLeaderText(leader ? `${leader.lastName} ${leader.firstName}` : "");
             setNote(brigade.note ?? "");
         } else {
-            setDate(defaultDate(brigadeYear));
+            setDate(`${brigadeYear}-06-01`);
             setName("");
-            setLeaderId("");
+            setLeaderId(null);
+            setLeaderText("");
             setNote("");
         }
         setMemberSearch("");
         setError(null);
-    }, [open, brigade, brigadeYear]);
+    }, [open, brigade, brigadeYear, allMembers]);
 
-    // Sync members list when prop changes
+    // Sync participants from prop (when opening existing brigade)
     useEffect(() => {
         setLocalMembers(members);
     }, [members]);
 
-    // When leader changes on new brigade, pre-fill them in participants
+    // ── Auto-add/swap leader in participants (new brigade only) ───────────────
     useEffect(() => {
         if (!isNew || !open) return;
-        if (leaderId === "") {
-            setLocalMembers([]);
-            return;
-        }
-        const leader = allMembers.find(m => m.id === leaderId);
-        if (leader) {
-            setLocalMembers([{
-                brigadeId: 0,
-                memberId: leader.id,
-                firstName: leader.firstName,
-                lastName: leader.lastName,
-                note: null,
-            }]);
-        }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [leaderId, isNew]);
 
+        const prevAutoLeader = autoAddedLeaderRef.current;
+
+        setLocalMembers(prev => {
+            // Remove previously auto-added leader
+            let next = prevAutoLeader !== null
+                ? prev.filter(m => m.memberId !== prevAutoLeader)
+                : prev;
+            // Add new leader if not already present
+            if (leaderId !== null && !next.some(m => m.memberId === leaderId)) {
+                const leader = allMembers.find(m => m.id === leaderId);
+                if (leader) {
+                    next = [...next, {
+                        brigadeId: 0,
+                        memberId: leader.id,
+                        firstName: leader.firstName,
+                        lastName: leader.lastName,
+                        note: null,
+                    }];
+                }
+            }
+            return next;
+        });
+
+        autoAddedLeaderRef.current = leaderId;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [leaderId]);
+
+    // ── Leader autocomplete ───────────────────────────────────────────────────
+    const leaderSuggestions = leaderFocused && leaderText.trim() !== ""
+        ? allMembers.filter(m => matchesMember(m, leaderText)).slice(0, 6)
+        : [];
+
+    function selectLeader(m: MemberOption) {
+        setLeaderId(m.id);
+        setLeaderText(`${m.lastName} ${m.firstName}`);
+        setLeaderFocused(false);
+    }
+
+    function onLeaderKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === "Enter" && leaderSuggestions.length > 0) {
+            e.preventDefault();
+            selectLeader(leaderSuggestions[0]);
+        }
+        if (e.key === "Escape") {
+            // Reset to current leader name
+            const leader = leaderId ? allMembers.find(m => m.id === leaderId) : null;
+            setLeaderText(leader ? `${leader.lastName} ${leader.firstName}` : "");
+            setLeaderFocused(false);
+        }
+    }
+
+    function onLeaderBlur() {
+        // Slight delay so click on suggestion fires first
+        setTimeout(() => {
+            const leader = leaderId ? allMembers.find(m => m.id === leaderId) : null;
+            setLeaderText(leader ? `${leader.lastName} ${leader.firstName}` : "");
+            setLeaderFocused(false);
+        }, 150);
+    }
+
+    function clearLeader() {
+        setLeaderId(null);
+        setLeaderText("");
+    }
+
+    // ── Member search ─────────────────────────────────────────────────────────
     const memberIds = new Set(localMembers.map(m => m.memberId));
 
-    const filteredSuggestions = allMembers.filter(m =>
-        !memberIds.has(m.id) &&
-        (memberSearch.trim() === "" ||
-            `${m.firstName} ${m.lastName}`.toLowerCase().includes(memberSearch.toLowerCase()))
-    ).slice(0, 8);
+    const memberSuggestions = memberSearch.trim() !== ""
+        ? allMembers
+            .filter(m => !memberIds.has(m.id) && matchesMember(m, memberSearch))
+            .slice(0, 8)
+        : [];
 
     function addLocalMember(m: MemberOption) {
         setLocalMembers(prev => [...prev, {
@@ -106,7 +179,7 @@ export function BrigadeSheet({
         setMemberSearch("");
     }
 
-    async function removeLocalMember(memberId: number) {
+    function removeLocalMember(memberId: number) {
         if (brigade) {
             startTransition(async () => {
                 await removeBrigadeMember(brigade.id, memberId);
@@ -118,7 +191,7 @@ export function BrigadeSheet({
         }
     }
 
-    async function handleAddMemberToExisting(m: MemberOption) {
+    function handleAddMemberToExisting(m: MemberOption) {
         if (!brigade) { addLocalMember(m); return; }
         startTransition(async () => {
             await addBrigadeMember(brigade.id, m.id);
@@ -134,6 +207,14 @@ export function BrigadeSheet({
         });
     }
 
+    function onMemberSearchKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+        if (e.key === "Enter" && memberSuggestions.length > 0) {
+            e.preventDefault();
+            handleAddMemberToExisting(memberSuggestions[0]);
+        }
+    }
+
+    // ── Save / Delete ─────────────────────────────────────────────────────────
     function handleSave() {
         setError(null);
         if (!date) { setError("Datum je povinné"); return; }
@@ -145,7 +226,7 @@ export function BrigadeSheet({
                         date,
                         year: brigadeYear,
                         name: name.trim() || null,
-                        leaderId: leaderId === "" ? null : Number(leaderId),
+                        leaderId,
                         note: note.trim() || null,
                         initialMemberIds: localMembers.map(m => m.memberId),
                     });
@@ -154,7 +235,7 @@ export function BrigadeSheet({
                         date,
                         year: brigadeYear,
                         name: name.trim() || null,
-                        leaderId: leaderId === "" ? null : Number(leaderId),
+                        leaderId,
                         note: note.trim() || null,
                     });
                 }
@@ -176,15 +257,20 @@ export function BrigadeSheet({
         });
     }
 
+    // ── Render ────────────────────────────────────────────────────────────────
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
             <SheetContent className="sm:max-w-xl px-5 pb-8 overflow-y-auto">
                 <SheetHeader className="px-0 pt-5 pb-4">
-                    <SheetTitle>{isNew ? "Nová brigáda" : `Brigáda ${brigade?.date ? brigade.date.split("-").reverse().join(". ") : ""}`}</SheetTitle>
+                    <SheetTitle>
+                        {isNew
+                            ? "Nová brigáda"
+                            : `Brigáda ${brigade.date.split("-").reverse().join(". ")}`}
+                    </SheetTitle>
                 </SheetHeader>
 
                 <div className="space-y-5">
-                    {/* ── Základní data ── */}
+                    {/* ── Datum + název ── */}
                     <div className="grid grid-cols-2 gap-4">
                         <div className="space-y-1.5">
                             <Label htmlFor="brigade-date">Datum *</Label>
@@ -206,20 +292,52 @@ export function BrigadeSheet({
                         </div>
                     </div>
 
+                    {/* ── Vedoucí autocomplete ── */}
                     <div className="space-y-1.5">
                         <Label htmlFor="brigade-leader">Vedoucí</Label>
-                        <select
-                            id="brigade-leader"
-                            value={leaderId}
-                            onChange={e => setLeaderId(e.target.value === "" ? "" : Number(e.target.value))}
-                            className="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm focus:outline-none focus:ring-1 focus:ring-ring">
-                            <option value="">— bez vedoucího —</option>
-                            {allMembers.map(m => (
-                                <option key={m.id} value={m.id}>{m.lastName} {m.firstName}</option>
-                            ))}
-                        </select>
+                        <div className="relative">
+                            <Input
+                                id="brigade-leader"
+                                placeholder="Začni psát příjmení nebo přezdívku…"
+                                value={leaderText}
+                                autoComplete="off"
+                                onChange={e => {
+                                    setLeaderText(e.target.value);
+                                    if (e.target.value.trim() === "") setLeaderId(null);
+                                }}
+                                onFocus={() => setLeaderFocused(true)}
+                                onBlur={onLeaderBlur}
+                                onKeyDown={onLeaderKeyDown}
+                            />
+                            {leaderId !== null && (
+                                <button
+                                    type="button"
+                                    onClick={clearLeader}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-lg leading-none px-1">
+                                    ×
+                                </button>
+                            )}
+                            {leaderSuggestions.length > 0 && (
+                                <div className="absolute z-10 top-full mt-1 w-full bg-white rounded-lg border shadow-md divide-y max-h-48 overflow-y-auto">
+                                    {leaderSuggestions.map((m, i) => (
+                                        <button
+                                            key={m.id}
+                                            type="button"
+                                            className={[
+                                                "w-full text-left px-3 py-2 text-sm transition-colors",
+                                                i === 0 ? "bg-gray-50 font-medium" : "hover:bg-gray-50",
+                                            ].join(" ")}
+                                            onMouseDown={e => { e.preventDefault(); selectLeader(m); }}>
+                                            {memberLabel(m)}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                        </div>
+                        <p className="text-xs text-gray-400">Enter potvrdí první nabídku</p>
                     </div>
 
+                    {/* ── Poznámka ── */}
                     <div className="space-y-1.5">
                         <Label htmlFor="brigade-note">Poznámka</Label>
                         <Textarea
@@ -233,9 +351,7 @@ export function BrigadeSheet({
 
                     {/* ── Účastníci ── */}
                     <div className="space-y-2">
-                        <div className="flex items-center justify-between">
-                            <Label>Účastníci ({localMembers.length})</Label>
-                        </div>
+                        <Label>Účastníci ({localMembers.length})</Label>
 
                         {membersLoading ? (
                             <p className="text-sm text-gray-400">Načítám…</p>
@@ -244,15 +360,18 @@ export function BrigadeSheet({
                                 {localMembers.length === 0 && (
                                     <p className="text-sm text-gray-400 px-3 py-2 italic">Žádní účastníci</p>
                                 )}
-                                {localMembers.map(m => (
+                                {[...localMembers]
+                                    .sort((a, b) => a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs"))
+                                    .map(m => (
                                     <div key={m.memberId} className="flex items-center justify-between px-3 py-2">
                                         <span className="text-sm text-gray-800">
                                             {m.lastName} {m.firstName}
-                                            {m.memberId === (leaderId === "" ? null : Number(leaderId)) && (
+                                            {m.memberId === leaderId && (
                                                 <span className="ml-1.5 text-xs text-amber-600 font-medium">(vedoucí)</span>
                                             )}
                                         </span>
                                         <button
+                                            type="button"
                                             onClick={() => removeLocalMember(m.memberId)}
                                             disabled={isPending}
                                             className="text-gray-400 hover:text-red-500 transition-colors text-lg leading-none px-1">
@@ -263,38 +382,41 @@ export function BrigadeSheet({
                             </div>
                         )}
 
-                        {/* Přidání člena */}
+                        {/* Přidání účastníka */}
                         <div className="relative">
                             <Input
-                                placeholder="Přidat účastníka — začni psát jméno…"
+                                placeholder="Přidat účastníka — příjmení, jméno nebo přezdívka…"
                                 value={memberSearch}
                                 onChange={e => setMemberSearch(e.target.value)}
+                                onKeyDown={onMemberSearchKeyDown}
                                 className="text-sm"
                             />
-                            {memberSearch.trim() !== "" && filteredSuggestions.length > 0 && (
+                            {memberSearch.trim() !== "" && memberSuggestions.length > 0 && (
                                 <div className="absolute z-10 top-full mt-1 w-full bg-white rounded-lg border shadow-md divide-y max-h-48 overflow-y-auto">
-                                    {filteredSuggestions.map(m => (
+                                    {memberSuggestions.map((m, i) => (
                                         <button
                                             key={m.id}
-                                            className="w-full text-left px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                                            type="button"
+                                            className={[
+                                                "w-full text-left px-3 py-2 text-sm transition-colors",
+                                                i === 0 ? "bg-gray-50 font-medium" : "hover:bg-gray-50",
+                                            ].join(" ")}
                                             onMouseDown={e => { e.preventDefault(); handleAddMemberToExisting(m); }}>
-                                            {m.lastName} {m.firstName}
+                                            {memberLabel(m)}
                                         </button>
                                     ))}
                                 </div>
                             )}
-                            {memberSearch.trim() !== "" && filteredSuggestions.length === 0 && (
+                            {memberSearch.trim() !== "" && memberSuggestions.length === 0 && (
                                 <div className="absolute z-10 top-full mt-1 w-full bg-white rounded-lg border shadow-sm px-3 py-2 text-sm text-gray-400">
                                     Žádný odpovídající člen
                                 </div>
                             )}
                         </div>
+                        <p className="text-xs text-gray-400">Enter přidá první nabídku</p>
                     </div>
 
-                    {/* ── Chyba ── */}
-                    {error && (
-                        <p className="text-sm text-red-500">{error}</p>
-                    )}
+                    {error && <p className="text-sm text-red-500">{error}</p>}
 
                     {/* ── Akce ── */}
                     <div className="flex items-center gap-2 pt-2">

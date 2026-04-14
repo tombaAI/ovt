@@ -1,19 +1,15 @@
 import { getDb } from "@/lib/db";
-import { contributionPeriods, members } from "@/db/schema";
+import { members, brigades as brigadesSchema } from "@/db/schema";
 import { desc, asc } from "drizzle-orm";
 import { getBrigades } from "@/lib/actions/brigades";
 import { BrigadesClient } from "./brigades-client";
-
-export type PeriodTab = {
-    id: number;
-    year: number;
-};
 
 export type MemberOption = {
     id: number;
     firstName: string;
     lastName: string;
     fullName: string;
+    nickname: string | null;
 };
 
 export default async function BrigadesPage(props: {
@@ -22,36 +18,36 @@ export default async function BrigadesPage(props: {
     const { year: yearParam } = await props.searchParams;
     const db = getDb();
 
-    const allPeriods = await db
-        .select({ id: contributionPeriods.id, year: contributionPeriods.year })
-        .from(contributionPeriods)
-        .orderBy(desc(contributionPeriods.year));
+    // Roky pro záložky: roky, ve kterých jsou brigády + aktuální rok + předchozí rok
+    const currentYear = new Date().getFullYear();
+    const existingYears = await db
+        .selectDistinct({ year: brigadesSchema.year })
+        .from(brigadesSchema);
+    const yearsSet = new Set<number>(existingYears.map(r => Number(r.year)));
+    yearsSet.add(currentYear);
+    yearsSet.add(currentYear - 1);
+    const years = Array.from(yearsSet).sort((a, b) => b - a);
 
-    if (allPeriods.length === 0) {
-        return (
-            <div className="space-y-4">
-                <h1 className="text-2xl font-semibold text-gray-900">Brigády</h1>
-                <p className="text-gray-500">Žádná příspěvková období v databázi.</p>
-            </div>
-        );
-    }
+    const selectedYear = Number(yearParam) || currentYear;
 
-    const selectedYear = Number(yearParam) || allPeriods[0].year;
-    const brigadeYear  = selectedYear - 1; // brigády roku X ovlivní příspěvky roku X+1
-
-    const rows = await getBrigades(brigadeYear);
+    const brigades = await getBrigades(selectedYear);
 
     const allMembers = await db
-        .select({ id: members.id, firstName: members.firstName, lastName: members.lastName, fullName: members.fullName })
+        .select({
+            id:        members.id,
+            firstName: members.firstName,
+            lastName:  members.lastName,
+            fullName:  members.fullName,
+            nickname:  members.nickname,
+        })
         .from(members)
         .orderBy(asc(members.lastName), asc(members.firstName));
 
     return (
         <BrigadesClient
-            periods={allPeriods}
+            years={years}
             selectedYear={selectedYear}
-            brigadeYear={brigadeYear}
-            brigades={rows}
+            brigades={brigades}
             allMembers={allMembers}
         />
     );
