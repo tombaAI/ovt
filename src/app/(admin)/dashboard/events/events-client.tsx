@@ -6,8 +6,9 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EventSheet } from "./event-sheet";
-import { copyEventsFromYear, EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/actions/events";
+import { copyEventsFromYear } from "@/lib/actions/events";
 import type { EventRow } from "@/lib/actions/events";
+import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 
 interface MemberOption {
     id: number;

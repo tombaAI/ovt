@@ -336,12 +336,56 @@ export const boats = appSchema.table(
     ]
 );
 
+// ── Event tables ─────────────────────────────────────────────────────────────
+
+export const eventTypeEnum = ["cpv", "foreign", "recreational", "club", "race", "brigada", "other"] as const;
+export type EventType = typeof eventTypeEnum[number];
+
+export const eventStatusEnum = ["planned", "confirmed", "cancelled", "completed"] as const;
+export type EventStatus = typeof eventStatusEnum[number];
+
+export const eventSourceEnum = ["manual", "google_calendar", "kanoe_rss"] as const;
+export type EventSource = typeof eventSourceEnum[number];
+
+export const events = appSchema.table(
+    "events",
+    {
+        id:           serial("id").primaryKey(),
+        year:         smallint("year").notNull(),
+        name:         text("name").notNull(),
+        eventType:    text("event_type", { enum: eventTypeEnum }).notNull().default("other"),
+        dateFrom:     date("date_from"),
+        dateTo:       date("date_to"),
+        approxMonth:  smallint("approx_month"),
+        location:     text("location"),
+        leaderId:     integer("leader_id").references(() => members.id, { onDelete: "set null" }),
+        status:       text("status", { enum: eventStatusEnum }).notNull().default("planned"),
+        description:  text("description"),
+        externalUrl:  text("external_url"),
+        source:       text("source", { enum: eventSourceEnum }).notNull().default("manual"),
+        gcalEventId:  text("gcal_event_id"),
+        gcalSync:     boolean("gcal_sync").notNull().default(false),
+        gcalSyncedAt: timestamp("gcal_synced_at", { withTimezone: true }),
+        note:         text("note"),
+        createdBy:    text("created_by").notNull(),
+        createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt:    timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("events_year_idx").on(t.year),
+        index("events_date_from_idx").on(t.dateFrom),
+        index("events_status_idx").on(t.status),
+        index("events_leader_idx").on(t.leaderId),
+    ]
+);
+
 // ── Brigade tables ───────────────────────────────────────────────────────────
 
 export const brigades = appSchema.table(
     "brigades",
     {
         id:        serial("id").primaryKey(),
+        eventId:   integer("event_id").references(() => events.id, { onDelete: "set null" }),
         date:      date("date").notNull(),
         year:      smallint("year").notNull(),
         name:      text("name"),
@@ -354,6 +398,7 @@ export const brigades = appSchema.table(
     (t) => [
         index("brigades_year_idx").on(t.year),
         index("brigades_date_idx").on(t.date),
+        index("brigades_event_idx").on(t.eventId),
     ]
 );
 
