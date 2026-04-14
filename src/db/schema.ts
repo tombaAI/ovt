@@ -310,6 +310,32 @@ export const paymentAllocations = appSchema.table(
     ]
 );
 
+// ── Boat tables ──────────────────────────────────────────────────────────────
+
+export const boats = appSchema.table(
+    "boats",
+    {
+        id:          serial("id").primaryKey(),
+        ownerId:     integer("owner_id").references(() => members.id, { onDelete: "set null" }),
+        description: text("description"),    // "modrá Dagger M8.0"
+        color:       text("color"),
+        grid:        text("grid"),           // '1' | '2' | '3' | 'dlouhé' | null = neznámé
+        position:    smallint("position"),   // číslo pozice v mříži; null pro dlouhé/neznámé
+        isPresent:   boolean("is_present").notNull().default(true),
+        storedFrom:  date("stored_from"),
+        storedTo:    date("stored_to"),      // null = stále aktivní
+        note:        text("note"),
+        createdBy:   text("created_by").notNull(),
+        createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("boats_owner_idx").on(t.ownerId),
+        index("boats_grid_idx").on(t.grid),
+        index("boats_stored_to_idx").on(t.storedTo),
+    ]
+);
+
 // ── Brigade tables ───────────────────────────────────────────────────────────
 
 export const brigades = appSchema.table(
