@@ -143,11 +143,11 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                 (m.email?.toLowerCase().includes(q) ?? false)
             );
         }
-        if (sort === "lastName") {
-            list = [...list].sort((a, b) =>
-                a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs")
-            );
-        }
+        list = [...list].sort((a, b) =>
+            sort === "lastName"
+                ? a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs")
+                : a.firstName.localeCompare(b.firstName, "cs") || a.lastName.localeCompare(b.lastName, "cs")
+        );
         return list;
     }, [members, filter, sort, searchText]);
 
