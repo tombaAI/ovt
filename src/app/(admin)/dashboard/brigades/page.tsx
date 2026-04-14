@@ -1,6 +1,6 @@
 import { getDb } from "@/lib/db";
 import { members, brigades as brigadesSchema } from "@/db/schema";
-import { desc, asc } from "drizzle-orm";
+import { asc } from "drizzle-orm";
 import { getBrigades } from "@/lib/actions/brigades";
 import { BrigadesClient } from "./brigades-client";
 
