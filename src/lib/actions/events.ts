@@ -263,3 +263,58 @@ export async function fetchGcalEvents(year: number) {
     const { listGcalEvents } = await import("@/lib/gcal");
     return listGcalEvents(year, year);
 }
+
+export type GcalImportItem = {
+    gcalEventId: string;
+    summary: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+    location: string | null;
+};
+
+/**
+ * Importuje vybrané GCal eventy jako nové akce do DB.
+ * Eventy s existujícím gcal_event_id se přeskočí (idempotentní).
+ * Vrátí počet skutečně vložených záznamů.
+ */
+export async function importGcalEvents(
+    year: number,
+    items: GcalImportItem[],
+): Promise<{ imported: number; skipped: number }> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    if (items.length === 0) return { imported: 0, skipped: 0 };
+
+    const db = getDb();
+
+    // Načti stávající gcal_event_id pro daný rok — přeskočíme duplicity
+    const existing = await db
+        .select({ gcalEventId: events.gcalEventId })
+        .from(events)
+        .where(eq(events.year, year));
+    const existingIds = new Set(existing.map(r => r.gcalEventId).filter(Boolean));
+
+    const toInsert = items.filter(i => !existingIds.has(i.gcalEventId));
+    if (toInsert.length === 0) return { imported: 0, skipped: items.length };
+
+    await db.insert(events).values(
+        toInsert.map(i => ({
+            year,
+            name:        i.summary,
+            eventType:   "other" as const,
+            dateFrom:    i.dateFrom ?? undefined,
+            dateTo:      i.dateTo   ?? undefined,
+            location:    i.location ?? undefined,
+            status:      "planned"  as const,
+            source:      "google_calendar" as const,
+            gcalEventId: i.gcalEventId,
+            gcalSync:    true,
+            gcalSyncedAt: new Date(),
+            createdBy:   session.user!.email!,
+        }))
+    );
+
+    revalidatePath("/dashboard/events");
+    return { imported: toInsert.length, skipped: items.length - toInsert.length };
+}

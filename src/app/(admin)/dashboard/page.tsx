@@ -1,6 +1,6 @@
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods } from "@/db/schema";
+import { members, memberContributions, contributionPeriods, events } from "@/db/schema";
 import { eq, sql, isNull, lte, and, or } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import Link from "next/link";
@@ -24,6 +24,12 @@ export default async function DashboardPage() {
             or(isNull(members.memberTo), sql`${members.memberTo} >= ${CONTRIBUTION_YEAR + '-01-01'}`)
         )
     );
+
+    const currentYear = new Date().getFullYear();
+    const [eventCounts] = await db.select({
+        total:    sql<number>`count(*)`,
+        noDate:   sql<number>`count(*) filter (where ${events.dateFrom} is null)`,
+    }).from(events).where(eq(events.year, currentYear));
 
     const [period] = await db.select({ id: contributionPeriods.id })
         .from(contributionPeriods)
@@ -63,6 +69,22 @@ export default async function DashboardPage() {
                         <CardContent>
                             <p className="text-2xl font-semibold text-gray-900">{Number(contribCounts?.paid ?? 0)}</p>
                             <p className="text-xs text-gray-400 mt-0.5">zaplaceno z {Number(contribCounts?.total ?? 0)} členů</p>
+                        </CardContent>
+                    </Card>
+                </Link>
+
+                <Link href={`/dashboard/events?year=${currentYear}`}>
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <p className="text-sm font-medium text-gray-500">Kalendář {currentYear}</p>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-2xl font-semibold text-gray-900">{Number(eventCounts?.total ?? 0)}</p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                                {Number(eventCounts?.noDate ?? 0) > 0
+                                    ? `${Number(eventCounts.noDate)} bez termínu`
+                                    : "akcí v plánu"}
+                            </p>
                         </CardContent>
                     </Card>
                 </Link>

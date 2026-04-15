@@ -48,7 +48,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 </Link>
                 <Link href="/dashboard/events"
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Akce
+                    Kalendář
                 </Link>
                 <Link href="/dashboard/brigades"
                     className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
