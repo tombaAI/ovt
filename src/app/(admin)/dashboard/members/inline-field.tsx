@@ -13,6 +13,9 @@ interface Props {
     onSave: (value: string) => Promise<{ error?: string } | { success: true }>;
     tjValue?: string | null;
     onTjAccept?: () => Promise<{ error?: string } | { success: true }>;
+    gcalValue?: string | null;
+    onGcalAccept?: () => Promise<void>;
+    onGcalPush?: () => Promise<void>;
 }
 
 function fmtDate(iso: string) {
@@ -21,14 +24,17 @@ function fmtDate(iso: string) {
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
-export function InlineField({ label, value, type = "text", placeholder, fieldId, activeField, onActiveFieldChange, onSave, tjValue, onTjAccept }: Props) {
+export function InlineField({ label, value, type = "text", placeholder, fieldId, activeField, onActiveFieldChange, onSave, tjValue, onTjAccept, gcalValue, onGcalAccept, onGcalPush }: Props) {
     const editing = activeField === fieldId;
     const [draft, setDraft]       = useState(value ?? "");
     const [saving, setSaving]     = useState(false);
     const [error, setError]       = useState<string | null>(null);
-    const [accepting, setAccepting] = useState(false);
+    const [accepting, setAccepting]     = useState(false);
+    const [acceptingGcal, setAcceptingGcal] = useState(false);
+    const [pushingGcal, setPushingGcal]     = useState(false);
 
-    const hasTjDiff = onTjAccept !== undefined && tjValue !== undefined && tjValue !== value;
+    const hasTjDiff  = onTjAccept !== undefined && tjValue !== undefined && tjValue !== value;
+    const hasGcalDiff = onGcalAccept !== undefined && gcalValue !== undefined && gcalValue !== value;
 
     const displayValue = type === "date" && value ? fmtDate(value) : value;
 
@@ -68,7 +74,22 @@ export function InlineField({ label, value, type = "text", placeholder, fieldId,
         setAccepting(false);
     }
 
-    const tjDisplay = type === "date" && tjValue ? fmtDate(tjValue) : tjValue;
+    async function handleGcalAccept() {
+        if (!onGcalAccept) return;
+        setAcceptingGcal(true);
+        await onGcalAccept();
+        setAcceptingGcal(false);
+    }
+
+    async function handleGcalPush() {
+        if (!onGcalPush) return;
+        setPushingGcal(true);
+        await onGcalPush();
+        setPushingGcal(false);
+    }
+
+    const tjDisplay   = type === "date" && tjValue   ? fmtDate(tjValue)   : tjValue;
+    const gcalDisplay = type === "date" && gcalValue  ? fmtDate(gcalValue) : gcalValue;
 
     return (
         <div className="border-b last:border-0 py-3">
@@ -131,6 +152,31 @@ export function InlineField({ label, value, type = "text", placeholder, fieldId,
                                 >
                                     {accepting ? "…" : "← Přijmout"}
                                 </button>
+                            </div>
+                        )}
+                        {hasGcalDiff && (
+                            <div className="flex items-center gap-2 mt-1 pl-1 flex-wrap">
+                                <span className="text-xs text-violet-600">
+                                    GCal: <span className="font-medium">{gcalDisplay ?? "(prázdné)"}</span>
+                                </span>
+                                <button
+                                    onClick={handleGcalAccept}
+                                    disabled={acceptingGcal || activeField !== null}
+                                    className="text-xs text-violet-600 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-50 disabled:opacity-50 shrink-0"
+                                    title="Přijmout hodnotu z Google Kalendáře"
+                                >
+                                    {acceptingGcal ? "…" : "← z GCal"}
+                                </button>
+                                {onGcalPush && (
+                                    <button
+                                        onClick={handleGcalPush}
+                                        disabled={pushingGcal || activeField !== null}
+                                        className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50 disabled:opacity-50 shrink-0"
+                                        title="Zapsat aktuální hodnotu do Google Kalendáře"
+                                    >
+                                        {pushingGcal ? "…" : "→ do GCal"}
+                                    </button>
+                                )}
                             </div>
                         )}
                     </div>

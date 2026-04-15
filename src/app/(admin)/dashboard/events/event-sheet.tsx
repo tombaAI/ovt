@@ -13,7 +13,7 @@ import {
     syncEventToGcal, acceptGcalField,
 } from "@/lib/actions/events";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
-import type { EventRow, EventType, EventStatus, EventAuditEntry, GcalDiffResult } from "@/lib/actions/events";
+import type { EventRow, EventType, EventStatus, EventAuditEntry, GcalDiffResult, GcalDiffField } from "@/lib/actions/events";
 
 interface MemberOption {
     id: number;
@@ -71,122 +71,13 @@ const EVENT_FIELD_LABELS: Record<string, string> = {
     accept_from_gcal: "← přijato z GCal",
 };
 
-// ── GCal diff section ─────────────────────────────────────────────────────────
+// ── GCal diff helpers ─────────────────────────────────────────────────────────
 
-function GcalDiffSection({ eventId, gcalEventId, onAccepted }: {
-    eventId: number;
-    gcalEventId: string;
-    onAccepted: () => void;
-}) {
-    const [diff, setDiff]       = useState<GcalDiffResult | null>(null);
-    const [loading, setLoading] = useState(true);
-    const [error, setError]     = useState<string | null>(null);
-    const [accepting, setAccepting] = useState<string | null>(null);
-    const [syncing, setSyncing] = useState(false);
-
-    useEffect(() => {
-        setLoading(true);
-        setError(null);
-        getEventGcalDiff(eventId)
-            .then(setDiff)
-            .catch(e => setError(e instanceof Error ? e.message : "Chyba"))
-            .finally(() => setLoading(false));
-    }, [eventId, gcalEventId]);
-
-    async function handleAccept(field: string, gcalValue: string | null) {
-        setAccepting(field);
-        try {
-            await acceptGcalField(eventId, field, gcalValue);
-            onAccepted();
-            // Refresh diff
-            const updated = await getEventGcalDiff(eventId);
-            setDiff(updated);
-        } finally {
-            setAccepting(null);
-        }
-    }
-
-    async function handlePushToGcal() {
-        setSyncing(true);
-        try {
-            await syncEventToGcal(eventId);
-            onAccepted();
-            const updated = await getEventGcalDiff(eventId);
-            setDiff(updated);
-        } finally {
-            setSyncing(false);
-        }
-    }
-
-    if (loading) return <p className="text-xs text-gray-400 py-2">Načítám stav v Google Kalendáři…</p>;
-    if (error)   return <p className="text-xs text-red-500 py-2">{error}</p>;
-    if (!diff)   return null;
-    if (!diff.gcalExists) return (
-        <p className="text-xs text-gray-400 py-2">Akce není nalezena v Google Kalendáři (byla smazána nebo ID nesedí)</p>
-    );
-
-    const hasDiffs = diff.fields.some(f => !f.match);
-
-    return (
-        <div className="space-y-2">
-            {diff.gcalUpdatedAt && (
-                <p className="text-xs text-gray-400">
-                    GCal upraven: {new Date(diff.gcalUpdatedAt).toLocaleDateString("cs-CZ")}
-                </p>
-            )}
-            <div className="rounded-lg border overflow-hidden">
-                <table className="w-full text-xs">
-                    <thead>
-                        <tr className="bg-gray-50 border-b">
-                            <th className="text-left px-3 py-2 font-medium text-gray-500 w-24">Pole</th>
-                            <th className="text-left px-3 py-2 font-medium text-gray-500">Web</th>
-                            <th className="text-left px-3 py-2 font-medium text-gray-500">Google</th>
-                            <th className="w-8"></th>
-                        </tr>
-                    </thead>
-                    <tbody className="divide-y">
-                        {diff.fields.map(f => (
-                            <tr key={f.field} className={f.match ? "" : "bg-amber-50"}>
-                                <td className="px-3 py-2 text-gray-500 font-medium">{f.label}</td>
-                                <td className="px-3 py-2 text-gray-800">
-                                    {f.field === "dateFrom" || f.field === "dateTo"
-                                        ? fmtDate(f.appValue)
-                                        : f.appValue ?? <span className="text-gray-300">—</span>}
-                                </td>
-                                <td className="px-3 py-2 text-gray-800">
-                                    {f.match
-                                        ? <span className="text-green-600">✓</span>
-                                        : (f.field === "dateFrom" || f.field === "dateTo"
-                                            ? fmtDate(f.gcalValue)
-                                            : f.gcalValue ?? <span className="text-gray-300">—</span>)
-                                    }
-                                </td>
-                                <td className="px-2 py-1">
-                                    {!f.match && (
-                                        <button
-                                            title="Přijmout hodnotu z Google Kalendáře"
-                                            disabled={accepting === f.field}
-                                            onClick={() => handleAccept(f.field, f.gcalValue)}
-                                            className="text-sky-600 hover:text-sky-800 disabled:opacity-40 text-sm font-medium px-1 rounded hover:bg-sky-50 transition-colors">
-                                            {accepting === f.field ? "…" : "←"}
-                                        </button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
-            <div className="flex items-center gap-3 pt-1">
-                {hasDiffs && <p className="text-xs text-amber-600">⚠ Web a Google Kalendář se liší</p>}
-                {!hasDiffs && <p className="text-xs text-green-600">✓ Shodné s Google Kalendářem</p>}
-                <Button variant="outline" size="sm" className="ml-auto text-xs h-7"
-                    disabled={syncing} onClick={handlePushToGcal}>
-                    {syncing ? "Zapisuji…" : "→ Zapsat web → Google"}
-                </Button>
-            </div>
-        </div>
-    );
+/** Najde diff entry pro konkrétní pole. Vrátí null pokud diff není načtený nebo pole shodné. */
+function getFieldDiff(diff: GcalDiffResult | null, field: string): GcalDiffField | null {
+    if (!diff || !diff.gcalExists) return null;
+    const entry = diff.fields.find(f => f.field === field);
+    return entry && !entry.match ? entry : null;
 }
 
 // ── Audit log ─────────────────────────────────────────────────────────────────
@@ -278,16 +169,21 @@ function ImmediateSelect({ label, value, options, eventId, field, onSaved }: {
     );
 }
 
-function ImmediateDate({ label, value, eventId, field, onSaved, min }: {
+function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, onGcalAccept, onGcalPush }: {
     label: string;
     value: string | null;
     eventId: number;
     field: string;
     onSaved: () => void;
     min?: string;
+    gcalValue?: string | null;
+    onGcalAccept?: () => Promise<void>;
+    onGcalPush?: () => Promise<void>;
 }) {
-    const [saving, setSaving] = useState(false);
-    const [draft, setDraft]   = useState(value ?? "");
+    const [saving, setSaving]           = useState(false);
+    const [draft, setDraft]             = useState(value ?? "");
+    const [acceptingGcal, setAcceptingGcal] = useState(false);
+    const [pushingGcal, setPushingGcal]     = useState(false);
 
     useEffect(() => setDraft(value ?? ""), [value]);
 
@@ -302,20 +198,65 @@ function ImmediateDate({ label, value, eventId, field, onSaved, min }: {
         }
     }
 
+    const hasGcalDiff = gcalValue !== undefined && gcalValue !== value;
+
+    async function handleGcalAccept() {
+        if (!onGcalAccept) return;
+        setAcceptingGcal(true);
+        await onGcalAccept();
+        setAcceptingGcal(false);
+    }
+
+    async function handleGcalPush() {
+        if (!onGcalPush) return;
+        setPushingGcal(true);
+        await onGcalPush();
+        setPushingGcal(false);
+    }
+
     return (
         <div className="border-b last:border-0 py-3">
             <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
                 <p className="text-sm font-medium text-gray-500 sm:w-28 shrink-0 mb-0.5 sm:mb-0">{label}</p>
-                <input
-                    type="date"
-                    value={draft}
-                    min={min}
-                    onChange={e => setDraft(e.target.value)}
-                    onBlur={handleBlur}
-                    disabled={saving}
-                    className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
-                />
-                {saving && <span className="text-xs text-gray-400">ukládám…</span>}
+                <div className="flex-1">
+                    <input
+                        type="date"
+                        value={draft}
+                        min={min}
+                        onChange={e => setDraft(e.target.value)}
+                        onBlur={handleBlur}
+                        disabled={saving}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                    />
+                    {saving && <span className="ml-2 text-xs text-gray-400">ukládám…</span>}
+                    {hasGcalDiff && (
+                        <div className="flex items-center gap-2 mt-1 flex-wrap">
+                            <span className="text-xs text-violet-600">
+                                GCal: <span className="font-medium">{gcalValue ? fmtDate(gcalValue) : "(prázdné)"}</span>
+                            </span>
+                            {onGcalAccept && (
+                                <button
+                                    onClick={handleGcalAccept}
+                                    disabled={acceptingGcal}
+                                    className="text-xs text-violet-600 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-50 disabled:opacity-50"
+                                    title="Přijmout hodnotu z Google Kalendáře"
+                                >
+                                    {acceptingGcal ? "…" : "← z GCal"}
+                                </button>
+                            )}
+                            {onGcalPush && (
+                                <button
+                                    onClick={handleGcalPush}
+                                    disabled={pushingGcal}
+                                    className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50 disabled:opacity-50"
+                                    title="Zapsat aktuální hodnotu do Google Kalendáře"
+                                >
+                                    {pushingGcal ? "…" : "→ do GCal"}
+                                </button>
+                            )}
+                        </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -532,14 +473,26 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
     const isNew = event === null;
     const [activeField, setActiveField] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
+    const [diff, setDiff] = useState<GcalDiffResult | null>(null);
+    const [syncing, setSyncing] = useState(false);
 
-    useEffect(() => { if (!open) setActiveField(null); }, [open]);
+    // Načti diff kdykoliv se otevře sheet pro existující akci s gcalEventId
+    useEffect(() => {
+        if (!open || !event?.gcalEventId) { setDiff(null); return; }
+        getEventGcalDiff(event.id).then(setDiff).catch(() => setDiff(null));
+    }, [open, event?.id, event?.gcalEventId]);
+
+    useEffect(() => { if (!open) { setActiveField(null); setDiff(null); } }, [open]);
 
     function save(field: string) {
         return async (value: string): Promise<{ success: true } | { error: string }> => {
             try {
                 await updateEventField(event!.id, field, value || null);
                 onSaved();
+                // Obnovit diff po uložení
+                if (event?.gcalEventId) {
+                    getEventGcalDiff(event.id).then(setDiff).catch(() => {});
+                }
                 return { success: true };
             } catch (e) {
                 return { error: e instanceof Error ? e.message : "Chyba" };
@@ -558,6 +511,35 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
         } finally {
             setDeleting(false);
         }
+    }
+
+    /** Přijme hodnotu z GCal pro dané pole a obnoví diff */
+    function makeGcalAccept(field: string, gcalValue: string | null) {
+        return async () => {
+            await acceptGcalField(event!.id, field, gcalValue);
+            onSaved();
+            const updated = await getEventGcalDiff(event!.id);
+            setDiff(updated);
+        };
+    }
+
+    /** Zapíše celou akci do GCal a obnoví diff */
+    async function pushToGcal() {
+        if (!event) return;
+        setSyncing(true);
+        try {
+            await syncEventToGcal(event.id);
+            onSaved();
+            const updated = await getEventGcalDiff(event.id);
+            setDiff(updated);
+        } finally {
+            setSyncing(false);
+        }
+    }
+
+    // Zkratka: vrátí gcalValue pro dané pole (null = shodné nebo diff nenačtený)
+    function gcalFieldValue(field: string) {
+        return getFieldDiff(diff, field)?.gcalValue ?? undefined;
     }
 
     return (
@@ -581,11 +563,23 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
                             <InlineField label="Název" fieldId="name" type="text"
                                 value={event.name} placeholder="Název akce"
                                 activeField={activeField} onActiveFieldChange={setActiveField}
-                                onSave={save("name")} />
+                                onSave={save("name")}
+                                gcalValue={gcalFieldValue("name")}
+                                onGcalAccept={gcalFieldValue("name") !== undefined
+                                    ? makeGcalAccept("name", gcalFieldValue("name") ?? null)
+                                    : undefined}
+                                onGcalPush={gcalFieldValue("name") !== undefined ? pushToGcal : undefined}
+                            />
                             <InlineField label="Místo" fieldId="location" type="text"
                                 value={event.location} placeholder="Řeka, místo…"
                                 activeField={activeField} onActiveFieldChange={setActiveField}
-                                onSave={save("location")} />
+                                onSave={save("location")}
+                                gcalValue={gcalFieldValue("location")}
+                                onGcalAccept={gcalFieldValue("location") !== undefined
+                                    ? makeGcalAccept("location", gcalFieldValue("location") ?? null)
+                                    : undefined}
+                                onGcalPush={gcalFieldValue("location") !== undefined ? pushToGcal : undefined}
+                            />
                             <InlineField label="Odkaz" fieldId="externalUrl" type="text"
                                 value={event.externalUrl} placeholder="https://…"
                                 activeField={activeField} onActiveFieldChange={setActiveField}
@@ -599,9 +593,22 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
                             <ImmediateSelect label="Stav" value={event.status}
                                 options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={onSaved} />
                             <ImmediateDate label="Datum od" value={event.dateFrom}
-                                eventId={event.id} field="dateFrom" onSaved={onSaved} />
+                                eventId={event.id} field="dateFrom" onSaved={onSaved}
+                                gcalValue={gcalFieldValue("dateFrom")}
+                                onGcalAccept={gcalFieldValue("dateFrom") !== undefined
+                                    ? makeGcalAccept("dateFrom", gcalFieldValue("dateFrom") ?? null)
+                                    : undefined}
+                                onGcalPush={gcalFieldValue("dateFrom") !== undefined ? pushToGcal : undefined}
+                            />
                             <ImmediateDate label="Datum do" value={event.dateTo}
-                                eventId={event.id} field="dateTo" onSaved={onSaved} min={event.dateFrom ?? undefined} />
+                                eventId={event.id} field="dateTo" onSaved={onSaved}
+                                min={event.dateFrom ?? undefined}
+                                gcalValue={gcalFieldValue("dateTo")}
+                                onGcalAccept={gcalFieldValue("dateTo") !== undefined
+                                    ? makeGcalAccept("dateTo", gcalFieldValue("dateTo") ?? null)
+                                    : undefined}
+                                onGcalPush={gcalFieldValue("dateTo") !== undefined ? pushToGcal : undefined}
+                            />
                             {!event.dateFrom && (
                                 <ImmediateSelect label="Orien. měsíc"
                                     value={event.approxMonth ? String(event.approxMonth) : null}
@@ -626,17 +633,9 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
                         </div>
 
                         {/* ── Google Kalendář ── */}
-                        {event.gcalEventId && (
-                            <div className="space-y-2">
-                                <p className="text-sm font-medium text-gray-700">Google Kalendář</p>
-                                <GcalDiffSection
-                                    eventId={event.id}
-                                    gcalEventId={event.gcalEventId}
-                                    onAccepted={onSaved}
-                                />
-                            </div>
-                        )}
-                        {!event.gcalEventId && (
+                        {event.gcalEventId ? (
+                            <GcalStatusBar diff={diff} syncing={syncing} onPush={pushToGcal} />
+                        ) : (
                             <GcalSyncStarter event={event} onSaved={onSaved} />
                         )}
 
@@ -688,6 +687,32 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder 
             <Textarea value={draft} onChange={e => setDraft(e.target.value)}
                 onBlur={handleBlur} placeholder={placeholder} rows={2}
                 className="text-sm resize-none" />
+        </div>
+    );
+}
+
+// ── GCal status bar (event s gcalEventId) ────────────────────────────────────
+
+function GcalStatusBar({ diff, syncing, onPush }: {
+    diff: GcalDiffResult | null;
+    syncing: boolean;
+    onPush: () => Promise<void>;
+}) {
+    const hasDiffs = diff?.gcalExists && diff.fields.some(f => !f.match);
+    const allMatch = diff?.gcalExists && diff.fields.every(f => f.match);
+
+    return (
+        <div className="flex items-center gap-3 rounded-lg border bg-gray-50 px-4 py-2.5 text-xs text-gray-500">
+            <span className="flex-1">
+                {!diff && "GCal: načítám…"}
+                {diff && !diff.gcalExists && "⚠ Akce nenalezena v Google Kalendáři"}
+                {hasDiffs && <span className="text-violet-600">⚠ Hodnoty se liší od Google Kalendáře (viz pole výše)</span>}
+                {allMatch && <span className="text-green-600">✓ Shodné s Google Kalendářem</span>}
+            </span>
+            <Button variant="outline" size="sm" disabled={syncing} onClick={onPush}
+                className="text-xs h-7 shrink-0">
+                {syncing ? "Zapisuji…" : "→ do GCal"}
+            </Button>
         </div>
     );
 }

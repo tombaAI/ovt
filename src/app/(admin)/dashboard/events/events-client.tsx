@@ -61,12 +61,6 @@ function fmtDateRange(dateFrom: string | null, dateTo: string | null, approxMont
     return "—";
 }
 
-/** Vrátí true pokud je GCal sync zastaralý (akce upravena po posledním syncu) */
-function isGcalStale(e: EventRow): boolean {
-    if (!e.gcalEventId || !e.gcalSync) return false;
-    if (!e.updatedAt || !e.gcalSyncedAt) return false;
-    return new Date(e.updatedAt) > new Date(e.gcalSyncedAt);
-}
 
 interface Props {
     years: number[];
@@ -128,7 +122,6 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
 
     const noDate   = events.filter(e => !e.dateFrom).length;
     const noLeader = events.filter(e => !e.leaderId).length;
-    const staleSync = events.filter(isGcalStale).length;
 
     return (
         <div className="space-y-4">
@@ -154,9 +147,6 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
                     <h1 className="text-2xl font-semibold text-gray-900">Kalendář {displayYear}</h1>
                     <p className="text-gray-500 mt-0.5 text-sm">
                         {events.length} akcí · {noDate} bez termínu · {noLeader} bez vedoucího
-                        {staleSync > 0 && (
-                            <span className="ml-2 text-amber-600">· {staleSync} nesync.</span>
-                        )}
                     </p>
                 </div>
                 <div className="flex gap-2 shrink-0 flex-wrap justify-end">
@@ -226,14 +216,7 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
                                     {fmtDateRange(e.dateFrom, e.dateTo, e.approxMonth)}
                                 </TableCell>
                                 <TableCell>
-                                    <div className="flex items-center gap-2 flex-wrap">
-                                        <span className="font-medium text-gray-900">{e.name}</span>
-                                        {isGcalStale(e) && (
-                                            <Badge className="bg-amber-100 text-amber-700 border-0 text-xs font-normal" title="Akce byla upravena po posledním GCal syncu">
-                                                ⚠ nesync.
-                                            </Badge>
-                                        )}
-                                    </div>
+                                    <span className="font-medium text-gray-900">{e.name}</span>
                                     {e.location && (
                                         <p className="text-xs text-gray-400 mt-0.5">{e.location}</p>
                                     )}
