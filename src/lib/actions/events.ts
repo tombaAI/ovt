@@ -1,8 +1,8 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { events, members } from "@/db/schema";
-import { eq, asc } from "drizzle-orm";
+import { events, members, auditLog } from "@/db/schema";
+import { eq, asc, desc } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import type { EventType, EventStatus, EventSource } from "@/db/schema";
@@ -30,6 +30,7 @@ export type EventRow = {
     gcalSync: boolean;
     gcalSyncedAt: Date | null;
     note: string | null;
+    updatedAt: Date | null;
 };
 
 export type EventFormData = {
@@ -73,6 +74,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             gcalSync:     events.gcalSync,
             gcalSyncedAt: events.gcalSyncedAt,
             note:         events.note,
+            updatedAt:    events.updatedAt,
         })
         .from(events)
         .leftJoin(members, eq(events.leaderId, members.id))
@@ -317,4 +319,153 @@ export async function importGcalEvents(
 
     revalidatePath("/dashboard/events");
     return { imported: toInsert.length, skipped: items.length - toInsert.length };
+}
+
+// ── Inline field update + audit ───────────────────────────────────────────────
+
+const ALLOWED_EVENT_FIELDS = new Set([
+    "name", "eventType", "dateFrom", "dateTo", "approxMonth",
+    "location", "leaderId", "status", "description", "externalUrl",
+    "gcalSync", "note",
+]);
+
+export type EventAuditEntry = {
+    id: number;
+    action: string;
+    changes: Record<string, { old: string | null; new: string | null }>;
+    changedBy: string;
+    changedAt: Date;
+};
+
+export async function updateEventField(
+    id: number,
+    field: string,
+    value: string | null,
+): Promise<void> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+    if (!ALLOWED_EVENT_FIELDS.has(field)) throw new Error(`Nepovolené pole: ${field}`);
+
+    const db = getDb();
+    const [before] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    if (!before) throw new Error("Akce nenalezena");
+
+    // Přetypování hodnoty podle pole
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const update: Record<string, any> = { updatedAt: new Date() };
+    if (field === "approxMonth" || field === "leaderId") {
+        update[field] = value !== null && value !== "" ? Number(value) : null;
+    } else if (field === "gcalSync") {
+        update[field] = value === "true";
+    } else {
+        update[field] = value !== null && value !== "" ? value : null;
+    }
+
+    await db.update(events).set(update).where(eq(events.id, id));
+
+    // Audit
+    const oldVal = String((before as Record<string, unknown>)[field] ?? "");
+    const newVal = String(update[field] ?? "");
+    if (oldVal !== newVal) {
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId:   id,
+            action:     "update_field",
+            changes:    { [field]: { old: oldVal || null, new: newVal || null } },
+            changedBy:  session.user.email,
+        });
+    }
+
+    revalidatePath("/dashboard/events");
+}
+
+export async function getEventAuditLog(id: number): Promise<EventAuditEntry[]> {
+    const db = getDb();
+    const rows = await db
+        .select()
+        .from(auditLog)
+        .where(eq(auditLog.entityId, id))
+        .orderBy(desc(auditLog.changedAt))
+        .limit(50);
+    return rows.filter(r => r.entityType === "event") as EventAuditEntry[];
+}
+
+// ── GCal diff ─────────────────────────────────────────────────────────────────
+
+export type GcalDiffField = {
+    field: string;        // klíč v DB
+    label: string;        // čitelný název
+    appValue: string | null;
+    gcalValue: string | null;
+    match: boolean;
+};
+
+export type GcalDiffResult =
+    | { gcalExists: false }
+    | { gcalExists: true; fields: GcalDiffField[]; gcalUpdatedAt: string | null };
+
+export async function getEventGcalDiff(id: number): Promise<GcalDiffResult> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    const db = getDb();
+    const [event] = await db.select().from(events).where(eq(events.id, id)).limit(1);
+    if (!event?.gcalEventId) return { gcalExists: false };
+
+    const { fetchGcalEventById } = await import("@/lib/gcal");
+    const gcal = await fetchGcalEventById(event.gcalEventId);
+    if (!gcal) return { gcalExists: false };
+
+    const fields: GcalDiffField[] = [
+        {
+            field:     "name",
+            label:     "Název",
+            appValue:  event.name,
+            gcalValue: gcal.summary,
+            match:     event.name === gcal.summary,
+        },
+        {
+            field:     "dateFrom",
+            label:     "Datum od",
+            appValue:  event.dateFrom as unknown as string | null,
+            gcalValue: gcal.dateFrom,
+            match:     (event.dateFrom as unknown as string | null) === gcal.dateFrom,
+        },
+        {
+            field:     "dateTo",
+            label:     "Datum do",
+            appValue:  event.dateTo as unknown as string | null,
+            gcalValue: gcal.dateTo,
+            match:     (event.dateTo as unknown as string | null) === gcal.dateTo,
+        },
+        {
+            field:     "location",
+            label:     "Místo",
+            appValue:  event.location,
+            gcalValue: gcal.location,
+            match:     (event.location ?? null) === (gcal.location ?? null),
+        },
+    ];
+
+    return { gcalExists: true, fields, gcalUpdatedAt: gcal.updatedAt };
+}
+
+/**
+ * Přijme hodnotu konkrétního pole z GCal do DB (jednosměrně GCal → app).
+ */
+export async function acceptGcalField(id: number, field: string, gcalValue: string | null): Promise<void> {
+    await updateEventField(id, field, gcalValue);
+
+    // Přidej audit záznam označující zdroj
+    const session = await auth();
+    const db = getDb();
+    await db.insert(auditLog).values({
+        entityType: "event",
+        entityId:   id,
+        action:     "accept_from_gcal",
+        changes:    { [field]: { old: null, new: gcalValue } },
+        changedBy:  session?.user?.email ?? "unknown",
+    }).onConflictDoNothing();
+
+    revalidatePath("/dashboard/events");
 }

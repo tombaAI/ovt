@@ -110,6 +110,46 @@ export async function deleteGcalEvent(gcalEventId: string): Promise<void> {
 }
 
 /**
+ * Načte jeden event z GCal podle ID.
+ * Vrátí null pokud event neexistuje (410 Gone / 404).
+ */
+export type GCalEventDetail = {
+    gcalEventId: string;
+    summary: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+    location: string | null;
+    description: string | null;
+    updatedAt: string | null;
+};
+
+export async function fetchGcalEventById(gcalEventId: string): Promise<GCalEventDetail | null> {
+    const cal = getCalendarClient();
+    try {
+        const res = await cal.events.get({
+            calendarId: GCAL_CALENDAR_ID,
+            eventId:    gcalEventId,
+        });
+        const e = res.data;
+        const rawStart = e.start?.date ?? e.start?.dateTime?.slice(0, 10) ?? null;
+        const rawEnd   = e.end?.date   ?? e.end?.dateTime?.slice(0, 10)   ?? null;
+        const dateTo = rawEnd && rawEnd !== rawStart ? addDays(rawEnd, -1) : null;
+        return {
+            gcalEventId,
+            summary:     e.summary ?? "",
+            dateFrom:    rawStart,
+            dateTo:      dateTo === rawStart ? null : dateTo,
+            location:    e.location ?? null,
+            description: e.description ?? null,
+            updatedAt:   e.updated ?? null,
+        };
+    } catch (e: unknown) {
+        if ((e as { code?: number }).code === 404 || (e as { code?: number }).code === 410) return null;
+        throw e;
+    }
+}
+
+/**
  * Načte seznam eventů z GCal pro dané časové rozmezí.
  * Používá se pro manuální pull/import.
  */

@@ -78,6 +78,14 @@ const MEMBERS: ImportItem[] = [
     },
 ];
 
+const CALENDAR: ImportItem[] = [
+    {
+        href:        "/dashboard/imports/gcal",
+        title:       "Import z Google Kalendáře",
+        description: "Načte akce z Google Kalendáře a importuje vybrané do sekce Kalendář. Idempotentní — duplicity se přeskočí.",
+    },
+];
+
 export default function ImportsPage() {
     return (
         <div className="space-y-8">
@@ -97,6 +105,11 @@ export default function ImportsPage() {
                 title="Členská základna"
                 description="Import a synchronizace dat členů z externích registrů."
                 items={MEMBERS}
+            />
+            <Section
+                title="Kalendář"
+                description="Synchronizace akcí s Google Kalendářem."
+                items={CALENDAR}
             />
         </div>
     );

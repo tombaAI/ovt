@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EventSheet } from "./event-sheet";
-import { copyEventsFromYear, fetchGcalEvents, importGcalEvents } from "@/lib/actions/events";
-import type { EventRow, GcalImportItem } from "@/lib/actions/events";
+import { copyEventsFromYear } from "@/lib/actions/events";
+import type { EventRow } from "@/lib/actions/events";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 
 interface MemberOption {
@@ -61,6 +61,13 @@ function fmtDateRange(dateFrom: string | null, dateTo: string | null, approxMont
     return "—";
 }
 
+/** Vrátí true pokud je GCal sync zastaralý (akce upravena po posledním syncu) */
+function isGcalStale(e: EventRow): boolean {
+    if (!e.gcalEventId || !e.gcalSync) return false;
+    if (!e.updatedAt || !e.gcalSyncedAt) return false;
+    return new Date(e.updatedAt) > new Date(e.gcalSyncedAt);
+}
+
 interface Props {
     years: number[];
     selectedYear: number;
@@ -77,64 +84,6 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
     const [sheetOpen, setSheetOpen] = useState(false);
     const [editEvent, setEditEvent] = useState<EventRow | null>(null);
     const [copying, setCopying]     = useState(false);
-
-    // ── GCal import ──────────────────────────────────────────────────────────
-    const [gcalPanel, setGcalPanel]         = useState(false);
-    const [gcalLoading, setGcalLoading]     = useState(false);
-    const [gcalItems, setGcalItems]         = useState<GcalImportItem[]>([]);
-    const [gcalSelected, setGcalSelected]   = useState<Set<string>>(new Set());
-    const [gcalError, setGcalError]         = useState<string | null>(null);
-    const [gcalImporting, setGcalImporting] = useState(false);
-    const [gcalMsg, setGcalMsg]             = useState<string | null>(null);
-
-    async function openGcalPanel() {
-        setGcalPanel(true);
-        setGcalItems([]);
-        setGcalSelected(new Set());
-        setGcalError(null);
-        setGcalMsg(null);
-        setGcalLoading(true);
-        try {
-            const items = await fetchGcalEvents(selectedYear);
-            setGcalItems(items);
-            // Předvyber eventy, které ještě nejsou v DB
-            const existingGcalIds = new Set(events.map(e => e.gcalEventId).filter(Boolean));
-            setGcalSelected(new Set(items.filter(i => !existingGcalIds.has(i.gcalEventId)).map(i => i.gcalEventId)));
-        } catch (e) {
-            setGcalError(e instanceof Error ? e.message : "Chyba načítání");
-        } finally {
-            setGcalLoading(false);
-        }
-    }
-
-    function toggleGcalItem(id: string) {
-        setGcalSelected(prev => {
-            const next = new Set(prev);
-            if (next.has(id)) { next.delete(id); } else { next.add(id); }
-            return next;
-        });
-    }
-
-    function toggleAllGcal(checked: boolean) {
-        setGcalSelected(checked ? new Set(gcalItems.map(i => i.gcalEventId)) : new Set());
-    }
-
-    async function handleGcalImport() {
-        const toImport = gcalItems.filter(i => gcalSelected.has(i.gcalEventId));
-        if (toImport.length === 0) return;
-        setGcalImporting(true);
-        try {
-            const result = await importGcalEvents(selectedYear, toImport);
-            setGcalMsg(`Importováno ${result.imported} akcí${result.skipped > 0 ? `, přeskočeno ${result.skipped} (již existují)` : ""}.`);
-            router.refresh();
-            // Po importu zavřeme panel za 2s
-            setTimeout(() => setGcalPanel(false), 2000);
-        } catch (e) {
-            setGcalError(e instanceof Error ? e.message : "Chyba importu");
-        } finally {
-            setGcalImporting(false);
-        }
-    }
 
     const displayYear = isPending && pendingYear !== null ? pendingYear : selectedYear;
 
@@ -179,6 +128,7 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
 
     const noDate   = events.filter(e => !e.dateFrom).length;
     const noLeader = events.filter(e => !e.leaderId).length;
+    const staleSync = events.filter(isGcalStale).length;
 
     return (
         <div className="space-y-4">
@@ -204,12 +154,12 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
                     <h1 className="text-2xl font-semibold text-gray-900">Kalendář {displayYear}</h1>
                     <p className="text-gray-500 mt-0.5 text-sm">
                         {events.length} akcí · {noDate} bez termínu · {noLeader} bez vedoucího
+                        {staleSync > 0 && (
+                            <span className="ml-2 text-amber-600">· {staleSync} nesync.</span>
+                        )}
                     </p>
                 </div>
                 <div className="flex gap-2 shrink-0 flex-wrap justify-end">
-                    <Button variant="outline" size="sm" onClick={openGcalPanel} disabled={gcalPanel}>
-                        ↓ Načíst z Google Kalendáře
-                    </Button>
                     {events.length === 0 && (
                         <Button variant="outline" size="sm" disabled={copying} onClick={handleCopyFromPrevYear}>
                             {copying ? "Kopíruji…" : `Kopírovat z ${selectedYear - 1}`}
@@ -220,81 +170,6 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
                     </Button>
                 </div>
             </div>
-
-            {/* ── GCal import panel ── */}
-            {gcalPanel && (
-                <div className="rounded-xl border bg-white overflow-hidden">
-                    <div className="flex items-center justify-between px-4 py-3 bg-gray-50 border-b">
-                        <p className="font-medium text-gray-800 text-sm">Akce v Google Kalendáři — {selectedYear}</p>
-                        <button onClick={() => setGcalPanel(false)} className="text-gray-400 hover:text-gray-600 text-xl leading-none px-1">×</button>
-                    </div>
-
-                    {gcalLoading && (
-                        <p className="text-sm text-gray-400 px-4 py-6 text-center">Načítám z Google Kalendáře…</p>
-                    )}
-
-                    {gcalError && (
-                        <p className="text-sm text-red-500 px-4 py-4">{gcalError}</p>
-                    )}
-
-                    {gcalMsg && (
-                        <p className="text-sm text-green-700 px-4 py-4 font-medium">{gcalMsg}</p>
-                    )}
-
-                    {!gcalLoading && !gcalError && !gcalMsg && gcalItems.length === 0 && (
-                        <p className="text-sm text-gray-400 px-4 py-6 text-center">Žádné akce v Google Kalendáři pro rok {selectedYear}</p>
-                    )}
-
-                    {!gcalLoading && !gcalError && !gcalMsg && gcalItems.length > 0 && (
-                        <>
-                            <div className="divide-y max-h-96 overflow-y-auto">
-                                {/* Záhlaví se "vybrat vše" */}
-                                <div className="flex items-center gap-3 px-4 py-2 bg-gray-50 text-xs text-gray-500">
-                                    <input
-                                        type="checkbox"
-                                        checked={gcalSelected.size === gcalItems.length}
-                                        onChange={e => toggleAllGcal(e.target.checked)}
-                                        className="h-4 w-4 rounded border-gray-300 accent-[#327600]"
-                                    />
-                                    <span>Vybrat vše ({gcalItems.length})</span>
-                                </div>
-                                {gcalItems.map(item => {
-                                    const alreadyIn = events.some(e => e.gcalEventId === item.gcalEventId);
-                                    return (
-                                        <label key={item.gcalEventId}
-                                            className={`flex items-start gap-3 px-4 py-2.5 cursor-pointer hover:bg-gray-50 ${alreadyIn ? "opacity-50" : ""}`}>
-                                            <input
-                                                type="checkbox"
-                                                checked={gcalSelected.has(item.gcalEventId)}
-                                                onChange={() => toggleGcalItem(item.gcalEventId)}
-                                                className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[#327600]"
-                                            />
-                                            <div className="flex-1 min-w-0">
-                                                <p className="text-sm font-medium text-gray-900 truncate">{item.summary}</p>
-                                                <p className="text-xs text-gray-400 mt-0.5">
-                                                    {item.dateFrom ? fmtDateRange(item.dateFrom, item.dateTo, null) : "bez termínu"}
-                                                    {item.location && ` · ${item.location}`}
-                                                    {alreadyIn && <span className="ml-2 text-green-600">✓ již v seznamu</span>}
-                                                </p>
-                                            </div>
-                                        </label>
-                                    );
-                                })}
-                            </div>
-                            <div className="flex items-center gap-3 px-4 py-3 border-t bg-gray-50">
-                                <Button
-                                    size="sm"
-                                    disabled={gcalImporting || gcalSelected.size === 0}
-                                    onClick={handleGcalImport}
-                                    className="bg-[#327600] hover:bg-[#2a6400]">
-                                    {gcalImporting ? "Importuji…" : `Importovat vybrané (${gcalSelected.size})`}
-                                </Button>
-                                <Button variant="ghost" size="sm" onClick={() => setGcalPanel(false)}>Zrušit</Button>
-                            </div>
-                        </>
-                    )}
-                </div>
-            )}
 
             {/* ── Filter pills ── */}
             <div className="flex gap-2 flex-wrap">
@@ -351,7 +226,14 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
                                     {fmtDateRange(e.dateFrom, e.dateTo, e.approxMonth)}
                                 </TableCell>
                                 <TableCell>
-                                    <span className="font-medium text-gray-900">{e.name}</span>
+                                    <div className="flex items-center gap-2 flex-wrap">
+                                        <span className="font-medium text-gray-900">{e.name}</span>
+                                        {isGcalStale(e) && (
+                                            <Badge className="bg-amber-100 text-amber-700 border-0 text-xs font-normal" title="Akce byla upravena po posledním GCal syncu">
+                                                ⚠ nesync.
+                                            </Badge>
+                                        )}
+                                    </div>
                                     {e.location && (
                                         <p className="text-xs text-gray-400 mt-0.5">{e.location}</p>
                                     )}
