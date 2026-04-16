@@ -160,11 +160,10 @@ export default async function SyncPage() {
     return (
         <div className="space-y-4">
             <div>
-                <h1 className="text-xl font-semibold">Synchronizace členů z TJ Bohemians</h1>
+                <h1 className="text-xl font-semibold">Porovnání členů s TJ Bohemians</h1>
                 <p className="text-sm text-muted-foreground mt-0.5">
-                    Import probíhá automaticky po každé změně souboru vodTuristika_database.xlsx
-                    v dokumentovém úložišti na SharePointu TJ Bohemians — změny se zde zobrazí do několika minut.
-                    {lastSyncStr && <span> Poslední synchronizace: {lastSyncStr}.</span>}
+                    Data z evidence vodní turistiky TJ Bohemians Praha (soubor vodTuristika_database.xlsx).
+                    {lastSyncStr && <span> Aktualizováno: {lastSyncStr}.</span>}
                 </p>
                 <p className="text-sm text-muted-foreground mt-1">
                     Záznamy jsou párované podle čísla ČSK — je důležité, aby se čísla na obou stranách shodovala.

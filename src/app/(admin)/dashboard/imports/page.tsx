@@ -59,7 +59,7 @@ const MEMBERS: ImportItem[] = [
     {
         href:        "/dashboard/imports/members-tj",
         title:       "Členové TJ Bohemians",
-        description: "Data z evidence vodní turistiky přicházejí automaticky přes Power Automate → webhook.",
+        description: "Porovnání a přenos dat z evidence vodní turistiky TJ Bohemians Praha.",
     },
     {
         href:        "/dashboard/imports/csv",
