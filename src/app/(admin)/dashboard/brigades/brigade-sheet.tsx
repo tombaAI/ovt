@@ -219,12 +219,15 @@ export function BrigadeSheet({
         setError(null);
         if (!date) { setError("Datum je povinné"); return; }
 
+        // Rok brigády vždy z datumu, ne ze záložky
+        const yearFromDate = parseInt(date.slice(0, 4), 10);
+
         startTransition(async () => {
             try {
                 if (isNew) {
                     await createBrigade({
                         date,
-                        year: brigadeYear,
+                        year: yearFromDate,
                         name: name.trim() || null,
                         leaderId,
                         note: note.trim() || null,
@@ -233,7 +236,7 @@ export function BrigadeSheet({
                 } else {
                     await updateBrigade(brigade.id, {
                         date,
-                        year: brigadeYear,
+                        year: yearFromDate,
                         name: name.trim() || null,
                         leaderId,
                         note: note.trim() || null,
