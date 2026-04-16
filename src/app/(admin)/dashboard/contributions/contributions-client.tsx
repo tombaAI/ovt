@@ -110,7 +110,7 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
                 {periods.map(p => {
                     const lc = LIFECYCLE[p.status as PeriodStatus] ?? LIFECYCLE.collecting;
-                    const isSelected = p.year === period.year;
+                    const isSelected = p.year === (pendingYear ?? period.year);
                     return (
                         <button key={p.year}
                             onClick={() => navigateYear(p.year)}
