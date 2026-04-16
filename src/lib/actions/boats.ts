@@ -2,7 +2,7 @@
 
 import { getDb } from "@/lib/db";
 import { boats, members, memberContributions, contributionPeriods } from "@/db/schema";
-import { eq, isNull, isNotNull, sql } from "drizzle-orm";
+import { eq, isNull, isNotNull, inArray, or, and, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 
@@ -74,11 +74,15 @@ export async function getBoats(includeArchived = false): Promise<BoatRow[]> {
             .from(memberContributions)
             .innerJoin(contributionPeriods, eq(memberContributions.periodId, contributionPeriods.id))
             .where(
-                sql`${memberContributions.memberId} = ANY(${memberIds})
-                    AND ${contributionPeriods.year} = ANY(${YEARS})
-                    AND (${memberContributions.amountBoat1} IS NOT NULL
-                      OR ${memberContributions.amountBoat2} IS NOT NULL
-                      OR ${memberContributions.amountBoat3} IS NOT NULL)`
+                and(
+                    inArray(memberContributions.memberId, memberIds),
+                    inArray(contributionPeriods.year, [...YEARS]),
+                    or(
+                        isNotNull(memberContributions.amountBoat1),
+                        isNotNull(memberContributions.amountBoat2),
+                        isNotNull(memberContributions.amountBoat3),
+                    ),
+                )
             );
 
         for (const c of contribs) {
