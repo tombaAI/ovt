@@ -10,9 +10,10 @@ CREATE TABLE app.boats (
     color       text,           -- barva
     grid        text,           -- mříž: '1', '2', '3', 'dlouhé' — NULL = neznámé
     position    smallint,       -- číslo pozice v mříži; NULL pro 'dlouhé' nebo neznámé
-    is_present  boolean NOT NULL DEFAULT true,  -- je loď fyzicky přítomna na místě
-    stored_from date,           -- od kdy loď evidujeme (NULL = historická data, neznámé)
-    stored_to   date,           -- do kdy; NULL = stále aktivní (loď je v krakorcích)
+    is_present      boolean NOT NULL DEFAULT true,  -- je loď fyzicky přítomna na místě
+    stored_from     date,           -- od kdy loď evidujeme (NULL = historická data, neznámé)
+    stored_to       date,           -- do kdy; NULL = stále aktivní (loď je v krakorcích)
+    last_checked_at date,           -- datum poslední fyzické kontroly v krakorcích
     note        text,
     created_by  text NOT NULL,
     created_at  timestamptz NOT NULL DEFAULT now(),

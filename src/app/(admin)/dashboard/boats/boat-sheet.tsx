@@ -34,10 +34,11 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
     const [color,       setColor]       = useState("");
     const [grid,        setGrid]        = useState("");
     const [position,    setPosition]    = useState("");
-    const [isPresent,   setIsPresent]   = useState(true);
-    const [storedFrom,  setStoredFrom]  = useState("");
-    const [storedTo,    setStoredTo]    = useState("");
-    const [note,        setNote]        = useState("");
+    const [isPresent,     setIsPresent]     = useState(true);
+    const [storedFrom,    setStoredFrom]    = useState("");
+    const [storedTo,      setStoredTo]      = useState("");
+    const [lastCheckedAt, setLastCheckedAt] = useState("");
+    const [note,          setNote]          = useState("");
 
     const [isPending, startTransition] = useTransition();
     const [error, setError]            = useState<string | null>(null);
@@ -53,6 +54,7 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
             setIsPresent(boat.isPresent);
             setStoredFrom(boat.storedFrom ?? "");
             setStoredTo(boat.storedTo ?? "");
+            setLastCheckedAt(boat.lastCheckedAt ?? "");
             setNote(boat.note ?? "");
         } else {
             setOwnerId("");
@@ -63,6 +65,7 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
             setIsPresent(true);
             setStoredFrom("");
             setStoredTo("");
+            setLastCheckedAt("");
             setNote("");
         }
         setError(null);
@@ -81,9 +84,10 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
                     grid:        grid.trim() || null,
                     position:    showPosition && position.trim() ? Number(position) : null,
                     isPresent,
-                    storedFrom:  storedFrom || null,
-                    storedTo:    storedTo || null,
-                    note:        note.trim() || null,
+                    storedFrom:    storedFrom || null,
+                    storedTo:      storedTo || null,
+                    lastCheckedAt: lastCheckedAt || null,
+                    note:          note.trim() || null,
                 };
                 if (isNew) {
                     await createBoat(data);
@@ -114,15 +118,16 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
         const today = new Date().toISOString().slice(0, 10);
         startTransition(async () => {
             await updateBoat(boat.id, {
-                ownerId:     boat.ownerId,
-                description: boat.description,
-                color:       boat.color,
-                grid:        boat.grid,
-                position:    boat.position,
-                isPresent:   boat.isPresent,
-                storedFrom:  boat.storedFrom,
-                storedTo:    today,
-                note:        boat.note,
+                ownerId:       boat.ownerId,
+                description:   boat.description,
+                color:         boat.color,
+                grid:          boat.grid,
+                position:      boat.position,
+                isPresent:     boat.isPresent,
+                storedFrom:    boat.storedFrom,
+                storedTo:      today,
+                lastCheckedAt: boat.lastCheckedAt,
+                note:          boat.note,
             });
             onSaved();
             onOpenChange(false);
@@ -222,8 +227,8 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
                         </Label>
                     </div>
 
-                    {/* ── Datum od/do ── */}
-                    <div className="grid grid-cols-2 gap-4">
+                    {/* ── Datum od/do + poslední kontrola ── */}
+                    <div className="grid grid-cols-3 gap-4">
                         <div className="space-y-1.5">
                             <Label htmlFor="boat-from">Uložena od</Label>
                             <Input
@@ -234,14 +239,23 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
                             />
                         </div>
                         <div className="space-y-1.5">
-                            <Label htmlFor="boat-to">Vyzvedána / archivována</Label>
+                            <Label htmlFor="boat-checked">Poslední kontrola</Label>
+                            <Input
+                                id="boat-checked"
+                                type="date"
+                                value={lastCheckedAt}
+                                onChange={e => setLastCheckedAt(e.target.value)}
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="boat-to">Archivována</Label>
                             <Input
                                 id="boat-to"
                                 type="date"
                                 value={storedTo}
                                 onChange={e => setStoredTo(e.target.value)}
                             />
-                            <p className="text-xs text-gray-400">Vyplň pro archivaci lodě</p>
+                            <p className="text-xs text-gray-400">Vyplň pro archivaci</p>
                         </div>
                     </div>
 

@@ -321,10 +321,11 @@ export const boats = appSchema.table(
         color:       text("color"),
         grid:        text("grid"),           // '1' | '2' | '3' | 'dlouhé' | null = neznámé
         position:    smallint("position"),   // číslo pozice v mříži; null pro dlouhé/neznámé
-        isPresent:   boolean("is_present").notNull().default(true),
-        storedFrom:  date("stored_from"),
-        storedTo:    date("stored_to"),      // null = stále aktivní
-        note:        text("note"),
+        isPresent:      boolean("is_present").notNull().default(true),
+        storedFrom:     date("stored_from"),
+        storedTo:       date("stored_to"),       // null = stále aktivní
+        lastCheckedAt:  date("last_checked_at"), // datum poslední fyzické kontroly
+        note:           text("note"),
         createdBy:   text("created_by").notNull(),
         createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

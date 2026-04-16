@@ -19,6 +19,7 @@ export type BoatRow = {
     isPresent: boolean;
     storedFrom: string | null;
     storedTo: string | null;
+    lastCheckedAt: string | null;
     note: string | null;
 };
 
@@ -36,10 +37,11 @@ export async function getBoats(includeArchived = false): Promise<BoatRow[]> {
             color:       boats.color,
             grid:        boats.grid,
             position:    boats.position,
-            isPresent:   boats.isPresent,
-            storedFrom:  boats.storedFrom,
-            storedTo:    boats.storedTo,
-            note:        boats.note,
+            isPresent:     boats.isPresent,
+            storedFrom:    boats.storedFrom,
+            storedTo:      boats.storedTo,
+            lastCheckedAt: boats.lastCheckedAt,
+            note:          boats.note,
         })
         .from(boats)
         .leftJoin(members, eq(boats.ownerId, members.id))
@@ -58,8 +60,9 @@ export async function getBoats(includeArchived = false): Promise<BoatRow[]> {
 
     return rows.map(r => ({
         ...r,
-        storedFrom: r.storedFrom as unknown as string | null,
-        storedTo:   r.storedTo as unknown as string | null,
+        storedFrom:    r.storedFrom    as unknown as string | null,
+        storedTo:      r.storedTo      as unknown as string | null,
+        lastCheckedAt: r.lastCheckedAt as unknown as string | null,
     }));
 }
 
@@ -73,6 +76,7 @@ export async function createBoat(data: {
     position: number | null;
     isPresent: boolean;
     storedFrom: string | null;
+    lastCheckedAt: string | null;
     note: string | null;
 }): Promise<{ id: number }> {
     const session = await auth();
@@ -82,16 +86,17 @@ export async function createBoat(data: {
     const [boat] = await db
         .insert(boats)
         .values({
-            ownerId:     data.ownerId,
-            description: data.description,
-            color:       data.color,
-            grid:        data.grid,
-            position:    data.position,
-            isPresent:   data.isPresent,
-            storedFrom:  data.storedFrom,
-            storedTo:    null,
-            note:        data.note,
-            createdBy:   session.user.email,
+            ownerId:       data.ownerId,
+            description:   data.description,
+            color:         data.color,
+            grid:          data.grid,
+            position:      data.position,
+            isPresent:     data.isPresent,
+            storedFrom:    data.storedFrom,
+            storedTo:      null,
+            lastCheckedAt: data.lastCheckedAt,
+            note:          data.note,
+            createdBy:     session.user.email,
         })
         .returning({ id: boats.id });
 
@@ -108,6 +113,7 @@ export async function updateBoat(id: number, data: {
     isPresent: boolean;
     storedFrom: string | null;
     storedTo: string | null;
+    lastCheckedAt: string | null;
     note: string | null;
 }): Promise<void> {
     const session = await auth();
