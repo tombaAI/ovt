@@ -4,7 +4,9 @@ import { members, memberContributions, contributionPeriods, events, boats, briga
 import { eq, sql, isNull, lte, and, or } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
+import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
+import { Suspense } from "react";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
 
 const PERIOD_STATUS: Record<string, { label: string; className: string }> = {
@@ -18,15 +20,26 @@ function formatKc(amount: number): string {
     return new Intl.NumberFormat("cs-CZ").format(Math.round(amount)) + "\u00a0Kč";
 }
 
-export default async function DashboardPage() {
-    const session = await auth();
-    const name = session?.user?.name?.split(" ")[0] ?? "Správce";
+// ── Skeleton fallback pro jednu kartu ─────────────────────────────────────────
 
+function CardSkeleton({ label }: { label: string }) {
+    return (
+        <Card>
+            <CardHeader className="pb-2">
+                <p className="text-sm font-medium text-gray-500">{label}</p>
+            </CardHeader>
+            <CardContent>
+                <Skeleton className="h-8 w-16" />
+                <Skeleton className="h-3 w-36 mt-2" />
+            </CardContent>
+        </Card>
+    );
+}
+
+// ── Async karty ───────────────────────────────────────────────────────────────
+
+async function MembersCard() {
     const db = getDb();
-    const today = new Date().toISOString().slice(0, 10);
-    const currentYear = new Date().getFullYear();
-
-    // ── Členové ─────────────────────────────────────────────────────────────
     const [memberCounts] = await db.select({
         total: sql<number>`count(*)`,
     }).from(members);
@@ -36,18 +49,34 @@ export default async function DashboardPage() {
     }).from(members).where(
         and(
             lte(members.memberFrom, `${CONTRIBUTION_YEAR}-12-31`),
-            or(isNull(members.memberTo), sql`${members.memberTo} >= ${CONTRIBUTION_YEAR + '-01-01'}`)
+            or(isNull(members.memberTo), sql`${members.memberTo} >= ${CONTRIBUTION_YEAR + "-01-01"}`)
         )
     );
 
-    // ── Příspěvky ────────────────────────────────────────────────────────────
+    return (
+        <Link href="/dashboard/members">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardHeader className="pb-2">
+                    <p className="text-sm font-medium text-gray-500">Členové</p>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-2xl font-semibold text-gray-900">{Number(activeCounts?.active ?? 0)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">aktivních v {CONTRIBUTION_YEAR} z {Number(memberCounts?.total ?? 0)} celkem</p>
+                </CardContent>
+            </Card>
+        </Link>
+    );
+}
+
+async function ContributionsCard() {
+    const db = getDb();
     const [period] = await db.select({ id: contributionPeriods.id, status: contributionPeriods.status })
         .from(contributionPeriods)
         .where(eq(contributionPeriods.year, CONTRIBUTION_YEAR));
 
     const [contribCounts] = period ? await db.select({
-        total:       sql<number>`count(*)`,
-        paid:        sql<number>`count(*) filter (where ${memberContributions.isPaid} = true)`,
+        total:        sql<number>`count(*)`,
+        paid:         sql<number>`count(*) filter (where ${memberContributions.isPaid} = true)`,
         prescription: sql<number>`coalesce(sum(${memberContributions.amountTotal}), 0)`,
     }).from(memberContributions).where(eq(memberContributions.periodId, period.id))
     : [{ total: 0, paid: 0, prescription: 0 }];
@@ -59,30 +88,130 @@ export default async function DashboardPage() {
     .where(eq(memberContributions.periodId, period.id))
     : [{ collected: 0 }];
 
-    // ── Kalendář ─────────────────────────────────────────────────────────────
+    const periodStatus = PERIOD_STATUS[period?.status ?? "draft"];
+
+    return (
+        <Link href="/dashboard/contributions">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                    <p className="text-sm font-medium text-gray-500">Příspěvky {CONTRIBUTION_YEAR}</p>
+                    {period && (
+                        <Badge className={periodStatus.className} variant="outline">
+                            {periodStatus.label}
+                        </Badge>
+                    )}
+                </CardHeader>
+                <CardContent>
+                    <p className="text-2xl font-semibold text-gray-900">
+                        {Number(contribCounts?.paid ?? 0)}{" "}
+                        <span className="text-base font-normal text-gray-400">/ {Number(contribCounts?.total ?? 0)}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        {formatKc(Number(paidSum?.collected ?? 0))} / {formatKc(Number(contribCounts?.prescription ?? 0))}
+                    </p>
+                </CardContent>
+            </Card>
+        </Link>
+    );
+}
+
+async function EventsCard({ currentYear }: { currentYear: number }) {
+    const db = getDb();
+    const today = new Date().toISOString().slice(0, 10);
     const [eventCounts] = await db.select({
         total:    sql<number>`count(*)`,
         noDate:   sql<number>`count(*) filter (where ${events.dateFrom} is null)`,
         upcoming: sql<number>`count(*) filter (where ${events.dateFrom} >= ${today} and ${events.status} != 'cancelled')`,
     }).from(events).where(eq(events.year, currentYear));
 
-    // ── Lodě ─────────────────────────────────────────────────────────────────
+    const upcomingEvents = Number(eventCounts?.upcoming ?? 0);
+
+    return (
+        <Link href={`/dashboard/events?year=${currentYear}`}>
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardHeader className="pb-2">
+                    <p className="text-sm font-medium text-gray-500">Kalendář {currentYear}</p>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-2xl font-semibold text-gray-900">{Number(eventCounts?.total ?? 0)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        {upcomingEvents > 0
+                            ? `${upcomingEvents} nadcházejících`
+                            : Number(eventCounts?.noDate ?? 0) > 0
+                                ? `${Number(eventCounts.noDate)} bez termínu`
+                                : "akcí v plánu"}
+                    </p>
+                </CardContent>
+            </Card>
+        </Link>
+    );
+}
+
+async function BoatsCard() {
+    const db = getDb();
     const [boatCounts] = await db.select({
         total:  sql<number>`count(*)`,
         active: sql<number>`count(*) filter (where ${boats.storedTo} is null)`,
     }).from(boats);
 
-    // ── Brigády ───────────────────────────────────────────────────────────────
+    const activeBoats = Number(boatCounts?.active ?? 0);
+    const totalBoats  = Number(boatCounts?.total ?? 0);
+
+    return (
+        <Link href="/dashboard/boats">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardHeader className="pb-2">
+                    <p className="text-sm font-medium text-gray-500">Lodě</p>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-2xl font-semibold text-gray-900">
+                        {activeBoats}{" "}
+                        {activeBoats !== totalBoats && (
+                            <span className="text-base font-normal text-gray-400">/ {totalBoats}</span>
+                        )}
+                    </p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        {activeBoats !== totalBoats ? "aktuálně uložených z celkem" : "uložených lodí"}
+                    </p>
+                </CardContent>
+            </Card>
+        </Link>
+    );
+}
+
+async function BrigadesCard({ currentYear }: { currentYear: number }) {
+    const db = getDb();
+    const today = new Date().toISOString().slice(0, 10);
     const [brigadeCounts] = await db.select({
         total:    sql<number>`count(*)`,
         upcoming: sql<number>`count(*) filter (where ${brigades.date} >= ${today})`,
     }).from(brigades).where(eq(brigades.year, currentYear));
 
-    const periodStatus = PERIOD_STATUS[period?.status ?? "draft"];
-    const activeBoats = Number(boatCounts?.active ?? 0);
-    const totalBoats  = Number(boatCounts?.total ?? 0);
-    const upcomingEvents = Number(eventCounts?.upcoming ?? 0);
     const upcomingBrigades = Number(brigadeCounts?.upcoming ?? 0);
+
+    return (
+        <Link href="/dashboard/brigades">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardHeader className="pb-2">
+                    <p className="text-sm font-medium text-gray-500">Brigády {currentYear}</p>
+                </CardHeader>
+                <CardContent>
+                    <p className="text-2xl font-semibold text-gray-900">{Number(brigadeCounts?.total ?? 0)}</p>
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        {upcomingBrigades > 0 ? `${upcomingBrigades} nadcházejících` : "brigád v roce"}
+                    </p>
+                </CardContent>
+            </Card>
+        </Link>
+    );
+}
+
+// ── Stránka ───────────────────────────────────────────────────────────────────
+
+export default async function DashboardPage() {
+    const session = await auth();
+    const name = session?.user?.name?.split(" ")[0] ?? "Správce";
+    const currentYear = new Date().getFullYear();
 
     return (
         <div className="space-y-6">
@@ -92,114 +221,22 @@ export default async function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-                {/* Členové */}
-                <Link href="/dashboard/members">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-2">
-                            <p className="text-sm font-medium text-gray-500">Členové</p>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">{Number(activeCounts?.active ?? 0)}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">aktivních v {CONTRIBUTION_YEAR} z {Number(memberCounts?.total ?? 0)} celkem</p>
-                        </CardContent>
-                    </Card>
-                </Link>
+                <Suspense fallback={<CardSkeleton label="Členové" />}>
+                    <MembersCard />
+                </Suspense>
+                <Suspense fallback={<CardSkeleton label={`Příspěvky ${CONTRIBUTION_YEAR}`} />}>
+                    <ContributionsCard />
+                </Suspense>
+                <Suspense fallback={<CardSkeleton label={`Kalendář ${currentYear}`} />}>
+                    <EventsCard currentYear={currentYear} />
+                </Suspense>
+                <Suspense fallback={<CardSkeleton label="Lodě" />}>
+                    <BoatsCard />
+                </Suspense>
+                <Suspense fallback={<CardSkeleton label={`Brigády ${currentYear}`} />}>
+                    <BrigadesCard currentYear={currentYear} />
+                </Suspense>
 
-                {/* Příspěvky */}
-                <Link href="/dashboard/contributions">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-2 flex flex-row items-center justify-between">
-                            <p className="text-sm font-medium text-gray-500">Příspěvky {CONTRIBUTION_YEAR}</p>
-                            {period && (
-                                <Badge className={periodStatus.className} variant="outline">
-                                    {periodStatus.label}
-                                </Badge>
-                            )}
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">
-                                {Number(contribCounts?.paid ?? 0)}{" "}
-                                <span className="text-base font-normal text-gray-400">/ {Number(contribCounts?.total ?? 0)}</span>
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                                {formatKc(Number(paidSum?.collected ?? 0))} / {formatKc(Number(contribCounts?.prescription ?? 0))}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </Link>
-
-                {/* Kalendář */}
-                <Link href={`/dashboard/events?year=${currentYear}`}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-2">
-                            <p className="text-sm font-medium text-gray-500">Kalendář {currentYear}</p>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">{Number(eventCounts?.total ?? 0)}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                                {upcomingEvents > 0
-                                    ? `${upcomingEvents} nadcházejících`
-                                    : Number(eventCounts?.noDate ?? 0) > 0
-                                        ? `${Number(eventCounts.noDate)} bez termínu`
-                                        : "akcí v plánu"}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </Link>
-
-                {/* Lodě */}
-                <Link href="/dashboard/boats">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-2">
-                            <p className="text-sm font-medium text-gray-500">Lodě</p>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">
-                                {activeBoats}{" "}
-                                {activeBoats !== totalBoats && (
-                                    <span className="text-base font-normal text-gray-400">/ {totalBoats}</span>
-                                )}
-                            </p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                                {activeBoats !== totalBoats
-                                    ? "aktuálně uložených z celkem"
-                                    : "uložených lodí"}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </Link>
-
-                {/* Brigády */}
-                <Link href="/dashboard/brigades">
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-2">
-                            <p className="text-sm font-medium text-gray-500">Brigády {currentYear}</p>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">{Number(brigadeCounts?.total ?? 0)}</p>
-                            <p className="text-xs text-gray-400 mt-0.5">
-                                {upcomingBrigades > 0
-                                    ? `${upcomingBrigades} nadcházejících`
-                                    : "brigád v roce"}
-                            </p>
-                        </CardContent>
-                    </Card>
-                </Link>
-
-                {/* Platby z banky */}
-                <Link href={`/dashboard/imports/bank?year=${CONTRIBUTION_YEAR}`}>
-                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                        <CardHeader className="pb-2">
-                            <p className="text-sm font-medium text-gray-500">Platby z banky {CONTRIBUTION_YEAR}</p>
-                        </CardHeader>
-                        <CardContent>
-                            <p className="text-2xl font-semibold text-gray-900">0</p>
-                            <p className="text-xs text-gray-400 mt-0.5">nespárovaných plateb</p>
-                        </CardContent>
-                    </Card>
-                </Link>
-
-                {/* Import */}
                 <Link href="/dashboard/imports">
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">
                         <CardHeader className="pb-2">
