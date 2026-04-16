@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git commit -m ':*)",
       "Bash(node -e ':*)",
-      "WebFetch(domain:www.fio.cz)"
+      "WebFetch(domain:www.fio.cz)",
+      "Bash(git commit -m ' *)",
+      "mcp__Neon__describe_table_schema"
     ],
     "additionalDirectories": [
       "/Users/ext93895/work/ovt-sync/.github/workflows",

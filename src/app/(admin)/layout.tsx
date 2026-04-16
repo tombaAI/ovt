@@ -1,7 +1,7 @@
 import { signOut } from "@/auth";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
-import Link from "next/link";
+import { NavLinks } from "./nav-links";
 import type { ReactNode } from "react";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
@@ -30,38 +30,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
             {/* Nav tab bar */}
             <nav className="bg-[#26272b] border-t border-white/10 flex px-2 overflow-x-auto">
-                <Link href="/dashboard"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Přehled
-                </Link>
-                <Link href="/dashboard/members"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Členové
-                </Link>
-                <Link href="/dashboard/contributions"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Příspěvky
-                </Link>
-                <Link href="/dashboard/payments"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Platby
-                </Link>
-                <Link href="/dashboard/events"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Kalendář
-                </Link>
-                <Link href="/dashboard/brigades"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Brigády
-                </Link>
-                <Link href="/dashboard/boats"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Lodě
-                </Link>
-                <Link href="/dashboard/imports"
-                    className="text-white/60 hover:text-white text-sm px-3 py-2 border-b-2 border-transparent hover:border-[#82b965] transition-colors whitespace-nowrap">
-                    Import dat
-                </Link>
+                <NavLinks />
             </nav>
 
             <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
