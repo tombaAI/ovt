@@ -524,7 +524,6 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         if (!member) return;
         if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
         setToggleError(null);
-        setOptCommittee(checked);
         const r = await setContributionFlags(member.id, periodId, checked, optTom ?? member.isTom);
         if ("success" in r) onMemberUpdated();
         else { setOptCommittee(null); setToggleError(r.error); }
@@ -534,7 +533,6 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         if (!member) return;
         if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
         setToggleError(null);
-        setOptTom(checked);
         const r = await setContributionFlags(member.id, periodId, optCommittee ?? member.isCommittee, checked);
         if ("success" in r) onMemberUpdated();
         else { setOptTom(null); setToggleError(r.error); }
@@ -608,7 +606,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                         <Checkbox id="chk-committee"
                                             checked={optCommittee ?? member.isCommittee}
                                             disabled={committeePending}
-                                            onCheckedChange={v => startCommitteeTransition(async () => { await toggleCommittee(Boolean(v)); })} />
+                                            onCheckedChange={v => { setOptCommittee(Boolean(v)); startCommitteeTransition(async () => { await toggleCommittee(Boolean(v)); }); }} />
                                         <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
                                             Člen výboru
                                             {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.committee} Kč)</span>}
@@ -619,7 +617,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                                         <Checkbox id="chk-tom"
                                             checked={optTom ?? member.isTom}
                                             disabled={tomPending}
-                                            onCheckedChange={v => startTomTransition(async () => { await toggleTom(Boolean(v)); })} />
+                                            onCheckedChange={v => { setOptTom(Boolean(v)); startTomTransition(async () => { await toggleTom(Boolean(v)); }); }} />
                                         <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
                                             Vedoucí TOM
                                             {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.tom} Kč)</span>}
