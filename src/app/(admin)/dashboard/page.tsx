@@ -186,6 +186,19 @@ export default async function DashboardPage() {
                     </Card>
                 </Link>
 
+                {/* Platby z banky */}
+                <Link href={`/dashboard/imports/bank?year=${CONTRIBUTION_YEAR}`}>
+                    <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                        <CardHeader className="pb-2">
+                            <p className="text-sm font-medium text-gray-500">Platby z banky {CONTRIBUTION_YEAR}</p>
+                        </CardHeader>
+                        <CardContent>
+                            <p className="text-2xl font-semibold text-gray-900">0</p>
+                            <p className="text-xs text-gray-400 mt-0.5">nespárovaných plateb</p>
+                        </CardContent>
+                    </Card>
+                </Link>
+
                 {/* Import */}
                 <Link href="/dashboard/imports">
                     <Card className="hover:shadow-md transition-shadow cursor-pointer">

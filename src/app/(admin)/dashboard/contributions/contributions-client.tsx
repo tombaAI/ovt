@@ -3,8 +3,11 @@
 import { useState, useMemo, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentSheet } from "./payment-sheet";
+import { PrepareDialog } from "./prepare-dialog";
+import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, PeriodTab, PeriodDetail, PeriodStatus } from "./page";
 
 type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo";
@@ -47,18 +50,18 @@ interface Props {
     periods: PeriodTab[];
     period: PeriodDetail;
     rows: ContribRow[];
+    canPrepare?: boolean;
+    prepareDefaults?: Partial<PeriodFormData>;
 }
 
-export function ContributionsClient({ periods, period, rows }: Props) {
+export function ContributionsClient({ periods, period, rows, canPrepare = false, prepareDefaults = {} }: Props) {
     const router = useRouter();
     const [filter, setFilter]               = useState<FilterKey>("issues");
     const [sheetOpen, setSheetOpen]         = useState(false);
     const [editContribId, setEditContribId] = useState<number | null>(null);
     const [isPending, startTransition]      = useTransition();
     const [pendingYear, setPendingYear]     = useState<number | null>(null);
-
-    const displayYear = pendingYear ?? period.year;
-    void displayYear;
+    const [prepareOpen, setPrepareOpen]     = useState(false);
 
     function navigateYear(year: number) {
         setPendingYear(year);
@@ -142,9 +145,20 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                         {period.dueDate && ` · Splatnost ${period.dueDate}`}
                     </p>
                 </div>
-                <Badge className={`${lifecycle.cls} text-sm font-medium px-3 py-1 shrink-0`}>
-                    {lifecycle.label}
-                </Badge>
+                <div className="flex items-center gap-2 shrink-0">
+                    {canPrepare && (
+                        <Button
+                            size="sm"
+                            onClick={() => setPrepareOpen(true)}
+                            className="bg-[#327600] hover:bg-[#327600]/90 text-white"
+                        >
+                            Připravit předpisy
+                        </Button>
+                    )}
+                    <Badge className={`${lifecycle.cls} text-sm font-medium px-3 py-1`}>
+                        {lifecycle.label}
+                    </Badge>
+                </div>
             </div>
 
             {/* ── Summary tiles ── */}
@@ -284,6 +298,13 @@ export function ContributionsClient({ periods, period, rows }: Props) {
                 onOpenChange={setSheetOpen}
                 row={editRow}
                 onPaymentUpdated={onPaymentUpdated}
+            />
+
+            <PrepareDialog
+                open={prepareOpen}
+                onOpenChange={setPrepareOpen}
+                year={period.year}
+                defaults={prepareDefaults}
             />
         </div>
     );

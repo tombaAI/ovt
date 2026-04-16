@@ -2,7 +2,9 @@ import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, paymentAllocations, paymentLedger } from "@/db/schema";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
 import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { getDefaultsFromPrevYear } from "@/lib/actions/contribution-periods";
 import { ContributionsClient } from "./contributions-client";
+import { NoPeriodView } from "./prepare-dialog";
 
 export type PeriodStatus = "draft" | "confirmed" | "collecting" | "closed";
 
@@ -86,16 +88,15 @@ export default async function ContributionsPage(props: {
         .from(contributionPeriods)
         .orderBy(desc(contributionPeriods.year));
 
-    if (allPeriods.length === 0) {
-        return (
-            <div className="space-y-4">
-                <h1 className="text-2xl font-semibold text-gray-900">Příspěvky</h1>
-                <p className="text-gray-500">Žádná období v databázi.</p>
-            </div>
-        );
+    const requestedYear = Number(searchParams.year) || CONTRIBUTION_YEAR;
+
+    // Pokud neexistuje žádné období nebo žádné pro vybraný rok, zobrazit prázdný stav s tlačítkem
+    if (allPeriods.length === 0 || !allPeriods.find(p => p.year === requestedYear)) {
+        const targetYear   = allPeriods.length === 0 ? CONTRIBUTION_YEAR : requestedYear;
+        const prepareDefaults = await getDefaultsFromPrevYear(targetYear);
+        return <NoPeriodView year={targetYear} defaults={prepareDefaults} />;
     }
 
-    const requestedYear = Number(searchParams.year) || CONTRIBUTION_YEAR;
     const period = (allPeriods.find(p => p.year === requestedYear) ?? allPeriods[0]) as PeriodDetail;
 
     const contribs = await db
@@ -173,11 +174,16 @@ export default async function ContributionsPage(props: {
         };
     });
 
+    const canPrepare     = period.status === "draft";
+    const prepareDefaults = canPrepare ? await getDefaultsFromPrevYear(period.year) : {};
+
     return (
         <ContributionsClient
             periods={allPeriods as PeriodTab[]}
             period={period}
             rows={data}
+            canPrepare={canPrepare}
+            prepareDefaults={prepareDefaults}
         />
     );
 }
