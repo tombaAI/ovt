@@ -273,3 +273,115 @@ export async function getDefaultsFromPrevYear(year: number): Promise<Partial<Per
         dueDate:           existing ? (existing.dueDate as unknown as string | null) : null,
     };
 }
+
+// ── Smazat všechny předpisy období ───────────────────────────────────────────
+
+/**
+ * Smaže všechny member_contributions pro dané období.
+ * Povoleno jen pokud je období ve stavu "draft".
+ */
+export async function deleteAllPrescriptions(
+    periodId: number,
+): Promise<{ error: string } | { success: true; deleted: number }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [period] = await db
+            .select({ status: contributionPeriods.status })
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, periodId));
+
+        if (!period) return { error: "Období nenalezeno" };
+        if (period.status !== "draft") return { error: "Smazání je povoleno jen ve stavu Příprava" };
+
+        const deleted = await db
+            .delete(memberContributions)
+            .where(eq(memberContributions.periodId, periodId))
+            .returning({ id: memberContributions.id });
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true, deleted: deleted.length };
+    } catch (e) {
+        console.error("[deleteAllPrescriptions]", e);
+        return { error: "Chyba při mazání" };
+    }
+}
+
+// ── Upravit částky jednoho předpisu ──────────────────────────────────────────
+
+export type PrescriptionAmounts = {
+    amountBase: number;
+    amountBoat1: number;   // 0 = žádná
+    amountBoat2: number;
+    amountBoat3: number;
+    discountCommittee: number;   // zadáno jako kladné číslo, uloženo záporně
+    discountTom: number;
+    discountIndividual: number;
+    brigadeSurcharge: number;
+};
+
+/**
+ * Aktualizuje složky předpisu a přepočítá amountTotal.
+ * Povoleno jen pokud je příslušné období ve stavu "draft".
+ */
+export async function updatePrescriptionAmounts(
+    contribId: number,
+    data: PrescriptionAmounts,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [contrib] = await db
+            .select({
+                id:       memberContributions.id,
+                periodId: memberContributions.periodId,
+            })
+            .from(memberContributions)
+            .where(eq(memberContributions.id, contribId));
+
+        if (!contrib) return { error: "Předpis nenalezen" };
+
+        const [period] = await db
+            .select({ status: contributionPeriods.status })
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, contrib.periodId));
+
+        if (!period) return { error: "Období nenalezeno" };
+        if (period.status !== "draft") return { error: "Úprava je povolena jen ve stavu Příprava" };
+
+        // Slevy se ukládají jako záporná čísla
+        const discountCommittee  = data.discountCommittee  > 0 ? -data.discountCommittee  : null;
+        const discountTom        = data.discountTom        > 0 ? -data.discountTom        : null;
+        const discountIndividual = data.discountIndividual > 0 ? -data.discountIndividual : null;
+
+        const amountTotal =
+            data.amountBase +
+            data.amountBoat1 + data.amountBoat2 + data.amountBoat3 +
+            (discountCommittee  ?? 0) +
+            (discountTom        ?? 0) +
+            (discountIndividual ?? 0) +
+            data.brigadeSurcharge;
+
+        await db.update(memberContributions).set({
+            amountBase:        data.amountBase,
+            amountBoat1:       data.amountBoat1 || null,
+            amountBoat2:       data.amountBoat2 || null,
+            amountBoat3:       data.amountBoat3 || null,
+            discountCommittee,
+            discountTom,
+            discountIndividual,
+            brigadeSurcharge:  data.brigadeSurcharge || null,
+            amountTotal,
+        }).where(eq(memberContributions.id, contribId));
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[updatePrescriptionAmounts]", e);
+        return { error: "Chyba při ukládání" };
+    }
+}

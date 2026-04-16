@@ -2,11 +2,17 @@
 
 import { useState, useMemo, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import {
+    Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter,
+} from "@/components/ui/dialog";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { PaymentSheet } from "./payment-sheet";
 import { PrepareDialog } from "./prepare-dialog";
+import { EditPrescriptionDialog } from "./edit-prescription-dialog";
+import { deleteAllPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, PeriodTab, PeriodDetail, PeriodStatus } from "./page";
 
@@ -59,9 +65,13 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
     const [filter, setFilter]               = useState<FilterKey>("issues");
     const [sheetOpen, setSheetOpen]         = useState(false);
     const [editContribId, setEditContribId] = useState<number | null>(null);
-    const [isPending, startTransition]      = useTransition();
-    const [pendingYear, setPendingYear]     = useState<number | null>(null);
-    const [prepareOpen, setPrepareOpen]     = useState(false);
+    const [isPending, startTransition]          = useTransition();
+    const [pendingYear, setPendingYear]         = useState<number | null>(null);
+    const [prepareOpen, setPrepareOpen]         = useState(false);
+    const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+    const [deleteIsPending, startDelete]        = useTransition();
+    const [editRow, setEditRow]                 = useState<ContribRow | null>(null);
+    const [editOpen, setEditOpen]               = useState(false);
 
     function navigateYear(year: number) {
         setPendingYear(year);
@@ -70,14 +80,28 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
         });
     }
 
-    const editRow = editContribId !== null ? (rows.find(r => r.contribId === editContribId) ?? null) : null;
+    const paymentSheetRow = editContribId !== null ? (rows.find(r => r.contribId === editContribId) ?? null) : null;
 
     const onPaymentUpdated = useCallback(() => { router.refresh(); }, [router]);
 
-    function openEdit(r: ContribRow) {
+    function openPaymentSheet(r: ContribRow) {
         setEditContribId(r.contribId);
         setSheetOpen(true);
         router.refresh();
+    }
+
+    function openEditPrescription(r: ContribRow, e: React.MouseEvent) {
+        e.stopPropagation();
+        setEditRow(r);
+        setEditOpen(true);
+    }
+
+    function handleDeleteAll() {
+        startDelete(async () => {
+            await deleteAllPrescriptions(period.id);
+            setDeleteConfirmOpen(false);
+            router.refresh();
+        });
     }
 
     const counts = useMemo(() => ({
@@ -146,6 +170,17 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
                     </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
+                    {canPrepare && rows.length > 0 && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setDeleteConfirmOpen(true)}
+                            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                        >
+                            <Trash2 className="w-3.5 h-3.5 mr-1" />
+                            Smazat vše
+                        </Button>
+                    )}
                     {canPrepare && (
                         <Button
                             size="sm"
@@ -214,11 +249,22 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
                     const d = diff(r);
                     const sb = STATUS_BADGE[r.status];
                     return (
-                        <button key={r.contribId} onClick={() => openEdit(r)}
+                        <button key={r.contribId} onClick={() => openPaymentSheet(r)}
                             className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
                             <div className="flex items-start justify-between gap-2">
                                 <p className="font-medium text-gray-900">{r.firstName} {r.lastName}</p>
-                                <Badge className={`${sb.cls} text-xs font-normal shrink-0`}>{sb.label}</Badge>
+                                <div className="flex items-center gap-1.5 shrink-0">
+                                    {canPrepare && (
+                                        <button
+                                            onClick={e => openEditPrescription(r, e)}
+                                            className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-[#327600]"
+                                            title="Upravit částky"
+                                        >
+                                            <Pencil className="w-3.5 h-3.5" />
+                                        </button>
+                                    )}
+                                    <Badge className={`${sb.cls} text-xs font-normal`}>{sb.label}</Badge>
+                                </div>
                             </div>
                             <div className="flex flex-wrap gap-x-4 gap-y-0.5 mt-1.5 text-sm text-gray-500">
                                 <span>Předpis: <strong className="text-gray-800">{fmt(r.amountTotal)}</strong></span>
@@ -262,7 +308,7 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
                             return (
                                 <TableRow key={r.contribId}
                                     className="hover:bg-gray-50/60 cursor-pointer"
-                                    onClick={() => openEdit(r)}>
+                                    onClick={() => openPaymentSheet(r)}>
                                     <TableCell className="font-medium">
                                         <span>{r.firstName} {r.lastName}</span>
                                         {r.todoNote && (
@@ -271,7 +317,20 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
                                             </span>
                                         )}
                                     </TableCell>
-                                    <TableCell className="text-right font-mono text-sm">{fmt(r.amountTotal)}</TableCell>
+                                    <TableCell className="text-right font-mono text-sm">
+                                        <span className="inline-flex items-center gap-2">
+                                            {fmt(r.amountTotal)}
+                                            {canPrepare && (
+                                                <button
+                                                    onClick={e => openEditPrescription(r, e)}
+                                                    className="p-0.5 rounded hover:bg-gray-100 text-gray-300 hover:text-[#327600]"
+                                                    title="Upravit částky"
+                                                >
+                                                    <Pencil className="w-3 h-3" />
+                                                </button>
+                                            )}
+                                        </span>
+                                    </TableCell>
                                     <TableCell className="text-right font-mono text-sm">{fmt(r.paidTotal)}</TableCell>
                                     <TableCell className="text-right font-mono text-sm hidden lg:table-cell">
                                         {d === null || d === 0 ? "—" : (
@@ -296,7 +355,7 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
             <PaymentSheet
                 open={sheetOpen}
                 onOpenChange={setSheetOpen}
-                row={editRow}
+                row={paymentSheetRow}
                 onPaymentUpdated={onPaymentUpdated}
             />
 
@@ -305,6 +364,43 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
                 onOpenChange={setPrepareOpen}
                 year={period.year}
                 defaults={prepareDefaults}
+            />
+
+            {/* ── Smazat vše — potvrzení ── */}
+            <Dialog open={deleteConfirmOpen} onOpenChange={setDeleteConfirmOpen}>
+                <DialogContent className="sm:max-w-sm">
+                    <DialogHeader>
+                        <DialogTitle>Smazat všechny předpisy?</DialogTitle>
+                    </DialogHeader>
+                    <p className="text-sm text-gray-600">
+                        Budou smazány všechny předpisy příspěvků pro rok{" "}
+                        <strong>{period.year}</strong> ({rows.length} záznamů).
+                        Akci nelze vrátit.
+                    </p>
+                    <DialogFooter>
+                        <Button
+                            variant="outline"
+                            onClick={() => setDeleteConfirmOpen(false)}
+                            disabled={deleteIsPending}
+                        >
+                            Zrušit
+                        </Button>
+                        <Button
+                            onClick={handleDeleteAll}
+                            disabled={deleteIsPending}
+                            className="bg-red-600 hover:bg-red-700 text-white"
+                        >
+                            {deleteIsPending ? "Mažu…" : "Smazat vše"}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {/* ── Upravit částky předpisu ── */}
+            <EditPrescriptionDialog
+                open={editOpen}
+                onOpenChange={setEditOpen}
+                row={editRow}
             />
         </div>
     );
