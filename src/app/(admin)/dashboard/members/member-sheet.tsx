@@ -474,8 +474,13 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
     const [committeePending, startCommitteeTransition] = useTransition();
     const [tomPending, startTomTransition] = useTransition();
     const [toggleError, setToggleError] = useState<string | null>(null);
+    const [optCommittee, setOptCommittee] = useState<boolean | null>(null);
+    const [optTom, setOptTom]             = useState<boolean | null>(null);
     const [activeField, setActiveField] = useState<string | null>(null);
     const [tjDiffs, setTjDiffs]         = useState<Record<string, string | null>>({});
+
+    // Reset optimistického stavu při přepnutí na jiného člena
+    useEffect(() => { setOptCommittee(null); setOptTom(null); }, [member?.id]);
 
     const [state, formAction, isPending] = useActionState<MemberFormState, FormData>(saveMember, null);
     useEffect(() => {
@@ -519,18 +524,20 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
         if (!member) return;
         if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
         setToggleError(null);
-        const r = await setContributionFlags(member.id, periodId, checked, member.isTom);
+        setOptCommittee(checked);
+        const r = await setContributionFlags(member.id, periodId, checked, optTom ?? member.isTom);
         if ("success" in r) onMemberUpdated();
-        else setToggleError(r.error);
+        else { setOptCommittee(null); setToggleError(r.error); }
     }
 
     async function toggleTom(checked: boolean) {
         if (!member) return;
         if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
         setToggleError(null);
-        const r = await setContributionFlags(member.id, periodId, member.isCommittee, checked);
+        setOptTom(checked);
+        const r = await setContributionFlags(member.id, periodId, optCommittee ?? member.isCommittee, checked);
         if ("success" in r) onMemberUpdated();
-        else setToggleError(r.error);
+        else { setOptTom(null); setToggleError(r.error); }
     }
 
     const isTerminated = Boolean(member?.memberTo);
@@ -599,7 +606,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
 
                                     <div className="flex items-center gap-2">
                                         <Checkbox id="chk-committee"
-                                            checked={member.isCommittee}
+                                            checked={optCommittee ?? member.isCommittee}
                                             disabled={committeePending}
                                             onCheckedChange={v => startCommitteeTransition(async () => { await toggleCommittee(Boolean(v)); })} />
                                         <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
@@ -610,7 +617,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
 
                                     <div className="flex items-center gap-2">
                                         <Checkbox id="chk-tom"
-                                            checked={member.isTom}
+                                            checked={optTom ?? member.isTom}
                                             disabled={tomPending}
                                             onCheckedChange={v => startTomTransition(async () => { await toggleTom(Boolean(v)); })} />
                                         <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
