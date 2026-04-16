@@ -110,9 +110,11 @@ export async function preparePrescriptions(
             return { success: true, generated: 0, skipped };
         }
 
-        // ── 4. Lodě aktivní v daném roce (pouze mříže 1/2/3) ─────────────────
+        // ── 4. Lodě aktivní v daném roce — počet na člena ────────────────────
+        // Cena nezáleží na velikosti/mříži, ale na pořadí:
+        //   1. loď → amountBoat1, 2. loď → amountBoat2, 3. loď → amountBoat3
         const boatRows = await db
-            .select({ ownerId: boats.ownerId, grid: boats.grid })
+            .select({ ownerId: boats.ownerId })
             .from(boats)
             .where(and(
                 inArray(boats.ownerId, newMemberIds),
@@ -120,15 +122,11 @@ export async function preparePrescriptions(
                 or(isNull(boats.storedTo),   sql`${boats.storedTo} >= ${yearStart}`),
             ));
 
-        type GridCounts = { g1: number; g2: number; g3: number };
-        const boatsByMember = boatRows.reduce((acc, b) => {
+        const boatCountByMember = boatRows.reduce((acc, b) => {
             if (!b.ownerId) return acc;
-            if (!acc[b.ownerId]) acc[b.ownerId] = { g1: 0, g2: 0, g3: 0 };
-            if (b.grid === "1") acc[b.ownerId].g1++;
-            else if (b.grid === "2") acc[b.ownerId].g2++;
-            else if (b.grid === "3") acc[b.ownerId].g3++;
+            acc[b.ownerId] = (acc[b.ownerId] ?? 0) + 1;
             return acc;
-        }, {} as Record<number, GridCounts>);
+        }, {} as Record<number, number>);
 
         // ── 5. Brigáda z předchozího roku ────────────────────────────────────
         const brigadeParticipants = await getBrigadeMemberIdsByYear(year - 1);
@@ -160,8 +158,8 @@ export async function preparePrescriptions(
 
         // ── 7. Výpočet a vložení předpisů ────────────────────────────────────
         const toInsert = newMemberIds.map(memberId => {
-            const prev     = prevByMember.get(memberId);
-            const boats_   = boatsByMember[memberId] ?? { g1: 0, g2: 0, g3: 0 };
+            const prev      = prevByMember.get(memberId);
+            const boatCount = boatCountByMember[memberId] ?? 0;
 
             // Slevy výbor/TOM: přenést, pokud člen měl slevu loni (znovu aplikovat letošní sazbu)
             const discountCommittee = prev?.discountCommittee
@@ -179,10 +177,11 @@ export async function preparePrescriptions(
             const discountIndividualNote      = hasValidIndividual ? prev!.discountIndividualNote      : null;
             const discountIndividualValidUntil = hasValidIndividual ? prev!.discountIndividualValidUntil : null;
 
-            // Příplatky za lodě
-            const amountBoat1 = boats_.g1 * period.amountBoat1;
-            const amountBoat2 = boats_.g2 * period.amountBoat2;
-            const amountBoat3 = boats_.g3 * period.amountBoat3;
+            // Příplatky za lodě — podle pořadí, ne podle velikosti/mříže
+            // Sloupce amountBoat1/2/3 uchovávají příplatek za 1./2./3. loď člena
+            const amountBoat1 = boatCount >= 1 ? period.amountBoat1 : 0;
+            const amountBoat2 = boatCount >= 2 ? period.amountBoat2 : 0;
+            const amountBoat3 = boatCount >= 3 ? period.amountBoat3 : 0;
 
             // Penále za brigádu: uplatní se pokud člen NEMÁ brigádu z minulého roku
             const didBrigade      = brigadeParticipants.has(memberId);
