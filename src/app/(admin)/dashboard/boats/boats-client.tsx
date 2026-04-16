@@ -131,13 +131,14 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
                             <TableHead>Majitel</TableHead>
                             <TableHead className="hidden sm:table-cell">Popis</TableHead>
                             <TableHead className="hidden md:table-cell w-24">Barva</TableHead>
+                            <TableHead className="hidden lg:table-cell w-36">Příspěvky</TableHead>
                             <TableHead className="w-24 text-center">Přítomna</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={5} className="text-center text-gray-400 py-10">
+                                <TableCell colSpan={6} className="text-center text-gray-400 py-10">
                                     Žádné lodě
                                 </TableCell>
                             </TableRow>
@@ -163,6 +164,26 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
                                 </TableCell>
                                 <TableCell className="hidden md:table-cell text-gray-600 text-sm">
                                     {b.color ?? <span className="text-gray-300">—</span>}
+                                </TableCell>
+                                <TableCell className="hidden lg:table-cell">
+                                    {b.ownerId ? (
+                                        <div className="flex gap-1">
+                                            {[2024, 2025, 2026].map(yr => (
+                                                <span
+                                                    key={yr}
+                                                    className={[
+                                                        "inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-semibold leading-none",
+                                                        b.contribYears.includes(yr)
+                                                            ? "bg-green-100 text-green-700"
+                                                            : "bg-gray-100 text-gray-400",
+                                                    ].join(" ")}>
+                                                    {yr}
+                                                </span>
+                                            ))}
+                                        </div>
+                                    ) : (
+                                        <span className="text-gray-300 text-xs">—</span>
+                                    )}
                                 </TableCell>
                                 <TableCell className="text-center">
                                     {b.isPresent ? (

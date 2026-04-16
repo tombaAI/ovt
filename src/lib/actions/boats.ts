@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { boats, members } from "@/db/schema";
+import { boats, members, memberContributions, contributionPeriods } from "@/db/schema";
 import { eq, isNull, isNotNull, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
@@ -21,6 +21,7 @@ export type BoatRow = {
     storedTo: string | null;
     lastCheckedAt: string | null;
     note: string | null;
+    contribYears: number[];   // roky, ve kterých má majitel lodě v příspěvcích
 };
 
 // ── Queries ──────────────────────────────────────────────────────────────────
@@ -58,11 +59,40 @@ export async function getBoats(includeArchived = false): Promise<BoatRow[]> {
         sql`${members.firstName} ASC NULLS LAST`,
     );
 
+    // Načti roky příspěvků pro majitele lodí (2024–2026)
+    const YEARS = [2024, 2025, 2026] as const;
+    const memberIds = [...new Set(rows.map(r => r.ownerId).filter((id): id is number => id !== null))];
+
+    const contribMap = new Map<number, Set<number>>();  // memberId → Set<year>
+
+    if (memberIds.length > 0) {
+        const contribs = await db
+            .select({
+                memberId: memberContributions.memberId,
+                year:     contributionPeriods.year,
+            })
+            .from(memberContributions)
+            .innerJoin(contributionPeriods, eq(memberContributions.periodId, contributionPeriods.id))
+            .where(
+                sql`${memberContributions.memberId} = ANY(${memberIds})
+                    AND ${contributionPeriods.year} = ANY(${YEARS})
+                    AND (${memberContributions.amountBoat1} IS NOT NULL
+                      OR ${memberContributions.amountBoat2} IS NOT NULL
+                      OR ${memberContributions.amountBoat3} IS NOT NULL)`
+            );
+
+        for (const c of contribs) {
+            if (!contribMap.has(c.memberId)) contribMap.set(c.memberId, new Set());
+            contribMap.get(c.memberId)!.add(c.year);
+        }
+    }
+
     return rows.map(r => ({
         ...r,
         storedFrom:    r.storedFrom    as unknown as string | null,
         storedTo:      r.storedTo      as unknown as string | null,
         lastCheckedAt: r.lastCheckedAt as unknown as string | null,
+        contribYears:  r.ownerId ? [...(contribMap.get(r.ownerId) ?? [])] : [],
     }));
 }
 
