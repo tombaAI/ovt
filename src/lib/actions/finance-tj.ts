@@ -52,9 +52,8 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
     try {
         const buffer = Buffer.from(await file.arrayBuffer());
 
-        // Dynamický import obchází NextJS quirk s pdf-parse test soubory
         // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require("pdf-parse/lib/pdf-parse.js") as (
+        const pdfParse = require("pdf-parse") as (
             buffer: Buffer
         ) => Promise<{ text: string }>;
         const { text } = await pdfParse(buffer);
