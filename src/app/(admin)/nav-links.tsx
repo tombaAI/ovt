@@ -14,6 +14,7 @@ const NAV_ITEMS: { href: string; label: string; exact?: boolean }[] = [
     { href: "/dashboard/boats",        label: "Lodě" },
     { href: "/dashboard/finance",       label: "Finance z TJ" },
     { href: "/dashboard/imports",      label: "Import dat" },
+    { href: "/dashboard/informace",    label: "Informace" },
 ];
 
 export function NavLinks() {

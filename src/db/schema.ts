@@ -460,6 +460,39 @@ export const importFinTjTransactions = appSchema.table(
     ]
 );
 
+// ── Notebook tables ──────────────────────────────────────────────────────────
+
+export const notebookNotes = appSchema.table(
+    "notebook_notes",
+    {
+        id:             serial("id").primaryKey(),
+        title:          text("title").notNull(),
+        createdByEmail: text("created_by_email").notNull(),
+        createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+        archivedAt:     timestamp("archived_at", { withTimezone: true }),
+    },
+    (t) => [
+        index("notebook_notes_archived_idx").on(t.archivedAt),
+        index("notebook_notes_updated_at_idx").on(t.updatedAt.desc()),
+    ]
+);
+
+export const notebookNoteVersions = appSchema.table(
+    "notebook_note_versions",
+    {
+        id:             serial("id").primaryKey(),
+        noteId:         integer("note_id").notNull().references(() => notebookNotes.id, { onDelete: "cascade" }),
+        content:        text("content").notNull(),
+        createdByEmail: text("created_by_email").notNull(),
+        createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("notebook_note_versions_note_idx").on(t.noteId),
+        index("notebook_note_versions_created_at_idx").on(t.createdAt.desc()),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(
