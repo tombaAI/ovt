@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition, useCallback } from "react";
+import { useState, useEffect, useTransition, useCallback, useRef, KeyboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import {
@@ -17,6 +17,7 @@ interface Props {
     open: boolean;
     onOpenChange: (v: boolean) => void;
     note: NoteWithLatest | null;
+    allTags: string[];
     includeArchived: boolean;
     onSaved: () => void;
 }
@@ -30,40 +31,113 @@ function fmtDate(d: Date | string) {
     });
 }
 
-export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }: Props) {
-    // Pracovní stav editoru
+// ── Vstup pro kategorie ───────────────────────────────────────────────────────
+function CategoryInput({
+    value,
+    onChange,
+    suggestions,
+}: {
+    value: string[];
+    onChange: (v: string[]) => void;
+    suggestions: string[];
+}) {
+    const [input, setInput] = useState("");
+    const inputRef = useRef<HTMLInputElement>(null);
+    const listId = "category-suggestions";
+
+    function addCategory(raw: string) {
+        const cat = raw.trim().toLowerCase();
+        if (cat && !value.includes(cat)) {
+            onChange([...value, cat]);
+        }
+        setInput("");
+    }
+
+    function handleKey(e: KeyboardEvent<HTMLInputElement>) {
+        if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            addCategory(input);
+        } else if (e.key === "Backspace" && input === "" && value.length > 0) {
+            onChange(value.slice(0, -1));
+        }
+    }
+
+    // Pokud uživatel vybral z datalist (onChange dostane celou hodnotu)
+    function handleChange(raw: string) {
+        if (suggestions.includes(raw.trim().toLowerCase())) {
+            addCategory(raw);
+        } else {
+            setInput(raw);
+        }
+    }
+
+    const remaining = suggestions.filter(s => !value.includes(s));
+
+    return (
+        <div
+            className="flex flex-wrap gap-1.5 items-center px-2 py-1.5 rounded-lg border border-gray-200 bg-white min-h-[36px] cursor-text"
+            onClick={() => inputRef.current?.focus()}>
+            {value.map(cat => (
+                <span key={cat}
+                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
+                    {cat}
+                    <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); onChange(value.filter(c => c !== cat)); }}
+                        className="text-[#327600]/60 hover:text-[#327600] leading-none">
+                        ×
+                    </button>
+                </span>
+            ))}
+            <input
+                ref={inputRef}
+                list={listId}
+                value={input}
+                onChange={e => handleChange(e.target.value)}
+                onKeyDown={handleKey}
+                placeholder={value.length === 0 ? "Přidat kategorii… (Enter)" : ""}
+                className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-gray-300"
+            />
+            <datalist id={listId}>
+                {remaining.map(s => <option key={s} value={s} />)}
+            </datalist>
+        </div>
+    );
+}
+
+// ── Hlavní sheet ──────────────────────────────────────────────────────────────
+export function NoteSheet({ open, onOpenChange, note, allTags, includeArchived, onSaved }: Props) {
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
+    const [tags, setTags] = useState<string[]>([]);
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
     const [saveError, setSaveError] = useState("");
 
-    // Verze
     const [versionsOpen, setVersionsOpen] = useState(false);
     const [versions, setVersions] = useState<NoteVersionRow[]>([]);
     const [versionsLoading, setVersionsLoading] = useState(false);
     const [expandedVersionId, setExpandedVersionId] = useState<number | null>(null);
 
-    // Archivace
     const [archiveConfirm, setArchiveConfirm] = useState(false);
     const [, startTransition] = useTransition();
 
     const isNew = currentNoteId === null;
     const isArchived = !!note?.archivedAt;
 
-    // Reset při otevření / změně poznámky
     useEffect(() => {
         if (!open) return;
         if (note) {
             setTitle(note.title);
             setContent(note.latestContent);
+            setTags(note.tags ?? []);
             setCurrentNoteId(note.id);
             setIsEditing(false);
         } else {
-            // Nová poznámka — rovnou do edit módu
             setTitle("");
             setContent("");
+            setTags([]);
             setCurrentNoteId(null);
             setIsEditing(true);
         }
@@ -99,12 +173,10 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
 
         let result;
         if (isNew) {
-            result = await createNote(title.trim(), content);
-            if ("success" in result && result.id) {
-                setCurrentNoteId(result.id);
-            }
+            result = await createNote(title.trim(), content, tags);
+            if ("success" in result && result.id) setCurrentNoteId(result.id);
         } else {
-            result = await saveNoteVersion(currentNoteId!, title.trim(), content);
+            result = await saveNoteVersion(currentNoteId!, title.trim(), content, tags);
         }
 
         if ("error" in result) {
@@ -120,9 +192,9 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
 
     function handleCancelEdit() {
         if (note) {
-            // Obnov původní hodnoty
             setTitle(note.title);
             setContent(note.latestContent);
+            setTags(note.tags ?? []);
         }
         setSaveError("");
         setIsEditing(false);
@@ -143,19 +215,15 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent
-                className="sm:max-w-4xl flex flex-col gap-0 p-0 overflow-hidden"
-                side="right">
+            <SheetContent className="sm:max-w-4xl flex flex-col gap-0 p-0 overflow-hidden" side="right">
 
                 {/* ── Header ── */}
                 <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
-                    <SheetTitle className="sr-only">
-                        {isNew ? "Nová poznámka" : title}
-                    </SheetTitle>
+                    <SheetTitle className="sr-only">{isNew ? "Nová poznámka" : title}</SheetTitle>
 
                     {isEditing ? (
-                        /* Edit mód — editovatelný název + tlačítka */
-                        <div className="space-y-1">
+                        <div className="space-y-2">
+                            {/* Název + tlačítka */}
                             <div className="flex items-center gap-2">
                                 <input
                                     type="text"
@@ -185,24 +253,39 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                                     </button>
                                 )}
                             </div>
-                            {saveError && (
-                                <p className="text-xs text-red-600">{saveError}</p>
-                            )}
+                            {/* Kategorie — vstup */}
+                            <div className="flex items-start gap-2">
+                                <span className="text-xs text-gray-400 mt-2 shrink-0">Kategorie:</span>
+                                <div className="flex-1">
+                                    <CategoryInput
+                                        value={tags}
+                                        onChange={setTags}
+                                        suggestions={allTags}
+                                    />
+                                </div>
+                            </div>
+                            {saveError && <p className="text-xs text-red-600">{saveError}</p>}
                         </div>
                     ) : (
-                        /* View mód — název + tlačítko Upravit */
-                        <div className="flex items-center gap-3">
-                            <h2 className="flex-1 text-lg font-semibold text-gray-900 leading-tight">
-                                {title}
-                            </h2>
-                            {!isArchived && (
-                                <Button
-                                    onClick={() => setIsEditing(true)}
-                                    variant="outline"
-                                    size="sm"
-                                    className="shrink-0">
-                                    Upravit
-                                </Button>
+                        <div className="space-y-1.5">
+                            <div className="flex items-center gap-3">
+                                <h2 className="flex-1 text-lg font-semibold text-gray-900 leading-tight">{title}</h2>
+                                {!isArchived && (
+                                    <Button onClick={() => setIsEditing(true)} variant="outline" size="sm" className="shrink-0">
+                                        Upravit
+                                    </Button>
+                                )}
+                            </div>
+                            {/* Kategorie — zobrazení */}
+                            {tags.length > 0 && (
+                                <div className="flex gap-1.5 flex-wrap">
+                                    {tags.map(t => (
+                                        <span key={t}
+                                            className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
+                                            {t}
+                                        </span>
+                                    ))}
+                                </div>
                             )}
                         </div>
                     )}
@@ -218,11 +301,9 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                     )}
                 </SheetHeader>
 
-                {/* ── Tělo sheetu ── */}
+                {/* ── Tělo ── */}
                 {isEditing ? (
-                    /* ── Split-view editor ── */
                     <div className="flex-1 flex overflow-hidden min-h-0">
-                        {/* Levá strana — zdrojový MD */}
                         <div className="flex-1 flex flex-col border-r min-w-0">
                             <div className="px-3 py-1.5 bg-gray-50 border-b text-xs text-gray-400 font-medium tracking-wide uppercase">
                                 Markdown
@@ -235,8 +316,6 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                                 spellCheck={false}
                             />
                         </div>
-
-                        {/* Pravá strana — náhled (skrytý na mobilu) */}
                         <div className="flex-1 flex-col min-w-0 hidden md:flex">
                             <div className="px-3 py-1.5 bg-gray-50 border-b text-xs text-gray-400 font-medium tracking-wide uppercase">
                                 Náhled
@@ -244,9 +323,7 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                             <div className="flex-1 overflow-y-auto p-5">
                                 {content ? (
                                     <div className="md-content">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                            {content}
-                                        </ReactMarkdown>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                                     </div>
                                 ) : (
                                     <p className="text-gray-300 text-sm italic">Náhled se zobrazí zde…</p>
@@ -255,13 +332,10 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                         </div>
                     </div>
                 ) : (
-                    /* ── View mód — čtecí zobrazení ── */
                     <div className="flex-1 overflow-y-auto p-6">
                         {content ? (
                             <div className="md-content max-w-2xl">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                    {content}
-                                </ReactMarkdown>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
                             </div>
                         ) : (
                             <p className="text-gray-400 text-sm italic">Žádný obsah</p>
@@ -269,7 +343,7 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                     </div>
                 )}
 
-                {/* ── Verze (collapsible) ── */}
+                {/* ── Verze ── */}
                 {currentNoteId !== null && (
                     <div className="border-t shrink-0">
                         <button
@@ -278,7 +352,6 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                             <span className="font-medium text-xs uppercase tracking-wide">Historie verzí</span>
                             <span className="text-gray-400 text-xs">{versionsOpen ? "▲ Skrýt" : "▼ Zobrazit"}</span>
                         </button>
-
                         {versionsOpen && (
                             <div className="border-t max-h-56 overflow-y-auto">
                                 {versionsLoading ? (
@@ -291,26 +364,18 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                                             <div key={v.id} className="px-5 py-2.5">
                                                 <div className="flex items-center justify-between gap-3">
                                                     <div className="flex items-center gap-2">
-                                                        <span className="text-xs font-semibold text-gray-500 w-6">
-                                                            v{versions.length - idx}
-                                                        </span>
-                                                        <span className="text-xs text-gray-400">
-                                                            {fmtDate(v.createdAt)} · {v.createdByEmail}
-                                                        </span>
+                                                        <span className="text-xs font-semibold text-gray-500 w-6">v{versions.length - idx}</span>
+                                                        <span className="text-xs text-gray-400">{fmtDate(v.createdAt)} · {v.createdByEmail}</span>
                                                     </div>
                                                     <button
-                                                        onClick={() => setExpandedVersionId(
-                                                            expandedVersionId === v.id ? null : v.id
-                                                        )}
-                                                        className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 transition-colors shrink-0">
+                                                        onClick={() => setExpandedVersionId(expandedVersionId === v.id ? null : v.id)}
+                                                        className="text-xs text-gray-400 hover:text-gray-700 underline underline-offset-2 shrink-0">
                                                         {expandedVersionId === v.id ? "Skrýt" : "Zobrazit"}
                                                     </button>
                                                 </div>
                                                 {expandedVersionId === v.id && (
                                                     <div className="mt-2 rounded-lg bg-gray-50 border p-3 md-content text-xs">
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                                                            {v.content}
-                                                        </ReactMarkdown>
+                                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{v.content}</ReactMarkdown>
                                                     </div>
                                                 )}
                                             </div>
@@ -330,21 +395,18 @@ export function NoteSheet({ open, onOpenChange, note, includeArchived, onSaved }
                                 <span className="text-xs text-gray-500">
                                     {isArchived ? "Opravdu obnovit?" : "Opravdu archivovat?"}
                                 </span>
-                                <button
-                                    onClick={handleArchive}
-                                    className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50 transition-colors">
+                                <button onClick={handleArchive}
+                                    className="text-xs text-red-600 hover:text-red-800 font-medium px-2 py-1 rounded hover:bg-red-50">
                                     Ano
                                 </button>
-                                <button
-                                    onClick={() => setArchiveConfirm(false)}
-                                    className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100 transition-colors">
+                                <button onClick={() => setArchiveConfirm(false)}
+                                    className="text-xs text-gray-400 hover:text-gray-600 px-2 py-1 rounded hover:bg-gray-100">
                                     Ne
                                 </button>
                             </div>
                         ) : (
-                            <button
-                                onClick={() => setArchiveConfirm(true)}
-                                className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
+                            <button onClick={() => setArchiveConfirm(true)}
+                                className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2">
                                 {isArchived ? "Obnovit z archivu" : "Archivovat"}
                             </button>
                         )}

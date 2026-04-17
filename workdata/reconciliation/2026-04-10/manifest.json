@@ -1,0 +1,38 @@
+{
+  "generated_at": "2026-04-10T09:22:58.189Z",
+  "out_dir": "workdata/reconciliation/2026-04-10",
+  "files": [
+    {
+      "fullPath": "workdata/reconciliation/2026-04-10/year_summary.csv",
+      "rows": 7
+    },
+    {
+      "fullPath": "workdata/reconciliation/2026-04-10/bank_unmapped_member.csv",
+      "rows": 30
+    },
+    {
+      "fullPath": "workdata/reconciliation/2026-04-10/bank_member_no_payment_match.csv",
+      "rows": 18
+    },
+    {
+      "fullPath": "workdata/reconciliation/2026-04-10/payments_no_bank_match.csv",
+      "rows": 37
+    },
+    {
+      "fullPath": "workdata/reconciliation/2026-04-10/outstanding_contributions.csv",
+      "rows": 77
+    },
+    {
+      "fullPath": "workdata/reconciliation/2026-04-10/family_payment_candidates.csv",
+      "rows": 91
+    }
+  ],
+  "counts": {
+    "year_summary": 7,
+    "bank_unmapped_member": 30,
+    "bank_member_no_payment_match": 18,
+    "payments_no_bank_match": 37,
+    "outstanding_contributions": 77,
+    "family_payment_candidates": 91
+  }
+}

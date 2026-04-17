@@ -53,15 +53,13 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
         const buffer = Buffer.from(await file.arrayBuffer());
         console.log(`[finance-tj] PDF buffer: ${buffer.byteLength} bytes, soubor: ${file.name}`);
 
-        // eslint-disable-next-line @typescript-eslint/no-require-imports
-        const pdfParse = require("pdf-parse") as (
-            buffer: Buffer
-        ) => Promise<{ text: string; numpages: number }>;
-        const { text, numpages } = await pdfParse(buffer);
-        console.log(`[finance-tj] PDF extrahován: ${numpages} stran, ${text.length} znaků`);
-        console.log(`[finance-tj] První 500 znaků textu:\n${text.slice(0, 500)}`);
+        const { extractText } = await import("unpdf");
+        const { text, totalPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
+        const fullText = Array.isArray(text) ? text.join("\n") : text;
+        console.log(`[finance-tj] PDF extrahován: ${totalPages} stran, ${fullText.length} znaků`);
+        console.log(`[finance-tj] První 500 znaků textu:\n${fullText.slice(0, 500)}`);
 
-        const parsed: TjParseResult = parseTjFinancePdf(text);
+        const parsed: TjParseResult = parseTjFinancePdf(fullText);
         console.log(`[finance-tj] Parser meta:`, parsed.meta);
         console.log(`[finance-tj] Nalezeno transakcí: ${parsed.transactions.length}`);
         parsed.transactions.forEach((tx, i) =>

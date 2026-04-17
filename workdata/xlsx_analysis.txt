@@ -1,0 +1,787 @@
+======================================================================
+SOUBOR: OVT Finance.xlsx
+======================================================================
+
+  --- List: Rozpočet - průběžný stav ---
+  Sloupce (27):
+    [0] Klíč
+    [1] Skupina
+    [2] Kategorie
+    [3] Ověření
+    [4] Položka
+    [5] Datum evidence
+    [6] Datum zaúčtování
+    [7] Účet
+    [8] Příjem
+    [9] Výdaj
+    [10] Obrat
+    [11] Záloha
+    [12] Převod
+    [13] Bilance
+    [14] Rok
+    [15] Poznámka
+    [16] TJ účet
+    [17] Air účet
+    [18] Fio účet
+    [19] Hotovost 2
+    [20] Hotovost 3
+    [21] Kontrolní součet
+    [22] stav
+    [23] datum stavu
+    [24] datum účet TJ
+    [25] datum účet Air
+    [26] datum účet Fio
+
+  Počet datových řádků: 398
+  Ukázka (prvních 5 řádků):
+    {'Klíč': '2017_Převody_Převod z 2016', 'Skupina': 'Převody', 'Kategorie': 'Převod z 2016', 'Ověření': None, 'Položka': 'Počáteční stav 2017', 'Datum evidence': datetime.datetime(2017, 1, 1, 0, 0), 'Datum zaúčtování': None, 'Účet': None, 'Příjem': 99427.0, 'Výdaj': None, 'Obrat': 99427, 'Záloha': None, 'Převod': None, 'Bilance': 99427, 'Rok': '2017', 'Poznámka': 'bez vlivu', 'TJ účet': 64352.0, 'Air účet': 0.0, 'Fio účet': 0.0, 'Hotovost 2': 34075.0, 'Hotovost 3': None, 'Kontrolní součet': -1000, 'stav': None, 'datum stavu': None}
+    {'Klíč': '2017_Běžný provoz_Příspěvky ČSK', 'Skupina': 'Běžný provoz', 'Kategorie': 'Příspěvky ČSK', 'Ověření': None, 'Položka': 'Příspěvky ČSK', 'Datum evidence': datetime.datetime(2017, 2, 20, 0, 0), 'Datum zaúčtování': None, 'Účet': None, 'Příjem': None, 'Výdaj': 1420.0, 'Obrat': -1420, 'Záloha': None, 'Převod': None, 'Bilance': 98007, 'Rok': '2017', 'Poznámka': 'bez vlivu', 'TJ účet': None, 'Air účet': None, 'Fio účet': None, 'Hotovost 2': None, 'Hotovost 3': None, 'Kontrolní součet': None, 'stav': None, 'datum stavu': None}
+    {'Klíč': '2017_Běžný provoz_Příspěvky', 'Skupina': 'Běžný provoz', 'Kategorie': 'Příspěvky', 'Ověření': None, 'Položka': 'Vybrané příspěvky na VH', 'Datum evidence': datetime.datetime(2017, 2, 21, 0, 0), 'Datum zaúčtování': None, 'Účet': None, 'Příjem': 11750.0, 'Výdaj': None, 'Obrat': 11750, 'Záloha': None, 'Převod': None, 'Bilance': 109757, 'Rok': '2017', 'Poznámka': 'y 2017', 'TJ účet': 64352, 'Air účet': None, 'Fio účet': 11750.0, 'Hotovost 2': 32655.0, 'Hotovost 3': None, 'Kontrolní součet': -1000, 'stav': None, 'datum stavu': None}
+    {'Klíč': '2017_Hamerák-akce_Hamerák materiál', 'Skupina': 'Hamerák-akce', 'Kategorie': 'Hamerák materiál', 'Ověření': None, 'Položka': 'Záloha - Jáchym Kopřiva', 'Datum evidence': datetime.datetime(2017, 2, 21, 0, 0), 'Datum zaúčtování': None, 'Účet': None, 'Příjem': None, 'Výdaj': None, 'Obrat': 0, 'Záloha': 3000.0, 'Převod': None, 'Bilance': 109757, 'Rok': '2017', 'Poznámka': 'bez vlivu', 'TJ účet': 64352, 'Air účet': 0.0, 'Fio účet': 8750.0, 'Hotovost 2': 32655.0, 'Hotovost 3': 3000.0, 'Kontrolní součet': -1000, 'stav': 'kde je 1000?', 'datum stavu': datetime.datetime(2017, 3, 22, 0, 0), 'datum účet TJ': None}
+    {'Klíč': '2017_Hamerák-akce_Hamerák materiál', 'Skupina': 'Hamerák-akce', 'Kategorie': 'Hamerák materiál', 'Ověření': None, 'Položka': 'Jáchym K - schody Hamerák', 'Datum evidence': datetime.datetime(2017, 3, 15, 0, 0), 'Datum zaúčtování': None, 'Účet': None, 'Příjem': None, 'Výdaj': 4478, 'Obrat': -4478, 'Záloha': None, 'Převod': None, 'Bilance': 105279, 'Rok': '2017', 'Poznámka': 'bez vlivu', 'TJ účet': None, 'Air účet': None, 'Fio účet': None, 'Hotovost 2': None, 'Hotovost 3': None, 'Kontrolní součet': None, 'stav': None, 'datum stavu': None, 'datum účet TJ': None}
+
+  --- List: Rozpočet 2026 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2026
+    [1] Plán
+    [2] Plnění
+    [3] Rozdíl
+    [5] 2026.0
+
+  Počet datových řádků: 59
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2026': 'Převod z roku 2025', 'Plán': 108166.0, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None, 2026.0: None}
+    {'Rozpočet OVT 2026': None, 'Plán': None, 'Plnění': None, 'Rozdíl': None, 2026.0: 'Údaje pro automatické doplnění sloupce "Plnění" z listu "Rozpočet - průběžný stav"'}
+    {'Rozpočet OVT 2026': 'Kapitola běžný provoz', 'Plán': 'Plán 2026', 'Plnění': 'Plnění 2026', 'Rozdíl': 'Rozdíl', 2026.0: 'Rok'}
+    {'Rozpočet OVT 2026': 'Příjmy', 'Plán': None, 'Plnění': None, 'Rozdíl': 'rozdíl', 2026.0: None}
+    {'Rozpočet OVT 2026': 'Příspěvky', 'Plán': 65000.0, 'Plnění': 0, 'Rozdíl': -65000, 2026.0: 2026}
+
+  --- List: Rozpočet 2025 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2025
+    [1] Plán
+    [2] Plnění
+    [3] Rozdíl
+    [5] 2025.0
+
+  Počet datových řádků: 59
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2025': 'Převod z roku 2024', 'Plán': 158324.0, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None, 2025.0: None}
+    {'Rozpočet OVT 2025': None, 'Plán': None, 'Plnění': None, 'Rozdíl': None, 2025.0: 'Údaje pro automatické doplnění sloupce "Plnění" z listu "Rozpočet - průběžný stav"'}
+    {'Rozpočet OVT 2025': 'Kapitola běžný provoz', 'Plán': 'Plán 2025', 'Plnění': 'Plnění 2025', 'Rozdíl': 'Rozdíl', 2025.0: 'Rok'}
+    {'Rozpočet OVT 2025': 'Příjmy', 'Plán': None, 'Plnění': None, 'Rozdíl': 'rozdíl', 2025.0: None}
+    {'Rozpočet OVT 2025': 'Příspěvky', 'Plán': 65000.0, 'Plnění': 56600, 'Rozdíl': -8400, 2025.0: 2025}
+
+  --- List: Rozpočet 2024 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2024
+    [1] Plán
+    [2] Plnění
+    [3] Rozdíl
+    [5] 2024.0
+
+  Počet datových řádků: 58
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2024': 'Převod z roku 2023', 'Plán': 181921.0, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None, 2024.0: None}
+    {'Rozpočet OVT 2024': None, 'Plán': None, 'Plnění': None, 'Rozdíl': None, 2024.0: 'Údaje pro automatické doplnění sloupce "Plnění" z listu "Rozpočet - průběžný stav"'}
+    {'Rozpočet OVT 2024': 'Kapitola běžný provoz', 'Plán': 'Plán 2024', 'Plnění': 'Plnění 2024', 'Rozdíl': 'Rozdíl', 2024.0: 'Rok'}
+    {'Rozpočet OVT 2024': 'Příjmy', 'Plán': None, 'Plnění': None, 'Rozdíl': 'rozdíl', 2024.0: None}
+    {'Rozpočet OVT 2024': 'Příspěvky', 'Plán': 65000.0, 'Plnění': 68400, 'Rozdíl': 3400, 2024.0: 2024}
+
+  --- List: Vývoj rozpočtu ---
+  Sloupce (2):
+    [0] Rok
+    [1] Stav na konci
+
+  Počet datových řádků: 13
+  Ukázka (prvních 5 řádků):
+    {'Rok': 2017.0, 'Stav na konci': 121759.0}
+    {'Rok': 2018.0, 'Stav na konci': 133443.0}
+    {'Rok': 2019.0, 'Stav na konci': 169424.0}
+    {'Rok': 2020.0, 'Stav na konci': 192476.0}
+    {'Rok': 2021.0, 'Stav na konci': 246189.0}
+
+  --- List: Rozpočet 2023 ---
+  Sloupce (4):
+    [0] Rozpočet OVT 2023
+    [1] Plán
+    [2] Plnění
+    [3] Rozdíl
+
+  Počet datových řádků: 66
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2023': 'Převod z roku 2022', 'Plán': 219956.0, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None}
+    {'Rozpočet OVT 2023': None, 'Plán': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2023': 'Kapitola běžný provoz', 'Plán': 'Plán 2023', 'Plnění': 'Plnění 2023', 'Rozdíl': 'Rozdíl'}
+    {'Rozpočet OVT 2023': 'Příjmy', 'Plán': None, 'Plnění': None, 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2023': 'Příspěvky', 'Plán': 53000.0, 'Plnění': 66150, 'Rozdíl': 13150}
+
+  --- List: Rozpočet 2022 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2022
+    [1] Plán
+    [2] (2021 plán)
+    [3] Plnění
+    [4] Rozdíl
+
+  Počet datových řádků: 66
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2022': 'Převod z roku 2021', 'Plán': 246189.0, '(2021 plán)': None, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None}
+    {'Rozpočet OVT 2022': None, 'Plán': None, '(2021 plán)': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2022': 'Kapitola běžný provoz', 'Plán': 'Plán 2022', '(2021 plán)': '(Plán 2021)', 'Plnění': 'Plnění 2022', 'Rozdíl': 'Rozdíl'}
+    {'Rozpočet OVT 2022': 'Příjmy', 'Plán': None, '(2021 plán)': None, 'Plnění': None, 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2022': 'Příspěvky', 'Plán': 40000.0, '(2021 plán)': 40000.0, 'Plnění': 43150, 'Rozdíl': 3150}
+
+  --- List: Rozpočet 2021 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2021
+    [1] Plán
+    [2] (2020 plán)
+    [3] Plnění
+    [4] Rozdíl
+
+  Počet datových řádků: 68
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2021': 'Převod z roku 2020', 'Plán': 192476.0, '(2020 plán)': None, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None}
+    {'Rozpočet OVT 2021': None, 'Plán': None, '(2020 plán)': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2021': 'Kapitola běžný provoz', 'Plán': 'Plán', '(2020 plán)': 'Plán 2020', 'Plnění': 'Plnění 2021', 'Rozdíl': 'Rozdíl'}
+    {'Rozpočet OVT 2021': 'Příjmy 2021', 'Plán': None, '(2020 plán)': None, 'Plnění': None, 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2021': 'Příspěvky', 'Plán': 40000.0, '(2020 plán)': 60000.0, 'Plnění': 45000, 'Rozdíl': 5000}
+
+  --- List: Rozpočet 2020 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2020
+    [1] Plán
+    [2] (2019 plán)
+    [3] Plnění
+    [4] Rozdíl
+
+  Počet datových řádků: 68
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2020': 'Převod z roku 2019', 'Plán': 169424.0, '(2019 plán)': None, 'Plnění': 'automaticky z průběžného stavu', 'Rozdíl': None}
+    {'Rozpočet OVT 2020': None, 'Plán': None, '(2019 plán)': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2020': 'Kapitola běžný provoz', 'Plán': 'Plán', '(2019 plán)': 'Plán 2019', 'Plnění': 'Plnění 2020', 'Rozdíl': 'Rozdíl'}
+    {'Rozpočet OVT 2020': 'Příjmy 2020', 'Plán': None, '(2019 plán)': None, 'Plnění': None, 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2020': 'Příspěvky', 'Plán': 60000.0, '(2019 plán)': 60000.0, 'Plnění': 40950, 'Rozdíl': -19050}
+
+  --- List: Rozpočet 2019 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2019
+    [1] Plán
+    [2] (2018 plán)
+    [3] Plnění
+    [4] Rozdíl
+
+  Počet datových řádků: 67
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2019': 'Převod z roku 2018', 'Plán': 133443.0, '(2018 plán)': None, 'Plnění': 'automaticky z průběžného stavu'}
+    {'Rozpočet OVT 2019': None, 'Plán': None, '(2018 plán)': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2019': 'Kapitola běžný provoz', 'Plán': 'Plán', '(2018 plán)': '(2018 plán)', 'Plnění': 'Plnění 2019', 'Rozdíl': 'Rozdíl'}
+    {'Rozpočet OVT 2019': 'Příjmy 2019', 'Plán': None, '(2018 plán)': None, 'Plnění': None, 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2019': 'Příspěvky', 'Plán': 60000.0, '(2018 plán)': 56170.0, 'Plnění': 59800, 'Rozdíl': -200}
+
+  --- List: Rozpočet 2018 ---
+  Sloupce (5):
+    [0] Rozpočet OVT 2018
+    [1] Plán
+    [2] (původní 2017)
+    [3] Plnění
+    [4] Rozdíl
+
+  Počet datových řádků: 67
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2018': 'Převod z roku 2017', 'Plán': 121759.0, '(původní 2017)': None, 'Plnění': 'stav k 12.12.2018'}
+    {'Rozpočet OVT 2018': None, 'Plán': None, '(původní 2017)': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2018': 'Kapitola běžný provoz', 'Plán': 'Plán', '(původní 2017)': '(původní 2017)', 'Plnění': 'Plnění', 'Rozdíl': 'Rozdíl'}
+    {'Rozpočet OVT 2018': 'Příjmy 2018', 'Plán': None, '(původní 2017)': None, 'Plnění': None, 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2018': 'Příspěvky', 'Plán': 56170, '(původní 2017)': None, 'Plnění': 64250, 'Rozdíl': 8080}
+
+  --- List: Rozpočet 2017 ---
+  Sloupce (4):
+    [0] Rozpočet OVT 2017
+    [2] Plán
+    [4] Plnění
+    [5] Rozdíl
+
+  Počet datových řádků: 55
+  Ukázka (prvních 5 řádků):
+    {'Rozpočet OVT 2017': None, 'Plán': None, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2017': 'Příjmy 2017', 'Plán': None, 'Plnění': 'aktuální k 19.2.2018', 'Rozdíl': 'rozdíl'}
+    {'Rozpočet OVT 2017': 'Příspěvky', 'Plán': 44800.0, 'Plnění': 58550, 'Rozdíl': None}
+    {'Rozpočet OVT 2017': 'Krákorečné', 'Plán': 16100.0, 'Plnění': None, 'Rozdíl': None}
+    {'Rozpočet OVT 2017': 'Krákorečné a nájmy TOM', 'Plán': 3792.0, 'Plnění': 11160.0, 'Rozdíl': None}
+
+  --- List: Změny členská základna ---
+  Sloupce (1):
+    [0] Noví členové - žádosti
+
+  Počet datových řádků: 22
+  Ukázka (prvních 5 řádků):
+    {'Noví členové - žádosti': 'Klára Machová'}
+    {'Noví členové - žádosti': 'Ouškatá'}
+    {'Noví členové - žádosti': 'Kluk od Mencmiho'}
+    {'Noví členové - žádosti': 'Holka od Mencmiho'}
+    {'Noví členové - žádosti': 'Žádosti o ukonční'}
+
+  --- List: Postupy ---
+  Sloupce (1):
+    [0] Jak získat výpis z účtu
+
+  Počet datových řádků: 12
+  Ukázka (prvních 5 řádků):
+    {'Jak získat výpis z účtu': 'Nejlépe kontaktovat přímo Vojtu Seidla, nebo účetní je Vlasta Žebráková, ale nikdy jsem se jí nedovolal'}
+    {'Jak získat výpis z účtu': 'Vojta může poslat výpis z účtu i mailem - ale stejně to přehodí na Žebrákovou, tak zkusit mailem jí..'}
+    {'Jak získat výpis z účtu': 'Jak registrovat nové členy'}
+    {'Jak získat výpis z účtu': '1) ČSK - nějak v jejich systému... paní Pavelková'}
+    {'Jak získat výpis z účtu': '2) TJ - donést přihlášku na sekretariát / nebo nechat na vrátnici loděnice Podolí'}
+
+  --- List: Účtenky ---
+  Sloupce (8):
+    [0] Kdo
+    [1] Za co
+    [2] Datum
+    [3] Částka účtenka
+    [4] Proplaceno
+    [5] Mám elektronicky?
+    [6] Mám fyzicky?
+    [7] Pozn.
+
+  Počet datových řádků: 14
+  Ukázka (prvních 5 řádků):
+    {'Kdo': 'Jáchym K', 'Za co': 'Hamerák schody', 'Datum': datetime.datetime(2017, 3, 28, 0, 0), 'Částka účtenka': None, 'Proplaceno': 4478.0, 'Mám elektronicky?': None, 'Mám fyzicky?': None, 'Pozn.': 'pozn.: Na Hameráku jsem od Jáchyma dostal obálku s účtenkami, zatím není doplněno'}
+    {'Kdo': 'Jáchym K', 'Za co': 'Hamerák schody', 'Datum': datetime.datetime(2017, 5, 5, 0, 0), 'Částka účtenka': 190.0, 'Proplaceno': 190.0, 'Mám elektronicky?': 'ano', 'Mám fyzicky?': 'ano', 'Pozn.': 've složce 2017'}
+    {'Kdo': 'Evka Matějková', 'Za co': 'Helma (asi) + lékárna', 'Datum': datetime.datetime(2017, 5, 22, 0, 0), 'Částka účtenka': 2090.0, 'Proplaceno': 1200.0, 'Mám elektronicky?': 'ano', 'Mám fyzicky?': 'ne', 'Pozn.': 'soutěž 2016'}
+    {'Kdo': 'Mára Veselý', 'Za co': 'Eskymáky', 'Datum': datetime.datetime(2017, 4, 5, 0, 0), 'Částka účtenka': 5200.0, 'Proplaceno': 1000.0, 'Mám elektronicky?': None, 'Mám fyzicky?': 'ano', 'Pozn.': 've složce 2017'}
+    {'Kdo': 'Mára Veselý', 'Za co': 'STK', 'Datum': datetime.datetime(2017, 5, 23, 0, 0), 'Částka účtenka': 800.0, 'Proplaceno': 1100.0, 'Mám elektronicky?': None, 'Mám fyzicky?': 'ano', 'Pozn.': '300 navíc brzdy'}
+
+  --- List: Výbor hlasování ---
+  Sloupce (14):
+    [0] Číslo
+    [1] Datum
+    [2] Otázka
+    [3] Tomík
+    [4] Ešus
+    [5] Jáchym
+    [6] Jakub
+    [7] Michal
+    [8] Evka
+    [9] Bundáš
+    [10] SUM A
+    [11] SUM B
+    [12] SUM C
+    [13] Poznámky
+
+  Počet datových řádků: 13
+  Ukázka (prvních 5 řádků):
+    {'Číslo': 1.0, 'Datum': datetime.datetime(2018, 1, 25, 0, 0), 'Otázka': 'Souhlasím s 20% provizí každému, kdo sežene finančního sponzora pro oddíl (v průběhu roku, nebo pro Hamerák)? Formou slevy z příspěvků (do jejich výše).', 'Tomík': 'ano', 'Ešus': 'ano', 'Jáchym': 'ano', 'Jakub': None, 'Michal': 'Ano', 'Evka': 'ano', 'Bundáš': 'Ano', 'SUM A': None, 'SUM B': None, 'SUM C': None, 'Poznámky': 'Mencmi: Souhlasím s výhradou - není to zbytečně moc? navrhuji 10%\nTomík: Částku bych neomezoval do maximální výše příspěvků. Když někdo sežene dotaci 50 000,- proč mu nedát více než 800,-'}
+    {'Číslo': 2.0, 'Datum': datetime.datetime(2018, 1, 25, 0, 0), 'Otázka': 'Souhlasím s odpuštěním Tomíkovi neodpracovanou brigádu za 2017?', 'Tomík': 'ano', 'Ešus': 'ano', 'Jáchym': 'ano', 'Jakub': None, 'Michal': 'ano', 'Evka': 'ano', 'Bundáš': 'ne', 'SUM A': None, 'SUM B': None, 'SUM C': None, 'Poznámky': None}
+    {'Číslo': 3.0, 'Datum': datetime.datetime(2018, 1, 25, 0, 0), 'Otázka': 'Souhlasím s odpuštěním Mencmimu neodpracovanou brigádu za 2017?', 'Tomík': 'ano', 'Ešus': 'ano', 'Jáchym': 'ano', 'Jakub': None, 'Michal': 'ano', 'Evka': 'ano', 'Bundáš': 'ne', 'SUM A': None, 'SUM B': None, 'SUM C': None, 'Poznámky': None}
+    {'Číslo': 4.0, 'Datum': datetime.datetime(2018, 1, 25, 0, 0), 'Otázka': 'Souhlasím, že Eva Davídková bude mít do odvolání výjimku z příspěvků (nebude nic platit)?', 'Tomík': 'ne, "B" viz níže', 'Ešus': 'ano', 'Jáchym': 'ano', 'Jakub': None, 'Michal': 'ne', 'Evka': 'ano', 'Bundáš': 'ano', 'SUM A': None, 'SUM B': None, 'SUM C': None, 'Poznámky': 'Tomík: Upřímně ani nevím kdo to je, proč evidujeme tzv. černé duše. Dal bych 400,- za rok ať prostě ten člověk ví že to není jen tak a 400 má každý.. i důchodce. => var. A (bez nutnosti brigády)'}
+    {'Číslo': 5.0, 'Datum': datetime.datetime(2018, 1, 25, 0, 0), 'Otázka': 'Příspěvky Jirky Kellera:\na. Bude mít do odvolání slevu 400 z příspěvků (a jinak platná pravidla včetně brigády)?\nb. Bude mít do odvolání slevu 400 z příspěvků a automaticky započítanou odpracovanou brigádu?\nc. Bude bez automatické výjimky.', 'Tomík': '"B"', 'Ešus': 'B', 'Jáchym': 'B', 'Jakub': None, 'Michal': 'C', 'Evka': 'A', 'Bundáš': 'B', 'SUM A': None, 'SUM B': None, 'SUM C': None, 'Poznámky': None}
+
+  --- List: _OVT_odkazy ---
+  Sloupce (4):
+    [0] Sešit
+    [1] Správce
+    [2] Popis
+    [3] Odkaz
+
+  Počet datových řádků: 4
+  Ukázka (prvních 5 řádků):
+    {'Sešit': 'OVT Finance', 'Správce': 'Tomáš Bauer', 'Popis': 'Přehled financí OVT, průběžné, roční plány, plnění', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1R2YB6v5965-Mc2dOhTTuFna0KWHik5YpvTAH5QouS8Q/edit?usp=sharing'}
+    {'Sešit': 'OVT Příspěvky', 'Správce': 'Tomáš Bauer', 'Popis': 'Tabulka se členy a přehledem příspěvků, včetně plnění', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1lx6nI87JFlcdVUSR4iVo3_OJIh3xd5aoKikaeBXB6VI/edit?usp=sharing'}
+    {'Sešit': 'OVT Krakorce', 'Správce': 'Tomáš Bauer', 'Popis': 'Tabulka s loděmi v krakorcích, popis lodí, majitelé', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1zlJTDRN7AkbIt7hJoxfJv_-az_dCEE_6FPN_axkWiYg/edit?usp=sharing'}
+    {'Sešit': 'OVT Přeúčtování s TOM', 'Správce': 'Tomáš Bauer', 'Popis': 'Podklady pro přeúčtování od TOM k nám', 'Odkaz': 'OVT Přeúčtování s TOM'}
+======================================================================
+SOUBOR: OVT Krakorce.xlsx
+======================================================================
+
+  --- List: Seznam_lodi_2021 ---
+  Sloupce (12):
+    [0] Mříž
+    [1] Pozice
+    [2] Majitel
+    [3] Zaplaceno
+    [4] Barva
+    [5] Popis
+    [6] Je loď
+    [7] Foto
+    [8] Poznámka
+    [9] Stav 2019
+    [10] 2019 řešit
+    [11] 2019 zaplaceno
+
+  Počet datových řádků: 87
+  Ukázka (prvních 5 řádků):
+    {'Mříž': 1.0, 'Pozice': 11.0, 'Majitel': 'Jiří Keller', 'Zaplaceno': 'ano', 'Barva': 'šedá', 'Popis': 'šedá až do stropu (Vaňha)', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+    {'Mříž': 1.0, 'Pozice': 12.0, 'Majitel': 'Vít Skála', 'Zaplaceno': 'ano', 'Barva': 'tmavě zelená', 'Popis': 'tmavě zelená (Vaňha)', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': 'potvrzeno', 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+    {'Mříž': 1.0, 'Pozice': 13.0, 'Majitel': 'Katka Měrková', 'Zaplaceno': 'ano', 'Barva': 'modrá', 'Popis': 'modrá Dagger M8.0', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+    {'Mříž': 1.0, 'Pozice': 14.0, 'Majitel': 'Bára Kostková', 'Zaplaceno': 'zkontrolovat', 'Barva': 'červená', 'Popis': 'Exo kajak XT260', 'Je loď': None, 'Foto': 2019.0, 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': 'příspěvky?', '2019 zaplaceno': 'ne'}
+    {'Mříž': 1.0, 'Pozice': 15.0, 'Majitel': 'Zuzka Čermáková', 'Zaplaceno': 'ano', 'Barva': 'modrá', 'Popis': 'modrá Vaňha až do stropu', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+
+  --- List: Seznam_lodi_2019 ---
+  Sloupce (12):
+    [0] Mříž
+    [1] Pozice
+    [2] Majitel
+    [3] Zaplaceno
+    [4] Barva
+    [5] Popis
+    [6] Je loď
+    [7] Foto
+    [8] Poznámka
+    [9] Stav 2019
+    [10] 2019 řešit
+    [11] 2019 zaplaceno
+
+  Počet datových řádků: 88
+  Ukázka (prvních 5 řádků):
+    {'Mříž': 1.0, 'Pozice': 11.0, 'Majitel': 'Jiří Keller', 'Zaplaceno': 'ano', 'Barva': 'šedá', 'Popis': 'šedá až do stropu (Vaňha)', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+    {'Mříž': 1.0, 'Pozice': 12.0, 'Majitel': 'Vít Skála', 'Zaplaceno': 'ano', 'Barva': 'tmavě zelená', 'Popis': 'tmavě zelená (Vaňha)', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': 'potvrzeno', 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+    {'Mříž': 1.0, 'Pozice': 13.0, 'Majitel': 'Katka Měrková', 'Zaplaceno': 'ano', 'Barva': 'modrá', 'Popis': 'modrá Dagger M8.0', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': None, '2019 zaplaceno': 'ano'}
+    {'Mříž': None, 'Pozice': 14.0, 'Majitel': 'Bára Kostková', 'Zaplaceno': 'zkontrolovat', 'Barva': 'červená', 'Popis': 'Exo kajak XT260', 'Je loď': None, 'Foto': 2019.0, 'Poznámka': None, 'Stav 2019': 'ano', '2019 řešit': 'příspěvky?', '2019 zaplaceno': 'ne'}
+    {'Mříž': 1.0, 'Pozice': 14.0, 'Majitel': 'Gríša', 'Zaplaceno': 'ano', 'Barva': 'zelená', 'Popis': 'zelená Bliztick (světle zelená)', 'Je loď': 1.0, 'Foto': 'ano', 'Poznámka': None, 'Stav 2019': None, '2019 řešit': 'odebrána'}
+
+  --- List: Schema_lodi_2017 ---
+  Sloupce (9):
+    [1] 19.0
+    [2] 18.0
+    [3] 17.0
+    [4] 16.0
+    [5] 15.0
+    [6] 14.0
+    [7] 13.0
+    [8] 12.0
+    [9] 11.0
+
+  Počet datových řádků: 26
+  Ukázka (prvních 5 řádků):
+    {19.0: None, 18.0: None, 17.0: 'Kája Chvojková', 16.0: 'Kája Chvojková', 15.0: 'Zuzka Čermáková', 14.0: 'Gríša', 13.0: 'Katka Měrková', 12.0: 'Vít Skála', 11.0: 'Jiří Keller'}
+    {19.0: None, 18.0: None, 17.0: None, 16.0: None, 15.0: None, 14.0: None, 13.0: None, 12.0: None, 11.0: None}
+    {19.0: None, 18.0: None, 17.0: None, 16.0: None, 15.0: None, 14.0: None, 13.0: None, 12.0: None, 11.0: None}
+    {19.0: None, 18.0: None, 17.0: None, 16.0: None, 15.0: 'Vadym', 14.0: 'Dominika Hodanová', 13.0: 'Mirek Ptáček', 12.0: 'Katka Klepačová', 11.0: None}
+    {19.0: 29.0, 18.0: 28.0, 17.0: 27.0, 16.0: 26.0, 15.0: 25.0, 14.0: 24.0, 13.0: 23.0, 12.0: 22.0, 11.0: 21.0}
+
+  --- List: _OVT_odkazy ---
+  Sloupce (4):
+    [0] Sešit
+    [1] Správce
+    [2] Popis
+    [3] Odkaz
+
+  Počet datových řádků: 3
+  Ukázka (prvních 5 řádků):
+    {'Sešit': 'OVT Finance', 'Správce': 'Tomáš Bauer', 'Popis': 'Přehled financí OVT, průběžné, roční plány, plnění', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1R2YB6v5965-Mc2dOhTTuFna0KWHik5YpvTAH5QouS8Q/edit?usp=sharing'}
+    {'Sešit': 'OVT Příspěvky', 'Správce': 'Tomáš Bauer', 'Popis': 'Tabulka se členy a přehledem příspěvků, včetně plnění', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1lx6nI87JFlcdVUSR4iVo3_OJIh3xd5aoKikaeBXB6VI/edit?usp=sharing'}
+    {'Sešit': 'OVT Krakorce', 'Správce': 'Tomáš Bauer', 'Popis': 'Tabulka s loděmi v krakorcích, popis lodí, majitelé', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1zlJTDRN7AkbIt7hJoxfJv_-az_dCEE_6FPN_axkWiYg/edit?usp=sharing'}
+======================================================================
+SOUBOR: OVT Podpora činnosti.xlsx
+======================================================================
+
+  --- List: Podpora 2025 ---
+  Sloupce (1):
+    [0] Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.
+
+  Počet datových řádků: 30
+  Ukázka (prvních 5 řádků):
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Celkem k dispozici na dotace'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Na dotace je letos aktuálně volných:'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': None}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Datum'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': datetime.datetime(2024, 4, 6, 0, 0)}
+
+  --- List: Podpora 2024 ---
+  Sloupce (1):
+    [0] Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.
+
+  Počet datových řádků: 30
+  Ukázka (prvních 5 řádků):
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Celkem k dispozici na dotace'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Na dotace je letos aktuálně volných:'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': None}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Datum'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': datetime.datetime(2024, 4, 6, 0, 0)}
+
+  --- List: Podpora 2023 ---
+  Sloupce (1):
+    [0] Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.
+
+  Počet datových řádků: 27
+  Ukázka (prvních 5 řádků):
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Celkem k dispozici na dotace'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Na dotace je letos aktuálně volných:'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': None}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': 'Datum'}
+    {'Pravidla pro podporu akcí najdete na listu: Pravidla pro podporu činnosti.': datetime.datetime(2023, 4, 1, 0, 0)}
+
+  --- List: Podpora 2022 ---
+  Sloupce (1):
+    [0] Pravidla pro podporu akcí najdete na druhém listu: Pravidla pro podporu činnosti.
+
+  Počet datových řádků: 21
+  Ukázka (prvních 5 řádků):
+    {'Pravidla pro podporu akcí najdete na druhém listu: Pravidla pro podporu činnosti.': 'Na dotace je letos aktuálně volných:'}
+    {'Pravidla pro podporu akcí najdete na druhém listu: Pravidla pro podporu činnosti.': 'Datum'}
+    {'Pravidla pro podporu akcí najdete na druhém listu: Pravidla pro podporu činnosti.': datetime.datetime(2022, 4, 2, 0, 0)}
+    {'Pravidla pro podporu akcí najdete na druhém listu: Pravidla pro podporu činnosti.': datetime.datetime(2022, 4, 23, 0, 0)}
+    {'Pravidla pro podporu akcí najdete na druhém listu: Pravidla pro podporu činnosti.': datetime.datetime(2022, 4, 23, 0, 0)}
+
+  --- List: Pravidla pro podporu činnosti ---
+  Sloupce (1):
+    [1] Pravidla pro podporu činnosti - dotace na akce
+
+  Počet datových řádků: 48
+  Ukázka (prvních 5 řádků):
+    {'Pravidla pro podporu činnosti - dotace na akce': 'Dotace jsou určeny pro členy oddílu jako podpora činnosti.'}
+    {'Pravidla pro podporu činnosti - dotace na akce': 'Dotace je předána organizátorovi, který ji rozdělí na jednotlivé členy (typicky poníží celkovou cenu zájezdu/nebo proplatí dopravu).'}
+    {'Pravidla pro podporu činnosti - dotace na akce': 'Dotace je adresná, tedy pokrývá náklady členů, typicky neslouží k pokrytí paušálních nákladů akce (tj. nepokrývá náklady nečlenů - dotace je benefit členů oddílu OVT).'}
+    {'Pravidla pro podporu činnosti - dotace na akce': 'Akce (i dotace na ní) si chceme hlavně užít, všechna pravidla níže slouží spíš jako rámec "co čekat" a pro zjednodušení, ne pro striktní vyžadování pravidel. Chápejte ale prosím, že kolem toho je dost práce, takže nějaká pravidla to mít musí..'}
+    {'Pravidla pro podporu činnosti - dotace na akce': 'Celkem je v rozpočtu na kalendářní rok schválený objem prostředků, v roce 2023 to je 30.000 Kč'}
+======================================================================
+SOUBOR: OVT Příspěvky.xlsx
+======================================================================
+
+  --- List: Příspěvky 2026 ---
+  Sloupce (26):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] tel
+    [4] jmeno
+    [5] variabilni_symbol
+    [6] CSK_cislo
+    [7] clen_ovt
+    [8] Poznámka
+    [9] Zaplaceno
+    [10] kolik
+    [11] kdy
+    [12] částka OK?
+    [13] PAY?
+    [14] 2025_Prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace = shoda s přehledem lodí v klecích
+
+    [24] poznamka_k_platbe
+    [25] QR platba
+
+  Počet datových řádků: 65
+  Ukázka (prvních 5 řádků):
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'tel': None, 'jmeno': 'Adam Chochola', 'variabilni_symbol': 207101021.0, 'CSK_cislo': 557186.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1800.0, 'kdy': datetime.datetime(2025, 2, 11, 0, 0), 'částka OK?': -900, 'PAY?': 'ano', '2025_Prispevky': 2700, 'zakladni_prispevky': 1500, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': 1200, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky na rok 2025 máš celkem: 2700,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101021 , termín: 28.2.2025. Děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2700&\',\'currency=CZK&\',\'vs=207101021&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'tel': None, 'jmeno': 'Aleš Němec', 'variabilni_symbol': 207101035.0, 'CSK_cislo': 557686.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 2300.0, 'kdy': datetime.datetime(2025, 6, 24, 0, 0), 'částka OK?': -400, 'PAY?': 'ano', '2025_Prispevky': 2700, 'zakladni_prispevky': 1500, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': 1200, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky na rok 2025 máš celkem: 2700,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101035 , termín: 28.2.2025. Děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2700&\',\'currency=CZK&\',\'vs=207101035&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'tel': None, 'jmeno': 'Alžběta Poštulková Poupětová', 'variabilni_symbol': 207101143.0, 'CSK_cislo': 557883.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1000.0, 'kdy': datetime.datetime(2025, 2, 18, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 1000, 'zakladni_prispevky': 1500, 's_vybor': None, 's_tom': -500, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1000&\',\'currency=CZK&\',\'vs=207101143&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 63.0, 'user_login': 'barborabernardova', 'user_email': 'barbora.bernardova@centrum.cz', 'tel': None, 'jmeno': 'Barbora Bernardová', 'variabilni_symbol': 207101099.0, 'CSK_cislo': 560631.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1000.0, 'kdy': datetime.datetime(2025, 2, 13, 0, 0), 'částka OK?': -500, 'PAY?': 'ano', '2025_Prispevky': 1500, 'zakladni_prispevky': 1500, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky na rok 2025 máš celkem: 1500,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101099 , termín: 28.2.2025. Děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1500&\',\'currency=CZK&\',\'vs=207101099&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 52.0, 'user_login': 'Bara', 'user_email': 'barborakostkova@gmail.com', 'tel': None, 'jmeno': 'Barbora Kostková', 'variabilni_symbol': 207101052.0, 'CSK_cislo': 559074.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 2300.0, 'kdy': datetime.datetime(2025, 2, 15, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 2300, 'zakladni_prispevky': 1500, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': 800.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2300&\',\'currency=CZK&\',\'vs=207101052&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+
+  --- List: Příspěvky 2025 ---
+  Sloupce (26):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] tel
+    [4] jmeno
+    [5] variabilni_symbol
+    [6] CSK_cislo
+    [7] clen_ovt
+    [8] Poznámka
+    [9] Zaplaceno
+    [10] kolik
+    [11] kdy
+    [12] částka OK?
+    [13] PAY?
+    [14] 2025_Prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace = shoda s přehledem lodí v klecích
+
+    [24] poznamka_k_platbe
+    [25] QR platba
+
+  Počet datových řádků: 65
+  Ukázka (prvních 5 řádků):
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'tel': None, 'jmeno': 'Adam Chochola', 'variabilni_symbol': 207101021.0, 'CSK_cislo': 557186.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1800.0, 'kdy': datetime.datetime(2025, 2, 11, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 1800, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': 800, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1800&\',\'currency=CZK&\',\'vs=207101021&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'tel': None, 'jmeno': 'Aleš Němec', 'variabilni_symbol': 207101035.0, 'CSK_cislo': 557686.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 2300.0, 'kdy': datetime.datetime(2025, 6, 24, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 2300, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 500.0, 'lod_1': 800, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2300&\',\'currency=CZK&\',\'vs=207101035&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'tel': None, 'jmeno': 'Alžběta Poštulková', 'variabilni_symbol': 207101143.0, 'CSK_cislo': 557883.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1000.0, 'kdy': datetime.datetime(2025, 2, 18, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 1000, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': -500, 's_individualni': None, 'n_brigada': 500.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1000&\',\'currency=CZK&\',\'vs=207101143&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 63.0, 'user_login': 'barborabernardova', 'user_email': 'barbora.bernardova@centrum.cz', 'tel': None, 'jmeno': 'Barbora Bernardová', 'variabilni_symbol': 207101099.0, 'CSK_cislo': 560631.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1000.0, 'kdy': datetime.datetime(2025, 2, 13, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 1000, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1000&\',\'currency=CZK&\',\'vs=207101099&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+    {'ID': 52.0, 'user_login': 'Bara', 'user_email': 'barborakostkova@gmail.com', 'tel': None, 'jmeno': 'Barbora Kostková', 'variabilni_symbol': 207101052.0, 'CSK_cislo': 559074.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 2300.0, 'kdy': datetime.datetime(2025, 2, 15, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2025_Prispevky': 2300, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 500.0, 'lod_1': 800.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2300&\',\'currency=CZK&\',\'vs=207101052&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2025&\',\'size=200" width="150">\')'}
+
+  --- List: Příspěvky 2024 ---
+  Sloupce (26):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] tel
+    [4] jmeno
+    [5] CSK_cislo
+    [6] variabilni_symbol
+    [7] clen_ovt
+    [8] Poznámka
+    [9] Zaplaceno
+    [10] kolik
+    [11] kdy
+    [12] částka OK?
+    [13] PAY?
+    [14] 2023_Prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace = shoda s přehledem lodí v klecích
+
+    [24] poznamka_k_platbe
+    [25] QR platba
+
+  Počet datových řádků: 90
+  Ukázka (prvních 5 řádků):
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'tel': None, 'jmeno': 'Adam Chochola', 'CSK_cislo': 557186.0, 'variabilni_symbol': 207101021.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 2300.0, 'kdy': datetime.datetime(2024, 2, 6, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2023_Prispevky': 2300, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 500.0, 'lod_1': 800, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2300&\',\'currency=CZK&\',\'vs=207101021&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2024&\',\'size=200" width="150">\')'}
+    {'ID': 120.0, 'user_login': 'Sadam', 'user_email': 'stn.adam@gmail.com', 'tel': None, 'jmeno': 'Adam Staněk', 'CSK_cislo': 557182.0, 'variabilni_symbol': 207101018.0, 'clen_ovt': 'Ne', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': 0, 'PAY?': 'zatím ne', '2023_Prispevky': None, 'zakladni_prispevky': None, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': None}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'tel': None, 'jmeno': 'Aleš Němec', 'CSK_cislo': 557686.0, 'variabilni_symbol': 207101035.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 1.0, 'kolik': 2300.0, 'kdy': datetime.datetime(2024, 4, 29, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2023_Prispevky': 2300, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 500.0, 'lod_1': 800, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2300&\',\'currency=CZK&\',\'vs=207101035&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2024&\',\'size=200" width="150">\')'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'tel': None, 'jmeno': 'Alžběta Poštulková', 'CSK_cislo': 557883.0, 'variabilni_symbol': 207101143.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 1000.0, 'kdy': datetime.datetime(2024, 2, 27, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2023_Prispevky': 1000, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': -500, 's_individualni': None, 'n_brigada': 500.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1000&\',\'currency=CZK&\',\'vs=207101143&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2024&\',\'size=200" width="150">\')'}
+    {'ID': 124.0, 'user_login': 'Anca', 'user_email': 'anna.svarovska@centrum.cz', 'tel': None, 'jmeno': 'Anna Dostálová', 'CSK_cislo': 557194.0, 'variabilni_symbol': 207101043.0, 'clen_ovt': 'Už nebude', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': 0, 'PAY?': 'zatím ne', '2023_Prispevky': None, 'zakladni_prispevky': None, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': None}
+
+  --- List: Příspěvky 2023 ---
+  Sloupce (26):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] tel
+    [4] jmeno
+    [5] CSK_cislo
+    [6] variabilni_symbol
+    [7] clen_ovt
+    [8] Poznámka
+    [9] Zaplaceno
+    [10] kolik
+    [11] kdy
+    [12] částka OK?
+    [13] PAY?
+    [14] 2023_Prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace = shoda s přehledem lodí v klecích
+
+    [24] poznamka_k_platbe
+    [25] QR platba
+
+  Počet datových řádků: 89
+  Ukázka (prvních 5 řádků):
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'tel': None, 'jmeno': 'Adam Chochola', 'CSK_cislo': 557186.0, 'variabilni_symbol': 207101021.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 1800.0, 'kdy': datetime.datetime(2023, 4, 18, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2023_Prispevky': 1800, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': 800, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1800&\',\'currency=CZK&\',\'vs=207101021&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2023&\',\'size=200" width="150">\')'}
+    {'ID': 120.0, 'user_login': 'Sadam', 'user_email': 'stn.adam@gmail.com', 'tel': None, 'jmeno': 'Adam Staněk', 'CSK_cislo': 557182.0, 'variabilni_symbol': 207101018.0, 'clen_ovt': 'Ne', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': 0, 'PAY?': 'zatím ne', '2023_Prispevky': None, 'zakladni_prispevky': None, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': None}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'tel': None, 'jmeno': 'Aleš Němec', 'CSK_cislo': 557686.0, 'variabilni_symbol': 207101035.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 2300.0, 'kdy': datetime.datetime(2023, 6, 29, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2023_Prispevky': 2300, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 500, 'lod_1': 800, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=2300&\',\'currency=CZK&\',\'vs=207101035&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2023&\',\'size=200" width="150">\')'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'tel': None, 'jmeno': 'Alžběta Poštulková', 'CSK_cislo': 557883.0, 'variabilni_symbol': 207101143.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 1000.0, 'kdy': datetime.datetime(2023, 5, 10, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2023_Prispevky': 1000, 'zakladni_prispevky': 1000, 's_vybor': None, 's_tom': -500, 's_individualni': None, 'n_brigada': 500, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1000&\',\'currency=CZK&\',\'vs=207101143&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2023&\',\'size=200" width="150">\')'}
+    {'ID': 124.0, 'user_login': 'Anca', 'user_email': 'anna.svarovska@centrum.cz', 'tel': None, 'jmeno': 'Anna Dostálová', 'CSK_cislo': 557194.0, 'variabilni_symbol': 207101043.0, 'clen_ovt': 'Už nebude', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': 0, 'PAY?': 'zatím ne', '2023_Prispevky': None, 'zakladni_prispevky': None, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': None}
+
+  --- List: Příspěvky 2022 ---
+  Sloupce (26):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] tel
+    [4] jmeno
+    [5] CSK_cislo
+    [6] variabilni_symbol
+    [7] clen_ovt
+    [8] Poznámka
+    [9] Zaplaceno
+    [10] kolik
+    [11] kdy
+    [12] částka OK?
+    [13] PAY?
+    [14] 2021_Prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace = shoda s přehledem lodí v klecích
+
+    [24] poznamka_k_platbe
+    [25] QR platba
+
+  Počet datových řádků: 75
+  Ukázka (prvních 5 řádků):
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'tel': None, 'jmeno': 'Adam Chochola', 'CSK_cislo': 557186.0, 'variabilni_symbol': 207101021.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 1250.0, 'kdy': datetime.datetime(2022, 6, 10, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2021_Prispevky': 1250, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1250&\',\'currency=CZK&\',\'vs=207101021&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2022&\',\'size=200" width="150">\')'}
+    {'ID': 120.0, 'user_login': 'Sadam', 'user_email': 'stn.adam@gmail.com', 'tel': None, 'jmeno': 'Adam Staněk', 'CSK_cislo': 557182.0, 'variabilni_symbol': 207101018.0, 'clen_ovt': 'Ne', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': -800, 'PAY?': 'zatím ne', '2021_Prispevky': 800, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 400.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Zatím prosím neplať příspěvky, nemám kompletní podklady. Pokud ještě nejsme ve spojení, ozvi se Bundášovi - tomas.bauer@centrum.cz, nebo 724102093. Děkuji.', 'QR platba': None}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'tel': None, 'jmeno': 'Aleš Němec', 'CSK_cislo': 557686.0, 'variabilni_symbol': 207101035.0, 'clen_ovt': 'Ano', 'Poznámka': 'WA 28.7.', 'Zaplaceno': 'ano', 'kolik': 1450.0, 'kdy': datetime.datetime(2022, 8, 11, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2021_Prispevky': 1450, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 400.0, 'lod_1': 450.0, 'lod_2': 200.0, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1450&\',\'currency=CZK&\',\'vs=207101035&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2022&\',\'size=200" width="150">\')'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'tel': None, 'jmeno': 'Alžběta Poštulková', 'CSK_cislo': 557883.0, 'variabilni_symbol': 207101143.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'ano', 'kolik': 400.0, 'kdy': datetime.datetime(2022, 6, 20, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2021_Prispevky': 400, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': -400.0, 's_individualni': None, 'n_brigada': 400.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=400&\',\'currency=CZK&\',\'vs=207101143&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2022&\',\'size=200" width="150">\')'}
+    {'ID': 124.0, 'user_login': 'Anca', 'user_email': 'anna.svarovska@centrum.cz', 'tel': None, 'jmeno': 'Anna Dostálová', 'CSK_cislo': 557194.0, 'variabilni_symbol': 207101043.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': -1700, 'PAY?': 'ano', '2021_Prispevky': 1700, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': 900.0, 'n_brigada': 400.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky na rok 2022 máš celkem: 1700,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101043 , termín: 30.6.2022. Děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1700&\',\'currency=CZK&\',\'vs=207101043&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2022&\',\'size=200" width="150">\')'}
+
+  --- List: Příspěvky 2021 ---
+  Sloupce (26):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] tel
+    [4] jmeno
+    [5] CSK_cislo
+    [6] variabilni_symbol
+    [7] clen_ovt
+    [8] Poznámka
+    [9] Zaplaceno
+    [10] kolik
+    [11] kdy
+    [12] částka OK?
+    [13] PAY?
+    [14] 2021_Prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace = shoda s přehledem lodí v klecích
+
+    [24] poznamka_k_platbe
+    [25] QR platba
+
+  Počet datových řádků: 75
+  Ukázka (prvních 5 řádků):
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'tel': None, 'jmeno': 'Adam Chochola', 'CSK_cislo': 557186.0, 'variabilni_symbol': 207101021.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1250.0, 'kdy': datetime.datetime(2021, 5, 17, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2021_Prispevky': 1250, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 400.0, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1250&\',\'currency=CZK&\',\'vs=207101021&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 120.0, 'user_login': 'Sadam', 'user_email': 'stn.adam@gmail.com', 'tel': None, 'jmeno': 'Adam Staněk', 'CSK_cislo': 557182.0, 'variabilni_symbol': 207101018.0, 'clen_ovt': 'Ne', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': -800, 'PAY?': 'zatím ne', '2021_Prispevky': 800, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 400.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Zatím prosím neplať příspěvky, nemám kompletní podklady. Pokud ještě nejsme ve spojení, ozvi se Bundášovi - tomas.bauer@centrum.cz, nebo 724102093. Děkuji.', 'QR platba': None}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'tel': None, 'jmeno': 'Aleš Němec', 'CSK_cislo': 557686.0, 'variabilni_symbol': 207101035.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 1450.0, 'kdy': datetime.datetime(2021, 5, 17, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2021_Prispevky': 1450, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 400.0, 'lod_1': 450.0, 'lod_2': 200.0, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1450&\',\'currency=CZK&\',\'vs=207101035&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'tel': None, 'jmeno': 'Alžběta Poštulková', 'CSK_cislo': 557883.0, 'variabilni_symbol': 207101143.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': 'Ano', 'kolik': 500.0, 'kdy': datetime.datetime(2021, 7, 15, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2021_Prispevky': 500, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': -400.0, 's_individualni': 100.0, 'n_brigada': 400.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=500&\',\'currency=CZK&\',\'vs=207101143&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 124.0, 'user_login': 'Anca', 'user_email': 'anna.svarovska@centrum.cz', 'tel': None, 'jmeno': 'Anna Dostálová', 'CSK_cislo': 557194.0, 'variabilni_symbol': 207101043.0, 'clen_ovt': 'Ano', 'Poznámka': None, 'Zaplaceno': None, 'kolik': None, 'kdy': None, 'částka OK?': -900, 'PAY?': 'ano', '2021_Prispevky': 900, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': 100.0, 'n_brigada': 400.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky na rok 2021 máš celkem: 900,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101043 , termín: 30.6.2021. Děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=900&\',\'currency=CZK&\',\'vs=207101043&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2021&\',\'size=200" width="150">\')'}
+
+  --- List: Příspěvky 2020 ---
+  Sloupce (24):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] jmeno
+    [4] CSK_cislo
+    [5] variabilni_symbol
+    [6] clen_ovt
+    [7] Zaplaceno
+    [8] kolik
+    [9] kdy
+    [10] částka OK?
+    [11] PAY?
+    [12] 2020_Prispevky
+    [13] zakladni_prispevky
+    [14] s_vybor
+    [15] s_tom
+    [16] s_individualni
+    [17] n_brigada
+    [18] lod_1
+    [19] lod_2
+    [20] lod_3
+    [21] loď identifikace = shoda s přehledem lodí v klecích
+
+    [22] poznamka_k_platbe
+    [23] QR platba
+
+  Počet datových řádků: 75
+  Ukázka (prvních 5 řádků):
+    {'ID': 48.0, 'user_login': 'eschus', 'user_email': 'essalek@seznam.cz', 'jmeno': 'Pavel Šálek', 'CSK_cislo': 556132.0, 'variabilni_symbol': 207101001.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ANO', 'kolik': 800.0, 'kdy': 'VH', 'částka OK?': -50, 'PAY?': 'ano', '2020_Prispevky': 850, 'zakladni_prispevky': 800.0, 's_vybor': -400.0, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky na rok 2020 máš celkem: 850,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101001 , termín: 30.6.2020. Děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=850&\',\'currency=CZK&\',\'vs=207101001&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 92.0, 'user_login': 'Jachym51', 'user_email': 'jachym.kopriva@seznam.cz', 'jmeno': 'Jáchym Kopřiva', 'CSK_cislo': 556116.0, 'variabilni_symbol': 207101002.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kolik': 850.0, 'kdy': datetime.datetime(2020, 3, 4, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2020_Prispevky': 850, 'zakladni_prispevky': 800.0, 's_vybor': -400.0, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=850&\',\'currency=CZK&\',\'vs=207101002&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 46.0, 'user_login': 'foxik', 'user_email': 'fox.roman68@gmail.com', 'jmeno': 'Roman Liška', 'CSK_cislo': 556121.0, 'variabilni_symbol': 207101004.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kolik': 1450.0, 'kdy': datetime.datetime(2020, 2, 24, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2020_Prispevky': 1450, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': 450.0, 'lod_2': 200.0, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=1450&\',\'currency=CZK&\',\'vs=207101004&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 55.0, 'user_login': 'Mejla', 'user_email': 'hrabak.milan@seznam.cz', 'jmeno': 'Milan Hrabák', 'CSK_cislo': 556111.0, 'variabilni_symbol': 207101005.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kolik': 800.0, 'kdy': datetime.datetime(2020, 3, 23, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2020_Prispevky': 800, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': 0.0, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': '_', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=800&\',\'currency=CZK&\',\'vs=207101005&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+    {'ID': 90.0, 'user_login': 'Evka1', 'user_email': 'ekovarova1@gmail.com', 'jmeno': 'Eva Kovářová', 'CSK_cislo': 556117.0, 'variabilni_symbol': 207101007.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kolik': 450.0, 'kdy': datetime.datetime(2020, 3, 9, 0, 0), 'částka OK?': 0, 'PAY?': 'ano', '2020_Prispevky': 450, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': -800.0, 'n_brigada': 0.0, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace = shoda s přehledem lodí v klecích\n': 'ano', 'poznamka_k_platbe': 'Příspěvky máš zaplacené, děkuji.', 'QR platba': 'CONCAT(\'<img src="https://api.paylibo.com/paylibo/generator/czech/image?accountNumber=2701772934&\',\'bankCode=2010&\',\'amount=450&\',\'currency=CZK&\',\'vs=207101007&\',\'message=P%C5%99%C3%ADsp%C4%9Bvky+OVT+Bohemians+2020&\',\'size=200" width="150">\')'}
+
+  --- List: příspěvky 2019 ---
+  Sloupce (25):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] jmeno
+    [4] adresa
+    [5] datum_narozeni
+    [6] CSK_cislo
+    [7] telefon
+    [8] variabilni_symbol
+    [9] clen_ovt
+    [10] Zaplaceno
+    [11] kde
+    [12] kdy
+    [13] celkové bez brigády
+    [14] celkove_prispevky
+    [15] zakladni_prispevky
+    [16] s_vybor
+    [17] s_tom
+    [18] s_individualni
+    [19] n_brigada
+    [20] lod_1
+    [21] lod_2
+    [22] lod_3
+    [23] loď identifikace
+
+    [24] poznamka_k_platbe
+
+  Počet datových řádků: 76
+  Ukázka (prvních 5 řádků):
+    {'ID': 43.0, 'user_login': 'ovt-admin', 'user_email': 'michal.mencik.24@gmail.com', 'jmeno': 'OVT Administrator', 'adresa': 'OVT', 'datum_narozeni': datetime.datetime(2015, 9, 12, 0, 0), 'CSK_cislo': None, 'telefon': 0.0, 'variabilni_symbol': None, 'clen_ovt': 'Ne', 'Zaplaceno': None, 'kde': None, 'kdy': None, 'celkové bez brigády': None, 'celkove_prispevky': None, 'zakladni_prispevky': None, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace\n': '_'}
+    {'ID': 71.0, 'user_login': 'achola', 'user_email': 'achola@email.cz', 'jmeno': 'Adam Chochola', 'adresa': 'Mečíková 8, Praha 10', 'datum_narozeni': datetime.datetime(1964, 1, 19, 0, 0), 'CSK_cislo': 557186.0, 'telefon': 737003673.0, 'variabilni_symbol': 207101021.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kde': 'TJ', 'kdy': datetime.datetime(2019, 2, 6, 0, 0), 'celkové bez brigády': 1250, 'celkove_prispevky': 1250, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': None, 'n_brigada': None, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace\n': 'ano', 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 1250,- Kč. Plať na účet: 18436101/0100 , variabilní symbol VS: 207101021 , termín: 31.3.2019. Děkuji.'}
+    {'ID': 120.0, 'user_login': 'Sadam', 'user_email': 'stn.adam@gmail.com', 'jmeno': 'Adam Staněk', 'adresa': None, 'datum_narozeni': None, 'CSK_cislo': 557182.0, 'telefon': None, 'variabilni_symbol': 207101018.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kde': 'Air', 'kdy': datetime.datetime(2019, 12, 10, 0, 0), 'celkové bez brigády': 900, 'celkove_prispevky': 900, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': 100.0, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace\n': '_', 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 900,- Kč. Plať na účet: 1024298088/3030 , variabilní symbol VS: 207101018 , termín: 30.4.2019. Děkuji.'}
+    {'ID': 116.0, 'user_login': 'Ales', 'user_email': 'nemecales@seznam.cz', 'jmeno': 'Aleš Němec', 'adresa': None, 'datum_narozeni': None, 'CSK_cislo': 557686.0, 'telefon': None, 'variabilni_symbol': 207101035.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kde': 'Air', 'kdy': datetime.datetime(2019, 5, 2, 0, 0), 'celkové bez brigády': 1350, 'celkove_prispevky': 1750, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': None, 's_individualni': 100.0, 'n_brigada': 400.0, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'loď identifikace\n': 'ne', 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 1750,- Kč. Plať na účet: 1024298088/3030 , variabilní symbol VS: 207101035 , termín: 30.4.2019. Děkuji.'}
+    {'ID': 109.0, 'user_login': 'postulkovaa', 'user_email': 'alzbetapostulkova@seznam.cz', 'jmeno': 'Alžběta Poštulková', 'adresa': 'Novohrádecká 5, Praha 4, 142 00', 'datum_narozeni': datetime.datetime(1999, 10, 14, 0, 0), 'CSK_cislo': 557883.0, 'telefon': 731730974.0, 'variabilni_symbol': 207101143.0, 'clen_ovt': 'Ano', 'Zaplaceno': 'ano', 'kde': 'TJ', 'kdy': datetime.datetime(2019, 3, 6, 0, 0), 'celkové bez brigády': 400, 'celkove_prispevky': 400, 'zakladni_prispevky': 800.0, 's_vybor': None, 's_tom': -400.0, 's_individualni': None, 'n_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'loď identifikace\n': '_', 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 400,- Kč. Plať na účet: 18436101/0100 , variabilní symbol VS: 207101143 , termín: 31.3.2019. Děkuji.'}
+
+  --- List: seznam_clenu_OVT_admin_20200208 ---
+  Sloupce (20):
+    [0] ID
+    [1] user_login
+    [2] user_email
+    [3] jmeno
+    [4] adresa
+    [5] datum_narozeni
+    [6] CSK_cislo
+    [7] telefon
+    [8] variabilni_symbol
+    [9] clen_ovt
+    [10] celkove_prispevky
+    [11] zakladni_prispevky
+    [12] sleva_vybor
+    [13] sleva_tom
+    [14] sleva_individualni
+    [15] neodpracovana_brigada
+    [16] lod_1
+    [17] lod_2
+    [18] lod_3
+    [19] poznamka_k_platbe
+
+  Počet datových řádků: 70
+  Ukázka (prvních 5 řádků):
+    {'ID': 43.0, 'user_login': 'ovt-admin', 'user_email': 'michal.mencik.24@gmail.com', 'jmeno': 'OVT Administrator', 'adresa': 'OVT', 'datum_narozeni': datetime.datetime(2015, 9, 12, 0, 0), 'CSK_cislo': None, 'telefon': 0.0, 'variabilni_symbol': None, 'clen_ovt': 'Ne', 'celkove_prispevky': None, 'zakladni_prispevky': None, 'sleva_vybor': None, 'sleva_tom': None, 'sleva_individualni': None, 'neodpracovana_brigada': None, 'lod_1': None, 'lod_2': None, 'lod_3': None, 'poznamka_k_platbe': None}
+    {'ID': 44.0, 'user_login': 'michal.mencik', 'user_email': 'mencmi@seznam.cz', 'jmeno': 'Michal Menčík', 'adresa': 'Za Zahradami 401 - Praha 10', 'datum_narozeni': datetime.datetime(1994, 10, 28, 0, 0), 'CSK_cislo': 559026.0, 'telefon': 602839266.0, 'variabilni_symbol': 207101067.0, 'clen_ovt': 'Ano', 'celkove_prispevky': 850.0, 'zakladni_prispevky': 800.0, 'sleva_vybor': -400.0, 'sleva_tom': None, 'sleva_individualni': None, 'neodpracovana_brigada': None, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 850,- Kč. Plať na účet: 18436101/0100 , variabilní symbol VS: 207101067 , termín: 31.3.2019. Děkuji.'}
+    {'ID': 45.0, 'user_login': 'Kormidelnik', 'user_email': 'tomikormidelnik@gmail.com', 'jmeno': 'Tomáš Matějka', 'adresa': 'Majerského 2047/1 Praha 4', 'datum_narozeni': datetime.datetime(1986, 7, 23, 0, 0), 'CSK_cislo': 556072.0, 'telefon': 777877447.0, 'variabilni_symbol': 207101049.0, 'clen_ovt': 'Ano', 'celkove_prispevky': 850.0, 'zakladni_prispevky': 800.0, 'sleva_vybor': -400.0, 'sleva_tom': None, 'sleva_individualni': None, 'neodpracovana_brigada': None, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 850,- Kč. Plať na účet: 18436101/0100 , variabilní symbol VS: 207101049 , termín: 31.3.2019. Děkuji.'}
+    {'ID': 46.0, 'user_login': 'foxik', 'user_email': 'fox.roman68@gmail.com', 'jmeno': 'Roman Liška', 'adresa': 'Praha 9 Kopřivnická 615', 'datum_narozeni': datetime.datetime(1968, 5, 13, 0, 0), 'CSK_cislo': 556121.0, 'telefon': 607229619.0, 'variabilni_symbol': 207101004.0, 'clen_ovt': 'Ano', 'celkove_prispevky': 1450.0, 'zakladni_prispevky': 800.0, 'sleva_vybor': None, 'sleva_tom': None, 'sleva_individualni': None, 'neodpracovana_brigada': None, 'lod_1': 450.0, 'lod_2': 200.0, 'lod_3': None, 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 1450,- Kč. Plať na účet: 18436101/0100 , variabilní symbol VS: 207101004 , termín: 31.3.2019. Děkuji.'}
+    {'ID': 48.0, 'user_login': 'eschus', 'user_email': 'essalek@seznam.cz', 'jmeno': 'Pavel Šálek', 'adresa': 'Halouny , Luční 42', 'datum_narozeni': datetime.datetime(1957, 4, 18, 0, 0), 'CSK_cislo': 556132.0, 'telefon': 603195224.0, 'variabilni_symbol': 207101001.0, 'clen_ovt': 'Ano', 'celkove_prispevky': 850.0, 'zakladni_prispevky': 800.0, 'sleva_vybor': -400.0, 'sleva_tom': None, 'sleva_individualni': None, 'neodpracovana_brigada': None, 'lod_1': 450.0, 'lod_2': None, 'lod_3': None, 'poznamka_k_platbe': 'Příspěvky na rok 2019 máš celkem: 850,- Kč. Plať na účet: 18436101/0100 , variabilní symbol VS: 207101001 , termín: 31.3.2019. Děkuji.'}
+
+  --- List: _OVT_odkazy ---
+  Sloupce (4):
+    [0] Sešit
+    [1] Správce
+    [2] Popis
+    [3] Odkaz
+
+  Počet datových řádků: 3
+  Ukázka (prvních 5 řádků):
+    {'Sešit': 'OVT Finance', 'Správce': 'Tomáš Bauer', 'Popis': 'Přehled financí OVT, průběžné, roční plány, plnění', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1R2YB6v5965-Mc2dOhTTuFna0KWHik5YpvTAH5QouS8Q/edit?usp=sharing'}
+    {'Sešit': 'OVT Příspěvky', 'Správce': 'Tomáš Bauer', 'Popis': 'Tabulka se členy a přehledem příspěvků, včetně plnění', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1lx6nI87JFlcdVUSR4iVo3_OJIh3xd5aoKikaeBXB6VI/edit?usp=sharing'}
+    {'Sešit': 'OVT Krakorce', 'Správce': 'Tomáš Bauer', 'Popis': 'Tabulka s loděmi v krakorcích, popis lodí, majitelé', 'Odkaz': 'https://docs.google.com/spreadsheets/d/1zlJTDRN7AkbIt7hJoxfJv_-az_dCEE_6FPN_axkWiYg/edit?usp=sharing'}

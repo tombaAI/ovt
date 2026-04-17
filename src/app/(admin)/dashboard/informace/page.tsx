@@ -1,4 +1,4 @@
-import { getNotes } from "@/lib/actions/notes";
+import { getNotes, getExistingTags } from "@/lib/actions/notes";
 import { InformaceClient } from "./informace-client";
 
 export default async function InformacePage({
@@ -8,7 +8,10 @@ export default async function InformacePage({
 }) {
     const params = await searchParams;
     const includeArchived = params.archived === "1";
-    const notes = await getNotes(includeArchived);
+    const [notes, allTags] = await Promise.all([
+        getNotes(includeArchived),
+        getExistingTags(),
+    ]);
 
-    return <InformaceClient notes={notes} includeArchived={includeArchived} />;
+    return <InformaceClient notes={notes} allTags={allTags} includeArchived={includeArchived} />;
 }

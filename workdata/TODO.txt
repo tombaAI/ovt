@@ -1,0 +1,27 @@
+Obecně:
+- širší ten detail...
+
+Členové
+
+Příspěvky
+- v přehledu přidat typy
+- v přehledu: částka, rozdíl (ne datum)
+
+Platby
+- konsolidace oběcně..
+- párování - na člena + rok + typ platby
+
+
+Kalendář
+- sync po otevření, á 10 minut
+- badge u akce, kde je rozdíl s G
+- doplnit akce 2026
+
+Brigády
+- při přidání nabídnout přidat i akci a G
+
+Lodě
+- zda jsou zaplacené
+- reálně které jsou v krakorcích
+
+Import

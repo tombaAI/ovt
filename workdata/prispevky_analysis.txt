@@ -1,0 +1,83 @@
+Listy: ['Příspěvky 2026', 'Příspěvky 2025', 'Příspěvky 2024', 'Příspěvky 2023', 'Příspěvky 2022', 'Příspěvky 2021', 'Příspěvky 2020']
+
+
+============================================================
+ROK 2026  |  46 záznamů
+  zakladni_prispevky : mode=1500  values=[1500]
+  lod_1              : mode=1200   values=[300, 800, 1200]
+  lod_2              : mode=800   values=[800]
+  lod_3              : mode=800   values=[800]
+  n_brigada (>0)     : mode=None  values=[]
+  s_vybor (abs)      : mode=500  values=[500]
+  s_tom (abs)        : mode=500  values=[500]
+  s_ind (abs)        : mode=900  values=[500, 900, 1000]
+
+============================================================
+ROK 2025  |  46 záznamů
+  zakladni_prispevky : mode=1000  values=[500, 1000]
+  lod_1              : mode=800   values=[300, 800]
+  lod_2              : mode=500   values=[500]
+  lod_3              : mode=500   values=[500]
+  n_brigada (>0)     : mode=500  values=[500]
+  s_vybor (abs)      : mode=500  values=[500]
+  s_tom (abs)        : mode=500  values=[500]
+  s_ind (abs)        : mode=900  values=[500, 900, 1000]
+
+============================================================
+ROK 2024  |  76 záznamů
+  zakladni_prispevky : mode=1000  values=[1000]
+  lod_1              : mode=800   values=[800]
+  lod_2              : mode=500   values=[500]
+  lod_3              : mode=500   values=[500]
+  n_brigada (>0)     : mode=500  values=[500]
+  s_vybor (abs)      : mode=500  values=[500]
+  s_tom (abs)        : mode=500  values=[500]
+  s_ind (abs)        : mode=900  values=[500, 900, 1000]
+
+============================================================
+ROK 2023  |  76 záznamů
+  zakladni_prispevky : mode=1000  values=[1000]
+  lod_1              : mode=800   values=[400, 800]
+  lod_2              : mode=500   values=[250, 500]
+  lod_3              : mode=500   values=[500]
+  n_brigada (>0)     : mode=500  values=[500]
+  s_vybor (abs)      : mode=500  values=[500]
+  s_tom (abs)        : mode=500  values=[500]
+  s_ind (abs)        : mode=1000  values=[500, 900, 1000]
+
+============================================================
+ROK 2022  |  75 záznamů
+  zakladni_prispevky : mode=800  values=[800]
+  lod_1              : mode=450   values=[450]
+  lod_2              : mode=200   values=[200, 300]
+  lod_3              : mode=300   values=[300]
+  n_brigada (>0)     : mode=400  values=[400, 2020]
+  s_vybor (abs)      : mode=400  values=[400]
+  s_tom (abs)        : mode=400  values=[400]
+  s_ind (abs)        : mode=900  values=[100, 700, 800, 900, 1150]
+
+============================================================
+ROK 2021  |  75 záznamů
+  zakladni_prispevky : mode=800  values=[800]
+  lod_1              : mode=450   values=[450]
+  lod_2              : mode=200   values=[200, 300]
+  lod_3              : mode=300   values=[300]
+  n_brigada (>0)     : mode=400  values=[400, 2020]
+  s_vybor (abs)      : mode=400  values=[400]
+  s_tom (abs)        : mode=400  values=[400]
+  s_ind (abs)        : mode=100  values=[100, 700, 800]
+
+============================================================
+ROK 2020  |  74 záznamů
+  zakladni_prispevky : mode=800  values=[800]
+  lod_1              : mode=450   values=[450]
+  lod_2              : mode=200   values=[200, 300]
+  lod_3              : mode=300   values=[300]
+  n_brigada (>0)     : mode=400  values=[400]
+  s_vybor (abs)      : mode=400  values=[400]
+  s_tom (abs)        : mode=400  values=[400]
+  s_ind (abs)        : mode=800  values=[100, 700, 800]
+
+============================================================
+CELKEM UNIKÁTNÍCH ČLENŮ: 76
+Aktivních (clen_ovt=Ano v posledním roce): 45

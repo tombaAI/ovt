@@ -40,6 +40,14 @@ export async function getNotes(includeArchived = false): Promise<NoteWithLatest[
     return result;
 }
 
+export async function getExistingTags(): Promise<string[]> {
+    const db = getDb();
+    const rows = await db.execute(
+        sql`SELECT DISTINCT unnest(tags) AS tag FROM app.notebook_notes WHERE archived_at IS NULL ORDER BY tag`
+    );
+    return (rows as unknown as { tag: string }[]).map(r => r.tag).filter(Boolean);
+}
+
 export async function getNoteVersions(noteId: number): Promise<NoteVersionRow[]> {
     const db = getDb();
     return db
@@ -49,14 +57,14 @@ export async function getNoteVersions(noteId: number): Promise<NoteVersionRow[]>
         .orderBy(desc(notebookNoteVersions.createdAt));
 }
 
-export async function createNote(title: string, content: string): Promise<NoteActionResult> {
+export async function createNote(title: string, content: string, tags: string[]): Promise<NoteActionResult> {
     const session = await auth();
     const email = session?.user?.email ?? "unknown";
     const db = getDb();
     try {
         const [note] = await db
             .insert(notebookNotes)
-            .values({ title, createdByEmail: email })
+            .values({ title, tags, createdByEmail: email })
             .returning();
         await db.insert(notebookNoteVersions).values({
             noteId: note.id,
@@ -74,7 +82,8 @@ export async function createNote(title: string, content: string): Promise<NoteAc
 export async function saveNoteVersion(
     noteId: number,
     title: string,
-    content: string
+    content: string,
+    tags: string[]
 ): Promise<NoteActionResult> {
     const session = await auth();
     const email = session?.user?.email ?? "unknown";
@@ -82,7 +91,7 @@ export async function saveNoteVersion(
     try {
         await db
             .update(notebookNotes)
-            .set({ title, updatedAt: new Date() })
+            .set({ title, tags, updatedAt: new Date() })
             .where(eq(notebookNotes.id, noteId));
         await db.insert(notebookNoteVersions).values({
             noteId,

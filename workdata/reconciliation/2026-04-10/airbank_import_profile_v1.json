@@ -1,0 +1,90 @@
+{
+  "profileName": "AirBank CSV v1",
+  "profileVersion": 1,
+  "source": {
+    "bank": "Air Bank",
+    "type": "file-csv",
+    "encoding": "utf-8",
+    "delimiter": ";",
+    "quote": "\"",
+    "headerRowIndex": 0
+  },
+  "importMode": {
+    "upsert": true,
+    "requireProfile": true,
+    "directionFilter": "incoming-only"
+  },
+  "uniqueKey": {
+    "strategy": "single-column",
+    "column": "Referenční číslo",
+    "fallbackStrategy": "composite-hash",
+    "fallbackColumns": [
+      "Datum provedení",
+      "Směr úhrady",
+      "Částka v měně účtu",
+      "Číslo účtu protistrany",
+      "Variabilní symbol",
+      "Zpráva pro příjemce",
+      "Poznámka k úhradě"
+    ]
+  },
+  "fieldMappings": [
+    { "sourceCol": "Referenční číslo", "targetField": "external_tx_id", "required": true },
+    { "sourceCol": "Datum provedení", "targetField": "date", "required": true },
+    { "sourceCol": "Směr úhrady", "targetField": "direction", "required": true },
+    { "sourceCol": "Částka v měně účtu", "targetField": "amount", "required": true },
+    { "sourceCol": "Měna účtu", "targetField": "currency", "required": true },
+    { "sourceCol": "Variabilní symbol", "targetField": "variable_symbol", "required": false },
+    { "sourceCol": "Konstantní symbol", "targetField": "constant_symbol", "required": false },
+    { "sourceCol": "Specifický symbol", "targetField": "specific_symbol", "required": false },
+    { "sourceCol": "Název protistrany", "targetField": "counterparty_name", "required": false },
+    { "sourceCol": "Číslo účtu protistrany", "targetField": "counterparty_account", "required": false },
+    { "sourceCol": "Zpráva pro příjemce", "targetField": "message_recipient", "required": false },
+    { "sourceCol": "Poznámka k úhradě", "targetField": "message_note", "required": false },
+    { "sourceCol": "Poznámka pro mne", "targetField": "message_internal", "required": false },
+    { "sourceCol": "Typ úhrady", "targetField": "payment_type", "required": false },
+    { "sourceCol": "Kategorie plateb", "targetField": "payment_category", "required": false },
+    { "sourceCol": "Zaúčtováno", "targetField": "booked_flag", "required": false }
+  ],
+  "transforms": {
+    "date": {
+      "sourceFormat": "dd/MM/yyyy",
+      "targetFormat": "yyyy-MM-dd",
+      "timezone": "Europe/Prague"
+    },
+    "amount": {
+      "decimalSeparator": ",",
+      "thousandSeparator": "",
+      "removeSpaces": true,
+      "toIntegerMinorUnit": false,
+      "incomingPositive": true
+    },
+    "direction": {
+      "incomingValues": ["Příchozí"],
+      "outgoingValues": ["Odchozí"]
+    },
+    "trim": true,
+    "emptyToNull": true,
+    "normalizeVariableSymbol": {
+      "stripNonDigits": true,
+      "stripLeadingZeros": true,
+      "emptyAsNull": true
+    },
+    "messageJoin": {
+      "targetField": "message",
+      "joinColumns": ["Zpráva pro příjemce", "Poznámka k úhradě", "Poznámka pro mne"],
+      "separator": " | "
+    }
+  },
+  "validations": {
+    "requiredForIncoming": ["date", "amount", "currency", "external_tx_id"],
+    "currencyAllowed": ["CZK"],
+    "amountMustBePositiveForIncoming": true,
+    "rejectUnbookedIfFlagExists": true
+  },
+  "notes": [
+    "AirBank export obsahuje jak příchozí tak odchozí platby; pro členské příspěvky se importují pouze příchozí.",
+    "Pole Referenční číslo je vhodný primární klíč pro upsert.",
+    "VS je často prázdný; matcher musí umět fallback přes jméno, zprávu a částku."
+  ]
+}

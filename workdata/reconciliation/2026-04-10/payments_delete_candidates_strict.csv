@@ -1,0 +1,219 @@
+payment_id,contrib_id,member_id,full_name,variable_symbol,paid_at,amount,bank_tx_id,bank_date,bank_amount,bank_counterparty_name,bank_message,payment_note,classification
+256,415,116,Aleš Němec,207101035,2025-06-24,2300,499,2025-06-24,2300,MgA.Němec Aleš,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+244,401,84,Jakub Chochola,207101057,2025-05-20,800,498,2025-05-20,800,Jakub Chochola,Příspěvky OVT Bohemians 2025,už zase ano,delete_candidate_strict
+246,403,88,Štěpán Klepač,207101046,2025-05-18,1800,497,2025-05-18,1800,Štěpán Klepač,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+261,421,144,Jan Pejsar,207101145,2025-05-14,1500,496,2025-05-14,1500,Pejsar Jan,Příspěvky Jan Pejsar,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+251,409,98,Gríša Vodička,207101014,2025-05-14,100,495,2025-05-14,100,ZUZANA KÁŠOVÁ,Za G. Vodičku,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+236,389,62,Kateřina Klepačová,207101032,2025-05-14,1800,494,2025-05-14,1800,Kateřina Klepačová,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+252,410,100,Martina Hlaváčková,207101045,2025-04-26,500,492,2025-04-26,500,HLAVÁČKOVÁ MARTINA,Příspěvky OVT Bohemians 2025 Martina,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+242,398,77,Kateřina Měrková,207101080,2025-04-24,900,491,2025-04-24,900,MĚRKOVÁ KATEŘINA,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+266,392,69,Eva Matějková,207101075,2025-04-23,1800,490,2025-04-23,1800,MATĚJKOVÁ EVA,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+248,406,93,Vojtěch Kopřiva,207101150,2025-04-22,1000,488,2025-04-22,1000,Vojtěch Kopřiva,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+262,422,160,Karolína Kotovská,207101153,2025-04-17,1000,487,2025-04-17,1000,KAROLINA KOTOVSKA,PŘÍSPĚVKY OVT BOHEMIANS 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+257,416,118,Lina Procházková,207101047,2025-04-15,1000,485,2025-04-15,1000,Procházková Lina,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+250,408,96,Jiří Klíma,207101015,2025-04-15,1000,486,2025-04-15,1000,Klíma Jiří,Klíma Jiří,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+269,397,75,Štěpán Hořejší,207101141,2025-04-14,1800,484,2025-04-14,1800,ŠTĚPÁN HOŘEJŠÍ,Příspěvky OVT Bohemians 2025,"Příspěvky na rok 2025 máš celkem: 1300,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101141 , termín: 28.2.2025. Děkuji.",delete_candidate_strict
+253,411,107,Petr Novák,207101031,2025-04-13,1000,483,2025-04-13,1000,Petr Novák,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+268,383,54,Jiří Vodička,207101026,2025-04-02,1500,482,2025-04-02,1500,VODIČKA JIŘÍ,Příspěvky OVT Bohemians 2025,"Příspěvky na rok 2025 máš celkem: 1400,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101026 , termín: 28.2.2025. Děkuji.",delete_candidate_strict
+267,379,46,Roman Liška,207101004,2025-03-11,1000,26,2025-03-11,1000,Roman Liška,Příspěvky OVT Bohemians 2025 odečtený poplatek za krakorec,"Příspěvky na rok 2025 máš celkem: 1800,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101004 , termín: 28.2.2025. Děkuji.",delete_candidate_strict
+259,419,133,Zdeněk Elis,207101012,2025-02-27,3300,24,2025-02-27,3300,Elis Zdeněk,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+241,396,74,Lukáš Kopřiva,207101149,2025-02-24,500,22,2025-02-24,500,Lukáš Kopřiva,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+239,394,72,Karolína Chvojková,207101102,2025-02-19,2300,20,2025-02-19,2300,Chvojka Jaroslav,Příspěvky OVT Bohemians 2025,"v řešení, nemá přístup na web",delete_candidate_strict
+254,412,109,Alžběta Poupětová,207101143,2025-02-18,1000,18,2025-02-18,1000,Alžběta Poštulková,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+243,399,82,Martin Kříž,207101136,2025-02-18,1000,17,2025-02-18,1000,Kříž Martin,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+235,388,59,Miroslav Ptáček,207101019,2025-02-18,1500,16,2025-02-18,1500,Miroslav Ptáček,Ptáček - Bohemka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+234,387,58,Vít Skála,207101061,2025-02-17,1800,15,2025-02-17,1800,SKÁLA VÍT,příspěvky Vít Skála,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+230,381,52,Barbora Kostková,207101052,2025-02-15,2300,14,2025-02-15,2300,Bc.Kostková Barbora,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+231,382,53,Jan Vais,207101076,2025-02-13,1800,13,2025-02-13,1800,Jan Vais,Off - příspěvky OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+264,413,112,Zuzana Čermáková,207101040,2025-02-12,1000,9,2025-02-12,1000,ZUZANA CERMAKOVA,PŘÍSPĚVKY OVT BOHEMIANS 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+240,395,73,Zbyněk Herynek,207101020,2025-02-12,1000,11,2025-02-12,1000,"Mgr. Herynek, Zbyněk",prispevky bohemka OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+228,378,45,Tomáš Matějka,207101049,2025-02-12,500,10,2025-02-12,500,Tomáš Matějka,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+265,393,71,Adam Chochola,207101021,2025-02-11,1800,3,2025-02-11,1800,Chochola Adam,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+258,418,130,Filip Havlíček,207101144,2025-02-11,1800,5,2025-02-11,1800,Havlíček Filip,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+255,414,115,Václav Machálek,207101022,2025-02-11,1800,7,2025-02-11,1800,VÁCLAV MACHÁLEK,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+247,405,92,Jáchym Kopřiva,207101002,2025-02-11,1800,8,2025-02-11,1800,Ing.Kopřiva Jáchym,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+229,380,48,Pavel Šálek,207101001,2025-02-11,1300,4,2025-02-11,1300,Pavel Šálek,Příspěvky Ešus,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+232,385,56,Tomáš Bauer,207101044,2025-02-10,1300,2,2025-02-10,1300,Tomáš Bauer,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+227,377,44,Michal Menčík,207101067,2025-02-09,500,1,2025-02-09,500,Michal Menčík,Příspěvky OVT Bohemians 2025,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+215,352,107,Petr Novák,207101031,2024-05-18,1500,451,2024-05-18,1500,PAVLÍNA NOVÁKOVÁ,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+221,360,121,Marek Veselý,207101050,2024-05-17,1300,450,2024-05-17,1300,"Veselý, Marek",Marek Veselý,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+219,357,116,Aleš Němec,207101035,2024-04-29,2300,449,2024-04-29,2300,MgA.Němec Aleš,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+225,374,144,Jan Pejsar,207101145,2024-04-26,1500,443,2024-04-26,1500,Pejsar Jan,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+224,370,138,Klára Matějková,207101137,2024-04-26,1500,446,2024-04-26,1500,Klára Matějková,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+199,326,72,Karolína Chvojková,207101102,2024-04-26,2300,445,2024-04-26,2300,Chvojka Jaroslav,,"v řešení, nemá přístup na web",delete_candidate_strict
+197,323,69,Eva Matějková,207101075,2024-04-26,1300,444,2024-04-26,1300,MATĚJKOVÁ EVA,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+194,317,62,Kateřina Klepačová,207101032,2024-04-26,2300,447,2024-04-26,2300,Štěpán Klepač,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+202,329,75,Štěpán Hořejší,207101141,2024-04-22,1800,442,2024-04-22,1800,ŠTĚPÁN HOŘEJŠÍ,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+189,312,55,Milan Hrabák,207101005,2024-03-19,1000,440,2024-03-19,1000,HRABÁK MILAN,příspěvky OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+226,376,160,Karolína Kotovská,207101153,2024-03-18,1500,437,2024-03-18,1500,KAROLINA KOTOVSKA,KAROLINA KOTOVSKA PRISPEVKY 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+222,366,130,Filip Havlíček,207101144,2024-03-17,2300,436,2024-03-17,2300,Havlíček Filip,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+214,349,100,Martina Hlaváčková,207101045,2024-03-16,1000,435,2024-03-16,1000,HLAVÁČKOVÁ MARTINA,PRISPEVKY OVT BOHEMIANS 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+212,346,96,Jiří Klíma,207101015,2024-03-15,1000,434,2024-03-15,1000,Klíma Jiří,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+210,343,93,Vojtěch Kopřiva,207101150,2024-03-15,1000,432,2024-03-15,1000,Vojtěch Kopřiva,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+184,304,46,Roman Liška,207101004,2024-03-15,2300,433,2024-03-15,2300,Roman Liška,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+220,358,118,Lina Procházková,207101047,2024-03-14,1000,431,2024-03-14,1000,Procházková Lina,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+183,303,45,Tomáš Matějka,207101049,2024-03-08,1000,430,2024-03-08,1000,Tomáš Matějka,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+223,368,133,Zdeněk Elis,207101012,2024-03-06,3300,429,2024-03-06,3300,Ing.Elis Zdeněk,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+216,353,109,Alžběta Poupětová,207101143,2024-02-27,1000,428,2024-02-27,1000,Alžběta Poštulková,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+203,330,77,Kateřina Měrková,207101080,2024-02-26,900,427,2024-02-26,900,MĚRKOVÁ KATEŘINA,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+193,316,59,Miroslav Ptáček,207101019,2024-02-26,1000,426,2024-02-26,1000,Miroslav Ptáček,Ptáček- Bohemka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+185,305,48,Pavel Šálek,207101001,2024-02-26,1300,425,2024-02-26,1300,Šálek Pavel,Ešus příspěvky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+218,356,115,Václav Machálek,207101022,2024-02-22,2300,423,2024-02-22,2300,VÁCLAV MACHÁLEK,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+200,327,73,Zbyněk Herynek,207101020,2024-02-20,1000,422,2024-02-20,1000,"Mgr. Herynek, Zbyněk",prispevky bohemka OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+188,311,54,Jiří Vodička,207101026,2024-02-16,1900,421,2024-02-16,1900,VODIČKA JIŘÍ,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+217,354,112,Zuzana Čermáková,207101040,2024-02-12,1000,420,2024-02-12,1000,ZUZANA CERMAKOVA,PŘÍSPĚVKY OVT BOHEMIANS 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+192,315,58,Vít Skála,207101061,2024-02-08,2300,419,2024-02-08,2300,SKÁLA VÍT,příspěvky - rocky - Vít Skála,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+209,342,92,Jáchym Kopřiva,207101002,2024-02-07,1800,418,2024-02-07,1800,Ing.Kopřiva Jáchym,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+198,325,71,Adam Chochola,207101021,2024-02-06,2300,417,2024-02-06,2300,Ing.Chochola Adam,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+204,335,82,Martin Kříž,207101136,2024-02-02,1000,413,2024-02-02,1000,Kříž Martin,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+201,328,74,Lukáš Kopřiva,207101149,2024-02-02,500,412,2024-02-02,500,Lukáš Kopřiva,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+187,310,53,Jan Vais,207101076,2024-02-02,1800,414,2024-02-02,1800,Jan Vais,OFF - Příspěvky na rok 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+186,309,52,Barbora Kostková,207101052,2024-02-02,2300,415,2024-02-02,2300,Bc.Kostková Barbora,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+182,302,44,Michal Menčík,207101067,2024-02-01,500,410,2024-02-01,500,Michal Menčík,Příspěvky OVT Bohemians 2024,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+208,340,88,Štěpán Klepač,207101046,2024-01-18,1300,409,2024-01-18,1300,Štěpán Klepač,Příspěvky OVT Bohemians 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+177,290,130,Filip Havlíček,207101144,2023-09-06,1800,407,2023-09-06,1800,Havlíček Filip,Příspěvky OVT Bohemians 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+159,261,84,Jakub Chochola,207101057,2023-07-11,1400,405,2023-07-11,1400,Jakub Chochola,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky na rok 2023 máš celkem: 1300,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101057 , termín: 31.5.2023. Děkuji.",delete_candidate_strict
+165,267,93,Vojtěch Kopřiva,207101150,2023-07-05,1000,404,2023-07-05,1000,Vojtěch Kopřiva,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+152,250,72,Karolína Chvojková,207101102,2023-07-04,2300,403,2023-07-04,2300,Chvojka Jaroslav,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+176,284,121,Marek Veselý,207101050,2023-06-29,1800,402,2023-06-29,1800,"Veselý, Marek",Marek Veselý,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+174,281,116,Aleš Němec,207101035,2023-06-29,2300,400,2023-06-29,2300,NĚMEC ALEŠ,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+162,264,88,Štěpán Klepač,207101046,2023-06-29,1300,401,2023-06-29,1300,Štěpán Klepač,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+175,282,118,Lina Procházková,207101047,2023-06-17,1000,398,2023-06-17,1000,Procházková Lina,Lina Procházková 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+157,259,82,Martin Kříž,207101136,2023-06-07,1650,397,2023-06-07,1650,Kříž Martin,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+170,276,107,Petr Novák,207101031,2023-05-31,1500,396,2023-05-31,1500,NOVAKOVA PAVLINA,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+137,228,46,Roman Liška,207101004,2023-05-28,1800,395,2023-05-28,1800,Roman Liška,"PRISPEVKY OVT BOHEMIANS 2023 Roman Liška, příspěvky a jedna loď.","Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+167,270,96,Jiří Klíma,207101015,2023-05-26,1000,394,2023-05-26,1000,Klíma Jiří,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+154,252,74,Lukáš Kopřiva,207101149,2023-05-26,500,393,2023-05-26,500,Lukáš Kopřiva,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+142,236,55,Milan Hrabák,207101005,2023-05-26,1000,391,2023-05-26,1000,HRABÁK MILAN,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+141,235,54,Jiří Vodička,207101026,2023-05-26,1900,392,2023-05-26,1900,VODIČKA JIŘÍ,Krakorce Karas,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+163,265,90,Eva Kovářová,207101007,2023-05-22,800,390,2023-05-22,800,EVA KOVAROVA,"ZA STAROU SLALOMKU, DĚKUJI:)",Příspěvky letos neplatíš.,delete_candidate_strict
+140,234,53,Jan Vais,207101076,2023-05-22,1800,389,2023-05-22,1800,Jan Vais,Příspěvky OVT - OFF,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+146,240,59,Miroslav Ptáček,207101019,2023-05-18,1400,388,2023-05-18,1400,Miroslav Ptáček,Ptáček 2023  1000+400 (1/2),"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+172,278,112,Zuzana Čermáková,207101040,2023-05-16,1000,387,2023-05-16,1000,ZUZANA CERMAKOVA,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+171,277,109,Alžběta Poupětová,207101143,2023-05-10,1000,386,2023-05-10,1000,Alžběta Poštulková,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+150,247,69,Eva Matějková,207101075,2023-05-06,1800,385,2023-05-06,1800,MATĚJKOVÁ EVA,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+138,229,48,Pavel Šálek,207101001,2023-05-05,1300,384,2023-05-05,1300,Šálek Pavel,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+145,239,58,Vít Skála,207101061,2023-05-04,1800,383,2023-05-04,1800,SKÁLA VÍT,příspěvky-rocky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+173,280,115,Václav Machálek,207101022,2023-04-27,1800,382,2023-04-27,1800,MACHALEK VACLAV,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+139,233,52,Barbora Kostková,207101052,2023-04-25,2300,381,2023-04-25,2300,Bc.Kostková Barbora,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+178,292,133,Zdeněk Elis,207101012,2023-04-24,2800,380,2023-04-24,2800,Elis Zdeněk,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+136,227,45,Tomáš Matějka,207101049,2023-04-24,1000,379,2023-04-24,1000,Tomáš Matějka,PRISPEVKY OVT BOHEMIANS 2023 Tomáš Matějka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+168,272,98,Gríša Vodička,207101014,2023-04-23,100,377,2023-04-23,100,KÁŠ KAREL,clenske od Grisi Vodicky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+153,251,73,Zbyněk Herynek,207101020,2023-04-23,1000,378,2023-04-23,1000,"Mgr. Herynek, Zbyněk",prispevky bohemka OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+179,294,138,Klára Matějková,207101137,2023-04-21,1500,376,2023-04-21,1500,KLARA MATEJKOVA,PLATBA PŘÍSPĚVKY,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+169,273,100,Martina Hlaváčková,207101045,2023-04-19,500,374,2023-04-19,500,HLAVÁČKOVÁ MARTINA,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+161,263,87,Leonard Beitler,207101059,2023-04-19,1500,375,2023-04-19,1500,BEITLER LEONARD,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+164,266,92,Jáchym Kopřiva,207101002,2023-04-18,1800,373,2023-04-18,1800,Ing.Kopřiva Jáchym,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+160,262,86,Martin Karabec,207101037,2023-04-18,1000,372,2023-04-18,1000,Martin Karabec,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+156,254,77,Kateřina Měrková,207101080,2023-04-18,1800,371,2023-04-18,1800,MĚRKOVÁ KATEŘINA,PRISPEVKY OVT BOHEMIANS 2023 Měrková Káťa,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+151,249,71,Adam Chochola,207101021,2023-04-18,1800,370,2023-04-18,1800,Ing.Chochola Adam,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+143,237,56,Tomáš Bauer,207101044,2023-04-18,1300,369,2023-04-18,1300,Tomáš Bauer,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+135,226,44,Michal Menčík,207101067,2023-04-14,500,368,2023-04-14,500,Michal Menčík,PRISPEVKY OVT BOHEMIANS 2023,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+110,181,79,Kateřina Šedivá,207101147,2023-03-15,800,366,2023-03-15,800,Kateřina Šedivá,PRISPEVKY OVT BOHEMIANS 2022,WA 28.7.,delete_candidate_strict
+131,216,132,Šimon Odstrčil,207101151,2023-02-06,1700,365,2023-02-06,1700,ODSTRCIL SIMON,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+127,206,116,Aleš Němec,207101035,2022-08-11,1450,212,2022-08-11,1450,MgA Němec Aleš,Aleš Němec,WA 28.7.,delete_candidate_strict
+124,201,107,Petr Novák,207101031,2022-08-04,800,211,2022-08-04,800,NOVAKOVA PAVLINA,Clensky prispevek OVT - Petr Novak,WA 28.7.,delete_candidate_strict
+129,209,121,Marek Veselý,207101050,2022-08-01,850,209,2022-08-01,850,"Veselý, Marek",,WA 28.7.,delete_candidate_strict
+108,178,75,Štěpán Hořejší,207101141,2022-07-29,850,208,2022-07-29,850,ŠTĚPÁN HOŘEJŠÍ,PRISPEVKY OVT BOHEMIANS 2022,WA 28.7.,delete_candidate_strict
+119,192,93,Vojtěch Kopřiva,207101150,2022-07-22,400,207,2022-07-22,400,Vojtěch Kopřiva,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+116,189,88,Štěpán Klepač,207101046,2022-07-22,850,206,2022-07-22,850,Štěpán Klepač,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+121,195,96,Jiří Klíma,207101015,2022-07-04,400,201,2022-07-04,400,Česká spořitelna,Jiří Klíma,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+111,184,82,Martin Kříž,207101136,2022-07-01,1450,200,2022-07-01,1450,Kříž Martin,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+107,177,74,Lukáš Kopřiva,207101149,2022-06-28,400,198,2022-06-28,400,KOPRIVA TOMAS,Clen.prispevek Bohemka2022-Kopr Luk,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+99,165,59,Miroslav Ptáček,207101019,2022-06-25,1250,197,2022-06-25,1250,Ptáček Miroslav,Ptáček -Bohemka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+117,190,90,Eva Kovářová,207101007,2022-06-23,450,195,2022-06-23,450,EVA KOVAROVA,"ZA STAROU SLALOMKU, DĚKUJI:)",Příspěvky letos neplatíš.,delete_candidate_strict
+122,197,98,Gríša Vodička,207101014,2022-06-21,100,190,2022-06-21,100,KÁŠ KAREL,Uhrada clenstvi Mudr. Grisa Vodicka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+103,172,69,Eva Matějková,207101075,2022-06-21,850,192,2022-06-21,850,MATĚJKOVÁ EVA,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+98,164,58,Vít Skála,207101061,2022-06-21,1250,191,2022-06-21,1250,SKÁLA VÍT,příspěvky_rocky-Vít Skála,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+94,160,54,Jiří Vodička,207101026,2022-06-21,750,193,2022-06-21,750,Vodička Jiří,Karas,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+125,202,109,Alžběta Poupětová,207101143,2022-06-20,400,188,2022-06-20,400,Alžběta Poštulková,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+118,191,92,Jáchym Kopřiva,207101002,2022-06-16,1250,187,2022-06-16,1250,Ing.Kopřiva Jáchym,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+115,188,87,Leonard Beitler,207101059,2022-06-16,1000,186,2022-06-16,1000,BEITLER LEONARD,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+132,217,133,Zdeněk Elis,207101012,2022-06-15,1850,185,2022-06-15,1850,Ing.Elis Zdeněk,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+109,179,77,Kateřina Měrková,207101080,2022-06-14,1250,184,2022-06-14,1250,MĚRKOVÁ KATEŘINA,Káťa Měrková - příspěvky Bohemka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+126,205,115,Václav Machálek,207101022,2022-06-13,1250,183,2022-06-13,1250,MACHALEK VACLAV,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+92,158,52,Barbora Kostková,207101052,2022-06-12,400,182,2022-06-12,400,Bc.Kostková Barbora,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+128,207,118,Lina Procházková,207101047,2022-06-10,800,181,2022-06-10,800,Procházková Lina,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+106,176,73,Zbyněk Herynek,207101020,2022-06-10,800,177,2022-06-10,800,"Mgr. Herynek, Zbyněk",prispevky bohemka OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+104,174,71,Adam Chochola,207101021,2022-06-10,1250,178,2022-06-10,1250,Ing.Chochola Adam,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+93,159,53,Jan Vais,207101076,2022-06-10,850,179,2022-06-10,850,Jan Vais,Příspěvky OVT - OFF,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+91,154,48,Pavel Šálek,207101001,2022-06-10,850,180,2022-06-10,850,Šálek Pavel,příspěvky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+114,187,86,Martin Karabec,207101037,2022-06-09,800,176,2022-06-09,800,Martin Karabec,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+96,162,56,Tomáš Bauer,207101044,2022-06-09,850,174,2022-06-09,850,Tomáš Bauer,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+89,152,45,Tomáš Matějka,207101049,2022-06-09,400,175,2022-06-09,400,Tomáš Matějka,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+88,151,44,Michal Menčík,207101067,2022-06-09,400,173,2022-06-09,400,Michal Menčík,PRISPEVKY OVT BOHEMIANS 2022,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+67,111,84,Jakub Chochola,207101057,2021-09-13,950,168,2021-09-13,950,Jakub Chochola,PRISPEVKY OVT BOHEMIANS 2021,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+63,102,74,Lukáš Kopřiva,207101149,2021-08-23,500,163,2021-08-23,500,Lukáš Kopřiva,Příspěvky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+79,126,107,Petr Novák,207101031,2021-07-27,900,159,2021-07-27,900,NOVAKOVA PAVLINA,Prispevek OVT 2021 - Petr Novak,"Příspěvky na rok 2021 máš celkem: 800,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101031 , termín: 30.6.2021. Děkuji.",delete_candidate_strict
+70,114,88,Štěpán Klepač,207101046,2021-07-16,1250,158,2021-07-16,1250,Štěpán Klepač,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+52,86,55,Milan Hrabák,207101005,2021-07-07,800,156,2021-07-07,800,HRABÁK MILAN,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+75,120,96,Jiří Klíma,207101015,2021-07-03,400,155,2021-07-03,400,Klíma Jiří,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+74,118,94,Vašek Hořejší,207101146,2021-07-02,400,154,2021-07-02,400,VACLAV HOREJSI,PLATBA,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+83,132,118,Lina Procházková,207101047,2021-07-01,800,153,2021-07-01,800,Procházková Lina,Lina Prochazkova prispevky 2021,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+50,84,53,Jan Vais,207101076,2021-07-01,400,152,2021-07-01,400,Jan Vais,Příspěvky OLT - off,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+85,140,130,Filip Havlíček,207101144,2021-06-30,1250,151,2021-06-30,1250,Havlíček Filip,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+60,97,69,Eva Matějková,207101075,2021-06-30,850,149,2021-06-30,850,MATĚJKOVÁ EVA,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+58,92,63,Barbora Bernardová,207101099,2021-06-30,800,150,2021-06-30,800,BERNARDOVA BARBORA,B Bernardova,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+64,103,75,Štěpán Hořejší,207101141,2021-06-29,850,148,2021-06-29,850,STEPAN HOREJSI,PLATBA,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+34,106,79,Kateřina Šedivá,207101147,2021-06-28,800,147,2021-06-28,800,Kateřina Šedivá,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+69,113,87,Leonard Beitler,207101059,2021-06-25,800,145,2021-06-25,800,BEITLER LEONARD,Prispevky Leos Beitler,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+68,112,86,Martin Karabec,207101037,2021-06-21,800,144,2021-06-21,800,Martin Karabec,Příspěvky OVT 2021,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+56,90,59,Miroslav Ptáček,207101019,2021-06-21,1250,143,2021-06-21,1250,PTACEK MIROSLAV,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+49,83,52,Barbora Kostková,207101052,2021-06-18,400,142,2021-06-18,400,Kostková Barbora,Bara Prispevky - Diky za praci pro Bohemku :),"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+55,89,58,Vít Skála,207101061,2021-06-11,1250,141,2021-06-11,1250,SKÁLA VÍT,příspěvky rocky Vít Skála,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+48,79,48,Pavel Šálek,207101001,2021-06-11,850,140,2021-06-11,850,Šálek Pavel,příspěvky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+81,130,115,Václav Machálek,207101022,2021-06-03,1250,138,2021-06-03,1250,MACHALEK VACLAV,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+72,116,92,Jáchym Kopřiva,207101002,2021-06-03,850,139,2021-06-03,850,"Kopřiva Jáchym,Ing.",Jáchym Kopřiva,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+87,144,138,Klára Matějková,207101137,2021-06-02,800,137,2021-06-02,800,Tomáš Matějka,PRISPEVKY OVT BOHEMIANS 2020 KláraMatějková,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+62,101,73,Zbyněk Herynek,207101020,2021-05-31,800,136,2021-05-31,800,"Mgr. Herynek, Zbyněk",prispevky bohemka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+47,78,46,Roman Liška,207101004,2021-05-27,1250,135,2021-05-27,1250,Roman Liška,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky na rok 2021 máš celkem: 1450,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101004 , termín: 30.6.2021. Děkuji.",delete_candidate_strict
+73,117,93,Vojtěch Kopřiva,207101150,2021-05-25,400,133,2021-05-25,400,Vojtěch Kopřiva,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+71,115,90,Eva Kovářová,207101007,2021-05-25,450,134,2021-05-25,450,EVA KOVAROVA,PŘEVOD PROSTŘEDKŮ,Příspěvky letos neplatíš.,delete_candidate_strict
+51,85,54,Jiří Vodička,207101026,2021-05-25,750,132,2021-05-25,750,Vodička Jiří,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+76,121,97,Pavel Machálek,207101024,2021-05-24,1250,131,2021-05-24,1250,Machálek Pavel,PRISPEVKY OVT BOHEMIANS 2021,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+86,142,133,Zdeněk Elis,207101012,2021-05-20,1850,130,2021-05-20,1850,Elis Zdeněk,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+77,122,98,Gríša Vodička,207101014,2021-05-18,100,129,2021-05-18,100,KÁŠ KAREL,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+82,131,116,Aleš Němec,207101035,2021-05-17,1450,125,2021-05-17,1450,NĚMEC ALEŠ,Aleš Němec,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+78,123,100,Martina Hlaváčková,207101045,2021-05-17,400,127,2021-05-17,400,HLAVÁČKOVÁ MARTINA,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+66,109,82,Martin Kříž,207101136,2021-05-17,1450,128,2021-05-17,1450,Kříž Martin,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+65,104,77,Kateřina Měrková,207101080,2021-05-17,1250,124,2021-05-17,1250,MĚRKOVÁ KATEŘINA,PRISPEVKY OVT BOHEMIANS 2020 - Kata Merkova,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+61,99,71,Adam Chochola,207101021,2021-05-17,1250,122,2021-05-17,1250,"Chochola Adam,Ing.",,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+53,87,56,Tomáš Bauer,207101044,2021-05-17,850,123,2021-05-17,850,Tomáš Bauer,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+45,76,44,Michal Menčík,207101067,2021-05-17,850,126,2021-05-17,850,Michal Menčík,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+46,77,45,Tomáš Matějka,207101049,2021-05-11,400,121,2021-05-11,400,Tomáš Matějka,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+35,52,107,Petr Novák,207101031,2020-08-18,800,104,2020-08-18,800,NOVAKOVA PAVLINA,Petr Novak - clensky prispevek OVT,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+12,16,59,Miroslav Ptáček,207101019,2020-08-05,1250,103,2020-08-05,1250,MIROSLAV PTÁČEK,Ptáček-doprava na Ha. = brigáda,"Příspěvky na rok 2020 máš celkem: 1650,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101019 , termín: 30.6.2020. Děkuji.",delete_candidate_strict
+37,54,112,Zuzana Čermáková,207101040,2020-08-04,1250,102,2020-08-04,1250,ANTONIN CERMAK,PŘEVOD PROSTŘEDKŮ,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+19,29,75,Štěpán Hořejší,207101141,2020-07-03,850,101,2020-07-03,850,STEPAN HOREJSI,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+42,66,130,Filip Havlíček,207101144,2020-06-30,1650,63,2020-06-30,1650,Havlíček Filip,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+40,57,116,Aleš Němec,207101035,2020-04-06,1200,61,2020-04-06,1200,NĚMEC ALEŠ,557686_ ALeš Němec,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+7,11,54,Jiří Vodička,207101026,2020-04-01,750,60,2020-04-01,750,Vodička Jiří,Karas,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+26,40,88,Štěpán Klepač,207101046,2020-03-30,1250,59,2020-03-30,1250,Štěpán Klepač,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+29,43,93,Vojtěch Kopřiva,207101150,2020-03-23,400,56,2020-03-23,400,Vojtěch Kopřiva,PRISPEVKY OVT BOHEMIANS 2020 V. Kopřiva,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+18,28,74,Lukáš Kopřiva,207101149,2020-03-23,400,57,2020-03-23,400,Vojtěch Kopřiva,PRISPEVKY OVT BOHEMIANS 2020 L. Kopřiva,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+13,18,63,Barbora Bernardová,207101099,2020-03-23,800,55,2020-03-23,800,BERNARDOVA BARBORA,Bara Bernardova,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+8,12,55,Milan Hrabák,207101005,2020-03-23,800,58,2020-03-23,800,HRABÁK MILAN,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+23,37,84,Jakub Chochola,207101057,2020-03-22,850,54,2020-03-22,850,Jakub Chochola,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+17,27,73,Zbyněk Herynek,207101020,2020-03-18,800,53,2020-03-18,800,"Mgr. Herynek, Zbyněk",prispevky bohemka,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+32,48,98,Gríša Vodička,207101014,2020-03-16,300,52,2020-03-16,300,KÁŠ KAREL,Gríša Vodička,"Příspěvky na rok 2020 máš celkem: 100,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101014 , termín: 30.6.2020. Děkuji.",delete_candidate_strict
+30,44,94,Vašek Hořejší,207101146,2020-03-10,400,51,2020-03-10,400,MAREK HOREJSI,PŘÍSPĚVKY VÁCLAV HOŘEJŠÍ,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+14,21,66,Marek Hořejší,207101082,2020-03-10,800,50,2020-03-10,800,MAREK HOREJSI,PŘÍSPĚVKY MAREK HOŘEJŠÍ,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+10,14,57,Marie Hořejší,207101081,2020-03-10,800,49,2020-03-10,800,MAREK HOREJSI,PŘÍSPĚVKY MARIE HOŘEJŠÍ,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+41,58,118,Lina Procházková,207101047,2020-03-09,800,48,2020-03-09,800,Procházková Lina,Lina Prochazkova prispevky 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+27,41,90,Eva Kovářová,207101007,2020-03-09,450,47,2020-03-09,450,EVA KOVAROVA,PŘEVOD PROSTŘEDKŮ,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+33,49,100,Martina Hlaváčková,207101045,2020-03-05,800,46,2020-03-05,800,HLAVÁČKOVÁ MARTINA,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+44,70,138,Klára Matějková,207101137,2020-03-04,800,44,2020-03-04,800,KLARA MATEJKOVA,PLATBA PŘÍSPĚVKY KLÁRA MATĚJKOVÁ,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+28,42,92,Jáchym Kopřiva,207101002,2020-03-04,850,45,2020-03-04,850,"Kopřiva Jáchym,Ing.",,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+43,68,133,Zdeněk Elis,207101012,2020-03-02,2250,43,2020-03-02,2250,"Elis Zdeněk,Ing.",PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+11,15,58,Vít Skála,207101061,2020-03-02,1250,42,2020-03-02,1250,SKÁLA VÍT,příspěvky-rocky,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+22,35,82,Martin Kříž,207101136,2020-02-26,1450,41,2020-02-26,1450,Kříž Martin,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+31,47,97,Pavel Machálek,207101024,2020-02-25,1650,37,2020-02-25,1650,"Machálek, Pavel",PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+20,30,77,Kateřina Měrková,207101080,2020-02-25,1250,39,2020-02-25,1250,MĚRKOVÁ KATEŘINA,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+5,9,52,Barbora Kostková,207101052,2020-02-25,400,40,2020-02-25,400,"Kostková Barbora,Bc.",PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+24,38,86,Martin Karabec,207101037,2020-02-24,800,36,2020-02-24,800,Martin Karabec,,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+21,32,79,Kateřina Šedivá,207101147,2020-02-24,800,34,2020-02-24,800,Kateřina Šedivá,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+16,25,71,Adam Chochola,207101021,2020-02-24,1250,33,2020-02-24,1250,"Chochola Adam,Ing.",,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+15,23,69,Eva Matějková,207101075,2020-02-24,850,35,2020-02-24,850,MATĚJKOVÁ EVA,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+3,4,46,Roman Liška,207101004,2020-02-24,1450,31,2020-02-24,1450,Roman Liška,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+9,13,56,Tomáš Bauer,207101044,2020-02-21,850,28,2020-02-21,850,"Bauer, Tomáš",PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict
+2,3,45,Tomáš Matějka,207101049,2020-02-21,400,30,2020-02-21,400,Tomáš Matějka,PRISPEVKY OVT BOHEMIANS 2020,"Příspěvky máš zaplacené, děkuji.",delete_candidate_strict

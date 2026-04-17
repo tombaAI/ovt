@@ -1,0 +1,92 @@
+bank_tx_id,tx_date,year,amount,variable_symbol,member_id,full_name,member_paid_in_year,member_payment_count_in_year,counterparty_name,message,candidate_reason
+499,2025-06-24,2025,2300,207101035,116,Aleš Němec,2300,1,MgA.Němec Aleš,Příspěvky OVT Bohemians 2025,possible_family_amount
+497,2025-05-18,2025,1800,207101046,88,Štěpán Klepač,1800,1,Štěpán Klepač,Příspěvky OVT Bohemians 2025,possible_family_amount
+494,2025-05-14,2025,1800,207101032,62,Kateřina Klepačová,1800,1,Kateřina Klepačová,Příspěvky OVT Bohemians 2025,possible_family_amount
+490,2025-04-23,2025,1800,207101075,69,Eva Matějková,1800,1,MATĚJKOVÁ EVA,Příspěvky OVT Bohemians 2025,possible_family_amount
+484,2025-04-14,2025,1800,207101141,75,Štěpán Hořejší,1800,1,ŠTĚPÁN HOŘEJŠÍ,Příspěvky OVT Bohemians 2025,possible_family_amount
+24,2025-02-27,2025,3300,207101012,133,Zdeněk Elis,3300,1,Elis Zdeněk,Příspěvky OVT Bohemians 2025,possible_family_amount
+23,2025-02-25,2025,1000,,,,0,0,JAN HNATEK,JAN HNATEK,no_member
+21,2025-02-19,2025,1000,,,,0,0,Riedl Robert,Riedl příspěvky 2025,no_member
+20,2025-02-19,2025,2300,207101102,72,Karolína Chvojková,2300,1,Chvojka Jaroslav,Příspěvky OVT Bohemians 2025,possible_family_amount
+19,2025-02-19,2025,2000,207101082,66,Marek Hořejší,1000,1,MAREK HOREJSI,PŘÍSPĚVKY MAREK + MARIE + VAŠEK HOŘEJŠÍ,possible_family_text
+15,2025-02-17,2025,1800,207101061,58,Vít Skála,1800,1,SKÁLA VÍT,příspěvky Vít Skála,possible_family_amount
+14,2025-02-15,2025,2300,207101052,52,Barbora Kostková,2300,1,Bc.Kostková Barbora,,possible_family_amount
+13,2025-02-13,2025,1800,207101076,53,Jan Vais,1800,1,Jan Vais,Off - příspěvky OVT,possible_family_amount
+12,2025-02-13,2025,1000,0,,,0,0,BERNARDOVA BARBORA,,no_member
+8,2025-02-11,2025,1800,207101002,92,Jáchym Kopřiva,1800,1,Ing.Kopřiva Jáchym,Příspěvky OVT Bohemians 2025,possible_family_amount
+7,2025-02-11,2025,1800,207101022,115,Václav Machálek,1800,1,VÁCLAV MACHÁLEK,Příspěvky OVT Bohemians 2025,possible_family_amount
+6,2025-02-11,2025,1000,,,,0,0,Martin Karabec,"Prispevky OVT 2025. dik, ahoj Martin",no_member
+5,2025-02-11,2025,1800,207101144,130,Filip Havlíček,1800,1,Havlíček Filip,Příspěvky OVT Bohemians 2025,possible_family_amount
+3,2025-02-11,2025,1800,207101021,71,Adam Chochola,1800,1,Chochola Adam,Příspěvky OVT Bohemians 2025,possible_family_amount
+454,2024-07-17,2024,500,,,,0,0,JAN HNATEK,JAN HNATEK,no_member
+453,2024-06-29,2024,800,207101044,56,Tomáš Bauer,1300,1,Tomáš Bauer,Příspěvky OVT Bohemians 2024 loď,possible_split_or_multi
+449,2024-04-29,2024,2300,207101035,116,Aleš Němec,2300,1,MgA.Němec Aleš,,possible_family_amount
+447,2024-04-26,2024,2300,207101032,62,Kateřina Klepačová,2300,1,Štěpán Klepač,Příspěvky OVT Bohemians 2024,possible_family_amount
+445,2024-04-26,2024,2300,207101102,72,Karolína Chvojková,2300,1,Chvojka Jaroslav,,possible_family_amount
+442,2024-04-22,2024,1800,207101141,75,Štěpán Hořejší,1800,1,ŠTĚPÁN HOŘEJŠÍ,Příspěvky OVT Bohemians 2024,possible_family_amount
+439,2024-03-18,2024,1000,0,,,0,0,BERNARDOVA BARBORA,,no_member
+438,2024-03-18,2024,500,207101082,66,Marek Hořejší,1500,1,MAREK HOREJSI,PŘÍSPĚVKY MAREK + MARIE + VAŠEK HOŘEJŠÍ,possible_split_or_multi
+436,2024-03-17,2024,2300,207101144,130,Filip Havlíček,2300,1,Havlíček Filip,Příspěvky OVT Bohemians 2024,possible_family_amount
+433,2024-03-15,2024,2300,207101004,46,Roman Liška,2300,1,Roman Liška,Příspěvky OVT Bohemians 2024,possible_family_amount
+429,2024-03-06,2024,3300,207101012,133,Zdeněk Elis,3300,1,Ing.Elis Zdeněk,Příspěvky OVT Bohemians 2024,possible_family_amount
+424,2024-02-26,2024,3000,207101082,66,Marek Hořejší,1500,1,MAREK HOREJSI,PŘÍSPĚVKY MAREK + MARIE + VAŠEK HOŘEJŠÍ,possible_family_text
+423,2024-02-22,2024,2300,207101022,115,Václav Machálek,2300,1,VÁCLAV MACHÁLEK,Příspěvky OVT Bohemians 2024,possible_family_amount
+421,2024-02-16,2024,1900,207101026,54,Jiří Vodička,1900,1,VODIČKA JIŘÍ,Příspěvky OVT Bohemians 2024,possible_family_amount
+419,2024-02-08,2024,2300,207101061,58,Vít Skála,2300,1,SKÁLA VÍT,příspěvky - rocky - Vít Skála,possible_family_amount
+418,2024-02-07,2024,1800,207101002,92,Jáchym Kopřiva,1800,1,Ing.Kopřiva Jáchym,,possible_family_amount
+417,2024-02-06,2024,2300,207101021,71,Adam Chochola,2300,1,Ing.Chochola Adam,Příspěvky OVT Bohemians 2024,possible_family_amount
+415,2024-02-02,2024,2300,207101052,52,Barbora Kostková,2300,1,Bc.Kostková Barbora,Příspěvky OVT Bohemians 2024,possible_family_amount
+414,2024-02-02,2024,1800,207101076,53,Jan Vais,1800,1,Jan Vais,OFF - Příspěvky na rok 2024,possible_family_amount
+411,2024-02-01,2024,500,207101044,56,Tomáš Bauer,1300,1,Tomáš Bauer,Příspěvky OVT Bohemians 2024,possible_split_or_multi
+407,2023-09-06,2023,1800,207101144,130,Filip Havlíček,1800,1,Havlíček Filip,Příspěvky OVT Bohemians 2023,possible_family_amount
+406,2023-07-12,2023,1600,,,,0,0,Pejsar Jan,Jan Pejsar - příspěvky,no_member
+403,2023-07-04,2023,2300,207101102,72,Karolína Chvojková,2300,1,Chvojka Jaroslav,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+402,2023-06-29,2023,1800,207101050,121,Marek Veselý,1800,1,"Veselý, Marek",Marek Veselý,possible_family_amount
+400,2023-06-29,2023,2300,207101035,116,Aleš Němec,2300,1,NĚMEC ALEŠ,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+399,2023-06-28,2023,1000,0,,,0,0,BERNARDOVA BARBORA,Bára Bernardová,no_member
+395,2023-05-28,2023,1800,207101004,46,Roman Liška,3250,2,Roman Liška,"PRISPEVKY OVT BOHEMIANS 2023 Roman Liška, příspěvky a jedna loď.",possible_split_or_multi
+392,2023-05-26,2023,1900,207101026,54,Jiří Vodička,1900,1,VODIČKA JIŘÍ,Krakorce Karas,possible_family_amount
+390,2023-05-22,2023,800,207101007,90,Eva Kovářová,800,1,EVA KOVAROVA,"ZA STAROU SLALOMKU, DĚKUJI:)",possible_family_text
+389,2023-05-22,2023,1800,207101076,53,Jan Vais,1800,1,Jan Vais,Příspěvky OVT - OFF,possible_family_amount
+388,2023-05-18,2023,1400,207101019,59,Miroslav Ptáček,1400,1,Miroslav Ptáček,Ptáček 2023  1000+400 (1/2),possible_family_text
+385,2023-05-06,2023,1800,207101075,69,Eva Matějková,1800,1,MATĚJKOVÁ EVA,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+383,2023-05-04,2023,1800,207101061,58,Vít Skála,1800,1,SKÁLA VÍT,příspěvky-rocky,possible_family_amount
+382,2023-04-27,2023,1800,207101022,115,Václav Machálek,1800,1,MACHALEK VACLAV,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+381,2023-04-25,2023,2300,207101052,52,Barbora Kostková,2300,1,Bc.Kostková Barbora,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+380,2023-04-24,2023,2800,207101012,133,Zdeněk Elis,2800,1,Elis Zdeněk,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+373,2023-04-18,2023,1800,207101002,92,Jáchym Kopřiva,1800,1,Ing.Kopřiva Jáchym,,possible_family_amount
+371,2023-04-18,2023,1800,207101080,77,Kateřina Měrková,1800,1,MĚRKOVÁ KATEŘINA,PRISPEVKY OVT BOHEMIANS 2023 Měrková Káťa,possible_family_amount
+370,2023-04-18,2023,1800,207101021,71,Adam Chochola,1800,1,Ing.Chochola Adam,PRISPEVKY OVT BOHEMIANS 2023,possible_family_amount
+363,2023-01-02,2023,1450,207101004,46,Roman Liška,3250,2,Roman Liška,Roman Liška příspěvky za 2022,possible_split_or_multi
+210,2022-08-02,2022,2200,20710112,,,0,0,Chvojka Jaroslav,Chvojkova Karolína,no_member
+205,2022-07-14,2022,800,0,,,0,0,HRABÁK MILAN,,no_member
+195,2022-06-23,2022,450,207101007,90,Eva Kovářová,450,1,EVA KOVAROVA,"ZA STAROU SLALOMKU, DĚKUJI:)",possible_family_text
+194,2022-06-22,2022,800,0,,,0,0,BERNARDOVA BARBORA,Bara Bernardova,no_member
+189,2022-06-21,2022,2000,207101082,66,Marek Hořejší,800,1,MAREK HOREJSI,PŘÍSPĚVKY MAREK + MARIE + VAŠEK HOŘEJŠÍ,possible_family_text
+185,2022-06-15,2022,1850,207101012,133,Zdeněk Elis,1850,1,Ing.Elis Zdeněk,PRISPEVKY OVT BOHEMIANS 2022,possible_family_amount
+171,2021-09-13,2021,300,,,,0,0,STEPAN HOREJSI,"TEPLÁ, ŠTĚPÁN HOŘEJŠÍ",no_member
+170,2021-09-13,2021,300,0,,,0,0,SKÁLA VÍT,TepláStřela rocky Vít Skála,no_member
+169,2021-09-13,2021,300,,,,0,0,Kateřina Šedivá,Kateřina Šedivá,no_member
+167,2021-09-10,2021,300,03585978,,,0,0,"Mgr. Herynek, Zbyněk",tepla strela zaloha zbynek,no_member
+165,2021-09-07,2021,300,0,,,0,0,MĚRKOVÁ KATEŘINA,Záloha Teplá+Střela Káťa Měrková,no_member
+164,2021-09-06,2021,300,,,,0,0,Šálek Pavel,Ešus- Teplá,no_member
+162,2021-08-09,2021,100,207101143,109,Alžběta Poupětová,500,1,Alžběta Poštulková,PRISPEVKY OVT BOHEMIANS 2020 - POKUTA,possible_split_or_multi
+161,2021-08-07,2021,1350,8954160094,,,0,0,Kateřina Klepačová,Klepačová příspěvky,no_member
+160,2021-08-03,2021,950,,,,0,0,"Veselý, Marek",Příspěvky Marek Veselý,no_member
+157,2021-07-15,2021,400,207101143,109,Alžběta Poupětová,500,1,Alžběta Poštulková,PRISPEVKY OVT BOHEMIANS 2020,possible_split_or_multi
+146,2021-06-28,2021,1600,207101082,66,Marek Hořejší,800,1,MAREK HOREJSI,PŘÍSPĚVKY MAREK + MARIE HOŘEJŠÍ,possible_family_text
+130,2021-05-20,2021,1850,207101012,133,Zdeněk Elis,1850,1,Elis Zdeněk,PRISPEVKY OVT BOHEMIANS 2020,possible_family_amount
+120,2021-03-16,2021,1250,207101032,62,Kateřina Klepačová,1350,1,Kateřina Klepačová,,possible_split_or_multi
+116,2021-02-11,2021,1200,207101145,144,Jan Pejsar,0,0,Pejsar Jan,"Příspěvky 2020, Honza Pejsar",possible_family_text
+111,2020-09-15,2020,300,,,,0,0,Havlíček Filip,,no_member
+110,2020-09-14,2020,300,0,,,0,0,SKÁLA VÍT,záloha Teplá Střela - rocky (Vít Skála),no_member
+109,2020-09-11,2020,300,,,,0,0,Vojtěch Kopřiva,Vojtěch Kopřiva,no_member
+108,2020-09-11,2020,300,,,,0,0,STEPAN HOREJSI,ŠTĚPÁN HOŘEJŠÍ - TEPLÁ A STŘELA,no_member
+107,2020-09-10,2020,300,0,,,0,0,BERNARDOVA BARBORA,"Tepla, Strela - Bara Bernardova",no_member
+106,2020-09-09,2020,300,0,,,0,0,MĚRKOVÁ KATEŘINA,Kata Merkova - zaloha Tepla a Strela,no_member
+105,2020-09-08,2020,600,,,,0,0,MAREK HOREJSI,PŘEVOD PROSTŘEDKŮ,no_member
+62,2020-04-20,2020,800,,,,0,0,Jan Vais,Příspěvky OVT - Jan Vais,no_member
+43,2020-03-02,2020,2250,207101012,133,Zdeněk Elis,2250,1,"Elis Zdeněk,Ing.",PRISPEVKY OVT BOHEMIANS 2020,possible_family_amount
+38,2020-02-25,2020,450,,,,0,0,Keller Jiří,,no_member
+32,2020-02-24,2020,850,,,,0,0,Tomáš Bauer,PRISPEVKY OVT BOHEMIANS 2020 Michal Menčík,no_member
+27,2020-02-20,2020,100,,,,0,0,"Bauer, Tomáš",,no_member

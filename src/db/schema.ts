@@ -12,6 +12,7 @@ import {
     timestamp,
     uuid
 } from "drizzle-orm/pg-core";
+import { sql as drizzleSql } from "drizzle-orm";
 
 export const appSchema = pgSchema("app");
 
@@ -467,6 +468,7 @@ export const notebookNotes = appSchema.table(
     {
         id:             serial("id").primaryKey(),
         title:          text("title").notNull(),
+        tags:           text("tags").array().notNull().default(drizzleSql`'{}'::text[]`),
         createdByEmail: text("created_by_email").notNull(),
         createdAt:      timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt:      timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

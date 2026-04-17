@@ -1,0 +1,52 @@
+payment_id,contrib_id,member_id,full_name,variable_symbol,paid_at,amount,payment_note,classification
+249,407,94,Vašek Hořejší,207101146,2026-03-26,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+260,420,138,Klára Matějková,207101137,2025-04-22,1500,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+238,391,66,Marek Hořejší,207101082,2025-02-19,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+233,386,57,Marie Hořejší,207101081,2025-02-19,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+237,390,63,Barbora Bernardová,207101099,2025-02-13,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+245,402,86,Martin Karabec,207101037,2025-02-11,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+205,336,83,Jan Kukla,207101030,2024-11-30,2300,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+206,337,84,Jakub Chochola,207101057,2024-08-13,800,už zase ano,keep_as_cash_reconciliation
+213,348,98,Gríša Vodička,207101014,2024-05-29,100,"Příspěvky máš zaplacené, děkuji.",keep_manual_review_has_weak_bank_evidence
+195,318,63,Barbora Bernardová,207101099,2024-03-18,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+211,344,94,Vašek Hořejší,207101146,2024-02-26,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+196,321,66,Marek Hořejší,207101082,2024-02-26,1500,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+191,314,57,Marie Hořejší,207101081,2024-02-26,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+207,338,86,Martin Karabec,207101037,2024-02-02,1000,"Příspěvky máš zaplacené, děkuji.",keep_manual_review_has_weak_bank_evidence
+190,313,56,Tomáš Bauer,207101044,2024-02-01,1300,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+158,260,83,Jan Kukla,207101030,2023-10-10,2300,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+147,241,62,Kateřina Klepačová,207101032,2023-09-08,1800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+180,298,144,Jan Pejsar,207101145,2023-07-12,1600,"Příspěvky na rok 2023 máš celkem: 1500,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101145 , termín: 31.5.2023. Děkuji.",keep_as_cash_reconciliation
+148,242,63,Barbora Bernardová,207101099,2023-06-28,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+181,300,160,Karolína Kotovská,207101153,2023-06-05,1000,Air,keep_as_cash_reconciliation
+166,268,94,Vašek Hořejší,207101146,2023-05-29,500,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+155,253,75,Štěpán Hořejší,207101141,2023-05-29,1300,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+149,245,66,Marek Hořejší,207101082,2023-05-29,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+144,238,57,Marie Hořejší,207101081,2023-05-29,1000,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+134,223,144,Jan Pejsar,207101145,2023-01-12,1700,možná zaplatí 11.1.2023,keep_as_cash_reconciliation
+90,153,46,Roman Liška,207101004,2023-01-03,1450,"mail / SMS 6.7., předpokládám, že zaplatí",keep_manual_review_has_weak_bank_evidence
+100,166,62,Kateřina Klepačová,207101032,2022-12-30,1250,WA 28.7.,keep_as_cash_reconciliation
+105,175,72,Karolína Chvojková,207101102,2022-08-02,2200,WA 28.7.,keep_as_cash_reconciliation
+101,167,63,Barbora Bernardová,207101099,2022-06-22,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+120,193,94,Vašek Hořejší,207101146,2022-06-21,400,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+102,170,66,Marek Hořejší,207101082,2022-06-21,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+97,163,57,Marie Hořejší,207101081,2022-06-21,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+57,91,62,Kateřina Klepačová,207101032,2021-08-07,1350,31.7. WA zpráva,keep_as_cash_reconciliation
+84,134,121,Marek Veselý,207101050,2021-08-03,950,31.7. WA zpráva,keep_as_cash_reconciliation
+80,127,109,Alžběta Poupětová,207101143,2021-07-15,500,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+59,95,66,Marek Hořejší,207101082,2021-06-28,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+54,88,57,Marie Hořejší,207101081,2021-06-28,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+6,10,53,Jan Vais,207101076,2020-04-20,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+38,55,114,Jiří Keller,207101011,2020-02-25,450,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+1,2,44,Michal Menčík,207101067,2020-02-21,850,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+263,400,83,Jan Kukla,207101030,,2300,Zaplaceno hotově na VH 26 (opraveno při importu),keep_as_cash_reconciliation
+133,219,138,Klára Matějková,207101137,,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+130,215,130,Filip Havlíček,207101144,,1250,2022-07-07 00:00:00,keep_as_cash_reconciliation
+123,198,100,Martina Hlaváčková,207101045,,400,2022-07-10 00:00:00,keep_as_cash_reconciliation
+113,186,84,Jakub Chochola,207101057,,850,2022-07-07 00:00:00,keep_as_cash_reconciliation
+112,185,83,Jan Kukla,207101030,,1450,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+95,161,55,Milan Hrabák,207101005,,800,2022-07-14 00:00:00,keep_as_cash_reconciliation
+39,56,115,Václav Machálek,207101022,,1250,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+36,53,109,Alžběta Poupětová,207101143,,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+25,39,87,Leonard Beitler,207101059,,800,"Příspěvky máš zaplacené, děkuji.",keep_as_cash_reconciliation
+4,5,48,Pavel Šálek,207101001,,800,"Příspěvky na rok 2020 máš celkem: 850,- Kč. Plať na účet: 2701772934/2010, variabilní symbol VS: 207101001 , termín: 30.6.2020. Děkuji.",keep_as_cash_reconciliation

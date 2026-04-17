@@ -1,0 +1,11 @@
+{
+  "generated_at": "2026-04-10T12:57:03.495Z",
+  "strict_delete_count": 218,
+  "keep_count": 51,
+  "total_count": 269,
+  "sql_summary": {
+    "total_payments": 269,
+    "strict_delete_count": 218,
+    "keep_count": 51
+  }
+}
