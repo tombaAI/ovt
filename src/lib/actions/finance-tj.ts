@@ -51,14 +51,22 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
 
     try {
         const buffer = Buffer.from(await file.arrayBuffer());
+        console.log(`[finance-tj] PDF buffer: ${buffer.byteLength} bytes, soubor: ${file.name}`);
 
         // eslint-disable-next-line @typescript-eslint/no-require-imports
         const pdfParse = require("pdf-parse") as (
             buffer: Buffer
-        ) => Promise<{ text: string }>;
-        const { text } = await pdfParse(buffer);
+        ) => Promise<{ text: string; numpages: number }>;
+        const { text, numpages } = await pdfParse(buffer);
+        console.log(`[finance-tj] PDF extrahován: ${numpages} stran, ${text.length} znaků`);
+        console.log(`[finance-tj] První 500 znaků textu:\n${text.slice(0, 500)}`);
 
         const parsed: TjParseResult = parseTjFinancePdf(text);
+        console.log(`[finance-tj] Parser meta:`, parsed.meta);
+        console.log(`[finance-tj] Nalezeno transakcí: ${parsed.transactions.length}`);
+        parsed.transactions.forEach((tx, i) =>
+            console.log(`[finance-tj]   tx[${i}]: ${tx.docDate} ${tx.docNumber} ${tx.sourceCode} | ${tx.accountCode} ${tx.accountName} | MD=${tx.debit} D=${tx.credit} | ${tx.description}`)
+        );
 
         if (!parsed.meta.reportDate) {
             return { error: "Nepodařilo se rozpoznat datum sestavy. Je toto výsledovka po střediscích dokladově?" };
