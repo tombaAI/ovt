@@ -418,6 +418,48 @@ export const brigadeMembers = appSchema.table(
     ]
 );
 
+// ── Finance TJ tables ────────────────────────────────────────────────────────
+
+/**
+ * Cover záznam pro každý import PDF výsledovky z TJ.
+ * Datum sestavy a filtr jsou metadata z hlavičky/patičky PDF.
+ */
+export const importFinTjImports = appSchema.table("import_fin_tj_imports", {
+    id:          serial("id").primaryKey(),
+    reportDate:  date("report_date").notNull(),       // "Dne: DD.MM.YYYY" z hlavičky
+    costCenter:  text("cost_center").notNull(),       // "Středisko: 207"
+    filterFrom:  date("filter_from"),                 // z "Datum >= DD.MM.YYYY"
+    filterTo:    date("filter_to"),                   // z "Datum <= DD.MM.YYYY"
+    filterRaw:   text("filter_raw"),                  // celý řádek Tisk vybraných záznamů
+    fileName:    text("file_name"),
+    importedBy:  text("imported_by").notNull(),
+    importedAt:  timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+/**
+ * Jednotlivé transakce z výsledovky TJ.
+ * Idempotentní přes doc_number (číslo dokladu je unikátní v účetnictví TJ).
+ */
+export const importFinTjTransactions = appSchema.table(
+    "import_fin_tj_transactions",
+    {
+        id:          serial("id").primaryKey(),
+        importId:    integer("import_id").notNull().references(() => importFinTjImports.id, { onDelete: "cascade" }),
+        docDate:     date("doc_date").notNull(),
+        docNumber:   text("doc_number").notNull().unique(),
+        sourceCode:  text("source_code").notNull(),   // IN, BV, FP, FV, ...
+        description: text("description").notNull(),   // firma + text z PDF
+        accountCode: text("account_code").notNull(),
+        accountName: text("account_name").notNull(),
+        debit:       numeric("debit",  { precision: 12, scale: 2 }).notNull().default("0"),
+        credit:      numeric("credit", { precision: 12, scale: 2 }).notNull().default("0"),
+    },
+    (t) => [
+        index("import_fin_tj_tx_import_idx").on(t.importId),
+        index("import_fin_tj_tx_date_idx").on(t.docDate),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(
