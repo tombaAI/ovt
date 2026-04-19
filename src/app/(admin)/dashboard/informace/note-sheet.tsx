@@ -109,7 +109,7 @@ function CategoryInput({
 export function NoteSheet({ open, onOpenChange, note, allCategories, includeArchived, onSaved }: Props) {
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
-    const [tags, setTags] = useState<string[]>([]);
+    const [categories, setCategories] = useState<string[]>([]);
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -131,13 +131,13 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
         if (note) {
             setTitle(note.title);
             setContent(note.latestContent);
-            setTags(note.categories ?? []);
+            setCategories(note.categories ?? []);
             setCurrentNoteId(note.id);
             setIsEditing(false);
         } else {
             setTitle("");
             setContent("");
-            setTags([]);
+            setCategories([]);
             setCurrentNoteId(null);
             setIsEditing(true);
         }
@@ -173,10 +173,10 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
 
         let result;
         if (isNew) {
-            result = await createNote(title.trim(), content, tags);
+            result = await createNote(title.trim(), content, categories);
             if ("success" in result && result.id) setCurrentNoteId(result.id);
         } else {
-            result = await saveNoteVersion(currentNoteId!, title.trim(), content, tags);
+            result = await saveNoteVersion(currentNoteId!, title.trim(), content, categories);
         }
 
         if ("error" in result) {
@@ -194,7 +194,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
         if (note) {
             setTitle(note.title);
             setContent(note.latestContent);
-            setTags(note.categories ?? []);
+            setCategories(note.categories ?? []);
         }
         setSaveError("");
         setIsEditing(false);
@@ -258,8 +258,8 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                                 <span className="text-xs text-gray-400 mt-2 shrink-0">Kategorie:</span>
                                 <div className="flex-1">
                                     <CategoryInput
-                                        value={tags}
-                                        onChange={setTags}
+                                        value={categories}
+                                        onChange={setCategories}
                                         suggestions={allCategories}
                                     />
                                 </div>
@@ -277,9 +277,9 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                                 )}
                             </div>
                             {/* Kategorie — zobrazení */}
-                            {tags.length > 0 && (
+                            {categories.length > 0 && (
                                 <div className="flex gap-1.5 flex-wrap">
-                                    {tags.map(t => (
+                                    {categories.map(t => (
                                         <span key={t}
                                             className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
                                             {t}
