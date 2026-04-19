@@ -1,33 +1,18 @@
 import { getDb } from "@/lib/db";
-import { events, members } from "@/db/schema";
+import { members } from "@/db/schema";
 import { asc } from "drizzle-orm";
 import { getEvents } from "@/lib/actions/events";
 import { EventsClient } from "./events-client";
+import { getSelectedYear } from "@/lib/year";
 import type { MemberOption } from "@/app/(admin)/dashboard/brigades/page";
 
-export default async function EventsPage(props: {
-    searchParams: Promise<{ year?: string }>;
-}) {
-    const { year: yearParam } = await props.searchParams;
+export default async function EventsPage() {
     const db = getDb();
+    const selectedYear = await getSelectedYear();
 
-    const currentYear = new Date().getFullYear();
-
-    // Roky pro záložky: roky s akcemi + aktuální + příští
-    const existingYears = await db
-        .selectDistinct({ year: events.year })
-        .from(events);
-    const yearsSet = new Set<number>(existingYears.map(r => Number(r.year)));
-    yearsSet.add(currentYear);
-    yearsSet.add(currentYear + 1);
-    const years = Array.from(yearsSet).sort((a, b) => b - a);
-
-    const selectedYear = Number(yearParam) || currentYear;
-
-    const eventRows = await getEvents(selectedYear);
-
-    const allMembers: MemberOption[] = await db
-        .select({
+    const [eventRows, allMembers] = await Promise.all([
+        getEvents(selectedYear),
+        db.select({
             id:        members.id,
             firstName: members.firstName,
             lastName:  members.lastName,
@@ -35,11 +20,11 @@ export default async function EventsPage(props: {
             nickname:  members.nickname,
         })
         .from(members)
-        .orderBy(asc(members.lastName), asc(members.firstName));
+        .orderBy(asc(members.lastName), asc(members.firstName)) as Promise<MemberOption[]>,
+    ]);
 
     return (
         <EventsClient
-            years={years}
             selectedYear={selectedYear}
             events={eventRows}
             allMembers={allMembers}

@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, paymentAllocations, paymentLedger } from "@/db/schema";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { getSelectedYear } from "@/lib/year";
 import { getDefaultsFromPrevYear } from "@/lib/actions/contribution-periods";
 import { ContributionsClient } from "./contributions-client";
 import { NoPeriodView } from "./prepare-dialog";
@@ -65,11 +65,9 @@ function calcStatus(paidTotal: number, amountTotal: number | null): ContribRow["
     return "underpaid";
 }
 
-export default async function ContributionsPage(props: {
-    searchParams: Promise<{ year?: string }>;
-}) {
-    const searchParams = await props.searchParams;
+export default async function ContributionsPage() {
     const db = getDb();
+    const selectedYear = await getSelectedYear();
 
     const allPeriods = await db
         .select({
@@ -88,16 +86,13 @@ export default async function ContributionsPage(props: {
         .from(contributionPeriods)
         .orderBy(desc(contributionPeriods.year));
 
-    const requestedYear = Number(searchParams.year) || CONTRIBUTION_YEAR;
-
-    // Pokud neexistuje žádné období nebo žádné pro vybraný rok, zobrazit prázdný stav s tlačítkem
-    if (allPeriods.length === 0 || !allPeriods.find(p => p.year === requestedYear)) {
-        const targetYear   = allPeriods.length === 0 ? CONTRIBUTION_YEAR : requestedYear;
-        const prepareDefaults = await getDefaultsFromPrevYear(targetYear);
-        return <NoPeriodView year={targetYear} defaults={prepareDefaults} />;
+    // Pokud neexistuje žádné období pro vybraný rok, zobrazit prázdný stav s tlačítkem
+    if (!allPeriods.find(p => p.year === selectedYear)) {
+        const prepareDefaults = await getDefaultsFromPrevYear(selectedYear);
+        return <NoPeriodView year={selectedYear} defaults={prepareDefaults} />;
     }
 
-    const period = (allPeriods.find(p => p.year === requestedYear) ?? allPeriods[0]) as PeriodDetail;
+    const period = allPeriods.find(p => p.year === selectedYear) as PeriodDetail;
 
     const contribs = await db
         .select({
@@ -179,7 +174,6 @@ export default async function ContributionsPage(props: {
 
     return (
         <ContributionsClient
-            periods={allPeriods as PeriodTab[]}
             period={period}
             rows={data}
             canPrepare={canPrepare}

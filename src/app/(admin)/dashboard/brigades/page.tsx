@@ -1,8 +1,9 @@
 import { getDb } from "@/lib/db";
-import { members, brigades as brigadesSchema } from "@/db/schema";
+import { members } from "@/db/schema";
 import { asc } from "drizzle-orm";
 import { getBrigades } from "@/lib/actions/brigades";
 import { BrigadesClient } from "./brigades-client";
+import { getSelectedYear } from "@/lib/year";
 
 export type MemberOption = {
     id: number;
@@ -12,28 +13,13 @@ export type MemberOption = {
     nickname: string | null;
 };
 
-export default async function BrigadesPage(props: {
-    searchParams: Promise<{ year?: string }>;
-}) {
-    const { year: yearParam } = await props.searchParams;
+export default async function BrigadesPage() {
     const db = getDb();
+    const selectedYear = await getSelectedYear();
 
-    // Roky pro záložky: roky, ve kterých jsou brigády + aktuální rok + předchozí rok
-    const currentYear = new Date().getFullYear();
-    const existingYears = await db
-        .selectDistinct({ year: brigadesSchema.year })
-        .from(brigadesSchema);
-    const yearsSet = new Set<number>(existingYears.map(r => Number(r.year)));
-    yearsSet.add(currentYear);
-    yearsSet.add(currentYear - 1);
-    const years = Array.from(yearsSet).sort((a, b) => b - a);
-
-    const selectedYear = Number(yearParam) || currentYear;
-
-    const brigades = await getBrigades(selectedYear);
-
-    const allMembers = await db
-        .select({
+    const [brigades, allMembers] = await Promise.all([
+        getBrigades(selectedYear),
+        db.select({
             id:        members.id,
             firstName: members.firstName,
             lastName:  members.lastName,
@@ -41,11 +27,11 @@ export default async function BrigadesPage(props: {
             nickname:  members.nickname,
         })
         .from(members)
-        .orderBy(asc(members.lastName), asc(members.firstName));
+        .orderBy(asc(members.lastName), asc(members.firstName)),
+    ]);
 
     return (
         <BrigadesClient
-            years={years}
             selectedYear={selectedYear}
             brigades={brigades}
             allMembers={allMembers}

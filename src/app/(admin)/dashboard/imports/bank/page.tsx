@@ -1,20 +1,15 @@
 import { getDb } from "@/lib/db";
 import { fioBankTransactions } from "@/db/schema";
 import { sql } from "drizzle-orm";
-import { loadBankTransactions, loadBankTransactionYears } from "@/lib/actions/bank";
+import { loadBankTransactions } from "@/lib/actions/bank";
 import { BankImportClient } from "./bank-import-client";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { getSelectedYear } from "@/lib/year";
 
 export const dynamic = "force-dynamic";
 
-export default async function BankImportPage(props: {
-    searchParams: Promise<{ year?: string }>;
-}) {
-    const { year: yearParam } = await props.searchParams;
+export default async function BankImportPage() {
     const db = getDb();
-
-    const years = await loadBankTransactionYears();
-    const selectedYear = Number(yearParam) || (years[0] ?? CONTRIBUTION_YEAR);
+    const selectedYear = await getSelectedYear();
 
     const [stats] = await db.select({
         total:    sql<number>`count(*)`,
@@ -42,7 +37,6 @@ export default async function BankImportPage(props: {
 
             <BankImportClient
                 transactions={transactions}
-                years={years}
                 selectedYear={selectedYear}
             />
         </div>

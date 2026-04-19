@@ -1,2 +1,2 @@
-/** Aktuálně aktivní rok pro příspěvky */
-export const CONTRIBUTION_YEAR = 2026;
+// CONTRIBUTION_YEAR byl nahrazen globálním selektorem roku (src/lib/year.ts)
+// Soubor ponechán pro případ budoucích konstant

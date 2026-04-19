@@ -2,10 +2,12 @@ import { signOut } from "@/auth";
 import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { NavLinks } from "./nav-links";
+import { YearSelector } from "./year-selector";
+import { getSelectedYear } from "@/lib/year";
 import type { ReactNode } from "react";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
-    const session = await auth();
+    const [session, selectedYear] = await Promise.all([auth(), getSelectedYear()]);
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-50">
@@ -19,6 +21,8 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 <span className="text-white/50 text-xs hidden md:inline truncate max-w-[180px]">
                     {session?.user?.name ?? session?.user?.email}
                 </span>
+
+                <YearSelector year={selectedYear} />
 
                 <form action={async () => { "use server"; await signOut({ redirectTo: "/login" }); }}>
                     <Button type="submit" variant="ghost" size="sm"

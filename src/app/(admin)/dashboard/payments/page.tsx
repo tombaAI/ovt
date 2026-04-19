@@ -2,11 +2,10 @@ import Link from "next/link";
 import {
     loadLedgerRows,
     getLedgerStats,
-    loadLedgerYears,
     type ReconciliationStatus,
 } from "@/lib/actions/reconciliation";
 import { PaymentsClient } from "./payments-client";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { getSelectedYear } from "@/lib/year";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +13,11 @@ const VALID_SOURCES = ["fio_bank", "file_import", "cash"] as const;
 type SourceFilter = typeof VALID_SOURCES[number];
 
 export default async function PaymentsPage(props: {
-    searchParams: Promise<{ year?: string; status?: string; source?: string; profileId?: string }>;
+    searchParams: Promise<{ status?: string; source?: string; profileId?: string }>;
 }) {
-    const { year: yearParam, status: statusParam, source: sourceParam, profileId: profileIdParam } = await props.searchParams;
+    const { status: statusParam, source: sourceParam, profileId: profileIdParam } = await props.searchParams;
 
-    const years        = await loadLedgerYears();
-    const selectedYear = Number(yearParam) || (years[0] ?? CONTRIBUTION_YEAR);
+    const selectedYear = await getSelectedYear();
 
     const validStatuses: ReconciliationStatus[] = ["unmatched", "suggested", "confirmed", "ignored"];
     const statusFilter = validStatuses.includes(statusParam as ReconciliationStatus)
@@ -59,7 +57,6 @@ export default async function PaymentsPage(props: {
             <PaymentsClient
                 rows={rows}
                 stats={stats}
-                years={years}
                 selectedYear={selectedYear}
                 statusFilter={statusFilter}
                 sourceFilter={sourceFilter}
