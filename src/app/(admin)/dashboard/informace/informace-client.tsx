@@ -8,7 +8,7 @@ import type { NoteWithLatest } from "@/lib/actions/notes";
 
 interface Props {
     notes: NoteWithLatest[];
-    allTags: string[];
+    allCategories: string[];
     includeArchived: boolean;
 }
 
@@ -19,28 +19,28 @@ function fmtDate(d: Date | string) {
     });
 }
 
-export function InformaceClient({ notes, allTags, includeArchived }: Props) {
+export function InformaceClient({ notes, allCategories, includeArchived }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [sheetOpen, setSheetOpen] = useState(false);
     const [editNote, setEditNote] = useState<NoteWithLatest | null>(null);
-    const [activeTag, setActiveTag] = useState<string | null>(null);
+    const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-    // Tagy přítomné v aktuálním výpisu (pro pill počty)
-    const tagCounts = notes.reduce<Record<string, number>>((acc, n) => {
-        for (const t of n.tags) acc[t] = (acc[t] ?? 0) + 1;
+    // Počty poznámek pro každou kategorii
+    const categoryCounts = notes.reduce<Record<string, number>>((acc, n) => {
+        for (const c of n.categories) acc[c] = (acc[c] ?? 0) + 1;
         return acc;
     }, {});
 
-    // Tagy ke zobrazení = ty, co se vyskytují v aktuálním výpisu + allTags ze serveru (pro konzistenci)
-    const visibleCategories = [...new Set([...allTags, ...Object.keys(tagCounts)])].sort();
+    // Kategorie ke zobrazení = union serverových + aktuálně v seznamu
+    const visibleCategories = [...new Set([...allCategories, ...Object.keys(categoryCounts)])].sort();
 
-    const filtered = activeTag
-        ? notes.filter(n => n.tags.includes(activeTag))
+    const filtered = activeCategory
+        ? notes.filter(n => n.categories.includes(activeCategory))
         : notes;
 
     function toggleArchived() {
-        setActiveTag(null);
+        setActiveCategory(null);
         startTransition(() => {
             router.push(`/dashboard/informace${includeArchived ? "" : "?archived=1"}`);
         });
@@ -71,7 +71,7 @@ export function InformaceClient({ notes, allTags, includeArchived }: Props) {
                     <p className="text-gray-500 mt-0.5 text-sm">
                         {includeArchived
                             ? `${notes.length} archivovaných poznámek`
-                            : `${filtered.length} z ${notes.length} ${notes.length === 1 ? "poznámky" : notes.length < 5 ? "poznámek" : "poznámek"}`
+                            : `${filtered.length} z ${notes.length} ${notes.length === 1 ? "poznámky" : "poznámek"}`
                         }
                     </p>
                 </div>
@@ -89,36 +89,36 @@ export function InformaceClient({ notes, allTags, includeArchived }: Props) {
                 </div>
             </div>
 
-            {/* ── Tag filter pills ── */}
+            {/* ── Kategorie filter pills ── */}
             {visibleCategories.length > 0 && (
                 <div className="flex gap-2 flex-wrap">
                     <button
-                        onClick={() => setActiveTag(null)}
+                        onClick={() => setActiveCategory(null)}
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
-                            activeTag === null
+                            activeCategory === null
                                 ? "bg-[#26272b] text-white"
                                 : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         Vše
-                        <span className={["text-xs font-semibold", activeTag === null ? "text-white/70" : "text-gray-400"].join(" ")}>
+                        <span className={["text-xs font-semibold", activeCategory === null ? "text-white/70" : "text-gray-400"].join(" ")}>
                             {notes.length}
                         </span>
                     </button>
                     {visibleCategories.map(cat => (
                         <button
                             key={cat}
-                            onClick={() => setActiveTag(activeTag === cat ? null : cat)}
+                            onClick={() => setActiveCategory(activeCategory === cat ? null : cat)}
                             className={[
                                 "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
-                                activeTag === cat
+                                activeCategory === cat
                                     ? "bg-[#26272b] text-white"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                             ].join(" ")}>
                             {cat}
-                            {tagCounts[cat] !== undefined && (
-                                <span className={["text-xs font-semibold", activeTag === cat ? "text-white/70" : "text-gray-400"].join(" ")}>
-                                    {tagCounts[cat]}
+                            {categoryCounts[cat] !== undefined && (
+                                <span className={["text-xs font-semibold", activeCategory === cat ? "text-white/70" : "text-gray-400"].join(" ")}>
+                                    {categoryCounts[cat]}
                                 </span>
                             )}
                         </button>
@@ -126,12 +126,12 @@ export function InformaceClient({ notes, allTags, includeArchived }: Props) {
                 </div>
             )}
 
-            {/* ── Note cards ── */}
+            {/* ── Karty poznámek ── */}
             <div className={`space-y-3 transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
                 {filtered.length === 0 && (
                     <div className="rounded-xl border bg-white p-10 text-center text-gray-400 text-sm">
-                        {activeTag
-                            ? `Žádné poznámky v kategorii "${activeTag}"`
+                        {activeCategory
+                            ? `Žádné poznámky v kategorii „${activeCategory}"`
                             : includeArchived ? "Žádné archivované poznámky" : "Zatím žádné poznámky — vytvořte první"}
                     </div>
                 )}
@@ -141,9 +141,7 @@ export function InformaceClient({ notes, allTags, includeArchived }: Props) {
                         onClick={() => openDetail(note)}
                         className="rounded-xl border bg-white p-5 hover:border-gray-300 hover:shadow-sm cursor-pointer transition-all">
                         <div className="flex items-start justify-between gap-3">
-                            <h2 className="font-semibold text-gray-900 text-base leading-tight">
-                                {note.title}
-                            </h2>
+                            <h2 className="font-semibold text-gray-900 text-base leading-tight">{note.title}</h2>
                             <span className="text-xs text-gray-400 shrink-0 mt-0.5">
                                 {note.versionCount} {note.versionCount === 1 ? "verze" : note.versionCount < 5 ? "verze" : "verzí"}
                             </span>
@@ -151,13 +149,12 @@ export function InformaceClient({ notes, allTags, includeArchived }: Props) {
                         <p className="text-xs text-gray-400 mt-1">
                             Upraveno {fmtDate(note.updatedAt)} · {note.createdByEmail}
                         </p>
-                        {note.tags.length > 0 && (
+                        {note.categories.length > 0 && (
                             <div className="flex gap-1.5 flex-wrap mt-2">
-                                {note.tags.map(tag => (
-                                    <span
-                                        key={tag}
+                                {note.categories.map(cat => (
+                                    <span key={cat}
                                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
-                                        {tag}
+                                        {cat}
                                     </span>
                                 ))}
                             </div>
@@ -175,7 +172,7 @@ export function InformaceClient({ notes, allTags, includeArchived }: Props) {
                 open={sheetOpen}
                 onOpenChange={setSheetOpen}
                 note={editNote}
-                allTags={allTags}
+                allCategories={allCategories}
                 includeArchived={includeArchived}
                 onSaved={onSaved}
             />

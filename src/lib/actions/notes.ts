@@ -40,12 +40,12 @@ export async function getNotes(includeArchived = false): Promise<NoteWithLatest[
     return result;
 }
 
-export async function getExistingTags(): Promise<string[]> {
+export async function getExistingCategories(): Promise<string[]> {
     const db = getDb();
     const rows = await db.execute(
-        sql`SELECT DISTINCT unnest(tags) AS tag FROM app.notebook_notes WHERE archived_at IS NULL ORDER BY tag`
+        sql`SELECT DISTINCT unnest(categories) AS category FROM app.notebook_notes WHERE archived_at IS NULL ORDER BY category`
     );
-    return (rows as unknown as { tag: string }[]).map(r => r.tag).filter(Boolean);
+    return (rows as unknown as { category: string }[]).map(r => r.category).filter(Boolean);
 }
 
 export async function getNoteVersions(noteId: number): Promise<NoteVersionRow[]> {
@@ -57,14 +57,14 @@ export async function getNoteVersions(noteId: number): Promise<NoteVersionRow[]>
         .orderBy(desc(notebookNoteVersions.createdAt));
 }
 
-export async function createNote(title: string, content: string, tags: string[]): Promise<NoteActionResult> {
+export async function createNote(title: string, content: string, categories: string[]): Promise<NoteActionResult> {
     const session = await auth();
     const email = session?.user?.email ?? "unknown";
     const db = getDb();
     try {
         const [note] = await db
             .insert(notebookNotes)
-            .values({ title, tags, createdByEmail: email })
+            .values({ title, categories, createdByEmail: email })
             .returning();
         await db.insert(notebookNoteVersions).values({
             noteId: note.id,
@@ -83,7 +83,7 @@ export async function saveNoteVersion(
     noteId: number,
     title: string,
     content: string,
-    tags: string[]
+    categories: string[]
 ): Promise<NoteActionResult> {
     const session = await auth();
     const email = session?.user?.email ?? "unknown";
@@ -91,7 +91,7 @@ export async function saveNoteVersion(
     try {
         await db
             .update(notebookNotes)
-            .set({ title, tags, updatedAt: new Date() })
+            .set({ title, categories, updatedAt: new Date() })
             .where(eq(notebookNotes.id, noteId));
         await db.insert(notebookNoteVersions).values({
             noteId,
