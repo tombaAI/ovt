@@ -7,7 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { Suspense } from "react";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 
 const PERIOD_STATUS: Record<string, { label: string; className: string }> = {
     draft:      { label: "Návrh",      className: "bg-gray-100 text-gray-600 border-gray-200" },

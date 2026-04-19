@@ -1,7 +1,7 @@
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, paymentAllocations, paymentLedger } from "@/db/schema";
 import { eq, asc, desc, inArray, and } from "drizzle-orm";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 import { getDefaultsFromPrevYear } from "@/lib/actions/contribution-periods";
 import { ContributionsClient } from "./contributions-client";
 import { NoPeriodView } from "./prepare-dialog";

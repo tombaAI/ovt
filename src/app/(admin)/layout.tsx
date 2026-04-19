@@ -3,7 +3,7 @@ import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { NavLinks } from "./nav-links";
 import { YearSelector } from "./year-selector";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 import type { ReactNode } from "react";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {

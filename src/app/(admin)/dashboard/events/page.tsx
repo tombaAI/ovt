@@ -3,7 +3,7 @@ import { members } from "@/db/schema";
 import { asc } from "drizzle-orm";
 import { getEvents } from "@/lib/actions/events";
 import { EventsClient } from "./events-client";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 import type { MemberOption } from "@/app/(admin)/dashboard/brigades/page";
 
 export default async function EventsPage() {

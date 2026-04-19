@@ -1,6 +1,6 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 
 const FILTERS = ["Problémy", "Nezaplaceno", "Nedoplatek", "Přeplatek", "Zaplaceno", "S úkolem", "Všichni"];
 

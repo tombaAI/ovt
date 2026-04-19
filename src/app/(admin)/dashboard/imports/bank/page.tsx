@@ -3,7 +3,7 @@ import { fioBankTransactions } from "@/db/schema";
 import { sql } from "drizzle-orm";
 import { loadBankTransactions } from "@/lib/actions/bank";
 import { BankImportClient } from "./bank-import-client";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 
 export const dynamic = "force-dynamic";
 

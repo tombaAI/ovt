@@ -5,7 +5,7 @@ import { members, memberContributions, contributionPeriods, auditLog, payments }
 import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 
 export type MemberFormState = { error: string } | { success: true } | null;
 

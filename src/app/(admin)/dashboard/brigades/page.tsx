@@ -3,7 +3,7 @@ import { members } from "@/db/schema";
 import { asc } from "drizzle-orm";
 import { getBrigades } from "@/lib/actions/brigades";
 import { BrigadesClient } from "./brigades-client";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 
 export type MemberOption = {
     id: number;

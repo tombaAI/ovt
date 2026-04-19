@@ -3,7 +3,7 @@ import { members, memberContributions, contributionPeriods, importMembersTjBohem
 import { eq, asc, desc, and, sql } from "drizzle-orm";
 import { getBrigadeMemberIdsByYear } from "@/lib/actions/brigades";
 import { MembersClient } from "./members-client";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 import type { SyncUpdatableField } from "@/lib/sync-config";
 
 export type PeriodTab = {

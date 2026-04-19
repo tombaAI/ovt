@@ -5,7 +5,7 @@ import {
     type ReconciliationStatus,
 } from "@/lib/actions/reconciliation";
 import { PaymentsClient } from "./payments-client";
-import { getSelectedYear } from "@/lib/year";
+import { getSelectedYear } from "@/lib/actions/year";
 
 export const dynamic = "force-dynamic";
 
