@@ -12,7 +12,6 @@ import type { BankTransactionRow } from "@/lib/actions/bank";
 
 interface Props {
     transactions: BankTransactionRow[];
-    years: number[];
     selectedYear: number;
 }
 
@@ -36,25 +35,15 @@ function formatAmount(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 0 }).format(amount);
 }
 
-export function BankImportClient({ transactions, years, selectedYear }: Props) {
+export function BankImportClient({ transactions, selectedYear }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [pendingYear, setPendingYear] = useState<number | null>(null);
 
     // Resync form state
     const [resyncFrom, setResyncFrom] = useState(defaultFrom);
     const [resyncTo,   setResyncTo]   = useState(defaultTo);
     const [resyncMsg,  setResyncMsg]  = useState<string | null>(null);
     const [resyncPending, startResync] = useTransition();
-
-    function navigateYear(year: number) {
-        setPendingYear(year);
-        startTransition(() => {
-            router.push(`/dashboard/imports/bank?year=${year}`);
-        });
-    }
-
-    const displayYear = pendingYear ?? selectedYear;
 
     function handleSyncLast() {
         startTransition(async () => {
@@ -91,24 +80,6 @@ export function BankImportClient({ transactions, years, selectedYear }: Props) {
 
     return (
         <div className="space-y-4">
-            {/* ── Year tabs ── */}
-            {years.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-                    {years.map(y => (
-                        <button key={y}
-                            onClick={() => navigateYear(y)}
-                            className={[
-                                "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                                y === displayYear
-                                    ? "bg-[#26272b] text-white"
-                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                            ].join(" ")}>
-                            {y}
-                        </button>
-                    ))}
-                </div>
-            )}
-
             {/* ── Ovládací panel ── */}
             <div className="flex flex-wrap gap-6 items-end">
                 <div className="flex items-center gap-2">

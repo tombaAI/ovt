@@ -1,19 +1,20 @@
 "use client";
 
-import { useState, useMemo, useCallback, useTransition } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { MemberSheet } from "./member-sheet";
-import type { MemberWithFlags, PeriodTab } from "./page";
+import type { MemberWithFlags } from "./page";
 
-type FilterKey = "all" | "committee" | "tom" | "individual" | "partial" | "todo" | "tjdiffs" | "nobrigade";
+type FilterKey = "all" | "inactive" | "committee" | "tom" | "individual" | "partial" | "nobrigade" | "todo" | "tjdiffs";
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "all",        label: "Aktivní"            },
+    { key: "inactive",   label: "Neaktivní"          },
     { key: "committee",  label: "Výbor"              },
     { key: "tom",        label: "Vedoucí TOM"        },
     { key: "individual", label: "Individuální sleva" },
@@ -23,32 +24,21 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "tjdiffs",    label: "Změny z TJ"         },
 ];
 
-
 function fmtDate(iso: string) {
     const [y, m, d] = iso.split("-");
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
+function isActive(m: MemberWithFlags, year: number): boolean {
+    return m.memberFrom <= `${year}-12-31` &&
+           (m.memberTo === null || m.memberTo >= `${year}-01-01`);
+}
+
 interface Props {
     members: MemberWithFlags[];
-    periods: PeriodTab[];
     selectedYear: number;
     periodId: number | null;
     currentYearDiscounts: { committee: number; tom: number } | null;
-}
-
-function YearBadges({ years }: { years: number[] }) {
-    const visible = years.length > 3 ? years.slice(-3) : years;
-    return (
-        <>
-            {years.length > 3 && (
-                <Badge className="bg-gray-100 text-gray-400 border-0 text-xs font-normal tracking-widest px-1.5">···</Badge>
-            )}
-            {visible.map(y => (
-                <Badge key={y} className="bg-gray-100 text-gray-600 border-0 text-xs font-normal">{y}</Badge>
-            ))}
-        </>
-    );
 }
 
 function MemberBadges({ m }: { m: MemberWithFlags }) {
@@ -88,57 +78,49 @@ function MemberBadges({ m }: { m: MemberWithFlags }) {
     );
 }
 
-export function MembersClient({ members, periods, selectedYear, periodId, currentYearDiscounts }: Props) {
+export function MembersClient({ members, selectedYear, periodId, currentYearDiscounts }: Props) {
     const router = useRouter();
-    const [isPending, startTransition]    = useTransition();
-    const [pendingYear, setPendingYear]   = useState<number | null>(null);
     const [filter, setFilter]             = useState<FilterKey>("all");
     const [sort, setSort]                 = useState<SortKey>("firstName");
     const [searchText, setSearchText]     = useState("");
     const [sheetOpen, setSheetOpen]       = useState(false);
     const [editMemberId, setEditMemberId] = useState<number | null>(null);
 
-    // Zobrazíme kliknutý rok okamžitě, bez čekání na server
-    const displayYear = isPending && pendingYear !== null ? pendingYear : selectedYear;
-    const isAllYears  = displayYear === 0;
-
     const editMember = editMemberId !== null ? (members.find(m => m.id === editMemberId) ?? null) : null;
 
     const onMemberUpdated = useCallback(() => { router.refresh(); }, [router]);
 
-    function navigateYear(year: number) {
-        setPendingYear(year);
-        setFilter("all");
-        startTransition(() => {
-            router.push(`/dashboard/members?year=${year === 0 ? "all" : year}`);
-        });
-    }
-
     function openDetail(m: MemberWithFlags) { setEditMemberId(m.id); setSheetOpen(true); router.refresh(); }
     function openAdd()                       { setEditMemberId(null); setSheetOpen(true); }
 
-    const counts = useMemo(() => ({
-        all:        members.filter(m => m.memberTo === null).length,
-        committee:  members.filter(m => m.isCommittee).length,
-        tom:        members.filter(m => m.isTom).length,
-        individual: members.filter(m => m.discountIndividual !== null).length,
-        partial:    members.filter(m => m.fromDate !== null || m.toDate !== null).length,
-        nobrigade:  members.filter(m => !m.hasBrigade).length,
-        todo:       members.filter(m => m.todoNote !== null).length,
-        tjdiffs:    members.filter(m => m.hasTjDiffs).length,
-    }), [members]);
+    const counts = useMemo(() => {
+        const active = members.filter(m => isActive(m, selectedYear));
+        return {
+            all:        active.length,
+            inactive:   members.filter(m => !isActive(m, selectedYear)).length,
+            committee:  active.filter(m => m.isCommittee).length,
+            tom:        active.filter(m => m.isTom).length,
+            individual: active.filter(m => m.discountIndividual !== null).length,
+            partial:    active.filter(m => m.fromDate !== null || m.toDate !== null).length,
+            nobrigade:  active.filter(m => !m.hasBrigade).length,
+            todo:       members.filter(m => m.todoNote !== null).length,
+            tjdiffs:    members.filter(m => m.hasTjDiffs).length,
+        };
+    }, [members, selectedYear]);
 
     const filtered = useMemo(() => {
+        const active = members.filter(m => isActive(m, selectedYear));
         let list: MemberWithFlags[];
         switch (filter) {
-            case "committee":  list = members.filter(m => m.isCommittee); break;
-            case "tom":        list = members.filter(m => m.isTom); break;
-            case "individual": list = members.filter(m => m.discountIndividual !== null); break;
-            case "partial":    list = members.filter(m => m.fromDate !== null || m.toDate !== null); break;
-            case "nobrigade":  list = members.filter(m => !m.hasBrigade); break;
+            case "inactive":   list = members.filter(m => !isActive(m, selectedYear)); break;
+            case "committee":  list = active.filter(m => m.isCommittee); break;
+            case "tom":        list = active.filter(m => m.isTom); break;
+            case "individual": list = active.filter(m => m.discountIndividual !== null); break;
+            case "partial":    list = active.filter(m => m.fromDate !== null || m.toDate !== null); break;
+            case "nobrigade":  list = active.filter(m => !m.hasBrigade); break;
             case "todo":       list = members.filter(m => m.todoNote !== null); break;
             case "tjdiffs":    list = members.filter(m => m.hasTjDiffs); break;
-            default:           list = members.filter(m => m.memberTo === null);
+            default:           list = active;
         }
         if (searchText.trim()) {
             const q = searchText.trim().toLowerCase();
@@ -155,43 +137,15 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                 : a.firstName.localeCompare(b.firstName, "cs") || a.lastName.localeCompare(b.lastName, "cs")
         );
         return list;
-    }, [members, filter, sort, searchText]);
+    }, [members, filter, sort, searchText, selectedYear]);
 
     return (
         <div className="space-y-4">
-            {/* ── Year tabs ── */}
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-                {periods.map(p => (
-                    <button key={p.year}
-                        onClick={() => navigateYear(p.year)}
-                        className={[
-                            "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                            p.year === displayYear
-                                ? "bg-[#26272b] text-white"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                        ].join(" ")}>
-                        {p.year}
-                    </button>
-                ))}
-                <button
-                    onClick={() => navigateYear(0)}
-                    className={[
-                        "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                        displayYear === 0
-                            ? "bg-[#26272b] text-white"
-                            : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                    ].join(" ")}>
-                    Všichni
-                </button>
-            </div>
-
             {/* ── Heading ── */}
             <div>
-                <h1 className="text-2xl font-semibold text-gray-900">
-                    {isAllYears ? "Všichni členové" : `Členové ${displayYear}`}
-                </h1>
+                <h1 className="text-2xl font-semibold text-gray-900">Členové {selectedYear}</h1>
                 <p className="text-gray-500 mt-0.5 text-sm">
-                    {members.length} členů
+                    {counts.all} aktivních z {members.length} celkem
                 </p>
             </div>
 
@@ -205,14 +159,15 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
 
             {/* ── Filter + sort pills ── */}
             <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
-                {FILTERS.filter(f => !isAllYears || ["all", "todo", "tjdiffs"].includes(f.key)).map((f) => (
+                {FILTERS.map((f) => (
                     <button key={f.key} onClick={() => setFilter(f.key)}
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "todo"     ? "bg-orange-500 text-white"
-                                  : f.key === "tjdiffs" ? "bg-sky-600 text-white"
+                                ? f.key === "todo"      ? "bg-orange-500 text-white"
+                                  : f.key === "tjdiffs"  ? "bg-sky-600 text-white"
                                   : f.key === "nobrigade" ? "bg-red-600 text-white"
+                                  : f.key === "inactive"  ? "bg-gray-600 text-white"
                                   : "bg-[#327600] text-white"
                                 : f.key === "todo" && counts.todo > 0
                                     ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
@@ -248,7 +203,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
             </div>
 
             {/* ── Mobile: cards ── */}
-            <div className={`md:hidden space-y-2 transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
+            <div className="md:hidden space-y-2">
                 {filtered.length === 0 && (
                     <p className="text-center text-gray-400 py-12 text-sm">Žádní členové</p>
                 )}
@@ -258,17 +213,14 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                         <p className="font-medium text-gray-900 leading-snug">{m.firstName} {m.lastName}</p>
                         {m.email && <p className="text-sm text-gray-500 mt-0.5 truncate">{m.email}</p>}
                         <div className="flex flex-wrap gap-1 mt-2">
-                            {isAllYears
-                                ? <YearBadges years={m.memberYears ?? []} />
-                                : <MemberBadges m={m} />
-                            }
+                            <MemberBadges m={m} />
                         </div>
                     </button>
                 ))}
             </div>
 
             {/* ── Desktop: table ── */}
-            <div className={`hidden md:block rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
+            <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
@@ -276,7 +228,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                             <TableHead>Jméno</TableHead>
                             <TableHead className="hidden lg:table-cell">E-mail</TableHead>
                             <TableHead className="hidden xl:table-cell text-right">VS</TableHead>
-                            <TableHead>{isAllYears ? "Roky" : "Role / členství"}</TableHead>
+                            <TableHead>Role / členství</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -298,10 +250,7 @@ export function MembersClient({ members, periods, selectedYear, periodId, curren
                                 </TableCell>
                                 <TableCell>
                                     <div className="flex flex-wrap gap-1">
-                                        {isAllYears
-                                            ? <YearBadges years={m.memberYears ?? []} />
-                                            : <MemberBadges m={m} />
-                                        }
+                                        <MemberBadges m={m} />
                                     </div>
                                 </TableCell>
                             </TableRow>

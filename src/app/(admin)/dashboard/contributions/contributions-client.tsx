@@ -14,7 +14,7 @@ import { PrepareDialog } from "./prepare-dialog";
 import { EditPrescriptionDialog } from "./edit-prescription-dialog";
 import { deleteAllPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
-import type { ContribRow, PeriodTab, PeriodDetail, PeriodStatus } from "./page";
+import type { ContribRow, PeriodDetail, PeriodStatus } from "./page";
 
 type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo";
 
@@ -53,32 +53,22 @@ function diff(row: ContribRow): number | null {
 }
 
 interface Props {
-    periods: PeriodTab[];
     period: PeriodDetail;
     rows: ContribRow[];
     canPrepare?: boolean;
     prepareDefaults?: Partial<PeriodFormData>;
 }
 
-export function ContributionsClient({ periods, period, rows, canPrepare = false, prepareDefaults = {} }: Props) {
+export function ContributionsClient({ period, rows, canPrepare = false, prepareDefaults = {} }: Props) {
     const router = useRouter();
     const [filter, setFilter]               = useState<FilterKey>("issues");
     const [sheetOpen, setSheetOpen]         = useState(false);
     const [editContribId, setEditContribId] = useState<number | null>(null);
-    const [isPending, startTransition]          = useTransition();
-    const [pendingYear, setPendingYear]         = useState<number | null>(null);
     const [prepareOpen, setPrepareOpen]         = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
     const [deleteIsPending, startDelete]        = useTransition();
     const [editRow, setEditRow]                 = useState<ContribRow | null>(null);
     const [editOpen, setEditOpen]               = useState(false);
-
-    function navigateYear(year: number) {
-        setPendingYear(year);
-        startTransition(() => {
-            router.push(`/dashboard/contributions?year=${year}`);
-        });
-    }
 
     const paymentSheetRow = editContribId !== null ? (rows.find(r => r.contribId === editContribId) ?? null) : null;
 
@@ -130,33 +120,6 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
 
     return (
         <div className="space-y-5">
-            {/* ── Year tabs ── */}
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-                {periods.map(p => {
-                    const lc = LIFECYCLE[p.status as PeriodStatus] ?? LIFECYCLE.collecting;
-                    const isSelected = p.year === (pendingYear ?? period.year);
-                    return (
-                        <button key={p.year}
-                            onClick={() => navigateYear(p.year)}
-                            disabled={isPending}
-                            className={[
-                                "inline-flex items-center gap-2 px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                                isSelected
-                                    ? "bg-[#26272b] text-white"
-                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                            ].join(" ")}>
-                            {p.year}
-                            <span className={[
-                                "text-xs px-1.5 py-0.5 rounded-full border",
-                                isSelected ? "bg-white/15 text-white border-white/20" : lc.cls,
-                            ].join(" ")}>
-                                {lc.label}
-                            </span>
-                        </button>
-                    );
-                })}
-            </div>
-
             {/* ── Period header ── */}
             <div className="flex items-start justify-between gap-4">
                 <div>
@@ -241,7 +204,7 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
             </div>
 
             {/* ── Mobile cards ── */}
-            <div className={`md:hidden space-y-2 transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
+            <div className="md:hidden space-y-2">
                 {filtered.length === 0 && (
                     <p className="text-center text-gray-400 py-12 text-sm">Žádné záznamy</p>
                 )}
@@ -282,7 +245,7 @@ export function ContributionsClient({ periods, period, rows, canPrepare = false,
             </div>
 
             {/* ── Desktop table ── */}
-            <div className={`hidden md:block rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
+            <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">

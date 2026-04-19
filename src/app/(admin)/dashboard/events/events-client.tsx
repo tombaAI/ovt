@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -63,28 +63,18 @@ function fmtDateRange(dateFrom: string | null, dateTo: string | null, approxMont
 
 
 interface Props {
-    years: number[];
     selectedYear: number;
     events: EventRow[];
     allMembers: MemberOption[];
 }
 
-export function EventsClient({ years, selectedYear, events, allMembers }: Props) {
+export function EventsClient({ selectedYear, events, allMembers }: Props) {
     const router = useRouter();
-    const [isPending, startTransition] = useTransition();
-    const [pendingYear, setPendingYear] = useState<number | null>(null);
     const [filter, setFilter] = useState<FilterKey>("all");
 
     const [sheetOpen, setSheetOpen] = useState(false);
     const [editEvent, setEditEvent] = useState<EventRow | null>(null);
     const [copying, setCopying]     = useState(false);
-
-    const displayYear = isPending && pendingYear !== null ? pendingYear : selectedYear;
-
-    function navigateYear(year: number) {
-        setPendingYear(year);
-        startTransition(() => router.push(`/dashboard/events?year=${year}`));
-    }
 
     const openNew = useCallback(() => {
         setEditEvent(null);
@@ -125,26 +115,10 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
 
     return (
         <div className="space-y-4">
-            {/* ── Year tabs ── */}
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-                {years.map(y => (
-                    <button key={y}
-                        onClick={() => navigateYear(y)}
-                        className={[
-                            "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                            y === displayYear
-                                ? "bg-[#26272b] text-white"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                        ].join(" ")}>
-                        {y}
-                    </button>
-                ))}
-            </div>
-
             {/* ── Heading + actions ── */}
             <div className="flex items-start justify-between gap-4">
                 <div>
-                    <h1 className="text-2xl font-semibold text-gray-900">Kalendář {displayYear}</h1>
+                    <h1 className="text-2xl font-semibold text-gray-900">Kalendář {selectedYear}</h1>
                     <p className="text-gray-500 mt-0.5 text-sm">
                         {events.length} akcí · {noDate} bez termínu · {noLeader} bez vedoucího
                     </p>
@@ -187,7 +161,7 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
             </div>
 
             {/* ── Table ── */}
-            <div className={`rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
+            <div className="rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
@@ -203,7 +177,7 @@ export function EventsClient({ years, selectedYear, events, allMembers }: Props)
                             <TableRow>
                                 <TableCell colSpan={5} className="text-center text-gray-400 py-10">
                                     {events.length === 0
-                                        ? `Žádné akce za rok ${displayYear}`
+                                        ? `Žádné akce za rok ${selectedYear}`
                                         : "Žádné akce odpovídají filtru"}
                                 </TableCell>
                             </TableRow>

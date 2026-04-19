@@ -17,7 +17,7 @@ interface Props {
     open: boolean;
     onOpenChange: (v: boolean) => void;
     note: NoteWithLatest | null;
-    allTags: string[];
+    allCategories: string[];
     includeArchived: boolean;
     onSaved: () => void;
 }
@@ -106,7 +106,7 @@ function CategoryInput({
 }
 
 // ── Hlavní sheet ──────────────────────────────────────────────────────────────
-export function NoteSheet({ open, onOpenChange, note, allTags, includeArchived, onSaved }: Props) {
+export function NoteSheet({ open, onOpenChange, note, allCategories, includeArchived, onSaved }: Props) {
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
     const [tags, setTags] = useState<string[]>([]);
@@ -131,7 +131,7 @@ export function NoteSheet({ open, onOpenChange, note, allTags, includeArchived, 
         if (note) {
             setTitle(note.title);
             setContent(note.latestContent);
-            setTags(note.tags ?? []);
+            setTags(note.categories ?? []);
             setCurrentNoteId(note.id);
             setIsEditing(false);
         } else {
@@ -194,7 +194,7 @@ export function NoteSheet({ open, onOpenChange, note, allTags, includeArchived, 
         if (note) {
             setTitle(note.title);
             setContent(note.latestContent);
-            setTags(note.tags ?? []);
+            setTags(note.categories ?? []);
         }
         setSaveError("");
         setIsEditing(false);
@@ -260,7 +260,7 @@ export function NoteSheet({ open, onOpenChange, note, allTags, includeArchived, 
                                     <CategoryInput
                                         value={tags}
                                         onChange={setTags}
-                                        suggestions={allTags}
+                                        suggestions={allCategories}
                                     />
                                 </div>
                             </div>

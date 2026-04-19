@@ -1,17 +1,18 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { getSelectedYear } from "@/lib/year";
 
 const FILTERS = ["Problémy", "Nezaplaceno", "Nedoplatek", "Přeplatek", "Zaplaceno", "S úkolem", "Všichni"];
 
-export default function Loading() {
+export default async function Loading() {
+    const selectedYear = await getSelectedYear();
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
                     <h1 className="text-2xl font-semibold text-gray-900">Příspěvky</h1>
                     <span className="inline-flex h-7 items-center px-3 rounded-full text-sm font-medium bg-[#327600]/10 text-[#327600] border border-[#327600]/20">
-                        {CONTRIBUTION_YEAR}
+                        {selectedYear}
                     </span>
                 </div>
                 <Skeleton className="h-5 w-20 rounded-full" />

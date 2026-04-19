@@ -22,7 +22,6 @@ import {
 } from "@/lib/actions/members";
 import { getMemberTjDiffs, updateMemberFieldFromTj, type TjDiff } from "@/lib/actions/sync";
 import { FIELD_LABELS } from "@/lib/member-fields";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
 import type { MemberWithFlags } from "./page";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -151,16 +150,17 @@ function TjDiffsSection({ memberId, onApplied }: { memberId: number; onApplied: 
 
 // ── Individual discount dialog ────────────────────────────────────────────────
 function DiscountDialog({
-    open, onOpenChange, member, periodId, currentDiscount, currentNote, currentValidUntil, onDone,
+    open, onOpenChange, member, periodId, selectedYear, currentDiscount, currentNote, currentValidUntil, onDone,
 }: {
     open: boolean; onOpenChange: (v: boolean) => void;
     member: MemberWithFlags; periodId: number | null;
+    selectedYear: number;
     currentDiscount: number | null; currentNote: string | null;
     currentValidUntil: number | null; onDone: () => void;
 }) {
     const [amount, setAmount]     = useState(currentDiscount ? Math.abs(currentDiscount) : 0);
     const [note, setNote]         = useState(currentNote ?? "");
-    const [validUntil, setValid]  = useState<number>(currentValidUntil ?? CONTRIBUTION_YEAR);
+    const [validUntil, setValid]  = useState<number>(currentValidUntil ?? selectedYear);
     const [remove, setRemove]     = useState(false);
     const [error, setError]       = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
@@ -169,11 +169,11 @@ function DiscountDialog({
         if (open) {
             setAmount(currentDiscount ? Math.abs(currentDiscount) : 0);
             setNote(currentNote ?? "");
-            setValid(currentValidUntil ?? CONTRIBUTION_YEAR);
+            setValid(currentValidUntil ?? selectedYear);
             setRemove(false);
             setError(null);
         }
-    }, [open, currentDiscount, currentNote, currentValidUntil]);
+    }, [open, currentDiscount, currentNote, currentValidUntil, selectedYear]);
 
     function handleConfirm() {
         if (!periodId) { setError("Příspěvkový záznam nenalezen"); return; }
@@ -192,7 +192,7 @@ function DiscountDialog({
         });
     }
 
-    const years = [CONTRIBUTION_YEAR, CONTRIBUTION_YEAR + 1, CONTRIBUTION_YEAR + 2];
+    const years = [selectedYear, selectedYear + 1, selectedYear + 2];
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -466,7 +466,7 @@ interface Props {
     onMemberUpdated: () => void;
 }
 
-export function MemberSheet({ open, onOpenChange, member, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
+export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
     const [showHistory, setShowHistory]               = useState(false);
     const [showContribHistory, setShowContribHistory] = useState(false);
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
@@ -599,7 +599,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                             {member.hasContrib && (
                                 <div className="rounded-xl border px-4 py-3 mb-4 space-y-3">
                                     <p className="text-sm font-semibold text-gray-700">
-                                        Příspěvky {CONTRIBUTION_YEAR}
+                                        Příspěvky {selectedYear}
                                     </p>
 
                                     <div className="flex items-center gap-2">
@@ -763,6 +763,7 @@ export function MemberSheet({ open, onOpenChange, member, periodId, currentYearD
                         onOpenChange={setDiscountDialogOpen}
                         member={member}
                         periodId={periodId}
+                        selectedYear={selectedYear}
                         currentDiscount={member.discountIndividual}
                         currentNote={null}
                         currentValidUntil={null}

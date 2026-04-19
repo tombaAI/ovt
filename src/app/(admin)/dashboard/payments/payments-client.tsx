@@ -11,7 +11,6 @@ type SourceFilter = "fio_bank" | "file_import" | "cash";
 interface Props {
     rows:            LedgerRow[];
     stats:           LedgerStats;
-    years:           number[];
     selectedYear:    number;
     statusFilter:    ReconciliationStatus | undefined;
     sourceFilter:    SourceFilter | undefined;
@@ -48,19 +47,16 @@ function formatAmount(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK", maximumFractionDigits: 2 }).format(amount);
 }
 
-export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter, sourceFilter, profileIdFilter }: Props) {
+export function PaymentsClient({ rows, stats, selectedYear, statusFilter, sourceFilter, profileIdFilter }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
-    const [pendingYear, setPendingYear] = useState<number | null>(null);
     const [detail, setDetail] = useState<LedgerRow | null>(null);
 
-    const displayYear = pendingYear ?? selectedYear;
-
     function buildParams(overrides: {
-        year?: number; status?: string | null;
+        status?: string | null;
         source?: string | null; profileId?: number | null;
     }) {
-        const params = new URLSearchParams({ year: String(overrides.year ?? displayYear) });
+        const params = new URLSearchParams();
         const s   = "status"    in overrides ? overrides.status    : statusFilter;
         const src = "source"    in overrides ? overrides.source    : sourceFilter;
         const pid = "profileId" in overrides ? overrides.profileId : profileIdFilter;
@@ -70,26 +66,18 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
         return params.toString();
     }
 
-    function navigateYear(year: number) {
-        setPendingYear(year);
-        startTransition(() => {
-            router.push(`/dashboard/payments?${buildParams({ year })}`);
-        });
-    }
-
     function navigateStatus(status: ReconciliationStatus | undefined) {
         startTransition(() => {
-            router.push(`/dashboard/payments?${buildParams({ status: status ?? null })}`);
+            const qs = buildParams({ status: status ?? null });
+            router.push(`/dashboard/payments${qs ? `?${qs}` : ""}`);
         });
     }
 
     // Kliknutí na zdroj: "Fio Bank" → source=fio_bank, "Air Bank" → source=file_import&profileId=X
     function navigateSource(source: SourceFilter | undefined, profileId?: number) {
         startTransition(() => {
-            router.push(`/dashboard/payments?${buildParams({
-                source:    source    ?? null,
-                profileId: profileId ?? null,
-            })}`);
+            const qs = buildParams({ source: source ?? null, profileId: profileId ?? null });
+            router.push(`/dashboard/payments${qs ? `?${qs}` : ""}`);
         });
     }
 
@@ -125,25 +113,6 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
 
     return (
         <>
-            {/* Year tabs */}
-            {years.length > 0 && (
-                <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-                    {years.map(y => (
-                        <button key={y}
-                            onClick={() => navigateYear(y)}
-                            disabled={isPending}
-                            className={[
-                                "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                                y === displayYear
-                                    ? "bg-[#26272b] text-white"
-                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                            ].join(" ")}>
-                            {y}
-                        </button>
-                    ))}
-                </div>
-            )}
-
             {/* Source filter pills — nadřazené status filtrům */}
             <div className="flex gap-1.5 flex-wrap">
                 {/* Vše */}
@@ -208,8 +177,8 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
                             <tr>
                                 <td colSpan={7} className="px-3 py-10 text-center text-sm text-muted-foreground">
                                     {statusFilter
-                                        ? `Žádné platby se stavem „${STATUS_LABELS[statusFilter]}" pro rok ${displayYear}.`
-                                        : `Žádné platby pro rok ${displayYear}.`}
+                                        ? `Žádné platby se stavem „${STATUS_LABELS[statusFilter]}" pro rok ${selectedYear}.`
+                                        : `Žádné platby pro rok ${selectedYear}.`}
                                 </td>
                             </tr>
                         )}
@@ -259,7 +228,7 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
 
             {rows.length > 0 && (
                 <p className="text-xs text-muted-foreground">
-                    {rows.length} plateb pro rok {displayYear}
+                    {rows.length} plateb pro rok {selectedYear}
                     {statusFilter ? ` · filtr: ${STATUS_LABELS[statusFilter]}` : ""}
                 </p>
             )}
@@ -268,7 +237,7 @@ export function PaymentsClient({ rows, stats, years, selectedYear, statusFilter,
             {detail && (
                 <PaymentSheet
                     row={detail}
-                    year={displayYear}
+                    year={selectedYear}
                     onClose={() => setDetail(null)}
                     onUpdated={() => { setDetail(null); router.refresh(); }}
                 />

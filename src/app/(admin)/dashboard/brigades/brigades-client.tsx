@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useCallback } from "react";
+import { useState, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -16,30 +16,18 @@ function fmtDate(iso: string) {
 }
 
 interface Props {
-    years: number[];
     selectedYear: number;
     brigades: BrigadeRow[];
     allMembers: MemberOption[];
 }
 
-export function BrigadesClient({ years, selectedYear, brigades, allMembers }: Props) {
+export function BrigadesClient({ selectedYear, brigades, allMembers }: Props) {
     const router = useRouter();
-    const [isPending, startTransition] = useTransition();
-    const [pendingYear, setPendingYear] = useState<number | null>(null);
 
     const [sheetOpen, setSheetOpen]       = useState(false);
     const [editBrigade, setEditBrigade]   = useState<BrigadeRow | null>(null);
     const [sheetMembers, setSheetMembers] = useState<BrigadeMemberRow[]>([]);
     const [sheetLoading, setSheetLoading] = useState(false);
-
-    const displayYear = isPending && pendingYear !== null ? pendingYear : selectedYear;
-
-    function navigateYear(year: number) {
-        setPendingYear(year);
-        startTransition(() => {
-            router.push(`/dashboard/brigades?year=${year}`);
-        });
-    }
 
     const openNew = useCallback(() => {
         setEditBrigade(null);
@@ -65,32 +53,16 @@ export function BrigadesClient({ years, selectedYear, brigades, allMembers }: Pr
 
     return (
         <div className="space-y-4">
-            {/* ── Year tabs ── */}
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 scrollbar-none">
-                {years.map(y => (
-                    <button key={y}
-                        onClick={() => navigateYear(y)}
-                        className={[
-                            "inline-flex items-center px-4 py-2 rounded-full text-sm font-semibold transition-colors shrink-0",
-                            y === displayYear
-                                ? "bg-[#26272b] text-white"
-                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                        ].join(" ")}>
-                        {y}
-                    </button>
-                ))}
-            </div>
-
             {/* ── Heading ── */}
             <div>
-                <h1 className="text-2xl font-semibold text-gray-900">Brigády {displayYear}</h1>
+                <h1 className="text-2xl font-semibold text-gray-900">Brigády {selectedYear}</h1>
                 <p className="text-gray-500 mt-0.5 text-sm">
                     {brigades.length} brigád · {brigades.reduce((s, b) => s + b.memberCount, 0)} účastí celkem
                 </p>
             </div>
 
             {/* ── Table ── */}
-            <div className={`rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-25 pointer-events-none" : ""}`}>
+            <div className="rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
@@ -104,7 +76,7 @@ export function BrigadesClient({ years, selectedYear, brigades, allMembers }: Pr
                         {brigades.length === 0 && (
                             <TableRow>
                                 <TableCell colSpan={4} className="text-center text-gray-400 py-10">
-                                    Žádné brigády za rok {displayYear}
+                                    Žádné brigády za rok {selectedYear}
                                 </TableCell>
                             </TableRow>
                         )}

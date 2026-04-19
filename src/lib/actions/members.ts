@@ -5,7 +5,7 @@ import { members, memberContributions, contributionPeriods, auditLog, payments }
 import { eq, and, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
-import { CONTRIBUTION_YEAR } from "@/lib/constants";
+import { getSelectedYear } from "@/lib/year";
 
 export type MemberFormState = { error: string } | { success: true } | null;
 
@@ -102,9 +102,10 @@ export async function saveMember(
             );
 
             // Current year contribution flags
+            const selectedYear = await getSelectedYear();
             const [period] = await db.select()
                 .from(contributionPeriods)
-                .where(eq(contributionPeriods.year, CONTRIBUTION_YEAR));
+                .where(eq(contributionPeriods.year, selectedYear));
 
             if (period) {
                 const [contrib] = await db.select()
