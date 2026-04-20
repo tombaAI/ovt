@@ -129,6 +129,7 @@ export function EditPrescriptionDialog({ open, onOpenChange, row }: Props) {
                             <AmtInput label="2. loď" value={form.amountBoat2} onChange={v => set("amountBoat2", v)} />
                             <AmtInput label="3. loď" value={form.amountBoat3} onChange={v => set("amountBoat3", v)} />
                         </div>
+                        <p className="text-[11px] text-gray-400 mt-1">2. a každá další loď mají zpravidla stejnou cenu</p>
                     </div>
 
                     {/* Slevy */}

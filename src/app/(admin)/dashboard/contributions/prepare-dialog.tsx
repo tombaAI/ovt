@@ -134,13 +134,11 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
                             {/* Příplatky za lodě */}
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Příplatek za loď (Kč / loď)</p>
-                                <div className="grid grid-cols-3 gap-3">
-                                    <NumInput label="Mříž 1" value={form.amountBoat1}
+                                <div className="grid grid-cols-2 gap-3">
+                                    <NumInput label="1. loď" value={form.amountBoat1}
                                         onChange={v => setNum("amountBoat1", v)} />
-                                    <NumInput label="Mříž 2" value={form.amountBoat2}
+                                    <NumInput label="2. a každá další loď" value={form.amountBoat2}
                                         onChange={v => setNum("amountBoat2", v)} />
-                                    <NumInput label="Mříž 3" value={form.amountBoat3}
-                                        onChange={v => setNum("amountBoat3", v)} />
                                 </div>
                             </div>
 

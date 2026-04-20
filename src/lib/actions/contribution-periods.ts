@@ -57,7 +57,7 @@ export async function preparePrescriptions(
                 amountBase:         data.amountBase,
                 amountBoat1:        data.amountBoat1,
                 amountBoat2:        data.amountBoat2,
-                amountBoat3:        data.amountBoat3,
+                amountBoat3:        data.amountBoat2,   // 3. loď = stejná cena jako 2.
                 discountCommittee:  data.discountCommittee,
                 discountTom:        data.discountTom,
                 brigadeSurcharge:   data.brigadeSurcharge,
@@ -70,7 +70,7 @@ export async function preparePrescriptions(
                     amountBase:        data.amountBase,
                     amountBoat1:       data.amountBoat1,
                     amountBoat2:       data.amountBoat2,
-                    amountBoat3:       data.amountBoat3,
+                    amountBoat3:       data.amountBoat2,   // 3. loď = stejná cena jako 2.
                     discountCommittee: data.discountCommittee,
                     discountTom:       data.discountTom,
                     brigadeSurcharge:  data.brigadeSurcharge,
@@ -177,11 +177,10 @@ export async function preparePrescriptions(
             const discountIndividualNote      = hasValidIndividual ? prev!.discountIndividualNote      : null;
             const discountIndividualValidUntil = hasValidIndividual ? prev!.discountIndividualValidUntil : null;
 
-            // Příplatky za lodě — podle pořadí, ne podle velikosti/mříže
-            // Sloupce amountBoat1/2/3 uchovávají příplatek za 1./2./3. loď člena
+            // Příplatky za lodě: 1. loď → amountBoat1, 2. a každá další → amountBoat2
             const amountBoat1 = boatCount >= 1 ? period.amountBoat1 : 0;
             const amountBoat2 = boatCount >= 2 ? period.amountBoat2 : 0;
-            const amountBoat3 = boatCount >= 3 ? period.amountBoat3 : 0;
+            const amountBoat3 = boatCount >= 3 ? period.amountBoat2 : 0; // stejná sazba jako 2.
 
             // Penále za brigádu: uplatní se pokud člen NEMÁ brigádu z minulého roku
             const didBrigade      = brigadeParticipants.has(memberId);
