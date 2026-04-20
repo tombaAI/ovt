@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-import { getResendClient } from "@/lib/email";
+import { getEmailSettings, getResendClient } from "@/lib/email";
 
 export const dynamic = "force-dynamic";
 
@@ -13,12 +13,13 @@ const RECIPIENTS = [
 ];
 
 export async function GET() {
+    const settings = getEmailSettings();
     const resend = getResendClient();
 
     const results = await Promise.all(
         RECIPIENTS.map(async (to) => {
             const { data, error } = await resend.emails.send({
-                from: "OVT sprava <onboarding@resend.dev>",
+                from: settings.from,
                 to: [to],
                 subject: "OVT: test hromadného odesílání e-mailů",
                 html: `
