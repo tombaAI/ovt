@@ -36,66 +36,121 @@ function CategoryInput({
     value,
     onChange,
     suggestions,
+    onPendingChange,
 }: {
     value: string[];
     onChange: (v: string[]) => void;
     suggestions: string[];
+    onPendingChange: (pending: string) => void;
 }) {
     const [input, setInput] = useState("");
+    const [open, setOpen] = useState(false);
+    const [highlightIdx, setHighlightIdx] = useState(-1);
     const inputRef = useRef<HTMLInputElement>(null);
-    const listId = "category-suggestions";
+    const containerRef = useRef<HTMLDivElement>(null);
+
+    const lc = input.trim().toLowerCase();
+    const available = suggestions.filter(s => !value.includes(s));
+    const filtered = lc
+        ? available.filter(s => s.includes(lc)).slice(0, 10)
+        : available.slice(0, 10);
 
     function addCategory(raw: string) {
         const cat = raw.trim().toLowerCase();
-        if (cat && !value.includes(cat)) {
-            onChange([...value, cat]);
-        }
+        if (cat && !value.includes(cat)) onChange([...value, cat]);
         setInput("");
+        onPendingChange("");
+        setOpen(false);
+        setHighlightIdx(-1);
     }
 
     function handleKey(e: KeyboardEvent<HTMLInputElement>) {
-        if (e.key === "Enter" || e.key === ",") {
+        if (e.key === "ArrowDown") {
             e.preventDefault();
-            addCategory(input);
+            setHighlightIdx(i => Math.min(i + 1, filtered.length - 1));
+        } else if (e.key === "ArrowUp") {
+            e.preventDefault();
+            setHighlightIdx(i => Math.max(i - 1, -1));
+        } else if (e.key === "Enter" || e.key === ",") {
+            e.preventDefault();
+            if (highlightIdx >= 0 && filtered[highlightIdx]) {
+                addCategory(filtered[highlightIdx]);
+            } else if (input.trim()) {
+                addCategory(input);
+            }
+        } else if (e.key === "Escape") {
+            setOpen(false);
+            setHighlightIdx(-1);
         } else if (e.key === "Backspace" && input === "" && value.length > 0) {
             onChange(value.slice(0, -1));
         }
     }
 
-    function handleChange(raw: string) {
+    function handleInputChange(raw: string) {
         setInput(raw);
+        onPendingChange(raw);
+        setHighlightIdx(-1);
+        setOpen(true);
     }
 
-    const remaining = suggestions.filter(s => !value.includes(s));
+    // Zavřít při kliknutí mimo
+    useEffect(() => {
+        function onMouseDown(e: MouseEvent) {
+            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+                setOpen(false);
+            }
+        }
+        document.addEventListener("mousedown", onMouseDown);
+        return () => document.removeEventListener("mousedown", onMouseDown);
+    }, []);
 
     return (
-        <div
-            className="flex flex-wrap gap-1.5 items-center px-2 py-1.5 rounded-lg border border-gray-200 bg-white min-h-[36px] cursor-text"
-            onClick={() => inputRef.current?.focus()}>
-            {value.map(cat => (
-                <span key={cat}
-                    className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
-                    {cat}
-                    <button
-                        type="button"
-                        onClick={e => { e.stopPropagation(); onChange(value.filter(c => c !== cat)); }}
-                        className="text-[#327600]/60 hover:text-[#327600] leading-none">
-                        ×
-                    </button>
-                </span>
-            ))}
-            <input
-                ref={inputRef}
-                list={listId}
-                value={input}
-                onChange={e => handleChange(e.target.value)}
-                onKeyDown={handleKey}
-                placeholder={value.length === 0 ? "Přidat kategorii… (Enter)" : ""}
-                className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-gray-300"
-            />
-            <datalist id={listId}>
-                {remaining.map(s => <option key={s} value={s} />)}
-            </datalist>
+        <div ref={containerRef} className="relative">
+            <div
+                className="flex flex-wrap gap-1.5 items-center px-2 py-1.5 rounded-lg border border-gray-200 bg-white min-h-[36px] cursor-text"
+                onClick={() => { inputRef.current?.focus(); setOpen(true); }}>
+                {value.map(cat => (
+                    <span key={cat}
+                        className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
+                        {cat}
+                        <button
+                            type="button"
+                            onClick={e => { e.stopPropagation(); onChange(value.filter(c => c !== cat)); }}
+                            className="text-[#327600]/60 hover:text-[#327600] leading-none">
+                            ×
+                        </button>
+                    </span>
+                ))}
+                <input
+                    ref={inputRef}
+                    value={input}
+                    onChange={e => handleInputChange(e.target.value)}
+                    onKeyDown={handleKey}
+                    onFocus={() => setOpen(true)}
+                    placeholder={value.length === 0 ? "Přidat kategorii… (Enter)" : ""}
+                    className="flex-1 min-w-[120px] bg-transparent text-sm outline-none placeholder:text-gray-300"
+                />
+            </div>
+
+            {/* Dropdown návrhů */}
+            {open && filtered.length > 0 && (
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-gray-200 rounded-lg shadow-lg z-[200] overflow-hidden">
+                    {filtered.map((s, i) => (
+                        <button
+                            key={s}
+                            type="button"
+                            onMouseDown={e => { e.preventDefault(); addCategory(s); }}
+                            className={[
+                                "w-full text-left px-3 py-2 text-sm transition-colors",
+                                i === highlightIdx
+                                    ? "bg-[#327600]/10 text-[#327600] font-medium"
+                                    : "text-gray-700 hover:bg-gray-50",
+                            ].join(" ")}>
+                            {s}
+                        </button>
+                    ))}
+                </div>
+            )}
         </div>
     );
 }
@@ -105,6 +160,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
     const [title, setTitle] = useState("");
     const [content, setContent] = useState("");
     const [categories, setCategories] = useState<string[]>([]);
+    const [pendingCategory, setPendingCategory] = useState("");
     const [currentNoteId, setCurrentNoteId] = useState<number | null>(null);
     const [isEditing, setIsEditing] = useState(false);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
@@ -138,6 +194,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
         }
         setSaveStatus("idle");
         setSaveError("");
+        setPendingCategory("");
         setVersionsOpen(false);
         setVersions([]);
         setExpandedVersionId(null);
@@ -163,6 +220,10 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
 
     async function handleSave() {
         if (!title.trim()) { setSaveError("Název nesmí být prázdný"); return; }
+        if (pendingCategory.trim()) {
+            setSaveError(`Kategorie „${pendingCategory.trim()}" není potvrzená — stiskněte Enter, nebo ji smažte`);
+            return;
+        }
         setSaveStatus("saving");
         setSaveError("");
 
@@ -210,7 +271,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
-            <SheetContent className="sm:max-w-4xl flex flex-col gap-0 p-0 overflow-hidden" side="right">
+            <SheetContent className="sm:max-w-4xl flex flex-col gap-0 p-0" side="right">
 
                 {/* ── Header ── */}
                 <SheetHeader className="px-5 pt-5 pb-3 border-b shrink-0">
@@ -256,6 +317,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                                         value={categories}
                                         onChange={setCategories}
                                         suggestions={allCategories}
+                                        onPendingChange={setPendingCategory}
                                     />
                                 </div>
                             </div>
@@ -298,7 +360,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
 
                 {/* ── Tělo ── */}
                 {isEditing ? (
-                    <div className="flex-1 flex overflow-hidden min-h-0">
+                    <div className="flex-1 flex overflow-hidden min-h-0" style={{ minHeight: 0 }}>
                         <div className="flex-1 flex flex-col border-r min-w-0">
                             <div className="px-3 py-1.5 bg-gray-50 border-b text-xs text-gray-400 font-medium tracking-wide uppercase">
                                 Markdown
