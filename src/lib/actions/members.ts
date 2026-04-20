@@ -2,7 +2,7 @@
 
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, auditLog, payments } from "@/db/schema";
-import { eq, and, sql, desc } from "drizzle-orm";
+import { eq, and, ne, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { getSelectedYear } from "@/lib/actions/year";
@@ -36,6 +36,14 @@ function diffObjects(
         if (o !== n) changes[k] = { old: o, new: n };
     }
     return changes;
+}
+
+async function checkVsUnique(db: ReturnType<typeof getDb>, vs: number, excludeId?: number): Promise<boolean> {
+    const rows = await db.select({ id: members.id }).from(members)
+        .where(excludeId !== undefined
+            ? and(eq(members.variableSymbol, vs), ne(members.id, excludeId))
+            : eq(members.variableSymbol, vs));
+    return rows.length === 0;
 }
 
 // ── saveMember ───────────────────────────────────────────────────────────────
@@ -73,6 +81,11 @@ export async function saveMember(
 
             const [current] = await db.select().from(members).where(eq(members.id, id));
             if (!current) return { error: "Člen nenalezen" };
+
+            if (memberData.variableSymbol !== null && memberData.variableSymbol !== current.variableSymbol) {
+                if (!await checkVsUnique(db, memberData.variableSymbol, id))
+                    return { error: "Variabilní symbol je již používán jiným členem" };
+            }
 
             await db.update(members)
                 .set({ ...memberData, updatedAt: new Date() })
@@ -163,6 +176,11 @@ export async function saveMember(
             const memberFromRaw = (formData.get("member_from") as string)?.trim();
             if (!memberFromRaw) return { error: "Datum vstupu je povinné" };
 
+            if (memberData.variableSymbol !== null) {
+                if (!await checkVsUnique(db, memberData.variableSymbol))
+                    return { error: "Variabilní symbol je již používán jiným členem" };
+            }
+
             const [{ nextId }] = await db.select({
                 nextId: sql<number>`coalesce(max(${members.id}), 0) + 1`
             }).from(members);
@@ -225,6 +243,10 @@ export async function updateMemberField(
                 break;
             case "variableSymbol":
                 newValue = Number(value) || null;
+                if (newValue !== null && newValue !== current.variableSymbol) {
+                    if (!await checkVsUnique(db, newValue as number, memberId))
+                        return { error: "Variabilní symbol je již používán jiným členem" };
+                }
                 break;
             case "cskNumber":
                 newValue = value.trim() || null;
