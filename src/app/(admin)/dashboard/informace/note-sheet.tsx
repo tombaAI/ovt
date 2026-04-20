@@ -62,13 +62,8 @@ function CategoryInput({
         }
     }
 
-    // Pokud uživatel vybral z datalist (onChange dostane celou hodnotu)
     function handleChange(raw: string) {
-        if (suggestions.includes(raw.trim().toLowerCase())) {
-            addCategory(raw);
-        } else {
-            setInput(raw);
-        }
+        setInput(raw);
     }
 
     const remaining = suggestions.filter(s => !value.includes(s));

@@ -28,7 +28,7 @@ export function InformaceClient({ notes, allCategories, includeArchived }: Props
 
     // Počty poznámek pro každou kategorii
     const categoryCounts = notes.reduce<Record<string, number>>((acc, n) => {
-        for (const c of n.categories) acc[c] = (acc[c] ?? 0) + 1;
+        for (const c of (n.categories ?? [])) acc[c] = (acc[c] ?? 0) + 1;
         return acc;
     }, {});
 
@@ -149,9 +149,9 @@ export function InformaceClient({ notes, allCategories, includeArchived }: Props
                         <p className="text-xs text-gray-400 mt-1">
                             Upraveno {fmtDate(note.updatedAt)} · {note.createdByEmail}
                         </p>
-                        {note.categories.length > 0 && (
+                        {(note.categories ?? []).length > 0 && (
                             <div className="flex gap-1.5 flex-wrap mt-2">
-                                {note.categories.map(cat => (
+                                {(note.categories ?? []).map(cat => (
                                     <span key={cat}
                                         className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium bg-[#327600]/10 text-[#327600]">
                                         {cat}
