@@ -124,13 +124,45 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
             <div className="flex items-start justify-between gap-4">
                 <div>
                     <h1 className="text-2xl font-semibold text-gray-900">Příspěvky {period.year}</h1>
-                    <p className="text-gray-500 mt-0.5 text-sm">
-                        Základ {period.amountBase} Kč
-                        {period.amountBoat1 > 0 && ` · Loď 1 ${period.amountBoat1} Kč`}
-                        {period.amountBoat2 > 0 && ` · Loď 2 ${period.amountBoat2} Kč`}
-                        {period.amountBoat3 > 0 && ` · Loď 3 ${period.amountBoat3} Kč`}
-                        {period.dueDate && ` · Splatnost ${period.dueDate}`}
-                    </p>
+                    <div className="mt-2 inline-flex flex-wrap gap-x-3 gap-y-1 rounded-lg border border-gray-100 bg-gray-50 px-3 py-1.5 text-xs text-gray-500">
+                        <span className="whitespace-nowrap">
+                            <span className="text-gray-400">Člen</span>{" "}
+                            <span className="font-medium text-gray-700">{period.amountBase.toLocaleString("cs-CZ")} Kč</span>
+                        </span>
+                        {period.amountBoat1 > 0 && (
+                            <span className="whitespace-nowrap">
+                                <span className="text-gray-400">Loď</span>{" "}
+                                <span className="font-medium text-gray-700">
+                                    {period.amountBoat1.toLocaleString("cs-CZ")} Kč
+                                    {period.amountBoat2 > 0 && ` / ${period.amountBoat2.toLocaleString("cs-CZ")} Kč`}
+                                </span>
+                            </span>
+                        )}
+                        {period.brigadeSurcharge > 0 && (
+                            <span className="whitespace-nowrap">
+                                <span className="text-gray-400">Brigáda</span>{" "}
+                                <span className="font-medium text-gray-700">+{period.brigadeSurcharge.toLocaleString("cs-CZ")} Kč</span>
+                            </span>
+                        )}
+                        {period.discountCommittee > 0 && (
+                            <span className="whitespace-nowrap">
+                                <span className="text-gray-400">Sleva výbor</span>{" "}
+                                <span className="font-medium text-gray-700">−{period.discountCommittee.toLocaleString("cs-CZ")} Kč</span>
+                            </span>
+                        )}
+                        {period.discountTom > 0 && (
+                            <span className="whitespace-nowrap">
+                                <span className="text-gray-400">Sleva TOM</span>{" "}
+                                <span className="font-medium text-gray-700">−{period.discountTom.toLocaleString("cs-CZ")} Kč</span>
+                            </span>
+                        )}
+                        {period.dueDate && (
+                            <span className="whitespace-nowrap">
+                                <span className="text-gray-400">Splatnost</span>{" "}
+                                <span className="font-medium text-gray-700">{period.dueDate}</span>
+                            </span>
+                        )}
+                    </div>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                     {canPrepare && rows.length > 0 && (
