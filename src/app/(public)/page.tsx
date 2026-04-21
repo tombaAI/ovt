@@ -45,7 +45,7 @@ export default function HomePage() {
                 <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mb-10">
                     Jsme kamarádský oddíl vodáků v pražském Podolí.
                     Sjíždíme řeky u nás i v zahraničí, každoročně pořádáme
-                    závod <strong>Hamerský potok</strong> a pravidelně jezdíme na chatu do Jizerských hor.
+                    závod <strong>Hamerský potok</strong> a jezdíme na chatu do Jizerských hor.
                 </p>
                 <div className="flex flex-wrap gap-4 justify-center">
                     <a
@@ -72,13 +72,13 @@ export default function HomePage() {
                     <div className="grid lg:grid-cols-2 gap-10 items-start">
                         <div className="space-y-4 text-gray-700 leading-relaxed">
                             <p>
-                                Jsme oddíl dospělých vodáků při{" "}
+                                Jsme vodácký oddíl při{" "}
                                 <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>TJ Bohemians Praha</a>.
                                 Jsme pro všechny, kteří mají rádi aktivní život a preferují zážitky před pohodlím.
                             </p>
                             <p>
                                 Pokud to jde, sjíždíme krásné řeky různých obtížností u nás i v zahraničí.
-                                Nevyhýbáme se ale ani slalomovým kanálům, cyklistice, horské turistice či lezení.
+                                Nevyhýbáme se ale ani slalomovým kanálům, krajinově velkolepým řekám i sjezdům s dětmi.
                                 Procvičujeme i praktickou záchranu na vodě.
                             </p>
                             <p>
@@ -90,12 +90,12 @@ export default function HomePage() {
                             <p>
                                 S{" "}
                                 <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
-                                jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, ale i jindy během roku.
+                                jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, na jaře na kolo, v létě na dovolenou a na podzim pouštět draky (a na brigádu).
                             </p>
                             <p>
-                                Kamarádi z{" "}
-                                <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistického oddílu mládeže (TOM) Bohemians</a>{" "}
-                                fungují jako samostatný oddíl pro děti a mládež — také v Podolí, také na vodě.
+                                Na vodáckých akcích spolupracujeme se spřáteleným{" "}
+                                <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistickým oddílem mládeže (TOM) TJ Bohemians</a>,{" "}
+                                který je přirozenou líhní budoucích vodáků — mnoho dnešních členů OVT prošlo právě TOMem.
                             </p>
                         </div>
                         <div className="rounded-xl overflow-hidden shadow-md">
@@ -157,9 +157,9 @@ export default function HomePage() {
                             <div className="rounded-xl border border-gray-600 px-6 py-4 text-sm text-gray-400 space-y-1">
                                 <p className="text-white font-semibold mb-2">Závod v číslech</p>
                                 <p>📍 Hamerský potok, Jindřichův Hradec</p>
-                                <p>📅 Každoročně na podzim</p>
+                                <p>📅 3.–4. října 2026</p>
                                 <p>🏆 Seriál ČPV</p>
-                                <p>🛶 Závodníci i veřejnost</p>
+                                <p>🛶 300 Závodníků, 700 vodáků celkem</p>
                             </div>
                         </div>
                     </div>
@@ -181,17 +181,17 @@ export default function HomePage() {
                             {
                                 icon: "🏐",
                                 title: "Každou středu",
-                                text: "Každou středu se potkáváme v tělocvičně v loděnici v Podolí — florbal a pohybové hry. Přes zimu se nesmí zakrnět.",
+                                text: "Každou středu se potkáváme v tělocvičně v loděnici v Podolí — florbal a pohybové hry.",
                             },
                             {
                                 icon: "⛷️",
                                 title: "Lyžování v Jizerách",
-                                text: "Jezdíme s Oddílem lyžařské turistiky TJ Bohemians na chatu v Jiřetíně pod Bukovou — v zimě lyžovat, ale i jindy během roku.",
+                                text: "Jezdíme s Oddílem lyžařské turistiky TJ Bohemians na chatu v Jiřetíně pod Bukovou — v zimě lyžovat, na jaře na kolo, v létě na dovolenou a na podzim pouštět draky (a na brigádu).",
                             },
                             {
                                 icon: "🚵",
                                 title: "Další sporty",
-                                text: "Nevyhýbáme se cyklistice, horské turistice ani lezení. Procvičujeme i praktickou záchranu na vodě.",
+                                text: "Nevyhýbáme se cyklistice, turistice, chillistice. Procvičujeme i praktickou záchranu na vodě.",
                             },
                             {
                                 icon: "🏕️",
