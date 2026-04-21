@@ -134,7 +134,7 @@ export default function HomePage() {
                                 </p>
                                 <p className="text-sm" style={{ color: "#82b965" }}>
                                     Ročník 2025 byl bohužel zrušen z důvodu kritického nedostatku vody v rybnících,
-                                    které zásobují Hamerák. Příští ročník se koná <strong>3.–4. října 2026</strong> — těšíme se!
+                                    které zásobují Hamerák. Letošní ročník se koná <strong>3.–4. října 2026</strong> — těšíme se!
                                 </p>
                             </div>
                         </div>
