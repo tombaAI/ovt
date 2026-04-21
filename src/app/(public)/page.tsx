@@ -105,10 +105,9 @@ export default function HomePage() {
                         </div>
                         <div className="space-y-4">
                             <p>
-                                Závodně se účastníme seriálu{" "}
-                                <strong>Českého poháru vodáků (ČPV)</strong> — celostátní série závodů na divoké vodě,
-                                která je vrcholnou domácí soutěží v kanoistice. ČPV je pro nás víc než sport:
-                                je to způsob, jak měřit síly s nejlepšími vodáky v zemi a posouvat se dál.
+                                Účastníme se seriálu{" "}
+                                <strong>Českého poháru vodáků (ČPV)</strong> — celostátní série závodů
+                                na divoké vodě. Závodit nás baví a Hamerák pořádáme s tím samým zápalem.
                             </p>
                             <p>
                                 Na vodáckých akcích spolupracujeme s{" "}
