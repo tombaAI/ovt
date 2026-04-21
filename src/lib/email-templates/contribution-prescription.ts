@@ -32,9 +32,19 @@ function fmtDate(iso: string): string {
     return `${Number(d)}.\u00a0${Number(m)}.\u00a0${y}`;
 }
 
+/**
+ * Sestaví plný 9místný VS: 207 (oddíl) + 101 (příspěvky) + 3 cifry z člena.
+ * Pokud je vs už 9místné (tj. ≥ 100_000_000), použije se přímo.
+ */
+function buildFullVS(vs: number): number {
+    if (vs >= 100_000_000) return vs;        // už plný formát
+    return 207_101_000 + (vs % 1000);        // 207101 + 3 cifry
+}
+
 /** Formátuje variabilní symbol jako "207 101 021". */
 function fmtVS(vs: number): string {
-    return String(vs).padStart(9, "0").replace(/(\d{3})(\d{3})(\d{3})/, "$1\u00a0$2\u00a0$3");
+    const full = String(buildFullVS(vs)).padStart(9, "0");
+    return full.replace(/(\d{3})(\d{3})(\d{3})/, "$1\u00a0$2\u00a0$3");
 }
 
 /**
@@ -60,13 +70,14 @@ function buildPayliboUrl(data: ContribEmailData): string | null {
     if (!data.variableSymbol || !data.amountTotal) return null;
     const [accountNumber, bankCode] = data.bankAccount.split("/");
     const message = encodeURIComponent(`Příspěvky OVT Bohemians ${data.year}`);
+    const fullVS  = buildFullVS(data.variableSymbol);
     return (
         `https://api.paylibo.com/paylibo/generator/czech/image` +
         `?accountNumber=${accountNumber}` +
         `&bankCode=${bankCode}` +
         `&amount=${data.amountTotal}` +
         `&currency=CZK` +
-        `&vs=${data.variableSymbol}` +
+        `&vs=${fullVS}` +
         `&message=${message}` +
         `&size=200`
     );
