@@ -32,35 +32,48 @@ export default function HomePage() {
             </header>
 
             {/* Hero */}
-            <section
-                className="relative flex flex-col items-center justify-center text-center py-32 px-4"
-                style={{ background: "linear-gradient(160deg, #1a2e0a 0%, #27450f 40%, #327600 100%)" }}
-            >
-                <p className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: "#82b965" }}>
-                    Oddíl vodní turistiky · TJ Bohemians Praha
-                </p>
-                <h1 className="text-5xl sm:text-7xl font-extrabold text-white mb-6 leading-tight">
-                    OVT Bohemians
-                </h1>
-                <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mb-10">
-                    Jsme kamarádský oddíl vodáků v pražském Podolí.
-                    Sjíždíme řeky u nás i v zahraničí, každoročně pořádáme
-                    závod <strong>Hamerský potok</strong> a jezdíme na chatu do Jizerských hor.
-                </p>
-                <div className="flex flex-wrap gap-4 justify-center">
-                    <a
-                        href="#pridej-se"
-                        className="px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-transform hover:scale-105"
-                        style={{ backgroundColor: "#327600" }}
-                    >
-                        Přidej se k nám
-                    </a>
-                    <a
-                        href="#hamerak"
-                        className="px-6 py-3 rounded-lg font-semibold border border-white/40 text-white bg-white/10 hover:bg-white/20 transition-colors"
-                    >
-                        Hamerský potok 2026 ↓
-                    </a>
+            <section className="relative flex flex-col items-center justify-center text-center py-32 px-4 overflow-hidden min-h-[480px]">
+                {/* Fotka na pozadí */}
+                <Image
+                    src="/foto-ovt.jpg"
+                    alt=""
+                    fill
+                    className="object-cover object-center"
+                    priority
+                />
+                {/* Tmavě zelený překryv */}
+                <div
+                    className="absolute inset-0"
+                    style={{ background: "linear-gradient(160deg, rgba(26,46,10,0.82) 0%, rgba(39,69,15,0.75) 50%, rgba(50,118,0,0.65) 100%)" }}
+                />
+                {/* Obsah */}
+                <div className="relative z-10">
+                    <p className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: "#82b965" }}>
+                        Oddíl vodní turistiky · TJ Bohemians Praha
+                    </p>
+                    <h1 className="text-5xl sm:text-7xl font-extrabold text-white mb-6 leading-tight">
+                        OVT Bohemians
+                    </h1>
+                    <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mb-10">
+                        Jsme kamarádský oddíl vodáků v pražském Podolí.
+                        Sjíždíme řeky u nás i v zahraničí, každoročně pořádáme
+                        závod <strong>Hamerský potok</strong> a jezdíme na chatu do Jizerských hor.
+                    </p>
+                    <div className="flex flex-wrap gap-4 justify-center">
+                        <a
+                            href="#pridej-se"
+                            className="px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-transform hover:scale-105"
+                            style={{ backgroundColor: "#327600" }}
+                        >
+                            Přidej se k nám
+                        </a>
+                        <a
+                            href="#hamerak"
+                            className="px-6 py-3 rounded-lg font-semibold border border-white/40 text-white bg-white/10 hover:bg-white/20 transition-colors"
+                        >
+                            Hamerský potok 2026 ↓
+                        </a>
+                    </div>
                 </div>
             </section>
 
@@ -69,8 +82,8 @@ export default function HomePage() {
                 <div className="max-w-5xl mx-auto">
                     <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>O oddílu</h2>
                     <div className="w-12 h-1 rounded mb-8" style={{ backgroundColor: "#327600" }} />
-                    <div className="grid lg:grid-cols-2 gap-10 items-start">
-                        <div className="space-y-4 text-gray-700 leading-relaxed">
+                    <div className="grid sm:grid-cols-2 gap-10 text-gray-700 leading-relaxed">
+                        <div className="space-y-4">
                             <p>
                                 Jsme vodácký oddíl při{" "}
                                 <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>TJ Bohemians Praha</a>.
@@ -87,6 +100,8 @@ export default function HomePage() {
                                 Naším cílem není závodní výkonnost, ale <strong>dobrá přátelství a zážitky</strong>{" "}
                                 vzniklé při sportu. Oddíl má přes <strong>50 aktivních členů</strong>.
                             </p>
+                        </div>
+                        <div className="space-y-4">
                             <p>
                                 S{" "}
                                 <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
@@ -97,15 +112,6 @@ export default function HomePage() {
                                 <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistickým oddílem mládeže (TOM) TJ Bohemians</a>,{" "}
                                 který je přirozenou líhní budoucích vodáků — mnoho dnešních členů OVT prošlo právě TOMem.
                             </p>
-                        </div>
-                        <div className="rounded-xl overflow-hidden shadow-md">
-                            <Image
-                                src="/foto-ovt.jpg"
-                                alt="Vodáci OVT Bohemians na řece"
-                                width={800}
-                                height={534}
-                                className="w-full h-auto object-cover"
-                            />
                         </div>
                     </div>
                 </div>
