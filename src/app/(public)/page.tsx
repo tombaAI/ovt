@@ -1,9 +1,10 @@
 import Link from "next/link";
+import { ContactForm } from "./contact-form";
 
 export const metadata = {
     title: "OVT Bohemians — Oddíl vodní turistiky",
     description:
-        "Kamarádský oddíl vodáků v Praze Podolí. Sjíždíme řeky u nás i v zahraničí, jezdíme na hory a každou středu hrajeme sporty v tělocvičně.",
+        "Kamarádský oddíl vodáků v Praze Podolí. Sjíždíme řeky u nás i v zahraničí, pořádáme závod Hamerský potok a jezdíme lyžovat do Jizerských hor.",
 };
 
 export default function HomePage() {
@@ -12,17 +13,10 @@ export default function HomePage() {
             {/* Navigační lišta */}
             <header style={{ backgroundColor: "#26272b" }} className="sticky top-0 z-50 shadow-md">
                 <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <div className="flex items-center gap-3">
-                        <span className="text-white font-bold text-lg tracking-tight">OVT Bohemians</span>
-                        <span
-                            className="hidden sm:inline text-xs px-2 py-0.5 rounded-full font-medium"
-                            style={{ backgroundColor: "#327600", color: "#fff" }}
-                        >
-                            TJ Bohemians Praha
-                        </span>
-                    </div>
+                    <span className="text-white font-bold text-lg tracking-tight">OVT Bohemians</span>
                     <nav className="flex items-center gap-5 text-sm">
                         <a href="#o-nas" className="text-gray-300 hover:text-white transition-colors">O nás</a>
+                        <a href="#hamerak" className="text-gray-300 hover:text-white transition-colors">Hamerák</a>
                         <a href="#aktivita" className="text-gray-300 hover:text-white transition-colors">Co děláme</a>
                         <a href="#historie" className="text-gray-300 hover:text-white transition-colors">Historie</a>
                         <a href="#pridej-se" className="text-gray-300 hover:text-white transition-colors">Přidej se</a>
@@ -42,15 +36,15 @@ export default function HomePage() {
                 style={{ background: "linear-gradient(160deg, #1a2e0a 0%, #27450f 40%, #327600 100%)" }}
             >
                 <p className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: "#82b965" }}>
-                    Oddíl vodní turistiky
+                    Oddíl vodní turistiky · TJ Bohemians Praha
                 </p>
                 <h1 className="text-5xl sm:text-7xl font-extrabold text-white mb-6 leading-tight">
                     OVT Bohemians
                 </h1>
                 <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mb-10">
                     Jsme kamarádský oddíl vodáků v pražském Podolí.
-                    Sjíždíme krásné řeky u nás i v zahraničí, jezdíme lyžovat do Jizerských hor
-                    a každou středu se potkáváme v tělocvičně.
+                    Sjíždíme řeky u nás i v zahraničí, každoročně pořádáme
+                    závod <strong>Hamerský potok</strong> a v zimě vyrazíme lyžovat do Jizerských hor.
                 </p>
                 <div className="flex flex-wrap gap-4 justify-center">
                     <a
@@ -61,10 +55,10 @@ export default function HomePage() {
                         Přidej se k nám
                     </a>
                     <a
-                        href="#o-nas"
+                        href="#hamerak"
                         className="px-6 py-3 rounded-lg font-semibold border border-white/40 text-white bg-white/10 hover:bg-white/20 transition-colors"
                     >
-                        Více o oddílu
+                        Hamerský potok 2026 ↓
                     </a>
                 </div>
             </section>
@@ -77,36 +71,91 @@ export default function HomePage() {
                     <div className="grid sm:grid-cols-2 gap-10 text-gray-700 leading-relaxed">
                         <div>
                             <p className="mb-4">
-                                Vítej na stránkách oddílu vodní turistiky při{" "}
-                                <strong>Tělovýchovné jednotě Bohemians Praha</strong>.
+                                Jsme oddíl dospělých vodáků při{" "}
+                                <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>TJ Bohemians Praha</a>.
                                 Jsme pro všechny, kteří mají rádi aktivní život a preferují zážitky před pohodlím.
                             </p>
                             <p className="mb-4">
-                                Jsme především vodáci — pokud to jde, sjíždíme krásné řeky různých obtížností
-                                u nás i v zahraničí. Nevyhýbáme se ale ani tréninku na slalomových kanálech,
-                                cyklistice, horské turistice či lezení. Procvičujeme i praktickou záchranu na vodě.
+                                Pokud to jde, sjíždíme krásné řeky různých obtížností u nás i v zahraničí.
+                                Nevyhýbáme se ale ani slalomovým kanálům, cyklistice, horské turistice či lezení.
+                                Procvičujeme i praktickou záchranu na vodě.
                             </p>
                             <p>
-                                V zimě pravidelně chodíme do bazénu v Praze&nbsp;6 – Suchdole,
-                                kde cvičíme <strong>eskymácké obraty</strong>. Pořádáme také lyžařské akce.
+                                Zázemím nám slouží <strong>loděnice v Podolí</strong> na Modřanské ulici
+                                vedle Žlutých lázní, kde se celoročně potkáváme.
                             </p>
                         </div>
                         <div>
                             <p className="mb-4">
                                 Naším cílem není závodní výkonnost, ale <strong>dobrá přátelství a zážitky</strong>{" "}
-                                vzniklé při sportu a venkovních aktivitách.
+                                vzniklé při sportu a venkovních aktivitách. Oddíl má přes <strong>50 aktivních členů</strong>.
                             </p>
                             <p className="mb-4">
-                                Zázemím nám slouží <strong>loděnice v Podolí</strong> na Modřanské ulici
-                                vedle Žlutých lázní. Celoročně zde probíhají oddílové schůzky,
-                                florbal a různé pohybové hry. Díky oddílu lyžařské turistiky TJ Bohemians
-                                jezdíme také na chatu v Jiřetíně pod Bukovou.
+                                V zimě jezdíme lyžovat s{" "}
+                                <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
+                                na chatu v Jiřetíně pod Bukovou v Jizerských horách.
                             </p>
                             <p>
-                                Pro děti a mládež máme <strong>turistický oddíl mládeže (TOM)</strong>{" "}
-                                se speciálním programem. Rostou z nich skvělí lidé — samostatní
-                                a zodpovědní — a mnozí se pak přidají i do dospělého oddílu.
+                                Kamarádi z{" "}
+                                <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistického oddílu mládeže (TOM) Bohemians</a>{" "}
+                                fungují jako samostatný oddíl pro děti a mládež — také v Podolí, také na vodě.
                             </p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            {/* Hamerák — prominentní sekce */}
+            <section
+                id="hamerak"
+                className="py-20 px-4"
+                style={{ backgroundColor: "#26272b" }}
+            >
+                <div className="max-w-5xl mx-auto">
+                    <div className="flex flex-col lg:flex-row gap-10 items-start">
+                        <div className="flex-1">
+                            <p className="text-sm font-semibold uppercase tracking-widest mb-3" style={{ color: "#82b965" }}>
+                                Náš velký závod
+                            </p>
+                            <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
+                                ČPV Hamerský potok
+                            </h2>
+                            <div className="w-12 h-1 rounded mb-6" style={{ backgroundColor: "#327600" }} />
+                            <div className="text-gray-300 leading-relaxed space-y-4">
+                                <p>
+                                    Každoročně na podzim pořádáme{" "}
+                                    <strong className="text-white">Hamerský potok</strong> —
+                                    závod zařazený do seriálu <strong className="text-white">Českého poháru vodáků (ČPV)</strong>.
+                                    Je to pro nás velká čest i závazek; připravujeme se na něj celou sezónu.
+                                </p>
+                                <p>
+                                    Závod se koná na <strong className="text-white">Hamerském potoce u Jindřichova Hradce</strong>.
+                                    Každý rok se tu sejde velké množství závodníků z celé republiky i nezávodící veřejnost.
+                                </p>
+                                <p className="text-sm" style={{ color: "#82b965" }}>
+                                    Ročník 2025 byl bohužel zrušen z důvodu kritického nedostatku vody v rybnících,
+                                    které zásobují Hamerák. Těšíme se na setkání v roce 2026!
+                                </p>
+                            </div>
+                        </div>
+                        <div className="lg:w-64 flex flex-col gap-4">
+                            <a
+                                href="https://hamerak.cz"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="block px-6 py-4 rounded-xl text-center font-semibold text-white transition-transform hover:scale-105"
+                                style={{ backgroundColor: "#327600" }}
+                            >
+                                Web závodu →<br />
+                                <span className="text-sm font-normal opacity-80">hamerak.cz</span>
+                            </a>
+                            <div className="rounded-xl border border-gray-600 px-6 py-4 text-sm text-gray-400 space-y-1">
+                                <p className="text-white font-semibold mb-2">Závod v číslech</p>
+                                <p>📍 Hamerský potok, Jindřichův Hradec</p>
+                                <p>📅 Každoročně na podzim</p>
+                                <p>🏆 Seriál ČPV</p>
+                                <p>🛶 Závodníci i veřejnost</p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -122,32 +171,32 @@ export default function HomePage() {
                             {
                                 icon: "🛶",
                                 title: "Vodní turistika",
-                                text: "Sjíždíme řeky různých obtížností u nás i v zahraničí. Vrcholem je každoroční jarní zájezd do Alp — Rakousko, Švýcarsko a dalších zemí.",
-                            },
-                            {
-                                icon: "🏆",
-                                title: "Hamerský potok",
-                                text: "Každoročně pořádáme oblíbený závod zařazený do Českého poháru vodáků na Hamerském potoce u Jindřichova Hradce.",
-                            },
-                            {
-                                icon: "🌊",
-                                title: "Eskymácké obraty",
-                                text: "V zimě cvičíme eskymácké obraty v bazénu v Praze 6 – Suchdole. Patří to k základní výbavě každého správného vodáka.",
-                            },
-                            {
-                                icon: "⛷️",
-                                title: "Lyžování",
-                                text: "Jezdíme do Jizerských hor na chatu oddílu lyžařské turistiky TJ Bohemians. Víkendy s dětmi i dospělými po celou zimu.",
+                                text: "Sjíždíme řeky různých obtížností u nás i v zahraničí. Vrcholem je každoroční jarní zájezd — Rakousko, Švýcarsko a další alpské země.",
                             },
                             {
                                 icon: "🏐",
                                 title: "Každou středu",
-                                text: "Každou středu se potkáváme v tělocvičně v loděnici v Podolí — florbal a různé pohybové hry. Přes zimu se nesmí zakrnět.",
+                                text: "Každou středu se potkáváme v tělocvičně v loděnici v Podolí — florbal a pohybové hry. Přes zimu se nesmí zakrnět.",
                             },
                             {
-                                icon: "👦",
-                                title: "Oddíl mládeže (TOM)",
-                                text: "Turistický oddíl mládeže s programem pro děti i dorost do 18 let. Vodáci budoucnosti vyrůstají s námi.",
+                                icon: "⛷️",
+                                title: "Lyžování v Jizerách",
+                                text: "V zimě jezdíme s Oddílem lyžařské turistiky TJ Bohemians na chatu v Jiřetíně pod Bukovou. Víkendy plné sněhu a dobré party.",
+                            },
+                            {
+                                icon: "🚵",
+                                title: "Další sporty",
+                                text: "Nevyhýbáme se cyklistice, horské turistice ani lezení. Procvičujeme i praktickou záchranu na vodě.",
+                            },
+                            {
+                                icon: "🏕️",
+                                title: "Oddílové akce",
+                                text: "Víkendové výjezdy pořádané přímo členy oddílu — stále se něco děje. Jednotlivé akce nejsou povinné, ale je škoda na nich chybět.",
+                            },
+                            {
+                                icon: "🏆",
+                                title: "Hamerský potok",
+                                text: "Náš vlastní závod v seriálu ČPV. Velká akce, na kterou se připravujeme celou sezónu. Přijď se podívat nebo závodit!",
                             },
                         ].map((item) => (
                             <div
@@ -169,79 +218,77 @@ export default function HomePage() {
             <section id="historie" className="py-20 px-4 bg-white">
                 <div className="max-w-4xl mx-auto">
                     <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>Něco z historie</h2>
-                    <div className="w-12 h-1 rounded mb-10" style={{ backgroundColor: "#327600" }} />
-                    <div className="space-y-6 text-gray-700 leading-relaxed">
-                        <p>
-                            Prvopočátky našeho oddílu sahají do <strong>50. let minulého století</strong>,
-                            kdy se spojil oddíl Spartak Stalingrad se Sokolem Vinohrady. Tehdy na vodu
-                            jezdili hlavně lyžaři, pro které byl vodní sport letním doplňkem.
-                            Postupně se formoval oddíl turistiky z nezávodících členů.
-                        </p>
-                        <p>
-                            Vrcholem činnosti oddílu se stala <strong>léta 1970–1990</strong>.
-                            Členové jezdili na řeky obtížnosti WW&nbsp;4–5, pravidelně se účastnili
-                            VTJZ, pořádali sjezd Botiče v Praze a jezdili na zahraniční vody —
-                            Rumunsko, Jugoslávii, Rakousko. Technici-nadšenci vyráběli vlastní
-                            lodě (kopyta &bdquo;pošovky&ldquo; a &bdquo;Bohemky&ldquo;) a oddíl
-                            měl i výbornou kapelu, která se schází dodnes.
-                        </p>
-                        <p>
-                            V letech <strong>1990–91 oddíl málem zanikl</strong>. Zbyli tři členové.
-                            Ti se ale nevzdali — dohodli se s vedoucím oddílu mládeže a pustili se
-                            do obnovy. Základem se stalo pravidelné pořádání zájezdů autobusem
-                            a začlenění vodní turistiky Fyzikálního ústavu. Postupně se podařilo
-                            získat zpět krakorce, klubovnu a přilákat nové členy.
-                        </p>
-                        <p>
-                            Dnes má oddíl <strong>přes 40 aktivních členů</strong>, fungující oddíl
-                            mládeže a každoroční pořádání Hamerského potoka v seriálu Českého
-                            poháru vodáků. Oddíl žije a daří se mu — pokud nevopakuje chyby
-                            minulosti a pečlivě se stará o mládež.
-                        </p>
-                        <p className="text-sm text-gray-500 italic">
-                            Text z pera Pavla Šálka (Ešuse), s pomocí Jirky Kellera.
-                        </p>
-                    </div>
+                    <div className="w-12 h-1 rounded mb-8" style={{ backgroundColor: "#327600" }} />
+                    <p className="text-gray-700 leading-relaxed mb-6">
+                        Oddíl má kořeny v <strong>50. letech minulého století</strong>. Svůj vrchol zažil
+                        v letech <strong>1970–1990</strong>, kdy členové sjížděli řeky WW&nbsp;4–5,
+                        pořádali závody v Praze i zahraničí a měli i výbornou kapelu.
+                        Po téměř zániku v roce <strong>1991</strong> (zbyli tři členové!) se oddíl
+                        obnovil, získal Hamerský potok do ČPV a dnes má přes 50 aktivních vodáků.
+                    </p>
+                    <details className="group">
+                        <summary
+                            className="cursor-pointer inline-flex items-center gap-2 text-sm font-semibold select-none"
+                            style={{ color: "#327600" }}
+                        >
+                            <span className="group-open:hidden">▶ Číst celou historii</span>
+                            <span className="hidden group-open:inline">▼ Skrýt historii</span>
+                        </summary>
+                        <div className="mt-6 space-y-4 text-gray-700 leading-relaxed text-sm border-l-2 pl-6" style={{ borderColor: "#82b965" }}>
+                            <p>
+                                Fakticky se dá vystopovat prvopočátek našeho oddílu až do 50. let minulého
+                                století. Tehdy se spojil oddíl Spartak Stalingrad se Sokolem Vinohrady.
+                                Na vodu tehdy jezdili hlavně lyžaři, kteří považovali vodu v létě za dobrý
+                                doplňkový sport. Jeden z tehdejších aktivních vodáků, L.&nbsp;Chrpa,
+                                pořádal i zájezdy na řeky. Postupně se začal tvořit oddíl turistiky
+                                z nezávodících členů.
+                            </p>
+                            <p>
+                                Turistiku tenkrát definoval ČSTV jako samostatnou složku a jednotlivé
+                                odbory začaly využívat podniková nákladní auta pro dopravu na vodu.
+                                Oddíl vodní a lyžařské turistiky byl tenkrát velmi úzce provázán
+                                a současně fungoval oddíl mládeže.
+                            </p>
+                            <p>
+                                Vrcholem činnosti se stala léta <strong>1970–1990</strong>, kdy se oddíl
+                                účastnil pravidelně VTJZ, pořádal sjezd Botiče, jezdil týden co týden
+                                na vodu a část členů jezdila obtížnosti WW&nbsp;4–5. Pořádaly se letní
+                                zájezdy — Rumunsko, Jugoslávie, Rakousko. Technici-nadšenci vyráběli
+                                vlastní lodě (kopyta &bdquo;pošovky&ldquo; a &bdquo;Bohemky&ldquo;). Oddíl měl i výbornou kapelu,
+                                která se schází dodnes.
+                            </p>
+                            <p>
+                                V letech <strong>1990–91 oddíl málem zanikl</strong>. Zbyli tři členové.
+                                Ti se dohodli s vedoucím oddílu mládeže Jirkou Klímou a pustili se
+                                do obnovy — základem se stalo pořádání zájezdů autobusem a začlenění
+                                vodní turistiky Fyzikálního ústavu. Podařilo se získat zpět krakorce
+                                i klubovnu.
+                            </p>
+                            <p>
+                                Postupně si lidi zvykli, že se opravdu na zájezd jede, mládež přestala
+                                přecházet jinam a začala pravidelně doplňovat dospělé. Poslední třešinkou
+                                na dortu se stalo převzetí pořádání Hamerského potoka a jeho prosazení
+                                do seriálu Českého poháru vodáků.
+                            </p>
+                            <p className="text-gray-500 italic">
+                                Text sepsal Pavel Šálek (Ešus) s pomocí Jirky Kellera.
+                            </p>
+                        </div>
+                    </details>
                 </div>
             </section>
 
             {/* Přidej se */}
             <section id="pridej-se" className="py-20 px-4" style={{ backgroundColor: "#f5f7f2" }}>
-                <div className="max-w-3xl mx-auto text-center">
-                    <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>Přidej se k nám</h2>
-                    <div className="w-12 h-1 rounded mb-8 mx-auto" style={{ backgroundColor: "#327600" }} />
-                    <p className="text-gray-600 leading-relaxed mb-8">
-                        Pokud tě naše plány zaujaly, neváhej a ozvi se. Nábor probíhá průběžně po celý rok.
-                        Buď nám napiš e-mailem, nebo přijď <strong>kteroukoli středu</strong> přímo k nám
-                        do loděnice v Podolí — adresu najdeš níže.
+                <div className="max-w-3xl mx-auto">
+                    <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: "#26272b" }}>Přidej se k nám</h2>
+                    <div className="w-12 h-1 rounded mb-6 mx-auto" style={{ backgroundColor: "#327600" }} />
+                    <p className="text-gray-600 leading-relaxed mb-8 text-center">
+                        Pokud tě naše plány zaujaly, napiš nám — nebo přijď{" "}
+                        <strong>kteroukoli středu</strong> přímo do loděnice v Podolí
+                        (Modřanská ul., vedle Žlutých lázní). Nábor probíhá průběžně po celý rok.
                     </p>
-                    <div className="bg-white rounded-xl p-8 text-left space-y-3 text-sm text-gray-700 mb-8 border border-gray-100 shadow-sm">
-                        <p>
-                            <span className="font-semibold">Kde nás najdeš:</span>{" "}
-                            Loděnice v Podolí, Modřanská ul., Praha (vedle Žlutých lázní)
-                        </p>
-                        <p>
-                            <span className="font-semibold">Kdy:</span>{" "}
-                            Každou středu — tělocvična a oddílové schůzky
-                        </p>
-                        <p>
-                            <span className="font-semibold">E-mail:</span>{" "}
-                            <a
-                                href="mailto:ovt@bohemianstj.cz"
-                                className="hover:underline"
-                                style={{ color: "#327600" }}
-                            >
-                                ovt@bohemianstj.cz
-                            </a>
-                        </p>
-                    </div>
-                    <a
-                        href="mailto:ovt@bohemianstj.cz"
-                        className="inline-block px-8 py-3 rounded-lg font-semibold text-white shadow transition-transform hover:scale-105"
-                        style={{ backgroundColor: "#327600" }}
-                    >
-                        Napsat nám
-                    </a>
+                    <ContactForm />
                 </div>
             </section>
 
@@ -253,17 +300,10 @@ export default function HomePage() {
                         <p>Oddíl vodní turistiky · TJ Bohemians Praha</p>
                     </div>
                     <div className="flex flex-col gap-1 sm:text-right">
-                        <a
-                            href="https://www.bohemianstj.cz"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            className="hover:text-white transition-colors"
-                        >
-                            TJ Bohemians Praha ↗
-                        </a>
-                        <Link href="/login" className="hover:text-white transition-colors">
-                            Přihlásit se do IS
-                        </Link>
+                        <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TJ Bohemians Praha ↗</a>
+                        <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TOM Bohemians (mládež) ↗</a>
+                        <a href="https://hamerak.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Hamerský potok ↗</a>
+                        <Link href="/login" className="hover:text-white transition-colors">Přihlásit se do IS</Link>
                     </div>
                 </div>
             </footer>
