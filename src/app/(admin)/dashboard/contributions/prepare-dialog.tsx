@@ -10,6 +10,13 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { preparePrescriptions, type PeriodFormData } from "@/lib/actions/contribution-periods";
 
+// ── Pevné volby bankovního účtu ───────────────────────────────────────────────
+const BANK_ACCOUNTS = [
+    { value: "2701772934/2010", label: "Fio banka — 2701772934/2010" },
+    { value: "1024298088/3030", label: "Air banka — 1024298088/3030" },
+    { value: "351416278/0300",  label: "TJ Bohemians — 351416278/0300" },
+];
+
 // ── Číselný vstup ─────────────────────────────────────────────────────────────
 function NumInput({
     label, value, onChange,
@@ -36,6 +43,8 @@ interface Props {
     defaults: Partial<PeriodFormData>;
 }
 
+const DEFAULT_BANK = "2701772934/2010";
+
 // ── Dialog ────────────────────────────────────────────────────────────────────
 export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
     const router = useRouter();
@@ -53,6 +62,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
         discountTom:       defaults.discountTom       ?? 0,
         brigadeSurcharge:  defaults.brigadeSurcharge  ?? 0,
         dueDate:           defaults.dueDate           ?? null,
+        bankAccount:       defaults.bankAccount       ?? DEFAULT_BANK,
     });
 
     // Aktualizovat formulář při změně defaults (např. při přepnutí roku)
@@ -67,6 +77,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
             discountTom:       defaults.discountTom       ?? 0,
             brigadeSurcharge:  defaults.brigadeSurcharge  ?? 0,
             dueDate:           defaults.dueDate           ?? null,
+            bankAccount:       defaults.bankAccount       ?? DEFAULT_BANK,
         });
     }, [year, defaults]);
 
@@ -157,7 +168,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
                             <div>
                                 <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Brigáda a splatnost</p>
                                 <div className="grid grid-cols-2 gap-3">
-                                    <NumInput label={`Penále bez brigády (Kč)`} value={form.brigadeSurcharge}
+                                    <NumInput label="Penále bez brigády (Kč)" value={form.brigadeSurcharge}
                                         onChange={v => setNum("brigadeSurcharge", v)} />
                                     <div className="space-y-1">
                                         <Label className="text-xs text-gray-600">Datum splatnosti</Label>
@@ -168,6 +179,28 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
                                             className="h-8 text-sm"
                                         />
                                     </div>
+                                </div>
+                            </div>
+
+                            {/* Bankovní účet */}
+                            <div>
+                                <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2">Bankovní účet pro platby</p>
+                                <div className="space-y-1.5">
+                                    {BANK_ACCOUNTS.map(acc => (
+                                        <label key={acc.value}
+                                            className="flex items-center gap-2.5 cursor-pointer rounded-lg border border-gray-200 px-3 py-2 text-sm hover:bg-gray-50 transition-colors"
+                                        >
+                                            <input
+                                                type="radio"
+                                                name="bankAccount"
+                                                value={acc.value}
+                                                checked={form.bankAccount === acc.value}
+                                                onChange={() => setForm(prev => ({ ...prev, bankAccount: acc.value }))}
+                                                className="accent-[#327600]"
+                                            />
+                                            <span className="font-mono text-gray-700">{acc.label}</span>
+                                        </label>
+                                    ))}
                                 </div>
                             </div>
 

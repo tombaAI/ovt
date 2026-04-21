@@ -19,6 +19,7 @@ export type PeriodFormData = {
     discountTom: number;
     brigadeSurcharge: number;
     dueDate: string | null;
+    bankAccount: string;   // "2701772934/2010" | "1024298088/3030" | "351416278/0300"
 };
 
 export type PreparePrescriptionsResult =
@@ -62,6 +63,7 @@ export async function preparePrescriptions(
                 discountTom:        data.discountTom,
                 brigadeSurcharge:   data.brigadeSurcharge,
                 dueDate:            data.dueDate,
+                bankAccount:        data.bankAccount,
                 status:             "draft",
             })
             .onConflictDoUpdate({
@@ -75,6 +77,7 @@ export async function preparePrescriptions(
                     discountTom:       data.discountTom,
                     brigadeSurcharge:  data.brigadeSurcharge,
                     dueDate:           data.dueDate,
+                    bankAccount:       data.bankAccount,
                 },
             })
             .returning();
@@ -256,6 +259,7 @@ export async function getDefaultsFromPrevYear(year: number): Promise<Partial<Per
             discountTom:       0,
             brigadeSurcharge:  0,
             dueDate:           null,
+            bankAccount:       "2701772934/2010",
         };
     }
 
@@ -268,6 +272,7 @@ export async function getDefaultsFromPrevYear(year: number): Promise<Partial<Per
         discountCommittee: source.discountCommittee,
         discountTom:       source.discountTom,
         brigadeSurcharge:  source.brigadeSurcharge,
+        bankAccount:       source.bankAccount,
         // Datum splatnosti přenášíme jen pokud jde o existující záznam téhož roku
         dueDate:           existing ? (existing.dueDate as unknown as string | null) : null,
     };

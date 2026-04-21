@@ -23,6 +23,7 @@ export type PeriodDetail = PeriodTab & {
     discountTom: number;
     brigadeSurcharge: number;
     dueDate: string | null;
+    bankAccount: string;
 };
 
 export type Payment = {
@@ -83,6 +84,7 @@ export default async function ContributionsPage() {
             discountTom:      contributionPeriods.discountTom,
             brigadeSurcharge: contributionPeriods.brigadeSurcharge,
             dueDate:          contributionPeriods.dueDate,
+            bankAccount:      contributionPeriods.bankAccount,
         })
         .from(contributionPeriods)
         .orderBy(desc(contributionPeriods.year));
