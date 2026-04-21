@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/badge";
 import { setContributionTodo } from "@/lib/actions/contributions";
 import { createCashPaymentOnContrib, deleteContribAllocation } from "@/lib/actions/reconciliation";
 import { getContribEmailHistory, type ContribMailEvent } from "@/lib/actions/contrib-emails";
+import { SendEmailDialog } from "./send-email-dialog";
 import type { ContribRow, Payment } from "./page";
 
 // ── Todo section ──────────────────────────────────────────────────────────────
@@ -77,7 +78,8 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
     const [addError, setAddError]   = useState<string | null>(null);
     const [addPending, startAdd]    = useTransition();
     const [delPending, startDel]    = useTransition();
-    const [mailHistory, setMailHistory] = useState<ContribMailEvent[]>([]);
+    const [mailHistory, setMailHistory]   = useState<ContribMailEvent[]>([]);
+    const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
     useEffect(() => {
         if (open) { setAmount(""); setPaidAt(""); setNote(""); setAddError(null); }
@@ -227,9 +229,20 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
 
                 {/* Email history */}
                 <div className="rounded-xl border px-4 py-3 mt-4">
-                    <div className="flex items-center gap-1.5 mb-3">
-                        <Mail className="w-3.5 h-3.5 text-gray-400" />
-                        <p className="text-sm font-semibold text-gray-700">Historie emailů</p>
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-1.5">
+                            <Mail className="w-3.5 h-3.5 text-gray-400" />
+                            <p className="text-sm font-semibold text-gray-700">Historie emailů</p>
+                        </div>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => setSendEmailOpen(true)}
+                            className="h-7 px-2.5 text-xs text-[#327600] border-[#327600]/30 hover:bg-[#327600]/5"
+                        >
+                            <Mail className="w-3 h-3 mr-1" />
+                            Odeslat email
+                        </Button>
                     </div>
                     {mailHistory.length === 0 ? (
                         <p className="text-sm text-gray-400">Žádné odeslané emaily</p>
@@ -254,6 +267,16 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
                         </div>
                     )}
                 </div>
+
+                <SendEmailDialog
+                    open={sendEmailOpen}
+                    onOpenChange={setSendEmailOpen}
+                    rows={row ? [row] : []}
+                    onSent={() => {
+                        if (row) getContribEmailHistory(row.contribId).then(setMailHistory);
+                        onPaymentUpdated();
+                    }}
+                />
             </SheetContent>
         </Sheet>
     );
