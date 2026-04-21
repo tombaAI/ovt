@@ -29,10 +29,10 @@ const FILTERS: { key: FilterKey; label: string }[] = [
 ];
 
 const STATUS_BADGE: Record<ContribRow["status"], { label: string; cls: string }> = {
-    paid:      { label: "Zaplaceno",   cls: "bg-[#327600]/10 text-[#327600] border-0"     },
-    overpaid:  { label: "Přeplatek",   cls: "bg-orange-100 text-orange-700 border-0"      },
-    underpaid: { label: "Nedoplatek",  cls: "bg-red-100 text-red-700 border-0"            },
-    unpaid:    { label: "Nezaplaceno", cls: "bg-red-50 text-red-600 border border-red-200" },
+    paid:      { label: "V pořádku",   cls: "bg-[#327600]/10 text-[#327600] border-0"      },
+    overpaid:  { label: "Více",        cls: "bg-orange-100 text-orange-700 border-0"        },
+    underpaid: { label: "Méně",        cls: "bg-red-100 text-red-700 border-0"              },
+    unpaid:    { label: "Nezaplaceno", cls: "bg-red-50 text-red-600 border border-red-200"  },
 };
 
 const LIFECYCLE: Record<PeriodStatus, { label: string; cls: string }> = {
@@ -50,6 +50,25 @@ function fmt(n: number | null) {
 function diff(row: ContribRow): number | null {
     if (row.amountTotal === null) return null;
     return row.paidTotal - row.amountTotal;
+}
+
+// ── Odznaky složek příspěvku ──────────────────────────────────────────────────
+type ContribBadge = { label: string; cls: string };
+
+function contribBadges(r: ContribRow): ContribBadge[] {
+    const badges: ContribBadge[] = [];
+    const boat = "rounded-full px-2 py-0.5 text-[10px] font-medium bg-slate-100 text-slate-600";
+    const warn  = "rounded-full px-2 py-0.5 text-[10px] font-medium bg-amber-50 text-amber-700 border border-amber-200";
+    const good  = "rounded-full px-2 py-0.5 text-[10px] font-medium bg-[#327600]/8 text-[#327600]";
+
+    if (r.amountBoat1)    badges.push({ label: "Loď",        cls: boat });
+    if (r.amountBoat2)    badges.push({ label: "2. loď",     cls: boat });
+    if (r.amountBoat3)    badges.push({ label: "3. loď",     cls: boat });
+    if (r.brigadeSurcharge && r.brigadeSurcharge > 0)
+                          badges.push({ label: "Bez brigády", cls: warn });
+    if (r.discountCommittee) badges.push({ label: "Výbor",   cls: good });
+    if (r.discountTom)    badges.push({ label: "TOM",         cls: good });
+    return badges;
 }
 
 interface Props {
@@ -243,11 +262,21 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                 {filtered.map(r => {
                     const d = diff(r);
                     const sb = STATUS_BADGE[r.status];
+                    const badges = contribBadges(r);
                     return (
                         <button key={r.contribId} onClick={() => openPaymentSheet(r)}
                             className="w-full text-left bg-white rounded-xl border border-gray-200 p-3.5 active:bg-gray-50 transition-colors">
                             <div className="flex items-start justify-between gap-2">
-                                <p className="font-medium text-gray-900">{r.firstName} {r.lastName}</p>
+                                <div className="min-w-0">
+                                    <p className="font-medium text-gray-900">{r.firstName} {r.lastName}</p>
+                                    {badges.length > 0 && (
+                                        <div className="flex flex-wrap gap-1 mt-1">
+                                            {badges.map(b => (
+                                                <span key={b.label} className={b.cls}>{b.label}</span>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
                                 <div className="flex items-center gap-1.5 shrink-0">
                                     {canPrepare && (
                                         <button
@@ -270,7 +299,6 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                                     </span>
                                 )}
                             </div>
-                            {r.lastPaidAt && <p className="text-xs text-gray-400 mt-1">{r.lastPaidAt}</p>}
                         </button>
                     );
                 })}
@@ -300,16 +328,26 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                         {filtered.map(r => {
                             const d = diff(r);
                             const sb = STATUS_BADGE[r.status];
+                            const badges = contribBadges(r);
                             return (
                                 <TableRow key={r.contribId}
                                     className="hover:bg-gray-50/60 cursor-pointer"
                                     onClick={() => openPaymentSheet(r)}>
                                     <TableCell className="font-medium">
-                                        <span>{r.firstName} {r.lastName}</span>
-                                        {r.todoNote && (
-                                            <span className="ml-2 text-xs text-orange-600 font-normal truncate max-w-[160px] inline-block align-middle">
-                                                {r.todoNote}
-                                            </span>
+                                        <div>
+                                            <span>{r.firstName} {r.lastName}</span>
+                                            {r.todoNote && (
+                                                <span className="ml-2 text-xs text-orange-600 font-normal truncate max-w-[160px] inline-block align-middle">
+                                                    {r.todoNote}
+                                                </span>
+                                            )}
+                                        </div>
+                                        {badges.length > 0 && (
+                                            <div className="flex flex-wrap gap-1 mt-1">
+                                                {badges.map(b => (
+                                                    <span key={b.label} className={b.cls}>{b.label}</span>
+                                                ))}
+                                            </div>
                                         )}
                                     </TableCell>
                                     <TableCell className="text-right font-mono text-sm">
