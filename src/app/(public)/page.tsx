@@ -110,7 +110,7 @@ export default function HomePage() {
                                 jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, na jaře na kolo, v létě na dovolenou a na podzim pouštět draky (a na brigádu).
                             </p>
                             <p>
-                                Na vodáckých akcích spolupracujeme se spřáteleným{" "}
+                                Na vodáckých akcích spolupracujeme s{" "}
                                 <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistickým oddílem mládeže (TOM) TJ Bohemians</a>,{" "}
                                 který je přirozenou líhní budoucích vodáků — mnoho dnešních členů OVT prošlo právě TOMem.
                             </p>
@@ -147,11 +147,11 @@ export default function HomePage() {
                                     Každý rok se tu sejde velké množství závodníků z celé republiky i nezávodící veřejnost.
                                 </p>
                                 <p className="text-sm" style={{ color: "#82b965" }}>
-                                    Letošní ročník se koná <strong>3.–4. října 2026</strong> — těšíme se!
+                                    Letošní ročník se koná <strong>3. – 4. října 2026</strong> — těšíme se!
                                 </p>
                             </div>
                         </div>
-                        <div className="lg:w-64 flex flex-col gap-4">
+                        <div className="lg:w-80 flex flex-col gap-4">
                             <a
                                 href="https://hamerak.cz"
                                 target="_blank"
@@ -163,11 +163,11 @@ export default function HomePage() {
                                 <span className="text-sm font-normal opacity-80">hamerak.cz</span>
                             </a>
                             <div className="rounded-xl border border-gray-600 px-6 py-4 text-sm text-gray-400 space-y-1">
-                                <p className="text-white font-semibold mb-2">Závod v číslech</p>
-                                <p>📍 Hamerský potok, Jindřichův Hradec</p>
-                                <p>📅 3.–4. října 2026</p>
+                                <p className="text-white font-semibold mb-2">Informace</p>
+                                <p>📍 Hamerský potok, Malý Ratmírov</p>
+                                <p>📅 3. – 4. října 2026</p>
                                 <p>🏆 Seriál ČPV</p>
-                                <p>🛶 300 Závodníků, 700 vodáků celkem</p>
+                                <p>🛶 700 vodáků, 300 závodníků</p>
                             </div>
                         </div>
                     </div>
