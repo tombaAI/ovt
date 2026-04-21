@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { Mail, Pencil, Trash2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -12,6 +12,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { PaymentSheet } from "./payment-sheet";
 import { PrepareDialog } from "./prepare-dialog";
 import { EditPrescriptionDialog } from "./edit-prescription-dialog";
+import { SendEmailDialog } from "./send-email-dialog";
 import { deleteAllPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, PeriodDetail, PeriodStatus } from "./page";
@@ -83,11 +84,14 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
     const [filter, setFilter]               = useState<FilterKey>("issues");
     const [sheetOpen, setSheetOpen]         = useState(false);
     const [editContribId, setEditContribId] = useState<number | null>(null);
-    const [prepareOpen, setPrepareOpen]         = useState(false);
+    const [prepareOpen, setPrepareOpen]             = useState(false);
     const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
-    const [deleteIsPending, startDelete]        = useTransition();
-    const [editRow, setEditRow]                 = useState<ContribRow | null>(null);
-    const [editOpen, setEditOpen]               = useState(false);
+    const [deleteIsPending, startDelete]            = useTransition();
+    const [editRow, setEditRow]                     = useState<ContribRow | null>(null);
+    const [editOpen, setEditOpen]                   = useState(false);
+    const [selectedIds, setSelectedIds]             = useState<Set<number>>(new Set());
+    const [sendEmailRows, setSendEmailRows]         = useState<ContribRow[]>([]);
+    const [sendEmailOpen, setSendEmailOpen]         = useState(false);
 
     const paymentSheetRow = editContribId !== null ? (rows.find(r => r.contribId === editContribId) ?? null) : null;
 
@@ -113,6 +117,20 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
         });
     }
 
+    function openSendEmail(targetRows: ContribRow[]) {
+        setSendEmailRows(targetRows);
+        setSendEmailOpen(true);
+    }
+
+    function toggleSelect(id: number, e: React.MouseEvent) {
+        e.stopPropagation();
+        setSelectedIds(prev => {
+            const next = new Set(prev);
+            if (next.has(id)) { next.delete(id); } else { next.add(id); }
+            return next;
+        });
+    }
+
     const counts = useMemo(() => ({
         all:       rows.length,
         paid:      rows.filter(r => r.status === "paid").length,
@@ -129,6 +147,16 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
         if (filter === "todo")   return rows.filter(r => r.todoNote !== null);
         return rows.filter(r => r.status === filter);
     }, [rows, filter]);
+
+    const allSelected = filtered.length > 0 && filtered.every(r => selectedIds.has(r.contribId));
+
+    function toggleSelectAll(e: React.ChangeEvent<HTMLInputElement>) {
+        if (e.target.checked) {
+            setSelectedIds(new Set(filtered.map(r => r.contribId)));
+        } else {
+            setSelectedIds(new Set());
+        }
+    }
 
     const stats = useMemo(() => ({
         collected: rows.reduce((s, r) => s + r.paidTotal, 0),
@@ -183,7 +211,18 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                         )}
                     </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
+                <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+                    {selectedIds.size > 0 && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => openSendEmail(rows.filter(r => selectedIds.has(r.contribId)))}
+                            className="text-[#327600] border-[#327600]/30 hover:bg-[#327600]/5"
+                        >
+                            <Mail className="w-3.5 h-3.5 mr-1" />
+                            Odeslat email ({selectedIds.size})
+                        </Button>
+                    )}
                     {canPrepare && rows.length > 0 && (
                         <Button
                             size="sm"
@@ -287,6 +326,13 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                                             <Pencil className="w-3.5 h-3.5" />
                                         </button>
                                     )}
+                                    <button
+                                        onClick={e => { e.stopPropagation(); openSendEmail([r]); }}
+                                        className="p-1 rounded hover:bg-gray-100 text-gray-400 hover:text-[#327600]"
+                                        title="Odeslat email"
+                                    >
+                                        <Mail className="w-3.5 h-3.5" />
+                                    </button>
                                     <Badge className={`${sb.cls} text-xs font-normal`}>{sb.label}</Badge>
                                 </div>
                             </div>
@@ -309,12 +355,23 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
+                            <TableHead className="w-8 pr-0">
+                                <input
+                                    type="checkbox"
+                                    checked={allSelected}
+                                    onChange={toggleSelectAll}
+                                    onClick={e => e.stopPropagation()}
+                                    className="cursor-pointer accent-[#327600]"
+                                    title="Vybrat vše"
+                                />
+                            </TableHead>
                             <TableHead>Člen</TableHead>
                             <TableHead className="text-right">Předpis</TableHead>
                             <TableHead className="text-right">Zaplaceno</TableHead>
                             <TableHead className="text-right hidden lg:table-cell">Rozdíl</TableHead>
                             <TableHead className="hidden lg:table-cell">Datum</TableHead>
                             <TableHead>Stav</TableHead>
+                            <TableHead className="w-8"></TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -333,6 +390,15 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                                 <TableRow key={r.contribId}
                                     className="hover:bg-gray-50/60 cursor-pointer"
                                     onClick={() => openPaymentSheet(r)}>
+                                    <TableCell className="pr-0 w-8" onClick={e => e.stopPropagation()}>
+                                        <input
+                                            type="checkbox"
+                                            checked={selectedIds.has(r.contribId)}
+                                            onChange={() => {}}
+                                            onClick={e => toggleSelect(r.contribId, e)}
+                                            className="cursor-pointer accent-[#327600]"
+                                        />
+                                    </TableCell>
                                     <TableCell className="font-medium">
                                         <div>
                                             <span>{r.firstName} {r.lastName}</span>
@@ -377,6 +443,15 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                                     </TableCell>
                                     <TableCell>
                                         <Badge className={`${sb.cls} text-xs font-normal`}>{sb.label}</Badge>
+                                    </TableCell>
+                                    <TableCell className="w-8 pr-2" onClick={e => e.stopPropagation()}>
+                                        <button
+                                            onClick={() => openSendEmail([r])}
+                                            className="p-1 rounded hover:bg-gray-100 text-gray-300 hover:text-[#327600]"
+                                            title="Odeslat email"
+                                        >
+                                            <Mail className="w-3.5 h-3.5" />
+                                        </button>
                                     </TableCell>
                                 </TableRow>
                             );
@@ -434,6 +509,14 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                 open={editOpen}
                 onOpenChange={setEditOpen}
                 row={editRow}
+            />
+
+            {/* ── Odeslat email ── */}
+            <SendEmailDialog
+                open={sendEmailOpen}
+                onOpenChange={setSendEmailOpen}
+                rows={sendEmailRows}
+                onSent={() => { setSelectedIds(new Set()); router.refresh(); }}
             />
         </div>
     );

@@ -500,19 +500,26 @@ export const notebookNoteVersions = appSchema.table(
 export const mailEvents = appSchema.table(
     "mail_events",
     {
-        id: uuid("id").primaryKey().defaultRandom(),
-        provider: text("provider").notNull().default("resend"),
+        id:        uuid("id").primaryKey().defaultRandom(),
+        provider:  text("provider").notNull().default("resend"),
         direction: text("direction", { enum: ["outbound", "inbound", "webhook"] }).notNull(),
         eventType: text("event_type").notNull(),
+        emailType: text("email_type"),   // 'prescription' | 'reminder' | 'other'
         messageId: text("message_id"),
         fromEmail: text("from_email"),
         toEmail:   text("to_email"),
         subject:   text("subject"),
         payload:   jsonb("payload").notNull().default({}),
+        memberId:  integer("member_id").references(() => members.id, { onDelete: "set null" }),
+        contribId: integer("contrib_id").references(() => memberContributions.id, { onDelete: "set null" }),
+        periodId:  integer("period_id").references(() => contributionPeriods.id, { onDelete: "set null" }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow()
     },
     (t) => [
         index("mail_events_created_at_idx").on(t.createdAt.desc()),
-        index("mail_events_event_type_idx").on(t.eventType)
+        index("mail_events_event_type_idx").on(t.eventType),
+        index("mail_events_member_idx").on(t.memberId),
+        index("mail_events_contrib_idx").on(t.contribId),
+        index("mail_events_period_idx").on(t.periodId),
     ]
 );

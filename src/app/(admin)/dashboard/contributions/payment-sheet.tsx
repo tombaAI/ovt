@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { Mail } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -10,6 +11,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
 import { setContributionTodo } from "@/lib/actions/contributions";
 import { createCashPaymentOnContrib, deleteContribAllocation } from "@/lib/actions/reconciliation";
+import { getContribEmailHistory, type ContribMailEvent } from "@/lib/actions/contrib-emails";
 import type { ContribRow, Payment } from "./page";
 
 // ── Todo section ──────────────────────────────────────────────────────────────
@@ -54,6 +56,12 @@ function fmtDate(iso: string) {
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
+const EMAIL_TYPE_LABEL: Record<string, string> = {
+    prescription: "Předpis příspěvků",
+    reminder:     "Upomínka",
+    other:        "Email",
+};
+
 // ── Main sheet ────────────────────────────────────────────────────────────────
 interface Props {
     open: boolean;
@@ -66,13 +74,19 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
     const [amount, setAmount] = useState("");
     const [paidAt, setPaidAt] = useState("");
     const [note, setNote]     = useState("");
-    const [addError, setAddError] = useState<string | null>(null);
-    const [addPending, startAdd]  = useTransition();
-    const [delPending, startDel]  = useTransition();
+    const [addError, setAddError]   = useState<string | null>(null);
+    const [addPending, startAdd]    = useTransition();
+    const [delPending, startDel]    = useTransition();
+    const [mailHistory, setMailHistory] = useState<ContribMailEvent[]>([]);
 
     useEffect(() => {
         if (open) { setAmount(""); setPaidAt(""); setNote(""); setAddError(null); }
     }, [open]);
+
+    useEffect(() => {
+        if (!open || !row) { setMailHistory([]); return; }
+        getContribEmailHistory(row.contribId).then(setMailHistory);
+    }, [open, row]);
 
     if (!row) return null;
     // Capture non-null ref for use in async closures
@@ -210,6 +224,36 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
                         if (r && "success" in r) onPaymentUpdated();
                     }}
                 />
+
+                {/* Email history */}
+                <div className="rounded-xl border px-4 py-3 mt-4">
+                    <div className="flex items-center gap-1.5 mb-3">
+                        <Mail className="w-3.5 h-3.5 text-gray-400" />
+                        <p className="text-sm font-semibold text-gray-700">Historie emailů</p>
+                    </div>
+                    {mailHistory.length === 0 ? (
+                        <p className="text-sm text-gray-400">Žádné odeslané emaily</p>
+                    ) : (
+                        <div className="space-y-2">
+                            {mailHistory.map(m => (
+                                <div key={m.id} className="flex items-start gap-2 text-xs text-gray-600">
+                                    <span className="text-gray-400 shrink-0 mt-0.5">
+                                        {new Date(m.sentAt).toLocaleString("cs-CZ", {
+                                            day: "numeric", month: "numeric", year: "numeric",
+                                            hour: "2-digit", minute: "2-digit",
+                                        })}
+                                    </span>
+                                    <div className="min-w-0">
+                                        <span className="font-medium">{EMAIL_TYPE_LABEL[m.emailType ?? ""] ?? m.emailType ?? "Email"}</span>
+                                        {m.toEmail && (
+                                            <span className="text-gray-400 ml-1 truncate block">{m.toEmail}</span>
+                                        )}
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
             </SheetContent>
         </Sheet>
     );

@@ -40,6 +40,7 @@ export type ContribRow = {
     memberId: number;
     firstName: string;
     lastName: string;
+    email: string | null;
     variableSymbol: number | null;
     amountTotal: number | null;
     amountBase: number | null;
@@ -100,6 +101,7 @@ export default async function ContributionsPage() {
             memberId:           memberContributions.memberId,
             firstName:          members.firstName,
             lastName:           members.lastName,
+            email:              members.email,
             variableSymbol:     members.variableSymbol,
             amountTotal:        memberContributions.amountTotal,
             amountBase:         memberContributions.amountBase,
