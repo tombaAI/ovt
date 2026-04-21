@@ -282,9 +282,7 @@ export default function HomePage() {
                     <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: "#26272b" }}>Přidej se k nám</h2>
                     <div className="w-12 h-1 rounded mb-6 mx-auto" style={{ backgroundColor: "#327600" }} />
                     <p className="text-gray-600 leading-relaxed mb-8 text-center">
-                        Pokud tě naše plány zaujaly, napiš nám — nebo přijď{" "}
-                        <strong>kteroukoli středu</strong> přímo do loděnice v Podolí
-                        (Modřanská ul., vedle Žlutých lázní). Nábor probíhá průběžně po celý rok.
+                        Pokud tě naše plány zaujaly, napiš nám. Nábor probíhá průběžně po celý rok.
                     </p>
                     <ContactForm />
                 </div>

@@ -89,7 +89,10 @@ export function ContactForm() {
                     {status === "sending" ? "Odesílám…" : "Odeslat"}
                 </button>
                 <span className="text-xs text-gray-400">
-                    nebo přijď kteroukoli středu do loděnice
+                    nebo napiš přímo na{" "}
+                    <a href="mailto:tomas.bauer@bohemianstj.cz" className="underline" style={{ color: "#327600" }}>
+                        tomas.bauer@bohemianstj.cz
+                    </a>
                 </span>
             </div>
         </form>
