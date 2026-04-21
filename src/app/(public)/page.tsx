@@ -13,8 +13,10 @@ export default function HomePage() {
             {/* Navigační lišta */}
             <header style={{ backgroundColor: "#26272b" }} className="sticky top-0 z-50 shadow-md">
                 <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
-                    <Image src="/logo-bohemians.png" alt="OVT Bohemians" width={36} height={36} className="shrink-0" />
-                    <span className="text-white font-bold text-lg tracking-tight">OVT Bohemians</span>
+                    <div className="flex items-center gap-2">
+                        <Image src="/logo-bohemians.png" alt="OVT Bohemians" width={36} height={36} className="shrink-0" />
+                        <span className="text-white font-bold text-lg tracking-tight">OVT Bohemians</span>
+                    </div>
                     <nav className="flex items-center gap-5 text-sm">
                         <a href="#o-nas" className="text-gray-300 hover:text-white transition-colors">O nás</a>
                         <a href="#hamerak" className="text-gray-300 hover:text-white transition-colors">Hamerák</a>
