@@ -132,8 +132,7 @@ export default function HomePage() {
                                     Každý rok se tu sejde velké množství závodníků z celé republiky i nezávodící veřejnost.
                                 </p>
                                 <p className="text-sm" style={{ color: "#82b965" }}>
-                                    Ročník 2025 byl bohužel zrušen z důvodu kritického nedostatku vody v rybnících,
-                                    které zásobují Hamerák. Letošní ročník se koná <strong>3.–4. října 2026</strong> — těšíme se!
+                                    Letošní ročník se koná <strong>3.–4. října 2026</strong> — těšíme se!
                                 </p>
                             </div>
                         </div>
