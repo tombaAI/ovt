@@ -142,14 +142,14 @@ export default function HomePage() {
                             <div className="w-12 h-1 rounded mb-6" style={{ backgroundColor: "#327600" }} />
                             <div className="text-gray-300 leading-relaxed space-y-4">
                                 <p>
-                                    <strong className="text-white">Český pohár vodáků (ČPV)</strong> je
-                                    celostátní seriál závodů na divoké vodě — nejvyšší domácí soutěž
-                                    v kanoistice. Naši závodníci se ho účastní každou sezónu.
+                                    Každoročně na podzim pořádáme{" "}
+                                    <strong className="text-white">Hamerský potok</strong> —
+                                    závod zařazený do seriálu <strong className="text-white">Českého poháru vodáků (ČPV)</strong>.
+                                    Je to pro nás velká čest i závazek; připravujeme se na něj celou sezónu.
                                 </p>
                                 <p>
-                                    A navíc: každoročně na podzim jsme i <strong className="text-white">pořadateli</strong> —
-                                    závod <strong className="text-white">ČPV Hamerský potok</strong> na Hamerském potoce
-                                    u Jindřichova Hradce pořádáme celou sezónu a sejde se na něm přes 700 vodáků z celé republiky.
+                                    Závod se koná na <strong className="text-white">Hamerském potoce u Jindřichova Hradce</strong>.
+                                    Každý rok se tu sejde velké množství závodníků z celé republiky i nezávodící veřejnost.
                                 </p>
                                 <p className="text-sm" style={{ color: "#82b965" }}>
                                     Letošní ročník se koná <strong>3. – 4. října 2026</strong> — těšíme se!
