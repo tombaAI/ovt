@@ -24,7 +24,7 @@ export async function sendContactEmail(data: ContactFormData): Promise<{ ok: boo
     }
 
     const resend = getResendClient();
-    const to = "ovt@bohemianstj.cz";
+    const to = ["tomas.bauer@bohemianstj.cz", "tomas.matejka@bohemianstj.cz"];
 
     await resend.emails.send({
         from: settings.from,

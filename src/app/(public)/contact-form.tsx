@@ -89,10 +89,7 @@ export function ContactForm() {
                     {status === "sending" ? "Odesílám…" : "Odeslat"}
                 </button>
                 <span className="text-xs text-gray-400">
-                    nebo napiš přímo na{" "}
-                    <a href="mailto:ovt@bohemianstj.cz" className="underline" style={{ color: "#327600" }}>
-                        ovt@bohemianstj.cz
-                    </a>
+                    nebo přijď kteroukoli středu do loděnice
                 </span>
             </div>
         </form>
