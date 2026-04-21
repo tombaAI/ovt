@@ -1,4 +1,3 @@
-import Link from "next/link";
 import { ContactForm } from "./contact-form";
 
 export const metadata = {
@@ -20,12 +19,12 @@ export default function HomePage() {
                         <a href="#aktivita" className="text-gray-300 hover:text-white transition-colors">Co děláme</a>
                         <a href="#historie" className="text-gray-300 hover:text-white transition-colors">Historie</a>
                         <a href="#pridej-se" className="text-gray-300 hover:text-white transition-colors">Přidej se</a>
-                        <Link
-                            href="/login"
+                        <a
+                            href="https://is.ovtbohemians.cz/login"
                             className="text-xs px-3 py-1.5 rounded-md border border-gray-500 text-gray-300 hover:border-white hover:text-white transition-colors"
                         >
                             Přihlásit se
-                        </Link>
+                        </a>
                     </nav>
                 </div>
             </header>
@@ -303,7 +302,7 @@ export default function HomePage() {
                         <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TJ Bohemians Praha ↗</a>
                         <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TOM Bohemians (mládež) ↗</a>
                         <a href="https://hamerak.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Hamerský potok ↗</a>
-                        <Link href="/login" className="hover:text-white transition-colors">Přihlásit se do IS</Link>
+                        <a href="https://is.ovtbohemians.cz/login" className="hover:text-white transition-colors">Přihlásit se do IS</a>
                     </div>
                 </div>
             </footer>
