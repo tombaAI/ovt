@@ -4,7 +4,7 @@ import { ContactForm } from "./contact-form";
 export const metadata = {
     title: "OVT Bohemians — Oddíl vodní turistiky",
     description:
-        "Kamarádský oddíl vodáků v Praze Podolí. Sjíždíme řeky u nás i v zahraničí, pořádáme závod Hamerský potok a jezdíme lyžovat do Jizerských hor.",
+        "Kamarádský oddíl vodáků v Praze Podolí. Sjíždíme řeky u nás i v zahraničí, pořádáme závod Hamerský potok a jezdíme na chatu do Jizerských hor.",
 };
 
 export default function HomePage() {
@@ -44,7 +44,7 @@ export default function HomePage() {
                 <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mb-10">
                     Jsme kamarádský oddíl vodáků v pražském Podolí.
                     Sjíždíme řeky u nás i v zahraničí, každoročně pořádáme
-                    závod <strong>Hamerský potok</strong> a v zimě vyrazíme lyžovat do Jizerských hor.
+                    závod <strong>Hamerský potok</strong> a pravidelně jezdíme na chatu do Jizerských hor.
                 </p>
                 <div className="flex flex-wrap gap-4 justify-center">
                     <a
@@ -91,9 +91,9 @@ export default function HomePage() {
                                 vzniklé při sportu a venkovních aktivitách. Oddíl má přes <strong>50 aktivních členů</strong>.
                             </p>
                             <p className="mb-4">
-                                V zimě jezdíme lyžovat s{" "}
+                                S{" "}
                                 <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
-                                na chatu v Jiřetíně pod Bukovou v Jizerských horách.
+                                jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, ale i jindy během roku.
                             </p>
                             <p>
                                 Kamarádi z{" "}
@@ -181,7 +181,7 @@ export default function HomePage() {
                             {
                                 icon: "⛷️",
                                 title: "Lyžování v Jizerách",
-                                text: "V zimě jezdíme s Oddílem lyžařské turistiky TJ Bohemians na chatu v Jiřetíně pod Bukovou. Víkendy plné sněhu a dobré party.",
+                                text: "Jezdíme s Oddílem lyžařské turistiky TJ Bohemians na chatu v Jiřetíně pod Bukovou — v zimě lyžovat, ale i jindy během roku.",
                             },
                             {
                                 icon: "🚵",
