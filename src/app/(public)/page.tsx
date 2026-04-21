@@ -69,14 +69,14 @@ export default function HomePage() {
                 <div className="max-w-5xl mx-auto">
                     <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>O oddílu</h2>
                     <div className="w-12 h-1 rounded mb-8" style={{ backgroundColor: "#327600" }} />
-                    <div className="grid sm:grid-cols-2 gap-10 text-gray-700 leading-relaxed">
-                        <div>
-                            <p className="mb-4">
+                    <div className="grid lg:grid-cols-2 gap-10 items-start">
+                        <div className="space-y-4 text-gray-700 leading-relaxed">
+                            <p>
                                 Jsme oddíl dospělých vodáků při{" "}
                                 <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>TJ Bohemians Praha</a>.
                                 Jsme pro všechny, kteří mají rádi aktivní život a preferují zážitky před pohodlím.
                             </p>
-                            <p className="mb-4">
+                            <p>
                                 Pokud to jde, sjíždíme krásné řeky různých obtížností u nás i v zahraničí.
                                 Nevyhýbáme se ale ani slalomovým kanálům, cyklistice, horské turistice či lezení.
                                 Procvičujeme i praktickou záchranu na vodě.
@@ -84,14 +84,10 @@ export default function HomePage() {
                             <p>
                                 Zázemím nám slouží <strong>loděnice v Podolí</strong> na Modřanské ulici
                                 vedle Žlutých lázní, kde se celoročně potkáváme.
-                            </p>
-                        </div>
-                        <div>
-                            <p className="mb-4">
                                 Naším cílem není závodní výkonnost, ale <strong>dobrá přátelství a zážitky</strong>{" "}
-                                vzniklé při sportu a venkovních aktivitách. Oddíl má přes <strong>50 aktivních členů</strong>.
+                                vzniklé při sportu. Oddíl má přes <strong>50 aktivních členů</strong>.
                             </p>
-                            <p className="mb-4">
+                            <p>
                                 S{" "}
                                 <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
                                 jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, ale i jindy během roku.
@@ -101,6 +97,15 @@ export default function HomePage() {
                                 <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistického oddílu mládeže (TOM) Bohemians</a>{" "}
                                 fungují jako samostatný oddíl pro děti a mládež — také v Podolí, také na vodě.
                             </p>
+                        </div>
+                        <div className="rounded-xl overflow-hidden shadow-md">
+                            <Image
+                                src="/foto-ovt.jpg"
+                                alt="Vodáci OVT Bohemians na řece"
+                                width={800}
+                                height={534}
+                                className="w-full h-auto object-cover"
+                            />
                         </div>
                     </div>
                 </div>
