@@ -99,20 +99,20 @@ export default function HomePage() {
                             <p>
                                 Zázemím nám slouží <strong>loděnice v Podolí</strong> na Modřanské ulici
                                 vedle Žlutých lázní, kde se celoročně potkáváme.
-                                Naším cílem není závodní výkonnost, ale <strong>dobrá přátelství a zážitky</strong>{" "}
-                                vzniklé při sportu. Oddíl má přes <strong>50 aktivních členů</strong>.
+                                Naším cílem není závodní výkonnost, ale <strong>zážitky a přátelství</strong>{" "}
+                                vzniklé při sportu. Oddíl má přes 50 aktivních členů.
                             </p>
                         </div>
                         <div className="space-y-4">
                             <p>
-                                S{" "}
-                                <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
-                                jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, na jaře na kolo, v létě na dovolenou a na podzim pouštět draky (a na brigádu).
-                            </p>
-                            <p>
                                 Na vodáckých akcích spolupracujeme s{" "}
                                 <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistickým oddílem mládeže (TOM) TJ Bohemians</a>,{" "}
                                 který je přirozenou líhní budoucích vodáků — mnoho dnešních členů OVT prošlo právě TOMem.
+                            </p>
+                            <p>
+                                S{" "}
+                                <a href="https://www.bohemianstj.cz/lyzarska-turistka/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Oddílem lyžařské turistiky TJ Bohemians</a>{" "}
+                                jezdíme na chatu v Jiřetíně pod Bukovou v Jizerských horách — v zimě lyžovat, na jaře na kolo, v létě na dovolenou a na podzim pouštět draky (a na brigádu).
                             </p>
                         </div>
                     </div>
