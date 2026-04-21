@@ -51,7 +51,7 @@ export default function HomePage() {
                 {/* Obsah */}
                 <div className="relative z-10">
                     <p className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: "#82b965" }}>
-                        Oddíl vodní turistiky · TJ Bohemians Praha
+                        Kanoistika · Český pohár vodáků · TJ Bohemians Praha
                     </p>
                     <h1 className="text-5xl sm:text-7xl font-extrabold text-white mb-6 leading-tight">
                         OVT Bohemians
@@ -105,6 +105,12 @@ export default function HomePage() {
                         </div>
                         <div className="space-y-4">
                             <p>
+                                Závodně se účastníme seriálu{" "}
+                                <strong>Českého poháru vodáků (ČPV)</strong> — celostátní série závodů na divoké vodě,
+                                která je vrcholnou domácí soutěží v kanoistice. ČPV je pro nás víc než sport:
+                                je to způsob, jak měřit síly s nejlepšími vodáky v zemi a posouvat se dál.
+                            </p>
+                            <p>
                                 Na vodáckých akcích spolupracujeme s{" "}
                                 <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>Turistickým oddílem mládeže (TOM) TJ Bohemians</a>,{" "}
                                 který je přirozenou líhní budoucích vodáků — mnoho dnešních členů OVT prošlo právě TOMem.
@@ -129,7 +135,7 @@ export default function HomePage() {
                     <div className="flex flex-col lg:flex-row gap-10 items-start">
                         <div className="flex-1">
                             <p className="text-sm font-semibold uppercase tracking-widest mb-3" style={{ color: "#82b965" }}>
-                                Náš velký závod
+                                Pořadatelé i závodníci
                             </p>
                             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
                                 ČPV Hamerský potok
@@ -137,14 +143,14 @@ export default function HomePage() {
                             <div className="w-12 h-1 rounded mb-6" style={{ backgroundColor: "#327600" }} />
                             <div className="text-gray-300 leading-relaxed space-y-4">
                                 <p>
-                                    Každoročně na podzim pořádáme{" "}
-                                    <strong className="text-white">Hamerský potok</strong> —
-                                    závod zařazený do seriálu <strong className="text-white">Českého poháru vodáků (ČPV)</strong>.
-                                    Je to pro nás velká čest i závazek; připravujeme se na něj celou sezónu.
+                                    <strong className="text-white">Český pohár vodáků (ČPV)</strong> je
+                                    celostátní seriál závodů na divoké vodě — nejvyšší domácí soutěž
+                                    v kanoistice. Naši závodníci se ho účastní každou sezónu.
                                 </p>
                                 <p>
-                                    Závod se koná na <strong className="text-white">Hamerském potoce u Jindřichova Hradce</strong>.
-                                    Každý rok se tu sejde velké množství závodníků z celé republiky i nezávodící veřejnost.
+                                    A navíc: každoročně na podzim jsme i <strong className="text-white">pořadateli</strong> —
+                                    závod <strong className="text-white">ČPV Hamerský potok</strong> na Hamerském potoce
+                                    u Jindřichova Hradce pořádáme celou sezónu a sejde se na něm přes 700 vodáků z celé republiky.
                                 </p>
                                 <p className="text-sm" style={{ color: "#82b965" }}>
                                     Letošní ročník se koná <strong>3. – 4. října 2026</strong> — těšíme se!
