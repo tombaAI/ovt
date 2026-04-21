@@ -4,13 +4,19 @@ import { NextResponse } from "next/server";
 export default auth((req) => {
     const isAuthed = Boolean(req.auth);
     const { pathname } = req.nextUrl;
+    const hostname = req.headers.get("host") ?? "";
+    const isIsDomain = hostname.startsWith("is.");
+
+    // Na subdoméně is. přesměrovat kořen rovnou na dashboard
+    if (isIsDomain && pathname === "/") {
+        return NextResponse.redirect(new URL("/dashboard", req.url));
+    }
 
     if (pathname === "/login" && isAuthed) {
         return NextResponse.redirect(new URL("/dashboard", req.url));
     }
 
-    const isProtected = pathname === "/" || pathname.startsWith("/dashboard");
-    if (isProtected && !isAuthed) {
+    if (pathname.startsWith("/dashboard") && !isAuthed) {
         return NextResponse.redirect(new URL("/login", req.url));
     }
 
