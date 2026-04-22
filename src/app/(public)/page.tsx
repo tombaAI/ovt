@@ -13,11 +13,13 @@ export default function HomePage() {
             {/* Navigační lišta */}
             <header style={{ backgroundColor: "#26272b" }} className="sticky top-0 z-50 shadow-md">
                 <div className="max-w-6xl mx-auto px-4 py-3 flex items-center justify-between">
+                    {/* Logo + název */}
                     <div className="flex items-center gap-2">
                         <Image src="/logo-bohemians.png" alt="OVT Bohemians" width={36} height={36} className="shrink-0" />
                         <span className="text-white font-bold text-lg tracking-tight">OVT Bohemians</span>
                     </div>
-                    <nav className="flex items-center gap-5 text-sm">
+                    {/* Desktop nav */}
+                    <nav className="hidden md:flex items-center gap-5 text-sm">
                         <a href="#o-nas" className="text-gray-300 hover:text-white transition-colors">O nás</a>
                         <a href="#hamerak" className="text-gray-300 hover:text-white transition-colors">Hamerák</a>
                         <a href="#aktivita" className="text-gray-300 hover:text-white transition-colors">Co děláme</a>
@@ -30,12 +32,27 @@ export default function HomePage() {
                             Přihlásit se
                         </a>
                     </nav>
+                    {/* Mobilní akce */}
+                    <div className="flex md:hidden items-center gap-2">
+                        <a
+                            href="#pridej-se"
+                            className="text-xs px-3 py-1.5 rounded-md font-semibold text-white"
+                            style={{ backgroundColor: "#327600" }}
+                        >
+                            Přidej se
+                        </a>
+                        <a
+                            href="https://is.ovtbohemians.cz/login"
+                            className="text-xs px-3 py-1.5 rounded-md border border-gray-500 text-gray-300"
+                        >
+                            IS
+                        </a>
+                    </div>
                 </div>
             </header>
 
             {/* Hero */}
-            <section className="relative flex flex-col items-center justify-center text-center py-32 px-4 overflow-hidden min-h-[480px]">
-                {/* Fotka na pozadí */}
+            <section className="relative flex flex-col items-center justify-center text-center py-20 sm:py-32 px-4 overflow-hidden min-h-[420px] sm:min-h-[480px]">
                 <Image
                     src="/foto-ovt.jpg"
                     alt=""
@@ -43,25 +60,23 @@ export default function HomePage() {
                     className="object-cover object-center"
                     priority
                 />
-                {/* Tmavě zelený překryv */}
                 <div
                     className="absolute inset-0"
                     style={{ background: "linear-gradient(160deg, rgba(26,46,10,0.82) 0%, rgba(39,69,15,0.75) 50%, rgba(50,118,0,0.65) 100%)" }}
                 />
-                {/* Obsah */}
-                <div className="relative z-10">
-                    <p className="text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: "#82b965" }}>
+                <div className="relative z-10 px-2">
+                    <p className="text-xs sm:text-sm font-semibold uppercase tracking-widest mb-4" style={{ color: "#82b965" }}>
                         Kanoistika · Český pohár vodáků · TJ Bohemians Praha
                     </p>
-                    <h1 className="text-5xl sm:text-7xl font-extrabold text-white mb-6 leading-tight">
+                    <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white mb-5 leading-tight">
                         OVT Bohemians
                     </h1>
-                    <p className="text-lg sm:text-xl text-gray-200 max-w-2xl mb-10">
+                    <p className="text-base sm:text-xl text-gray-200 max-w-2xl mb-8">
                         Jsme kamarádský oddíl vodáků v pražském Podolí.
                         Sjíždíme řeky u nás i v zahraničí, každoročně pořádáme
                         závod <strong>Hamerský potok</strong> a jezdíme na chatu do Jizerských hor.
                     </p>
-                    <div className="flex flex-wrap gap-4 justify-center">
+                    <div className="flex flex-col sm:flex-row gap-3 justify-center">
                         <a
                             href="#pridej-se"
                             className="px-6 py-3 rounded-lg font-semibold text-white shadow-lg transition-transform hover:scale-105"
@@ -80,11 +95,11 @@ export default function HomePage() {
             </section>
 
             {/* O nás */}
-            <section id="o-nas" className="py-20 px-4 bg-white">
+            <section id="o-nas" className="py-14 sm:py-20 px-4 bg-white">
                 <div className="max-w-5xl mx-auto">
-                    <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>O oddílu</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-3" style={{ color: "#26272b" }}>O oddílu</h2>
                     <div className="w-12 h-1 rounded mb-8" style={{ backgroundColor: "#327600" }} />
-                    <div className="grid sm:grid-cols-2 gap-10 text-gray-700 leading-relaxed">
+                    <div className="grid sm:grid-cols-2 gap-8 sm:gap-10 text-gray-700 leading-relaxed">
                         <div className="space-y-4">
                             <p>
                                 Jsme vodácký oddíl při{" "}
@@ -124,16 +139,12 @@ export default function HomePage() {
                 </div>
             </section>
 
-            {/* Hamerák — prominentní sekce */}
-            <section
-                id="hamerak"
-                className="py-20 px-4"
-                style={{ backgroundColor: "#26272b" }}
-            >
+            {/* Hamerák */}
+            <section id="hamerak" className="py-14 sm:py-20 px-4" style={{ backgroundColor: "#26272b" }}>
                 <div className="max-w-5xl mx-auto">
-                    <div className="flex flex-col lg:flex-row gap-10 items-start">
+                    <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start">
                         <div className="flex-1">
-                            <p className="text-sm font-semibold uppercase tracking-widest mb-3" style={{ color: "#82b965" }}>
+                            <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#82b965" }}>
                                 Náš velký závod
                             </p>
                             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
@@ -156,16 +167,16 @@ export default function HomePage() {
                                 </p>
                             </div>
                         </div>
-                        <div className="lg:w-80 flex flex-col gap-4">
+                        <div className="w-full lg:w-80 flex flex-col gap-4">
                             <a
-                                href="https://hamerak.cz"
+                                href="https://hamerak.ovtbohemians.cz"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 className="block px-6 py-4 rounded-xl text-center font-semibold text-white transition-transform hover:scale-105"
                                 style={{ backgroundColor: "#327600" }}
                             >
                                 Web závodu →<br />
-                                <span className="text-sm font-normal opacity-80">hamerak.cz</span>
+                                <span className="text-sm font-normal opacity-80">hamerak.ovtbohemians.cz</span>
                             </a>
                             <div className="rounded-xl border border-gray-600 px-6 py-4 text-sm text-gray-400 space-y-1">
                                 <p className="text-white font-semibold mb-2">Informace</p>
@@ -180,11 +191,11 @@ export default function HomePage() {
             </section>
 
             {/* Co děláme */}
-            <section id="aktivita" className="py-20 px-4" style={{ backgroundColor: "#f5f7f2" }}>
+            <section id="aktivita" className="py-14 sm:py-20 px-4" style={{ backgroundColor: "#f5f7f2" }}>
                 <div className="max-w-5xl mx-auto">
-                    <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>Co děláme</h2>
-                    <div className="w-12 h-1 rounded mb-10" style={{ backgroundColor: "#327600" }} />
-                    <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-3" style={{ color: "#26272b" }}>Co děláme</h2>
+                    <div className="w-12 h-1 rounded mb-8 sm:mb-10" style={{ backgroundColor: "#327600" }} />
+                    <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
                         {[
                             {
                                 icon: "🛶",
@@ -219,13 +230,13 @@ export default function HomePage() {
                         ].map((item) => (
                             <div
                                 key={item.title}
-                                className="bg-white rounded-xl p-6 shadow-sm border border-gray-100"
+                                className="bg-white rounded-xl p-4 sm:p-6 shadow-sm border border-gray-100"
                             >
-                                <div className="text-4xl mb-4">{item.icon}</div>
-                                <h3 className="font-bold text-lg mb-2" style={{ color: "#26272b" }}>
+                                <div className="text-3xl sm:text-4xl mb-3">{item.icon}</div>
+                                <h3 className="font-bold text-sm sm:text-lg mb-1 sm:mb-2" style={{ color: "#26272b" }}>
                                     {item.title}
                                 </h3>
-                                <p className="text-gray-600 text-sm leading-relaxed">{item.text}</p>
+                                <p className="text-gray-600 text-xs sm:text-sm leading-relaxed">{item.text}</p>
                             </div>
                         ))}
                     </div>
@@ -233,9 +244,9 @@ export default function HomePage() {
             </section>
 
             {/* Historie */}
-            <section id="historie" className="py-20 px-4 bg-white">
+            <section id="historie" className="py-14 sm:py-20 px-4 bg-white">
                 <div className="max-w-4xl mx-auto">
-                    <h2 className="text-3xl font-bold mb-3" style={{ color: "#26272b" }}>Něco z historie</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-3" style={{ color: "#26272b" }}>Něco z historie</h2>
                     <div className="w-12 h-1 rounded mb-8" style={{ backgroundColor: "#327600" }} />
                     <p className="text-gray-700 leading-relaxed mb-6">
                         Oddíl má kořeny v <strong>50. letech minulého století</strong>. Svůj vrchol zažil
@@ -297,9 +308,9 @@ export default function HomePage() {
             </section>
 
             {/* Přidej se */}
-            <section id="pridej-se" className="py-20 px-4" style={{ backgroundColor: "#f5f7f2" }}>
+            <section id="pridej-se" className="py-14 sm:py-20 px-4" style={{ backgroundColor: "#f5f7f2" }}>
                 <div className="max-w-3xl mx-auto">
-                    <h2 className="text-3xl font-bold mb-3 text-center" style={{ color: "#26272b" }}>Přidej se k nám</h2>
+                    <h2 className="text-2xl sm:text-3xl font-bold mb-3 text-center" style={{ color: "#26272b" }}>Přidej se k nám</h2>
                     <div className="w-12 h-1 rounded mb-6 mx-auto" style={{ backgroundColor: "#327600" }} />
                     <p className="text-gray-600 leading-relaxed mb-8 text-center">
                         Pokud tě naše plány zaujaly, napiš nám. Nábor probíhá průběžně po celý rok.
@@ -318,7 +329,7 @@ export default function HomePage() {
                     <div className="flex flex-col gap-1 sm:text-right">
                         <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TJ Bohemians Praha ↗</a>
                         <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TOM Bohemians (mládež) ↗</a>
-                        <a href="https://hamerak.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Hamerský potok ↗</a>
+                        <a href="https://hamerak.ovtbohemians.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Hamerský potok ↗</a>
                         <a href="https://is.ovtbohemians.cz/login" className="hover:text-white transition-colors">Přihlásit se do IS</a>
                     </div>
                 </div>
