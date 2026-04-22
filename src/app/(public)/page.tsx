@@ -145,7 +145,7 @@ export default function HomePage() {
                     <div className="flex flex-col lg:flex-row gap-8 lg:gap-10 items-start">
                         <div className="flex-1">
                             <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: "#82b965" }}>
-                                Náš velký závod
+                                Pořádáme
                             </p>
                             <h2 className="text-3xl sm:text-4xl font-extrabold text-white mb-4">
                                 ČPV Hamerský potok
