@@ -102,7 +102,7 @@ export default function HomePage() {
                     <div className="grid sm:grid-cols-2 gap-8 sm:gap-10 text-gray-700 leading-relaxed">
                         <div className="space-y-4">
                             <p>
-                                Jsme vodácký oddíl při{" "}
+                                Jsme oddíl vodní turistiky při{" "}
                                 <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="underline" style={{ color: "#327600" }}>TJ Bohemians Praha</a>.
                                 Jsme pro všechny, kteří mají rádi aktivní život a preferují zážitky před pohodlím.
                             </p>
