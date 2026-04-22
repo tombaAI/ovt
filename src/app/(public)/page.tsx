@@ -69,7 +69,7 @@ export default function HomePage() {
                         Kanoistika · Český pohár vodáků · TJ Bohemians Praha
                     </p>
                     <h1 className="text-4xl sm:text-6xl lg:text-7xl font-extrabold text-white mb-5 leading-tight">
-                        OVT Bohemians
+                        Oddíl vodní turistiky
                     </h1>
                     <p className="text-base sm:text-xl text-gray-200 max-w-2xl mb-8">
                         Jsme kamarádský oddíl vodáků v pražském Podolí.
