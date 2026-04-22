@@ -16,7 +16,7 @@ export default function HomePage() {
                     {/* Logo + název */}
                     <div className="flex items-center gap-2">
                         <Image src="/logo-bohemians.png" alt="OVT Bohemians" width={36} height={36} className="shrink-0" />
-                        <span className="text-white font-bold text-lg tracking-tight">OVT Bohemians</span>
+                        <span className="text-white font-bold text-lg tracking-tight">Oddíl vodní turistiky</span>
                     </div>
                     {/* Desktop nav */}
                     <nav className="hidden md:flex items-center gap-5 text-sm">
