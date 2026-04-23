@@ -79,11 +79,12 @@ export function EditPrescriptionDialog({ open, onOpenChange, row }: Props) {
         setForm(prev => ({ ...prev, [key]: v }));
     }
 
-    // Průběžný výpočet celkové částky
+    // Průběžný výpočet celkové částky — sleva výbor má přednost, TOM se neuplatní současně
+    const effectiveTom = form.discountCommittee > 0 ? 0 : form.discountTom;
     const totalPreview =
         form.amountBase +
         form.amountBoat1 + form.amountBoat2 + form.amountBoat3 -
-        form.discountCommittee - form.discountTom - form.discountIndividual +
+        form.discountCommittee - effectiveTom - form.discountIndividual +
         form.brigadeSurcharge;
 
     function handleSave() {
@@ -142,6 +143,11 @@ export function EditPrescriptionDialog({ open, onOpenChange, row }: Props) {
                             <AmtInput label="TOM"         value={form.discountTom}         onChange={v => set("discountTom", v)} />
                             <AmtInput label="Individuální" value={form.discountIndividual} onChange={v => set("discountIndividual", v)} />
                         </div>
+                        {form.discountCommittee > 0 && form.discountTom > 0 && (
+                            <p className="text-[11px] text-amber-600 mt-1">
+                                Sleva výbor má přednost — sleva TOM se do celkové částky nezapočítá.
+                            </p>
+                        )}
                     </div>
 
                     {/* Penále brigáda */}

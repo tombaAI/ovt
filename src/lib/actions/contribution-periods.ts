@@ -165,12 +165,15 @@ export async function preparePrescriptions(
             const boatCount = boatCountByMember[memberId] ?? 0;
 
             // Slevy výbor/TOM: přenést, pokud člen měl slevu loni (znovu aplikovat letošní sazbu)
+            // Sleva výbor má přednost — pokud ji člen má, sleva TOM se do celkové částky nezapočítá
+            // (obě se stále ukládají jako příznak, aby bylo vidět členství ve výboru / vedení TOM)
             const discountCommittee = prev?.discountCommittee
                 ? -period.discountCommittee
                 : null;
             const discountTom = prev?.discountTom
                 ? -period.discountTom
                 : null;
+            const effectiveDiscountTom = discountCommittee ? null : discountTom;
 
             // Individuální sleva: přenést, pokud validUntil >= letošní rok
             const hasValidIndividual =
@@ -193,7 +196,7 @@ export async function preparePrescriptions(
                 period.amountBase +
                 amountBoat1 + amountBoat2 + amountBoat3 +
                 (discountCommittee ?? 0) +
-                (discountTom ?? 0) +
+                (effectiveDiscountTom ?? 0) +
                 (discountIndividual ?? 0) +
                 brigadeSurcharge;
 
@@ -358,16 +361,18 @@ export async function updatePrescriptionAmounts(
         if (period.status !== "draft") return { error: "Úprava je povolena jen ve stavu Příprava" };
 
         // Slevy se ukládají jako záporná čísla
+        // Sleva výbor má přednost — pokud ji člen má, sleva TOM se do součtu nezapočítá
         const discountCommittee  = data.discountCommittee  > 0 ? -data.discountCommittee  : null;
         const discountTom        = data.discountTom        > 0 ? -data.discountTom        : null;
         const discountIndividual = data.discountIndividual > 0 ? -data.discountIndividual : null;
+        const effectiveDiscountTom = discountCommittee ? null : discountTom;
 
         const amountTotal =
             data.amountBase +
             data.amountBoat1 + data.amountBoat2 + data.amountBoat3 +
-            (discountCommittee  ?? 0) +
-            (discountTom        ?? 0) +
-            (discountIndividual ?? 0) +
+            (discountCommittee     ?? 0) +
+            (effectiveDiscountTom  ?? 0) +
+            (discountIndividual    ?? 0) +
             data.brigadeSurcharge;
 
         await db.update(memberContributions).set({
