@@ -334,7 +334,7 @@ _(TJ import není ve filtru — pouze vizuální badge na řádku v tabulce)_
 | Marie Hořejší | 12340 | `Sleva 200 Kč` `📋 úkol` |
 | Petr Kolář | 11111 | `bez brigády` |
 
-- **Jméno** = `{příjmení} {jméno}` + `({přezdívka})` pokud existuje
+- **Jméno** = `{jméno} {příjmení}` + `({přezdívka})` pokud existuje — stejný formát jako záhlaví sloupce
 - **ČSK** = číslo CSK
 - **Info** = barevné badges: Výbor, TOM, sleva s částkou, vstup/odchod s datem, bez brigády, úkol, změny z TJ
 - Klik na řádek → `← Seznam členů` + detail člena

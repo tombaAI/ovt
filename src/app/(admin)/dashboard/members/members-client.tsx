@@ -393,7 +393,7 @@ export function MembersClient({
                         className="w-full text-left bg-white rounded-xl border border-gray-200 px-4 py-3 active:bg-gray-50 transition-colors flex items-center gap-3">
                         <div className="flex-1 min-w-0">
                             <p className="font-medium text-gray-900 leading-snug">
-                                {m.lastName} {m.firstName}
+                                {m.firstName} {m.lastName}
                                 {m.nickname && <span className="text-gray-400 font-normal"> ({m.nickname})</span>}
                             </p>
                             {m.cskNumber && <p className="text-xs text-gray-400 mt-0.5">ČSK {m.cskNumber}</p>}
@@ -440,7 +440,7 @@ export function MembersClient({
                         {filtered.map(m => (
                             <TableRow key={m.id} className="hover:bg-gray-50/60 cursor-pointer" onClick={() => openDetail(m)}>
                                 <TableCell className="font-medium py-3">
-                                    {m.lastName} {m.firstName}
+                                    {m.firstName} {m.lastName}
                                     {m.nickname && <span className="text-gray-400 font-normal ml-1">({m.nickname})</span>}
                                 </TableCell>
                                 <TableCell className="text-sm text-gray-500 font-mono w-20">
