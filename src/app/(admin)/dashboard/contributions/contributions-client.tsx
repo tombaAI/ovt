@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useCallback, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Pencil, Trash2 } from "lucide-react";
+import { Pencil, Search, Trash2, X } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -89,6 +89,7 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
     const [deleteIsPending, startDelete]            = useTransition();
     const [editRow, setEditRow]                     = useState<ContribRow | null>(null);
     const [editOpen, setEditOpen]                   = useState(false);
+    const [query, setQuery]                         = useState("");
 
     const paymentSheetRow = editContribId !== null ? (rows.find(r => r.contribId === editContribId) ?? null) : null;
 
@@ -126,12 +127,32 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
     }), [rows]);
 
     const filtered = useMemo(() => {
-        if (filter === "all")        return rows;
-        if (filter === "issues")     return rows.filter(r => r.status !== "paid");
-        if (filter === "todo")       return rows.filter(r => r.todoNote !== null);
-        if (filter === "unreviewed") return rows.filter(r => !r.reviewed);
-        return rows.filter(r => r.status === filter);
-    }, [rows, filter]);
+        const q = query.trim().toLowerCase();
+
+        function matchesQuery(r: ContribRow): boolean {
+            if (!q) return true;
+            // Jméno člena
+            const name = `${r.firstName} ${r.lastName}`.toLowerCase();
+            if (name.includes(q)) return true;
+            // Klíčová slova složek
+            if ("výbor".includes(q) && r.discountCommittee) return true;
+            if ("tom".includes(q)   && r.discountTom)       return true;
+            // Částka — hledáme jako číslo (uživatel píše bez mezer nebo s mezerami)
+            if (r.amountTotal !== null) {
+                const amtStr = String(r.amountTotal);
+                const qDigits = q.replace(/\s/g, "");
+                if (qDigits && /^\d+$/.test(qDigits) && amtStr.includes(qDigits)) return true;
+            }
+            return false;
+        }
+
+        const result = rows.filter(matchesQuery);
+        if (filter === "all")        return result;
+        if (filter === "issues")     return result.filter(r => r.status !== "paid");
+        if (filter === "todo")       return result.filter(r => r.todoNote !== null);
+        if (filter === "unreviewed") return result.filter(r => !r.reviewed);
+        return result.filter(r => r.status === filter);
+    }, [rows, filter, query]);
 
     const stats = useMemo(() => ({
         collected: rows.reduce((s, r) => s + r.paidTotal, 0),
@@ -232,6 +253,26 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                     <p className="text-lg font-semibold text-gray-800">{stats.collected.toLocaleString("cs-CZ")} Kč</p>
                     <p className="text-xs text-gray-400">z {stats.expected.toLocaleString("cs-CZ")} Kč</p>
                 </div>
+            </div>
+
+            {/* ── Hledání ── */}
+            <div className="relative">
+                <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-gray-400 pointer-events-none" />
+                <input
+                    type="search"
+                    value={query}
+                    onChange={e => setQuery(e.target.value)}
+                    placeholder="Hledat jméno, výbor, TOM, částku…"
+                    className="w-full h-9 pl-8 pr-8 rounded-lg border border-gray-200 bg-white text-sm placeholder:text-gray-400 focus:outline-none focus:ring-2 focus:ring-[#327600]/30 focus:border-[#327600]/50"
+                />
+                {query && (
+                    <button
+                        onClick={() => setQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                    >
+                        <X className="w-3.5 h-3.5" />
+                    </button>
+                )}
             </div>
 
             {/* ── Filter pills ── */}
