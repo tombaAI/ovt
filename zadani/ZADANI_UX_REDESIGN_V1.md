@@ -94,7 +94,27 @@ Díky tomu:
 
 Každý přehled má maximálně **3 výrazné one-click filtry** (badge/pill) pro nejčastěji používané stavy. Zbytek filtrů je dostupný přes **rozbalovací menu „Filtrovat"**.
 
-**Řazení** je umístěno v **hlavičce stránky** (v záhlaví nad tabulkou), ne v rozbalovacím menu — je to přímá akce na pohled, ne filtr.
+Řazení je v záhlaví sloupce tabulky — viz sekce 2.4.
+
+### 2.4 Řazení v přehledech
+
+Řazení se ovládá kliknutím na záhlaví sloupce tabulky. Platí tyto obecné principy:
+
+**Záhlaví sloupce:** Název sloupce (nebo jeho část) je klikatelné. U vícehodnotových sloupců (např. „Jméno Příjmení (přezdívka)") je každá hodnota klikatelná samostatně.
+
+**Šipka:** Aktivní třídící pole má bezprostředně za sebou šipku označující směr (`↑` vzestupně, `↓` sestupně). Ostatní pole šipku nemají.
+
+**Chování při kliknutí:**
+- Klik na pole, podle kterého se **nyní neřadí** → řazení podle tohoto pole, směr ASC.
+- Klik na pole, podle kterého se **nyní řadí** → přepnutí směru (ASC ↔ DESC).
+
+**Výchozí stav:** Každý přehled má definované výchozí pole a směr. U přehledu členů je výchozí řazení podle Příjmení ASC.
+
+**Null hodnoty:** Položky bez hodnoty řazeného pole jsou vždy na konci (bez ohledu na směr).
+
+**Sekundární řazení:** Pokud si jsou dvě položky podle hlavního pole rovny, sekundárně se řadí podle Příjmení ASC (nebo jiného definovaného sekundárního klíče přehledu).
+
+**URL persistance:** Aktuální řazení je součástí URL (`?sort=cskNumber&dir=desc`). Výchozí hodnoty (výchozí pole + ASC) se do URL nezapisují.
 
 ### 2.2 Filtr na člena — cross-entity
 
@@ -443,3 +463,4 @@ Individuální sleva   —    [Nastavit]
 | 2026-04-23 | 9B rozhodnuto: bottom bar (Členové/Příspěvky/Platby/···) + drawer pro zbytek; hamburger vyloučen kvůli kolizi s back šipkou |
 | 2026-04-23 | Sekce 10: detailní popis stránek Členové (přehled + detail) |
 | 2026-04-23 | Sekce 10 přepracována: záhlaví na 1 řádek, sloupce, GDPR pole, akcní menu, rok=all, nečlenové arch. poznámka |
+| 2026-04-23 | Sekce 2.4: obecné principy řazení (klik na záhlaví, ASC/DESC toggle, null na konci, sekundární klíč, URL) |

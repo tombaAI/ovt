@@ -14,7 +14,8 @@ import { AddMemberSheet } from "./add-member-sheet";
 import type { MemberWithFlags } from "./page";
 
 type FilterKey = "all" | "todo" | "unreviewed";
-type SortKey   = "lastName" | "firstName";
+type SortKey   = "lastName" | "firstName" | "nickname" | "cskNumber" | "variableSymbol";
+type SortDir   = "asc" | "desc";
 
 interface Props {
     members: MemberWithFlags[];
@@ -24,11 +25,23 @@ interface Props {
     // Initial values from server searchParams — no client re-render on change
     initialFilter: string;
     initialSort: string;
+    initialSortDir: string;
     initialQ: string;
     initialStav: string;
     initialSleva: string;
     initialBrigada: boolean;
     initialCastRoku: boolean;
+}
+
+// Null-safe comparison: nulls always sort last, direction only affects non-null values
+function cmpField(a: string | number | null, b: string | number | null, dir: SortDir): number {
+    if (a === null && b === null) return 0;
+    if (a === null) return 1;
+    if (b === null) return -1;
+    const cmp = typeof a === "string" && typeof b === "string"
+        ? a.localeCompare(b, "cs")
+        : (a as number) - (b as number);
+    return dir === "asc" ? cmp : -cmp;
 }
 
 function isActive(m: MemberWithFlags, year: number): boolean {
@@ -86,7 +99,7 @@ function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
 
 export function MembersClient({
     members, selectedYear,
-    initialFilter, initialSort, initialQ, initialStav, initialSleva, initialBrigada, initialCastRoku,
+    initialFilter, initialSort, initialSortDir, initialQ, initialStav, initialSleva, initialBrigada, initialCastRoku,
 }: Props) {
     const router = useRouter();
     const pathname = usePathname();
@@ -94,6 +107,7 @@ export function MembersClient({
     // ── Local state — no server re-renders on change ──
     const [filter, setFilter]     = useState<FilterKey>(initialFilter as FilterKey);
     const [sort, setSort]         = useState<SortKey>(initialSort as SortKey);
+    const [sortDir, setSortDir]   = useState<SortDir>(initialSortDir as SortDir);
     const [searchDraft, setSearchDraft] = useState(initialQ);  // input value (immediate)
     const [q, setQ]               = useState(initialQ);        // debounced value (used for filtering)
     const [stav, setStav]         = useState(initialStav);
@@ -128,9 +142,16 @@ export function MembersClient({
         updateUrl({ filter: f === "all" ? null : f });
     }
 
-    function setSortAndUrl(s: SortKey) {
-        setSort(s);
-        updateUrl({ sort: s === "lastName" ? null : s });
+    function handleSort(key: SortKey) {
+        if (sort === key) {
+            const newDir: SortDir = sortDir === "asc" ? "desc" : "asc";
+            setSortDir(newDir);
+            updateUrl({ sort: key === "lastName" ? null : key, dir: newDir === "asc" ? null : "desc" });
+        } else {
+            setSort(key);
+            setSortDir("asc");
+            updateUrl({ sort: key === "lastName" ? null : key, dir: null });
+        }
     }
 
     function setStavAndUrl(s: string) {
@@ -158,7 +179,7 @@ export function MembersClient({
     }
 
     function resetAll() {
-        setFilter("all"); setSort("lastName"); setSearchDraft(""); setQ("");
+        setFilter("all"); setSort("lastName"); setSortDir("asc"); setSearchDraft(""); setQ("");
         setStav("active"); setSlevaSet(new Set()); setBrigada(false); setCastRoku(false);
         window.history.replaceState({}, "", pathname);
     }
@@ -226,12 +247,24 @@ export function MembersClient({
             );
         }
 
-        return [...list].sort((a, b) =>
-            sort === "firstName"
-                ? a.firstName.localeCompare(b.firstName, "cs") || a.lastName.localeCompare(b.lastName, "cs")
-                : a.lastName.localeCompare(b.lastName, "cs")   || a.firstName.localeCompare(b.firstName, "cs")
-        );
-    }, [members, filter, sort, q, stav, slevaSet, brigada, castRoku, selectedYear]);
+        const sec = (a: MemberWithFlags, b: MemberWithFlags) =>
+            a.lastName.localeCompare(b.lastName, "cs") || a.firstName.localeCompare(b.firstName, "cs");
+
+        return [...list].sort((a, b) => {
+            switch (sort) {
+                case "firstName":
+                    return cmpField(a.firstName, b.firstName, sortDir) || sec(a, b);
+                case "nickname":
+                    return cmpField(a.nickname, b.nickname, sortDir) || sec(a, b);
+                case "cskNumber":
+                    return cmpField(a.cskNumber, b.cskNumber, sortDir) || sec(a, b);
+                case "variableSymbol":
+                    return cmpField(a.variableSymbol, b.variableSymbol, sortDir) || sec(a, b);
+                default: // lastName
+                    return cmpField(a.lastName, b.lastName, sortDir) || a.firstName.localeCompare(b.firstName, "cs");
+            }
+        });
+    }, [members, filter, sort, sortDir, q, stav, slevaSet, brigada, castRoku, selectedYear]);
 
     function openDetail(m: MemberWithFlags) {
         const currentUrl = window.location.pathname + window.location.search;
@@ -381,26 +414,27 @@ export function MembersClient({
             <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
-                        <TableRow className="bg-gray-50">
-                            <TableHead
-                                className="cursor-pointer select-none hover:bg-gray-100 transition-colors"
-                                onClick={() => setSortAndUrl(sort === "lastName" ? "firstName" : "lastName")}
-                            >
-                                <span className="flex items-center gap-1">
-                                    Jméno
-                                    <span className="text-gray-400 text-xs font-normal">
-                                        {sort === "lastName" ? "↑ příjm." : "↑ jm."}
-                                    </span>
-                                </span>
+                        <TableRow className="bg-gray-50 text-sm">
+                            <TableHead className="py-2">
+                                <div className="flex items-baseline gap-1.5 flex-wrap">
+                                    <SortBtn field="firstName" label="Jméno"       sort={sort} dir={sortDir} onSort={handleSort} />
+                                    <SortBtn field="lastName"  label="Příjmení"    sort={sort} dir={sortDir} onSort={handleSort} />
+                                    <SortBtn field="nickname"  label="(přezdívka)" sort={sort} dir={sortDir} onSort={handleSort} dim />
+                                </div>
                             </TableHead>
-                            <TableHead className="w-24">ČSK</TableHead>
-                            <TableHead>Info</TableHead>
+                            <TableHead className="w-20 py-2">
+                                <SortBtn field="cskNumber" label="ČSK" sort={sort} dir={sortDir} onSort={handleSort} />
+                            </TableHead>
+                            <TableHead className="w-24 py-2">
+                                <SortBtn field="variableSymbol" label="VS" sort={sort} dir={sortDir} onSort={handleSort} />
+                            </TableHead>
+                            <TableHead className="py-2">Info</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={3} className="text-center text-gray-400 py-10">Žádní členové</TableCell>
+                                <TableCell colSpan={4} className="text-center text-gray-400 py-10">Žádní členové</TableCell>
                             </TableRow>
                         )}
                         {filtered.map(m => (
@@ -409,8 +443,11 @@ export function MembersClient({
                                     {m.lastName} {m.firstName}
                                     {m.nickname && <span className="text-gray-400 font-normal ml-1">({m.nickname})</span>}
                                 </TableCell>
-                                <TableCell className="text-sm text-gray-500 font-mono">
+                                <TableCell className="text-sm text-gray-500 font-mono w-20">
                                     {m.cskNumber ?? <span className="text-gray-300">—</span>}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-500 font-mono w-24">
+                                    {m.variableSymbol ?? <span className="text-gray-300">—</span>}
                                 </TableCell>
                                 <TableCell>
                                     <MemberInfoBadges m={m} />
@@ -435,5 +472,25 @@ function PillCount({ n, active }: { n: number; active: boolean }) {
         <span className={`text-xs rounded-full px-1.5 ${active ? "bg-white/25" : "bg-gray-100 text-gray-500"}`}>
             {n}
         </span>
+    );
+}
+
+function SortBtn({ field, label, sort, dir, onSort, dim }: {
+    field: SortKey; label: string;
+    sort: SortKey; dir: SortDir;
+    onSort: (f: SortKey) => void;
+    dim?: boolean;
+}) {
+    const active = sort === field;
+    return (
+        <button
+            onClick={() => onSort(field)}
+            className={`transition-colors hover:text-gray-900 ${active ? "text-gray-900 font-medium" : dim ? "text-gray-400" : "text-gray-500"}`}
+        >
+            {label}
+            {active && (
+                <span className="ml-0.5 text-[#327600] font-normal">{dir === "asc" ? "↑" : "↓"}</span>
+            )}
+        </button>
     );
 }

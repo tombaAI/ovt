@@ -204,6 +204,7 @@ export default async function MembersPage({
             currentYearDiscounts={currentYearDiscounts}
             initialFilter={(params.filter as string) ?? "all"}
             initialSort={(params.sort as string) ?? "lastName"}
+            initialSortDir={(params.dir as string) ?? "asc"}
             initialQ={(params.q as string) ?? ""}
             initialStav={(params.stav as string) ?? "active"}
             initialSleva={(params.sleva as string) ?? ""}
