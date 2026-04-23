@@ -14,7 +14,7 @@ import { AddMemberSheet } from "./add-member-sheet";
 import type { MemberWithFlags } from "./page";
 
 type FilterKey = "all" | "todo" | "unreviewed";
-type SortKey   = "lastName" | "firstName" | "nickname" | "cskNumber" | "variableSymbol";
+type SortKey   = "lastName" | "firstName" | "nickname" | "cskNumber" | "variableSymbol" | "email" | "phone";
 type SortDir   = "asc" | "desc";
 
 interface Props {
@@ -270,6 +270,10 @@ export function MembersClient({
                     return cmpField(a.cskNumber, b.cskNumber, sortDir) || sec(a, b);
                 case "variableSymbol":
                     return cmpField(a.variableSymbol, b.variableSymbol, sortDir) || sec(a, b);
+                case "email":
+                    return cmpField(a.email, b.email, sortDir) || sec(a, b);
+                case "phone":
+                    return cmpField(a.phone, b.phone, sortDir) || sec(a, b);
                 default: // lastName
                     return cmpField(a.lastName, b.lastName, sortDir) || a.firstName.localeCompare(b.firstName, "cs");
             }
@@ -442,13 +446,19 @@ export function MembersClient({
                             <TableHead className="w-24 py-2">
                                 <SortBtn field="variableSymbol" label="VS" sort={sort} dir={sortDir} onSort={handleSort} />
                             </TableHead>
+                            <TableHead className="py-2">
+                                <SortBtn field="email" label="E-mail" sort={sort} dir={sortDir} onSort={handleSort} />
+                            </TableHead>
+                            <TableHead className="py-2">
+                                <SortBtn field="phone" label="Telefon" sort={sort} dir={sortDir} onSort={handleSort} />
+                            </TableHead>
                             <TableHead className="py-2">Info</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={4} className="text-center text-gray-400 py-10">Žádní členové</TableCell>
+                                <TableCell colSpan={6} className="text-center text-gray-400 py-10">Žádní členové</TableCell>
                             </TableRow>
                         )}
                         {filtered.map(m => (
@@ -462,6 +472,12 @@ export function MembersClient({
                                 </TableCell>
                                 <TableCell className="text-sm text-gray-500 font-mono w-24">
                                     {m.variableSymbol ?? <span className="text-gray-300">—</span>}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-600 max-w-[180px] truncate">
+                                    {m.email ?? <span className="text-gray-300">—</span>}
+                                </TableCell>
+                                <TableCell className="text-sm text-gray-600 whitespace-nowrap">
+                                    {m.phone ?? <span className="text-gray-300">—</span>}
                                 </TableCell>
                                 <TableCell>
                                     <MemberInfoBadges m={m} />
