@@ -1,0 +1,715 @@
+"use client";
+
+import { useEffect, useState, useTransition, useCallback } from "react";
+import { useRouter } from "next/navigation";
+import { Eye, EyeOff, ChevronDown, MoreHorizontal } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Label } from "@/components/ui/label";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
+import { Badge } from "@/components/ui/badge";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { InlineField } from "../inline-field";
+import { BackButton } from "@/components/back-button";
+import { pushNavStack } from "@/lib/nav-stack";
+import {
+    updateMemberField, setIndividualDiscount, setContributionFlags,
+    terminateMembership, getMemberHistory, getMemberAuditLog,
+    setMemberTodo, setMemberReviewed,
+    type AuditEntry, type MemberYearRecord,
+} from "@/lib/actions/members";
+import { getMemberTjDiffs, updateMemberFieldFromTj } from "@/lib/actions/sync";
+import { FIELD_LABELS } from "@/lib/member-fields";
+import type { MemberWithFlags } from "../page";
+
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
+function fmtDateShort(iso: string | null): string {
+    if (!iso) return "—";
+    const [y, m, d] = iso.split("-");
+    return `${Number(d)}. ${Number(m)}. ${y}`;
+}
+
+function todayIso() {
+    return new Date().toISOString().slice(0, 10);
+}
+
+function fmt(n: number | null): string {
+    if (n === null) return "—";
+    return n.toLocaleString("cs-CZ") + " Kč";
+}
+
+// ── Membership status label ───────────────────────────────────────────────────
+
+function membershipStatusLabel(member: MemberWithFlags, year: number): string {
+    if (member.memberTo) {
+        const d = member.memberTo as string;
+        if (d.startsWith(`${year}`)) return `do ${fmtDateShort(d)}`;
+        if (d < `${year}-01-01`) return "ukončeno";
+    }
+    if (member.fromDate) return `od ${fmtDateShort(member.fromDate)}`;
+    return "aktivní";
+}
+
+// ── Audit history ─────────────────────────────────────────────────────────────
+
+function AuditHistory({ memberId }: { memberId: number }) {
+    const [log, setLog]         = useState<AuditEntry[]>([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        getMemberAuditLog(memberId).then(e => { setLog(e); setLoading(false); });
+    }, [memberId]);
+
+    if (loading) return <p className="text-sm text-gray-400 py-4">Načítám historii…</p>;
+    if (log.length === 0) return <p className="text-sm text-gray-400 py-4">Žádné záznamy</p>;
+
+    const isTjAction = (action: string) => action === "import_from_tj" || action === "update_from_tj";
+
+    return (
+        <div className="space-y-2 max-h-96 overflow-y-auto">
+            {log.map(entry => (
+                <div key={entry.id} className="text-xs border rounded-lg p-2.5 bg-gray-50 space-y-1.5">
+                    <div className="flex items-center justify-between gap-2 text-gray-500 flex-wrap">
+                        <div className="flex items-center gap-1.5">
+                            <span className="font-medium text-gray-700">{entry.changedBy}</span>
+                            {isTjAction(entry.action) && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-blue-50 text-blue-600 border border-blue-200">
+                                    import TJ
+                                </span>
+                            )}
+                        </div>
+                        <span>{new Intl.DateTimeFormat("cs-CZ", {
+                            day: "2-digit", month: "2-digit", year: "numeric",
+                            hour: "2-digit", minute: "2-digit",
+                        }).format(new Date(entry.changedAt))}</span>
+                    </div>
+                    {Object.entries(entry.changes)
+                        .filter(([field]) => field !== "source")
+                        .map(([field, diff]) => (
+                            <div key={field} className="flex gap-1 flex-wrap">
+                                <span className="text-gray-500">{FIELD_LABELS[field] ?? field}:</span>
+                                {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
+                                {diff.old !== null && diff.new !== null && <span className="text-gray-400">→</span>}
+                                {diff.new !== null
+                                    ? <span className="text-green-600">{diff.new}</span>
+                                    : <span className="text-gray-400">(odstraněno)</span>
+                                }
+                            </div>
+                        ))}
+                </div>
+            ))}
+        </div>
+    );
+}
+
+// ── Contribution history ──────────────────────────────────────────────────────
+
+function ContributionHistory({ memberId, onNavigate }: { memberId: number; onNavigate: (url: string) => void }) {
+    const [rows, setRows] = useState<MemberYearRecord[] | null>(null);
+
+    useEffect(() => {
+        getMemberHistory(memberId).then(setRows);
+    }, [memberId]);
+
+    if (!rows) return <p className="text-sm text-gray-400 py-2">Načítám…</p>;
+    if (rows.length === 0) return <p className="text-sm text-gray-400 py-2">Žádné záznamy</p>;
+
+    return (
+        <div className="overflow-x-auto">
+            <table className="w-full text-sm min-w-[320px]">
+                <thead>
+                    <tr className="border-b text-xs font-semibold text-gray-500 uppercase tracking-wide">
+                        <th className="text-left pb-2 pr-3">Rok</th>
+                        <th className="text-right pb-2 pr-3">Předpis</th>
+                        <th className="text-right pb-2 pr-3">Zaplaceno</th>
+                        <th className="text-right pb-2">Stav</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map(r => {
+                        const balance = r.hasContrib && r.amountTotal !== null
+                            ? r.paidTotal - r.amountTotal
+                            : null;
+                        return (
+                            <tr key={r.year}
+                                className="border-b last:border-0 hover:bg-gray-50 cursor-pointer"
+                                onClick={() => onNavigate(`/dashboard/contributions?member=${memberId}&year=${r.year}`)}>
+                                <td className="py-2 pr-3 font-semibold text-gray-800">{r.year}</td>
+                                {r.hasContrib ? (
+                                    <>
+                                        <td className="py-2 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.amountTotal)}</td>
+                                        <td className="py-2 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.paidTotal)}</td>
+                                        <td className="py-2 text-right text-xs font-medium">
+                                            {balance === 0 && <span className="text-green-600">OK</span>}
+                                            {balance !== null && balance > 0 && <span className="text-blue-600">+{balance.toLocaleString("cs-CZ")} Kč</span>}
+                                            {balance !== null && balance < 0 && <span className="text-red-600">{balance.toLocaleString("cs-CZ")} Kč</span>}
+                                            {balance === null && <span className="text-gray-400">—</span>}
+                                        </td>
+                                    </>
+                                ) : (
+                                    <td colSpan={3} className="py-2 text-xs font-medium text-amber-600">⚠ Chybí předpis</td>
+                                )}
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
+        </div>
+    );
+}
+
+// ── Individual discount dialog ────────────────────────────────────────────────
+
+function DiscountDialog({
+    open, onOpenChange, member, periodId, selectedYear, currentDiscount, onDone,
+}: {
+    open: boolean; onOpenChange: (v: boolean) => void;
+    member: MemberWithFlags; periodId: number | null;
+    selectedYear: number; currentDiscount: number | null; onDone: () => void;
+}) {
+    const [amount, setAmount]   = useState(currentDiscount ? Math.abs(currentDiscount) : 0);
+    const [note, setNote]       = useState("");
+    const [validUntil, setValid] = useState<number>(selectedYear);
+    const [remove, setRemove]   = useState(false);
+    const [error, setError]     = useState<string | null>(null);
+    const [pending, startT]     = useTransition();
+
+    useEffect(() => {
+        if (open) {
+            setAmount(currentDiscount ? Math.abs(currentDiscount) : 0);
+            setNote(""); setValid(selectedYear); setRemove(false); setError(null);
+        }
+    }, [open, currentDiscount, selectedYear]);
+
+    function handleConfirm() {
+        if (!periodId) { setError("Příspěvkový záznam nenalezen"); return; }
+        if (!remove && !note.trim()) { setError("Poznámka je povinná"); return; }
+        if (!remove && amount <= 0) { setError("Částka musí být větší než 0"); return; }
+        startT(async () => {
+            const result = await setIndividualDiscount(member.id, periodId, remove ? null : amount, note, remove ? null : validUntil);
+            if ("error" in result) { setError(result.error); return; }
+            onDone(); onOpenChange(false);
+        });
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>Individuální sleva — {member.firstName} {member.lastName}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                    {currentDiscount !== null && (
+                        <div className="flex items-center gap-2">
+                            <Checkbox id="rm-disc" checked={remove} onCheckedChange={v => setRemove(Boolean(v))} />
+                            <Label htmlFor="rm-disc" className="cursor-pointer text-red-600">Zrušit slevu</Label>
+                        </div>
+                    )}
+                    {!remove && (
+                        <>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="disc-amt">Částka slevy (Kč) *</Label>
+                                <Input id="disc-amt" type="number" min={1} value={amount || ""} placeholder="0"
+                                    onChange={e => setAmount(Number(e.target.value))} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="disc-note">Důvod *</Label>
+                                <Textarea id="disc-note" rows={2} placeholder="Proč tato sleva?"
+                                    value={note} onChange={e => { setNote(e.target.value); setError(null); }} />
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label htmlFor="disc-valid">Platí do roku</Label>
+                                <select id="disc-valid" value={validUntil}
+                                    onChange={e => setValid(Number(e.target.value))}
+                                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm">
+                                    {[selectedYear, selectedYear + 1, selectedYear + 2].map(y =>
+                                        <option key={y} value={y}>{y}</option>
+                                    )}
+                                    <option value={9999}>Neurčito</option>
+                                </select>
+                            </div>
+                        </>
+                    )}
+                    {error && <p className="text-xs text-red-600">{error}</p>}
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Zrušit</Button>
+                    <Button onClick={handleConfirm} disabled={pending}
+                        className={remove ? "bg-red-600 hover:bg-red-700" : "bg-[#327600] hover:bg-[#2a6400]"}>
+                        {pending ? "Ukládám…" : remove ? "Zrušit slevu" : "Uložit"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Terminate membership dialog ───────────────────────────────────────────────
+
+function TerminateDialog({
+    open, onOpenChange, member, onDone,
+}: {
+    open: boolean; onOpenChange: (v: boolean) => void;
+    member: MemberWithFlags; onDone: () => void;
+}) {
+    const [date, setDate]   = useState(todayIso);
+    const [note, setNote]   = useState("");
+    const [error, setError] = useState<string | null>(null);
+    const [pending, startT] = useTransition();
+
+    useEffect(() => {
+        if (open) { setDate(todayIso()); setNote(""); setError(null); }
+    }, [open]);
+
+    function handleConfirm() {
+        if (!note.trim()) { setError("Komentář je povinný"); return; }
+        startT(async () => {
+            const result = await terminateMembership(member.id, date, note);
+            if ("error" in result) { setError(result.error); return; }
+            onDone(); onOpenChange(false);
+        });
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Ukončení členství — {member.firstName} {member.lastName}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 py-2">
+                    <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2.5 text-xs text-amber-800 space-y-1">
+                        <p className="font-semibold">Upozornění</p>
+                        <p>Toto ukončuje členství pouze v této aplikaci. Neřeší odhlášení v TJ Bohemians ani v ČSK.</p>
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="term-date">Datum ukončení *</Label>
+                        <Input id="term-date" type="date" value={date} onChange={e => setDate(e.target.value)} />
+                    </div>
+                    <div className="space-y-1.5">
+                        <Label htmlFor="term-note">Komentář *</Label>
+                        <Textarea id="term-note" rows={3} placeholder="Důvod ukončení…"
+                            value={note} onChange={e => { setNote(e.target.value); setError(null); }} />
+                    </div>
+                    {error && <p className="text-xs text-red-600">{error}</p>}
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="outline" onClick={() => onOpenChange(false)}>Zrušit</Button>
+                    <Button onClick={handleConfirm} disabled={pending} className="bg-red-600 hover:bg-red-700">
+                        {pending ? "Ukládám…" : "Ukončit členství"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Audit log dialog ──────────────────────────────────────────────────────────
+
+function AuditLogDialog({ open, onOpenChange, member }: {
+    open: boolean; onOpenChange: (v: boolean) => void; member: MemberWithFlags;
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-2xl max-h-[80vh] flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>Audit log — {member.firstName} {member.lastName}</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-y-auto">
+                    <AuditHistory memberId={member.id} />
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── GDPR section ──────────────────────────────────────────────────────────────
+
+function GdprSection({ member }: { member: MemberWithFlags }) {
+    const [visible, setVisible] = useState(false);
+    const toggle = useCallback(() => setVisible(v => !v), []);
+
+    return (
+        <div className="border-b py-3">
+            <button onClick={toggle} className="flex items-center gap-2 w-full text-left" type="button">
+                <span className="text-sm font-medium text-gray-500 w-28 shrink-0">GDPR</span>
+                <span className="text-sm text-gray-400 italic">
+                    {visible ? "skrýt" : "zobrazit osobní údaje"}
+                </span>
+                <span className="ml-auto text-gray-400 hover:text-gray-700 transition-colors">
+                    {visible ? <EyeOff size={15} /> : <Eye size={15} />}
+                </span>
+            </button>
+            {visible && (
+                <div className="mt-2 pl-0 sm:pl-32 space-y-1.5 text-sm">
+                    <div className="flex gap-3">
+                        <span className="text-gray-500 w-32 shrink-0">Datum narození</span>
+                        <span className="font-medium">{fmtDateShort(member.birthDate)}</span>
+                    </div>
+                    <div className="flex gap-3">
+                        <span className="text-gray-500 w-32 shrink-0">Rodné číslo</span>
+                        <span className="font-medium font-mono">{member.birthNumber ?? "—"}</span>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+// ── Main component ────────────────────────────────────────────────────────────
+
+interface Props {
+    member: MemberWithFlags;
+    selectedYear: number;
+    periodId: number | null;
+    currentYearDiscounts: { committee: number; tom: number } | null;
+}
+
+export function MemberDetailClient({ member: initialMember, selectedYear, periodId, currentYearDiscounts }: Props) {
+    const router = useRouter();
+    const member = initialMember;
+    const [activeField, setActiveField]               = useState<string | null>(null);
+    const [tjDiffs, setTjDiffs]                       = useState<Record<string, string | null>>({});
+    const [discountOpen, setDiscountOpen]             = useState(false);
+    const [terminateOpen, setTerminateOpen]           = useState(false);
+    const [auditOpen, setAuditOpen]                   = useState(false);
+    const [showContrib, setShowContrib]               = useState(false);
+    const [committeePending, startCommitteeT]         = useTransition();
+    const [tomPending, startTomT]                     = useTransition();
+    const [reviewedPending, startReviewedT]           = useTransition();
+    const [todoSaving, setTodoSaving]                 = useState(false);
+    const [toggleError, setToggleError]               = useState<string | null>(null);
+    const [optCommittee, setOptCommittee]             = useState<boolean | null>(null);
+    const [optTom, setOptTom]                         = useState<boolean | null>(null);
+
+    useEffect(() => {
+        setOptCommittee(null); setOptTom(null);
+    }, [member.id]);
+
+    useEffect(() => {
+        if (member.hasTjDiffs) {
+            getMemberTjDiffs(member.id).then(diffs => {
+                setTjDiffs(Object.fromEntries(diffs.map(d => [d.field, d.tjValue])));
+            });
+        }
+    }, [member.id, member.hasTjDiffs]);
+
+    function refresh() { router.refresh(); }
+
+    function fieldSaver(field: Parameters<typeof updateMemberField>[1]) {
+        return (value: string) => updateMemberField(member.id, field, value).then(r => {
+            if ("success" in r) refresh();
+            return r;
+        });
+    }
+
+    function tjAcceptor(field: Parameters<typeof updateMemberFieldFromTj>[1]) {
+        const tjVal = tjDiffs[field];
+        if (tjVal === undefined) return undefined;
+        return () => updateMemberFieldFromTj(member.id, field, tjVal).then(r => {
+            if ("success" in r) {
+                setTjDiffs(prev => { const next = { ...prev }; delete next[field]; return next; });
+                refresh();
+            }
+            return r;
+        });
+    }
+
+    async function toggleCommittee(checked: boolean) {
+        if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
+        setToggleError(null);
+        const r = await setContributionFlags(member.id, periodId, checked, optTom ?? member.isTom);
+        if ("success" in r) refresh(); else { setOptCommittee(null); setToggleError(r.error); }
+    }
+
+    async function toggleTom(checked: boolean) {
+        if (!periodId) { setToggleError("Chybí příspěvkové období pro tento rok"); return; }
+        setToggleError(null);
+        const r = await setContributionFlags(member.id, periodId, optCommittee ?? member.isCommittee, checked);
+        if ("success" in r) refresh(); else { setOptTom(null); setToggleError(r.error); }
+    }
+
+    async function saveTodo(note: string | null) {
+        setTodoSaving(true);
+        const r = await setMemberTodo(member.id, note);
+        if ("success" in r) refresh();
+        setTodoSaving(false);
+    }
+
+    function navigateTo(url: string, label?: string) {
+        pushNavStack({ url: `/dashboard/members/${member.id}`, label: label ?? `Člen: ${member.firstName} ${member.lastName}` });
+        router.push(url);
+    }
+
+    const isTerminated = Boolean(member.memberTo);
+    const memberLabel = `Člen: ${member.firstName} ${member.lastName}`;
+
+    return (
+        <>
+            <div className="max-w-2xl mx-auto space-y-0">
+                {/* ── Page header ── */}
+                <div className="flex items-center gap-3 mb-6">
+                    <div className="shrink-0">
+                        <BackButton />
+                    </div>
+
+                    <div className="flex-1 min-w-0">
+                        <h1 className="text-xl font-semibold text-gray-900 leading-tight">
+                            {member.firstName} {member.lastName}
+                            {member.nickname && (
+                                <span className="text-gray-400 font-normal ml-1.5 text-base">({member.nickname})</span>
+                            )}
+                        </h1>
+                        {isTerminated && (
+                            <Badge className="mt-1 bg-red-100 text-red-700 border-0 text-xs">Ukončen</Badge>
+                        )}
+                    </div>
+
+                    {/* Action buttons — max 3 visual elements */}
+                    <div className="flex items-center gap-2 shrink-0">
+                        <Button size="sm" variant="outline" className="h-8 text-xs"
+                            onClick={() => navigateTo(`/dashboard/contributions?member=${member.id}`, memberLabel)}>
+                            Příspěvky
+                        </Button>
+                        <Button size="sm" variant="outline" className="h-8 text-xs"
+                            onClick={() => navigateTo(`/dashboard/boats?member=${member.id}`, memberLabel)}>
+                            Lodě
+                        </Button>
+                        <Popover>
+                            <PopoverTrigger asChild>
+                                <Button size="sm" variant="outline" className="h-8 w-8 p-0">
+                                    <MoreHorizontal size={15} />
+                                </Button>
+                            </PopoverTrigger>
+                            <PopoverContent align="end" className="w-44 p-1.5 space-y-0.5">
+                                {(["Brigády", "Platby"] as const).map(label => (
+                                    <button key={label}
+                                        onClick={() => navigateTo(
+                                            `/dashboard/${label === "Brigády" ? "brigades" : "payments"}?member=${member.id}`,
+                                            memberLabel
+                                        )}
+                                        className="w-full text-left px-2.5 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors">
+                                        {label}
+                                    </button>
+                                ))}
+                                <Separator className="my-1" />
+                                <button onClick={() => setAuditOpen(true)}
+                                    className="w-full text-left px-2.5 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors">
+                                    Audit log
+                                </button>
+                                {!isTerminated && (
+                                    <button onClick={() => setTerminateOpen(true)}
+                                        className="w-full text-left px-2.5 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 transition-colors">
+                                        Ukončit členství
+                                    </button>
+                                )}
+                            </PopoverContent>
+                        </Popover>
+                    </div>
+                </div>
+
+                {/* Ukončení info */}
+                {isTerminated && (
+                    <div className="rounded-xl border border-red-200 bg-red-50/40 px-4 py-3 mb-4 text-sm space-y-1">
+                        <p className="font-semibold text-red-700">Členství ukončeno</p>
+                        <p className="text-gray-600">Datum: <span className="font-medium">{fmtDateShort(member.memberTo)}</span></p>
+                        {member.memberToNote && <p className="text-gray-500 text-xs">{member.memberToNote}</p>}
+                    </div>
+                )}
+
+                {/* ── Fields ── */}
+                <div className="rounded-xl border px-4 mb-4">
+                    <InlineField label="Příjmení"   value={member.lastName}   fieldId="lastName"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")}  tjValue={tjDiffs["lastName"]}  onTjAccept={tjAcceptor("lastName")} />
+                    <InlineField label="Jméno"      value={member.firstName}  fieldId="firstName"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
+                    <InlineField label="Přezdívka"  value={member.nickname}   fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")}  tjValue={tjDiffs["nickname"]}  onTjAccept={tjAcceptor("nickname")} placeholder="(žádná)" />
+                    <InlineField label="E-mail"     value={member.email}      fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")}     tjValue={tjDiffs["email"]}     onTjAccept={tjAcceptor("email")} type="email" />
+                    <InlineField label="Telefon"    value={member.phone}      fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")}     tjValue={tjDiffs["phone"]}     onTjAccept={tjAcceptor("phone")} type="tel" />
+                    <InlineField label="Adresa"     value={member.address}    fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")}   tjValue={tjDiffs["address"]}   onTjAccept={tjAcceptor("address")} placeholder="(nezadáno)" />
+                    <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} type="number" />
+                    <InlineField label="Číslo ČSK" value={member.cskNumber}  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} tjValue={tjDiffs["cskNumber"]} onTjAccept={tjAcceptor("cskNumber")} />
+                    <InlineField label="Login"     value={member.userLogin}  fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} placeholder="(nezadáno)" />
+                    <InlineField label="Člen od"   value={member.memberFrom} fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} type="date" />
+                    <InlineField label="Pohlaví"   value={member.gender}     fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")}    tjValue={tjDiffs["gender"]}    onTjAccept={tjAcceptor("gender")} placeholder="(nezadáno)" />
+                    <InlineField label="Poznámka"  value={member.note}       fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} placeholder="(žádná)" />
+                    <GdprSection member={member} />
+                </div>
+
+                {/* ── Úkol ── */}
+                <div className={[
+                    "rounded-xl border px-4 py-3 mb-4",
+                    member.todoNote ? "border-orange-200 bg-orange-50/40" : "",
+                ].join(" ")}>
+                    <p className="text-sm font-semibold text-gray-700 mb-2">Úkol k řešení</p>
+                    <TodoEditor
+                        currentNote={member.todoNote}
+                        saving={todoSaving}
+                        onSave={saveTodo}
+                    />
+                </div>
+
+                {/* ── Členství [rok] ── */}
+                <div className="rounded-xl border px-4 py-3 mb-4 space-y-3">
+                    <p className="text-sm font-semibold text-gray-700">Členství {selectedYear}</p>
+
+                    <div className="text-sm">
+                        <span className="text-gray-500 mr-2">Stav:</span>
+                        <span className="font-medium">{membershipStatusLabel(member, selectedYear)}</span>
+                    </div>
+
+                    {member.hasContrib && (
+                        <>
+                            <div className="flex items-center gap-2">
+                                <Checkbox id="chk-committee"
+                                    checked={optCommittee ?? member.isCommittee}
+                                    disabled={committeePending}
+                                    onCheckedChange={v => {
+                                        setOptCommittee(Boolean(v));
+                                        startCommitteeT(() => toggleCommittee(Boolean(v)));
+                                    }} />
+                                <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
+                                    Člen výboru
+                                    {currentYearDiscounts && (
+                                        <span className="text-gray-400 font-normal ml-1">
+                                            (−{currentYearDiscounts.committee} Kč)
+                                        </span>
+                                    )}
+                                </Label>
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                                <Checkbox id="chk-tom"
+                                    checked={optTom ?? member.isTom}
+                                    disabled={tomPending}
+                                    onCheckedChange={v => {
+                                        setOptTom(Boolean(v));
+                                        startTomT(() => toggleTom(Boolean(v)));
+                                    }} />
+                                <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
+                                    Vedoucí TOM
+                                    {currentYearDiscounts && (
+                                        <span className="text-gray-400 font-normal ml-1">
+                                            (−{currentYearDiscounts.tom} Kč)
+                                        </span>
+                                    )}
+                                </Label>
+                            </div>
+
+                            {toggleError && <p className="text-xs text-red-600">{toggleError}</p>}
+
+                            <Separator />
+
+                            <div className="flex items-center justify-between">
+                                <div>
+                                    <p className="text-sm">Individuální sleva</p>
+                                    {member.discountIndividual !== null
+                                        ? <p className="text-sm font-semibold text-purple-700">−{Math.abs(member.discountIndividual)} Kč</p>
+                                        : <p className="text-sm text-gray-400">Žádná</p>
+                                    }
+                                </div>
+                                <button onClick={() => setDiscountOpen(true)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2">
+                                    {member.discountIndividual !== null ? "Upravit" : "Nastavit"}
+                                </button>
+                            </div>
+                        </>
+                    )}
+
+                    {!member.hasContrib && (
+                        <p className="text-xs text-amber-600">⚠ Pro tento rok chybí příspěvkový předpis</p>
+                    )}
+
+                    <Separator />
+
+                    <div className="flex items-center gap-2">
+                        <Checkbox id="chk-reviewed"
+                            checked={member.membershipReviewed}
+                            disabled={reviewedPending}
+                            onCheckedChange={v => {
+                                startReviewedT(async () => {
+                                    const r = await setMemberReviewed(member.id, Boolean(v));
+                                    if ("success" in r) refresh();
+                                });
+                            }} />
+                        <Label htmlFor="chk-reviewed" className="cursor-pointer text-sm text-gray-600">
+                            Provedena revize
+                        </Label>
+                    </div>
+                </div>
+
+                {/* ── Příspěvky po rocích ── */}
+                <div className="mb-4">
+                    <button
+                        onClick={() => setShowContrib(v => !v)}
+                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left py-2">
+                        <ChevronDown size={14} className={`transition-transform ${showContrib ? "" : "-rotate-90"}`} />
+                        Příspěvky po rocích
+                    </button>
+                    {showContrib && (
+                        <div className="mt-2">
+                            <ContributionHistory memberId={member.id} onNavigate={url => navigateTo(url, memberLabel)} />
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* Dialogs */}
+            <DiscountDialog
+                open={discountOpen}
+                onOpenChange={setDiscountOpen}
+                member={member}
+                periodId={periodId}
+                selectedYear={selectedYear}
+                currentDiscount={member.discountIndividual}
+                onDone={refresh}
+            />
+            <TerminateDialog
+                open={terminateOpen}
+                onOpenChange={setTerminateOpen}
+                member={member}
+                onDone={refresh}
+            />
+            <AuditLogDialog
+                open={auditOpen}
+                onOpenChange={setAuditOpen}
+                member={member}
+            />
+        </>
+    );
+}
+
+// ── Todo editor ───────────────────────────────────────────────────────────────
+
+function TodoEditor({ currentNote, saving, onSave }: {
+    currentNote: string | null;
+    saving: boolean;
+    onSave: (note: string | null) => Promise<void>;
+}) {
+    const [text, setText] = useState(currentNote ?? "");
+    useEffect(() => { setText(currentNote ?? ""); }, [currentNote]);
+
+    return (
+        <div className="space-y-2">
+            <Textarea
+                value={text}
+                onChange={e => setText(e.target.value)}
+                placeholder="Popište co je potřeba udělat…"
+                rows={3}
+                className="text-sm resize-none"
+            />
+            <div className="flex gap-2">
+                <Button size="sm" onClick={() => onSave(text.trim() || null)} disabled={saving}
+                    className="bg-[#327600] hover:bg-[#2a6400]">
+                    {saving ? "Ukládám…" : "Uložit"}
+                </Button>
+                {currentNote && (
+                    <Button size="sm" variant="outline" onClick={() => onSave(null)} disabled={saving}>
+                        ✓ Vyřešeno
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}

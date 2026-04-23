@@ -1,6 +1,9 @@
 Obecně:
 - širší ten detail...
 
+Dashboard
+- lepší skeleton
+
 Členové
 
 Příspěvky
@@ -23,5 +26,8 @@ Brigády
 Lodě
 - zda jsou zaplacené
 - reálně které jsou v krakorcích
+- audit historie hodnot
+
+tabulka je moc široká - zkrať ji. Třeba zobraz méně z poznámky
 
 Import

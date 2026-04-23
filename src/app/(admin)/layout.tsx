@@ -3,6 +3,7 @@ import { auth } from "@/auth";
 import { Button } from "@/components/ui/button";
 import { NavLinks } from "./nav-links";
 import { YearSelector } from "./year-selector";
+import { MobileNav } from "./mobile-nav";
 import { getSelectedYear } from "@/lib/actions/year";
 import type { ReactNode } from "react";
 
@@ -32,14 +33,18 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 </form>
             </header>
 
-            {/* Nav tab bar */}
-            <nav className="bg-[#26272b] border-t border-white/10 flex px-2 overflow-x-auto">
+            {/* Desktop nav tab bar */}
+            <nav className="hidden md:flex bg-[#26272b] border-t border-white/10 px-2 overflow-x-auto">
                 <NavLinks />
             </nav>
 
-            <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto">
+            {/* Main content — extra bottom padding on mobile for the nav bar */}
+            <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto pb-20 md:pb-6">
                 {children}
             </main>
+
+            {/* Mobile bottom navigation */}
+            <MobileNav />
         </div>
     );
 }

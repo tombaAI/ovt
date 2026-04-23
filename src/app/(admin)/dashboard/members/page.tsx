@@ -1,3 +1,4 @@
+import { Suspense } from "react";
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, importMembersTjBohemians } from "@/db/schema";
 import { eq, asc, desc, and, sql } from "drizzle-orm";
@@ -193,11 +194,13 @@ export default async function MembersPage() {
     });
 
     return (
-        <MembersClient
-            members={rows}
-            selectedYear={actualYear}
-            periodId={period?.id ?? null}
-            currentYearDiscounts={currentYearDiscounts}
-        />
+        <Suspense>
+            <MembersClient
+                members={rows}
+                selectedYear={actualYear}
+                periodId={period?.id ?? null}
+                currentYearDiscounts={currentYearDiscounts}
+            />
+        </Suspense>
     );
 }

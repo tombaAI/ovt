@@ -9,7 +9,13 @@
       "Bash(npm run:*)",
       "Bash(npx tsc:*)",
       "mcp__Neon__run_sql",
-      "mcp__Neon__list_projects"
+      "mcp__Neon__list_projects",
+      "Bash(git commit -m ' *)",
+      "Bash(git *)",
+      "WebFetch(domain:www.bohemianstj.cz)"
+    ],
+    "additionalDirectories": [
+      "/Users/ext93895/work/ovt/src/app/(admin)/dashboard/members"
     ]
   }
 }

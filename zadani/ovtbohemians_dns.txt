@@ -1,0 +1,33 @@
+$TTL 3600
+; Zone: ovtbohemians.cz. (#577883)
+; File written on Tue Apr 21 08:41:38 2026
+$ORIGIN ovtbohemians.cz.
+
+@	IN SOA	ns.endora.cz. hostmaster@endora.cz. (
+	2026042006	  ; Serial
+	28800     	  ; Refresh
+	7200      	  ; Retry
+	604800    	  ; Expire
+	10800     	) ; Minimum
+                                   	21600	IN A    	185.102.21.36
+                                   	300	IN MX   	5 mx2.endora.cz.
+                                   	21600	IN NS   	ns.endora.cz.
+                                   	21600	IN NS   	ns.endoraland.com.
+                                   	3600	IN TXT  	"v=spf1 include:_spf.webglobe.com mx a ip4:88.86.120.195/32 a:mx.endora.cz. ?all"
+*                                  	21600	IN A    	185.102.21.36
+1442522998.ovtbohemians._domainkey 	21600	IN TXT  	"v=DKIM1;p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC9qJ4LTetXY+g5m/9Kx3HHG8brhZyftDX/ayKJWGmBOuBWWs8I7qK/HNttxTiYRQGyJ89iUGHiUpnFuQcN2KkuZUStN7LSjqXqZ3/qyz84SDckhKQMVL/zSwJ6trvJ6Z3Sqo6eNRGP451+mF6++987H238nFX8gyVmmt2m4u0E5QIDAQAB:3600::"
+41hv8-oh64e-2yoh5ryp._domainkey    	3600	IN TXT  	("v=DKIM1; t=y; k=rsa; p=MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEA7uOJZrt "
+                                                                "fsHQo/Yd7Jb+PJYTIUSQZMCG9AlLuwI+ZTd1CKtvsIZU3zjUytznPZcIcYw7v1Ha2Ro7J1AyGi "
+                                                                "dnJNOyL23QpDmdZzsnMXYlIObv3wmO35dW/1tkNwimMneeeo2vyb7oYOX1mz0MRLbqku1ZIGxr "
+                                                                "nGFwkK2gtqsUrvTuUtWAKCMeVQw1sCgWe zI37GnMJ4p9afsgsDcEncCmkmN5ykUTFBb/Rd5hB "
+                                                                "VarEdIIPn34XNTuEpyD8oaXPcHB7Mo8GW0RLTvyppo3acynZbare04hLGraByreIBbSwtA1od5 "
+                                                                "FDNMeJNSJVbHbdjK4cYcaSOt7cHg+Iy6orW2g+SwIDAQAB");
+hamerak                            	3600	IN A    	185.102.21.250
+hamerak                            	3600	IN AAAA 	2001:880:0:15:0:0:0:158
+localhost                          	21600	IN A    	185.102.21.36
+resend._domainkey                  	3600	IN TXT  	"p=MIGfMA0GCSqGSIb3DQEBAQUAA4GNADCBiQKBgQC6Hp56Qg8WbJl0IFyqjRywi6z6lmDjmTWMBlVtvVeJ1Q38T3pSd/pWcwIUeX5HOHtuASj2qYuUTuCbPrHbjHZy8okarg40pjWoXtKlSWyX1HbBGNqPmifJ3IwsqjDEh8Cqe8LCqLEDfedJwAOij4Kqdyt9XQ7xGba++hJZrR6YWwIDAQAB"
+send                               	3600	IN MX   	10 feedback-smtp.eu-west-1.amazonses.com.
+send                               	3600	IN TXT  	"v=spf1 include:amazonses.com ~all"
+_dmarc                             	3600	IN TXT  	"v=DMARC1; p=none;"
+_domainkey                         	3600	IN TXT  	"v=DKIM1; t=y; k=rsa"
+

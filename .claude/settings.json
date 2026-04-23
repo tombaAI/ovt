@@ -5,7 +5,8 @@
       "Bash(node -e ':*)",
       "WebFetch(domain:www.fio.cz)",
       "Bash(git commit -m ' *)",
-      "mcp__Neon__describe_table_schema"
+      "mcp__Neon__describe_table_schema",
+      "WebSearch"
     ],
     "additionalDirectories": [
       "/Users/ext93895/work/ovt-sync/.github/workflows",
