@@ -202,9 +202,13 @@ export function MembersClient({
                 list = members.filter(m => !isActive(m, selectedYear));
             } else {
                 list = members.filter(m => isActive(m, selectedYear));
-                if (slevaSet.has("committee"))  list = list.filter(m => m.isCommittee);
-                if (slevaSet.has("tom"))         list = list.filter(m => m.isTom);
-                if (slevaSet.has("individual"))  list = list.filter(m => m.discountIndividual !== null);
+                if (slevaSet.size > 0) {
+                    list = list.filter(m =>
+                        (slevaSet.has("committee") && m.isCommittee) ||
+                        (slevaSet.has("tom") && m.isTom) ||
+                        (slevaSet.has("individual") && m.discountIndividual !== null)
+                    );
+                }
                 if (brigada)   list = list.filter(m => !m.hasBrigade);
                 if (castRoku)  list = list.filter(m => m.fromDate !== null || m.toDate !== null);
             }
@@ -329,24 +333,6 @@ export function MembersClient({
                     </PopoverContent>
                 </Popover>
 
-                {/* Sort */}
-                <Popover>
-                    <PopoverTrigger asChild>
-                        <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 shrink-0">
-                            {sort === "lastName" ? "↑ Příjmení" : "↑ Jméno"}
-                            <ChevronDown size={12} />
-                        </button>
-                    </PopoverTrigger>
-                    <PopoverContent align="start" className="w-36 p-1.5 space-y-0.5">
-                        {(["lastName", "firstName"] as SortKey[]).map(s => (
-                            <button key={s} onClick={() => setSortAndUrl(s)}
-                                className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${sort === s ? "bg-[#327600]/10 text-[#327600] font-medium" : "hover:bg-gray-50"}`}>
-                                {s === "lastName" ? "Příjmení" : "Jméno"}
-                            </button>
-                        ))}
-                    </PopoverContent>
-                </Popover>
-
                 {hasActiveFilters && (
                     <button onClick={resetAll}
                         className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1.5 hover:bg-gray-50 rounded transition-colors">
@@ -396,7 +382,17 @@ export function MembersClient({
                 <Table>
                     <TableHeader>
                         <TableRow className="bg-gray-50">
-                            <TableHead>Jméno</TableHead>
+                            <TableHead
+                                className="cursor-pointer select-none hover:bg-gray-100 transition-colors"
+                                onClick={() => setSortAndUrl(sort === "lastName" ? "firstName" : "lastName")}
+                            >
+                                <span className="flex items-center gap-1">
+                                    Jméno
+                                    <span className="text-gray-400 text-xs font-normal">
+                                        {sort === "lastName" ? "↑ příjm." : "↑ jm."}
+                                    </span>
+                                </span>
+                            </TableHead>
                             <TableHead className="w-24">ČSK</TableHead>
                             <TableHead>Info</TableHead>
                         </TableRow>

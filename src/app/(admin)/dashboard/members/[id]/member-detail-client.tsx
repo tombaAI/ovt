@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useTransition, useCallback } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Eye, EyeOff, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -266,36 +266,37 @@ function AuditLogDialog({ open, onOpenChange, member }: {
     );
 }
 
-// ── GDPR section ──────────────────────────────────────────────────────────────
+// ── GDPR section — two separate rows, each with its own eye toggle ───────────
+
+function GdprRow({ label, value, mono }: { label: string; value: string | null; mono?: boolean }) {
+    const [visible, setVisible] = useState(false);
+    return (
+        <div className="border-b py-3 flex flex-col sm:flex-row sm:items-center sm:gap-4">
+            <p className="text-sm font-medium text-gray-500 sm:w-28 shrink-0 mb-0.5 sm:mb-0">{label}</p>
+            <div className="flex items-center gap-2 flex-1">
+                {visible
+                    ? <span className={`text-sm text-gray-900 ${mono ? "font-mono" : ""}`}>{value ?? "—"}</span>
+                    : <span className="text-sm text-gray-300 select-none">{"•".repeat(8)}</span>
+                }
+                <button
+                    type="button"
+                    onClick={() => setVisible(v => !v)}
+                    className="ml-1 text-gray-300 hover:text-gray-600 transition-colors"
+                    title={visible ? "Skrýt" : "Zobrazit"}
+                >
+                    {visible ? <EyeOff size={14} /> : <Eye size={14} />}
+                </button>
+            </div>
+        </div>
+    );
+}
 
 function GdprSection({ member }: { member: MemberWithFlags }) {
-    const [visible, setVisible] = useState(false);
-    const toggle = useCallback(() => setVisible(v => !v), []);
-
     return (
-        <div className="border-b py-3">
-            <button onClick={toggle} className="flex items-center gap-2 w-full text-left" type="button">
-                <span className="text-sm font-medium text-gray-500 w-28 shrink-0">GDPR</span>
-                <span className="text-sm text-gray-400 italic">
-                    {visible ? "skrýt" : "zobrazit osobní údaje"}
-                </span>
-                <span className="ml-auto text-gray-400 hover:text-gray-700 transition-colors">
-                    {visible ? <EyeOff size={15} /> : <Eye size={15} />}
-                </span>
-            </button>
-            {visible && (
-                <div className="mt-2 pl-0 sm:pl-32 space-y-1.5 text-sm">
-                    <div className="flex gap-3">
-                        <span className="text-gray-500 w-32 shrink-0">Datum narození</span>
-                        <span className="font-medium">{fmtDateShort(member.birthDate)}</span>
-                    </div>
-                    <div className="flex gap-3">
-                        <span className="text-gray-500 w-32 shrink-0">Rodné číslo</span>
-                        <span className="font-medium font-mono">{member.birthNumber ?? "—"}</span>
-                    </div>
-                </div>
-            )}
-        </div>
+        <>
+            <GdprRow label="Datum narození" value={fmtDateShort(member.birthDate)} />
+            <GdprRow label="Rodné číslo"    value={member.birthNumber} mono />
+        </>
     );
 }
 
