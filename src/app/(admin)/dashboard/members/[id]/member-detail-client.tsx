@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, ChevronDown, MoreHorizontal } from "lucide-react";
+import { Eye, EyeOff, MoreHorizontal } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -17,9 +17,9 @@ import { BackButton } from "@/components/back-button";
 import { pushNavStack } from "@/lib/nav-stack";
 import {
     updateMemberField, setIndividualDiscount, setContributionFlags,
-    terminateMembership, getMemberHistory, getMemberAuditLog,
+    terminateMembership, getMemberAuditLog,
     setMemberTodo, setMemberReviewed,
-    type AuditEntry, type MemberYearRecord,
+    type AuditEntry,
 } from "@/lib/actions/members";
 import { getMemberTjDiffs, updateMemberFieldFromTj } from "@/lib/actions/sync";
 import { FIELD_LABELS } from "@/lib/member-fields";
@@ -37,10 +37,6 @@ function todayIso() {
     return new Date().toISOString().slice(0, 10);
 }
 
-function fmt(n: number | null): string {
-    if (n === null) return "—";
-    return n.toLocaleString("cs-CZ") + " Kč";
-}
 
 // ── Membership status label ───────────────────────────────────────────────────
 
@@ -102,62 +98,6 @@ function AuditHistory({ memberId }: { memberId: number }) {
                         ))}
                 </div>
             ))}
-        </div>
-    );
-}
-
-// ── Contribution history ──────────────────────────────────────────────────────
-
-function ContributionHistory({ memberId, onNavigate }: { memberId: number; onNavigate: (url: string) => void }) {
-    const [rows, setRows] = useState<MemberYearRecord[] | null>(null);
-
-    useEffect(() => {
-        getMemberHistory(memberId).then(setRows);
-    }, [memberId]);
-
-    if (!rows) return <p className="text-sm text-gray-400 py-2">Načítám…</p>;
-    if (rows.length === 0) return <p className="text-sm text-gray-400 py-2">Žádné záznamy</p>;
-
-    return (
-        <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[320px]">
-                <thead>
-                    <tr className="border-b text-xs font-semibold text-gray-500 uppercase tracking-wide">
-                        <th className="text-left pb-2 pr-3">Rok</th>
-                        <th className="text-right pb-2 pr-3">Předpis</th>
-                        <th className="text-right pb-2 pr-3">Zaplaceno</th>
-                        <th className="text-right pb-2">Stav</th>
-                    </tr>
-                </thead>
-                <tbody>
-                    {rows.map(r => {
-                        const balance = r.hasContrib && r.amountTotal !== null
-                            ? r.paidTotal - r.amountTotal
-                            : null;
-                        return (
-                            <tr key={r.year}
-                                className="border-b last:border-0 hover:bg-gray-50 cursor-pointer"
-                                onClick={() => onNavigate(`/dashboard/contributions?member=${memberId}&year=${r.year}`)}>
-                                <td className="py-2 pr-3 font-semibold text-gray-800">{r.year}</td>
-                                {r.hasContrib ? (
-                                    <>
-                                        <td className="py-2 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.amountTotal)}</td>
-                                        <td className="py-2 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.paidTotal)}</td>
-                                        <td className="py-2 text-right text-xs font-medium">
-                                            {balance === 0 && <span className="text-green-600">OK</span>}
-                                            {balance !== null && balance > 0 && <span className="text-blue-600">+{balance.toLocaleString("cs-CZ")} Kč</span>}
-                                            {balance !== null && balance < 0 && <span className="text-red-600">{balance.toLocaleString("cs-CZ")} Kč</span>}
-                                            {balance === null && <span className="text-gray-400">—</span>}
-                                        </td>
-                                    </>
-                                ) : (
-                                    <td colSpan={3} className="py-2 text-xs font-medium text-amber-600">⚠ Chybí předpis</td>
-                                )}
-                            </tr>
-                        );
-                    })}
-                </tbody>
-            </table>
         </div>
     );
 }
@@ -376,7 +316,6 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
     const [discountOpen, setDiscountOpen]             = useState(false);
     const [terminateOpen, setTerminateOpen]           = useState(false);
     const [auditOpen, setAuditOpen]                   = useState(false);
-    const [showContrib, setShowContrib]               = useState(false);
     const [committeePending, startCommitteeT]         = useTransition();
     const [tomPending, startTomT]                     = useTransition();
     const [reviewedPending, startReviewedT]           = useTransition();
@@ -522,19 +461,18 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
 
                 {/* ── Fields ── */}
                 <div className="rounded-xl border px-4 mb-4">
-                    <InlineField label="Příjmení"   value={member.lastName}   fieldId="lastName"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")}  tjValue={tjDiffs["lastName"]}  onTjAccept={tjAcceptor("lastName")} />
-                    <InlineField label="Jméno"      value={member.firstName}  fieldId="firstName"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
-                    <InlineField label="Přezdívka"  value={member.nickname}   fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")}  tjValue={tjDiffs["nickname"]}  onTjAccept={tjAcceptor("nickname")} placeholder="(žádná)" />
-                    <InlineField label="E-mail"     value={member.email}      fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")}     tjValue={tjDiffs["email"]}     onTjAccept={tjAcceptor("email")} type="email" />
-                    <InlineField label="Telefon"    value={member.phone}      fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")}     tjValue={tjDiffs["phone"]}     onTjAccept={tjAcceptor("phone")} type="tel" />
-                    <InlineField label="Adresa"     value={member.address}    fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")}   tjValue={tjDiffs["address"]}   onTjAccept={tjAcceptor("address")} placeholder="(nezadáno)" />
-                    <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} type="number" />
-                    <InlineField label="Číslo ČSK" value={member.cskNumber}  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} tjValue={tjDiffs["cskNumber"]} onTjAccept={tjAcceptor("cskNumber")} />
-                    <InlineField label="Login"     value={member.userLogin}  fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} placeholder="(nezadáno)" />
-                    <InlineField label="Člen od"   value={member.memberFrom} fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} type="date" />
-                    <InlineField label="Pohlaví"   value={member.gender}     fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")}    tjValue={tjDiffs["gender"]}    onTjAccept={tjAcceptor("gender")} placeholder="(nezadáno)" />
-                    <InlineField label="Poznámka"  value={member.note}       fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} placeholder="(žádná)" />
+                    <InlineField label="Příjmení"    value={member.lastName}   fieldId="lastName"        activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")}         tjValue={tjDiffs["lastName"]}  onTjAccept={tjAcceptor("lastName")} />
+                    <InlineField label="Jméno"       value={member.firstName}  fieldId="firstName"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")}        tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
+                    <InlineField label="Přezdívka"   value={member.nickname}   fieldId="nickname"        activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")}         tjValue={tjDiffs["nickname"]}  onTjAccept={tjAcceptor("nickname")} placeholder="(žádná)" />
                     <GdprSection member={member} />
+                    <InlineField label="E-mail"      value={member.email}      fieldId="email"           activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")}            tjValue={tjDiffs["email"]}     onTjAccept={tjAcceptor("email")} type="email" />
+                    <InlineField label="Telefon"     value={member.phone}      fieldId="phone"           activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")}            tjValue={tjDiffs["phone"]}     onTjAccept={tjAcceptor("phone")} type="tel" />
+                    <InlineField label="Adresa"      value={member.address}    fieldId="address"         activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")}          tjValue={tjDiffs["address"]}   onTjAccept={tjAcceptor("address")} placeholder="(nezadáno)" />
+                    <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} type="number" />
+                    <InlineField label="Číslo ČSK"  value={member.cskNumber}  fieldId="cskNumber"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")}        tjValue={tjDiffs["cskNumber"]} onTjAccept={tjAcceptor("cskNumber")} />
+                    <InlineField label="Člen od"     value={member.memberFrom} fieldId="memberFrom"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} type="date" />
+                    <InlineField label="Pohlaví"     value={member.gender}     fieldId="gender"          activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")}           tjValue={tjDiffs["gender"]}    onTjAccept={tjAcceptor("gender")} placeholder="(nezadáno)" />
+                    <InlineField label="Poznámka"    value={member.note}       fieldId="note"            activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} placeholder="(žádná)" />
                 </div>
 
                 {/* ── Úkol ── */}
@@ -639,20 +577,6 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                     </div>
                 </div>
 
-                {/* ── Příspěvky po rocích ── */}
-                <div className="mb-4">
-                    <button
-                        onClick={() => setShowContrib(v => !v)}
-                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left py-2">
-                        <ChevronDown size={14} className={`transition-transform ${showContrib ? "" : "-rotate-90"}`} />
-                        Příspěvky po rocích
-                    </button>
-                    {showContrib && (
-                        <div className="mt-2">
-                            <ContributionHistory memberId={member.id} onNavigate={url => navigateTo(url, memberLabel)} />
-                        </div>
-                    )}
-                </div>
             </div>
 
             {/* Dialogs */}

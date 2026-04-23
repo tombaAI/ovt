@@ -1,49 +1,62 @@
 import { Skeleton } from "@/components/ui/skeleton";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 
-const FILTERS = ["Aktivní", "Výbor", "Vedoucí TOM", "Individuální sleva", "Vstup / ukončení", "Bez brigády", "S úkolem", "Změny z TJ"];
-
 export default function Loading() {
     return (
-        <div className="space-y-4">
-            <div className="flex items-center justify-between">
-                <h1 className="text-2xl font-semibold text-gray-900">Členové</h1>
-                <span className="inline-flex h-9 items-center px-3 rounded-md text-sm bg-gray-100 text-gray-400 border">
-                    Nový člen
-                </span>
+        <div className="space-y-3">
+            {/* Header row — matches new layout */}
+            <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-xl font-semibold text-gray-900 mr-0.5">Členové …</h1>
+                <Skeleton className="h-8 w-36 rounded-md" />
+                <Skeleton className="h-8 w-24 rounded-full" />
+                <Skeleton className="h-8 w-24 rounded-full" />
+                <Skeleton className="h-8 w-28 rounded-full" />
+                <Skeleton className="h-8 w-28 rounded-full" />
+                <Skeleton className="h-8 w-24 rounded-full" />
+                <div className="ml-auto">
+                    <Skeleton className="h-8 w-28 rounded-md" />
+                </div>
             </div>
 
-            <div className="flex gap-2 flex-wrap">
-                {FILTERS.map(label => (
-                    <span key={label} className="inline-flex h-8 items-center px-3 rounded-full text-xs text-gray-400 bg-gray-100 border border-gray-200">
-                        {label}
-                    </span>
-                ))}
-            </div>
-
-            <div className="rounded-lg border bg-white overflow-hidden">
+            {/* Table */}
+            <div className="hidden md:block rounded-xl border bg-white overflow-hidden">
                 <Table>
                     <TableHeader>
-                        <TableRow>
-                            <TableHead className="w-12 text-center">ID</TableHead>
+                        <TableRow className="bg-gray-50">
                             <TableHead>Jméno</TableHead>
-                            <TableHead className="hidden lg:table-cell">E-mail</TableHead>
-                            <TableHead className="hidden xl:table-cell text-right">VS</TableHead>
-                            <TableHead>Role / členství</TableHead>
+                            <TableHead className="w-24">ČSK</TableHead>
+                            <TableHead>Info</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {Array.from({ length: 10 }).map((_, i) => (
+                        {Array.from({ length: 12 }).map((_, i) => (
                             <TableRow key={i}>
-                                <TableCell><Skeleton className="h-4 w-7 mx-auto" /></TableCell>
-                                <TableCell><Skeleton className="h-4 w-36" /></TableCell>
-                                <TableCell className="hidden lg:table-cell"><Skeleton className="h-4 w-44" /></TableCell>
-                                <TableCell className="hidden xl:table-cell text-right"><Skeleton className="h-4 w-16 ml-auto" /></TableCell>
-                                <TableCell><Skeleton className="h-5 w-20 rounded-full" /></TableCell>
+                                <TableCell className="py-3"><Skeleton className="h-4 w-40" /></TableCell>
+                                <TableCell><Skeleton className="h-4 w-16" /></TableCell>
+                                <TableCell>
+                                    <div className="flex gap-1.5">
+                                        {i % 3 === 0 && <Skeleton className="h-5 w-14 rounded" />}
+                                        {i % 4 === 0 && <Skeleton className="h-5 w-10 rounded" />}
+                                        {i % 5 === 0 && <Skeleton className="h-5 w-20 rounded" />}
+                                    </div>
+                                </TableCell>
                             </TableRow>
                         ))}
                     </TableBody>
                 </Table>
+            </div>
+
+            {/* Mobile cards */}
+            <div className="md:hidden space-y-1.5">
+                {Array.from({ length: 8 }).map((_, i) => (
+                    <div key={i} className="bg-white rounded-xl border border-gray-200 px-4 py-3 flex items-center gap-3">
+                        <div className="flex-1 space-y-1.5">
+                            <Skeleton className="h-4 w-36" />
+                            <Skeleton className="h-3 w-16" />
+                        </div>
+                        <Skeleton className="h-5 w-14 rounded" />
+                    </div>
+                ))}
             </div>
         </div>
     );

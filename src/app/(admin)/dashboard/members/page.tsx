@@ -1,4 +1,3 @@
-import { Suspense } from "react";
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, importMembersTjBohemians } from "@/db/schema";
 import { eq, asc, desc, and, sql } from "drizzle-orm";
@@ -48,9 +47,13 @@ export type MemberWithFlags = {
 };
 
 
-export default async function MembersPage() {
+export default async function MembersPage({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
     const db = getDb();
-    const selectedYear = await getSelectedYear();
+    const [selectedYear, params] = await Promise.all([getSelectedYear(), searchParams]);
 
     const allPeriods = await db
         .select({ id: contributionPeriods.id, year: contributionPeriods.year })
@@ -194,13 +197,18 @@ export default async function MembersPage() {
     });
 
     return (
-        <Suspense>
-            <MembersClient
-                members={rows}
-                selectedYear={actualYear}
-                periodId={period?.id ?? null}
-                currentYearDiscounts={currentYearDiscounts}
-            />
-        </Suspense>
+        <MembersClient
+            members={rows}
+            selectedYear={actualYear}
+            periodId={period?.id ?? null}
+            currentYearDiscounts={currentYearDiscounts}
+            initialFilter={(params.filter as string) ?? "all"}
+            initialSort={(params.sort as string) ?? "lastName"}
+            initialQ={(params.q as string) ?? ""}
+            initialStav={(params.stav as string) ?? "active"}
+            initialSleva={(params.sleva as string) ?? ""}
+            initialBrigada={params.brigada === "none"}
+            initialCastRoku={params.cast === "1"}
+        />
     );
 }

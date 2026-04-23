@@ -1,7 +1,7 @@
 "use client";
 
-import { useMemo } from "react";
-import { useRouter, usePathname, useSearchParams } from "next/navigation";
+import { useState, useMemo, useEffect, useCallback } from "react";
+import { useRouter, usePathname } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -11,11 +11,25 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SlidersHorizontal, ChevronDown, Plus } from "lucide-react";
 import { pushNavStack } from "@/lib/nav-stack";
 import { AddMemberSheet } from "./add-member-sheet";
-import { useState } from "react";
 import type { MemberWithFlags } from "./page";
 
 type FilterKey = "all" | "todo" | "unreviewed";
 type SortKey   = "lastName" | "firstName";
+
+interface Props {
+    members: MemberWithFlags[];
+    selectedYear: number;
+    periodId: number | null;
+    currentYearDiscounts: { committee: number; tom: number } | null;
+    // Initial values from server searchParams — no client re-render on change
+    initialFilter: string;
+    initialSort: string;
+    initialQ: string;
+    initialStav: string;
+    initialSleva: string;
+    initialBrigada: boolean;
+    initialCastRoku: boolean;
+}
 
 function isActive(m: MemberWithFlags, year: number): boolean {
     return m.memberFrom <= `${year}-12-31` &&
@@ -24,23 +38,7 @@ function isActive(m: MemberWithFlags, year: number): boolean {
 
 function fmtDate(iso: string) {
     const [y, m, d] = iso.split("-");
-    return `${Number(d)}. ${Number(m)}. ${y.slice(2)}`;
-}
-
-function contribColor(m: MemberWithFlags): string {
-    if (!m.hasContrib) return "bg-gray-100 text-gray-500";
-    if (m.isPaid === true)  return "bg-green-100 text-green-700";
-    if (m.amountTotal === null) return "bg-gray-100 text-gray-400";
-    // isPaid=false means underpaid or overpaid
-    if (m.amountTotal !== null && (m.isPaid === false)) return "bg-orange-100 text-orange-700";
-    return "bg-gray-100 text-gray-500";
-}
-
-function contribLabel(m: MemberWithFlags): string {
-    if (!m.hasContrib) return "—";
-    if (m.isPaid === true) return "zaplaceno";
-    if (m.amountTotal === null) return "bez předpisu";
-    return "nedoplatek";
+    return `${Number(d)}. ${Number(m)}. ${y!.slice(2)}`;
 }
 
 function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
@@ -73,7 +71,7 @@ function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
                 </span>
             )}
             {m.todoNote && (
-                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-700 border border-orange-200 max-w-[160px] truncate">
+                <span className="inline-flex items-center px-1.5 py-0.5 rounded text-xs bg-orange-100 text-orange-700 border border-orange-200 max-w-[180px] truncate">
                     {m.todoNote}
                 </span>
             )}
@@ -86,44 +84,86 @@ function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
     );
 }
 
-interface Props {
-    members: MemberWithFlags[];
-    selectedYear: number;
-    periodId: number | null;
-    currentYearDiscounts: { committee: number; tom: number } | null;
-}
-
-export function MembersClient({ members, selectedYear }: Props) {
+export function MembersClient({
+    members, selectedYear,
+    initialFilter, initialSort, initialQ, initialStav, initialSleva, initialBrigada, initialCastRoku,
+}: Props) {
     const router = useRouter();
     const pathname = usePathname();
-    const searchParams = useSearchParams();
-    const [addOpen, setAddOpen] = useState(false);
 
-    // URL-driven state
-    const filter   = (searchParams.get("filter")  ?? "all")      as FilterKey;
-    const sort     = (searchParams.get("sort")    ?? "lastName")  as SortKey;
-    const q        = searchParams.get("q") ?? "";
-    const stav     = searchParams.get("stav") ?? "active";          // "active" | "inactive"
-    const sleva    = searchParams.get("sleva") ?? "";               // "committee,tom,individual" csv
-    const brigada  = searchParams.get("brigada") === "none";
-    const castRoku = searchParams.get("cast") === "1";
+    // ── Local state — no server re-renders on change ──
+    const [filter, setFilter]     = useState<FilterKey>(initialFilter as FilterKey);
+    const [sort, setSort]         = useState<SortKey>(initialSort as SortKey);
+    const [searchDraft, setSearchDraft] = useState(initialQ);  // input value (immediate)
+    const [q, setQ]               = useState(initialQ);        // debounced value (used for filtering)
+    const [stav, setStav]         = useState(initialStav);
+    const [slevaSet, setSlevaSet] = useState<Set<string>>(() =>
+        new Set(initialSleva ? initialSleva.split(",").filter(Boolean) : [])
+    );
+    const [brigada, setBrigada]   = useState(initialBrigada);
+    const [castRoku, setCastRoku] = useState(initialCastRoku);
+    const [addOpen, setAddOpen]   = useState(false);
 
-    const slevaSet = useMemo(() => new Set(sleva ? sleva.split(",") : []), [sleva]);
+    // Debounce search — update URL and filtering state after 250ms idle
+    useEffect(() => {
+        const t = setTimeout(() => {
+            setQ(searchDraft);
+            updateUrl({ q: searchDraft || null });
+        }, 250);
+        return () => clearTimeout(t);
+    }, [searchDraft]);  // eslint-disable-line react-hooks/exhaustive-deps
 
-    function setParam(key: string, value: string | null) {
-        const p = new URLSearchParams(searchParams.toString());
-        if (value === null || value === "") p.delete(key);
-        else p.set(key, value);
-        router.replace(`${pathname}?${p.toString()}`);
+    // ── URL sync helper — no Next.js navigation ──
+    const updateUrl = useCallback((updates: Record<string, string | null>) => {
+        const url = new URL(window.location.href);
+        for (const [key, value] of Object.entries(updates)) {
+            if (value === null || value === "") url.searchParams.delete(key);
+            else url.searchParams.set(key, value);
+        }
+        window.history.replaceState({}, "", url.toString());
+    }, []);
+
+    function setFilterAndUrl(f: FilterKey) {
+        setFilter(f);
+        updateUrl({ filter: f === "all" ? null : f });
+    }
+
+    function setSortAndUrl(s: SortKey) {
+        setSort(s);
+        updateUrl({ sort: s === "lastName" ? null : s });
+    }
+
+    function setStavAndUrl(s: string) {
+        setStav(s);
+        updateUrl({ stav: s === "active" ? null : s });
     }
 
     function toggleSleva(key: string) {
-        const next = new Set(slevaSet);
-        if (next.has(key)) next.delete(key); else next.add(key);
-        setParam("sleva", [...next].join(",") || null);
+        setSlevaSet(prev => {
+            const next = new Set(prev);
+            if (next.has(key)) next.delete(key); else next.add(key);
+            updateUrl({ sleva: [...next].join(",") || null });
+            return next;
+        });
     }
 
-    // Active dropdown filter count + label
+    function setBrigadaAndUrl(v: boolean) {
+        setBrigada(v);
+        updateUrl({ brigada: v ? "none" : null });
+    }
+
+    function setCastRokuAndUrl(v: boolean) {
+        setCastRoku(v);
+        updateUrl({ cast: v ? "1" : null });
+    }
+
+    function resetAll() {
+        setFilter("all"); setSort("lastName"); setSearchDraft(""); setQ("");
+        setStav("active"); setSlevaSet(new Set()); setBrigada(false); setCastRoku(false);
+        window.history.replaceState({}, "", pathname);
+    }
+
+    // ── Dropdown active conditions ──
     const dropdownConditions: string[] = [];
     if (stav === "inactive") dropdownConditions.push("Neaktivní");
     if (slevaSet.has("committee")) dropdownConditions.push("Výbor");
@@ -132,7 +172,7 @@ export function MembersClient({ members, selectedYear }: Props) {
     if (brigada) dropdownConditions.push("Bez brigády");
     if (castRoku) dropdownConditions.push("Část roku");
 
-    const filtrButtonLabel = dropdownConditions.length === 0
+    const filtrLabel = dropdownConditions.length === 0
         ? "Filtrovat"
         : dropdownConditions.length === 1
             ? dropdownConditions[0]!
@@ -140,7 +180,7 @@ export function MembersClient({ members, selectedYear }: Props) {
 
     const hasActiveFilters = filter !== "all" || dropdownConditions.length > 0 || q !== "";
 
-    // Computed list
+    // ── Computed counts and filtered list ──
     const counts = useMemo(() => {
         const active = members.filter(m => isActive(m, selectedYear));
         return {
@@ -158,7 +198,6 @@ export function MembersClient({ members, selectedYear }: Props) {
         } else if (filter === "unreviewed") {
             list = members.filter(m => !m.membershipReviewed);
         } else {
-            // filter === "all"
             if (stav === "inactive") {
                 list = members.filter(m => !isActive(m, selectedYear));
             } else {
@@ -191,118 +230,100 @@ export function MembersClient({ members, selectedYear }: Props) {
     }, [members, filter, sort, q, stav, slevaSet, brigada, castRoku, selectedYear]);
 
     function openDetail(m: MemberWithFlags) {
-        const currentUrl = `${pathname}${searchParams.toString() ? `?${searchParams.toString()}` : ""}`;
+        const currentUrl = window.location.pathname + window.location.search;
         pushNavStack({ url: currentUrl, label: "Seznam členů" });
         router.push(`/dashboard/members/${m.id}`);
     }
 
-    const pillBase = "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0 cursor-pointer";
-    const pillActive = "bg-[#327600] text-white";
-    const pillTodoActive = "bg-orange-500 text-white";
-    const pillUnreviewedActive = "bg-violet-600 text-white";
-    const pillInactive = "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50";
-    const pillTodoInactive = counts.todo > 0 ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100" : pillInactive;
-    const pillUnreviewedInactive = counts.unreviewed > 0 ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100" : pillInactive;
-
-    function PillCount({ n }: { n: number }) {
-        return <span className="text-xs rounded-full px-1.5 bg-white/25">{n}</span>;
-    }
+    // ── Pill styles ──
+    const pill = (active: boolean, activeClass: string, inactiveClass: string) =>
+        `inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0 cursor-pointer ${active ? activeClass : inactiveClass}`;
 
     return (
-        <div className="space-y-4">
+        <div className="space-y-3">
             {/* ── Header row ── */}
             <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-xl font-semibold text-gray-900 mr-1">Členové {selectedYear}</h1>
+                <h1 className="text-xl font-semibold text-gray-900 mr-0.5">Členové {selectedYear}</h1>
 
-                {/* Search */}
                 <Input
                     placeholder="Hledat…"
-                    value={q}
-                    onChange={e => setParam("q", e.target.value || null)}
-                    className="h-8 w-40 text-sm"
+                    value={searchDraft}
+                    onChange={e => setSearchDraft(e.target.value)}
+                    className="h-8 w-36 text-sm"
                 />
 
                 {/* Badge pills */}
-                <button className={`${pillBase} ${filter === "all" ? pillActive : pillInactive}`}
-                    onClick={() => setParam("filter", "all")}>
-                    Aktivní <PillCount n={counts.all} />
+                <button className={pill(filter === "all", "bg-[#327600] text-white", "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50")}
+                    onClick={() => setFilterAndUrl("all")}>
+                    Aktivní <PillCount n={counts.all} active={filter === "all"} />
                 </button>
-                <button className={`${pillBase} ${filter === "todo" ? pillTodoActive : pillTodoInactive}`}
-                    onClick={() => setParam("filter", "todo")}>
-                    S úkolem <PillCount n={counts.todo} />
+                <button className={pill(
+                    filter === "todo",
+                    "bg-orange-500 text-white",
+                    counts.todo > 0 ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                )} onClick={() => setFilterAndUrl("todo")}>
+                    S úkolem <PillCount n={counts.todo} active={filter === "todo"} />
                 </button>
-                <button className={`${pillBase} ${filter === "unreviewed" ? pillUnreviewedActive : pillUnreviewedInactive}`}
-                    onClick={() => setParam("filter", "unreviewed")}>
-                    Bez revize <PillCount n={counts.unreviewed} />
+                <button className={pill(
+                    filter === "unreviewed",
+                    "bg-violet-600 text-white",
+                    counts.unreviewed > 0 ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                )} onClick={() => setFilterAndUrl("unreviewed")}>
+                    Bez revize <PillCount n={counts.unreviewed} active={filter === "unreviewed"} />
                 </button>
 
-                {/* Filtrovat dropdown */}
+                {/* Filtrovat popover */}
                 <Popover>
                     <PopoverTrigger asChild>
-                        <button className={`${pillBase} ${dropdownConditions.length > 0
-                            ? "bg-blue-50 text-blue-700 border border-blue-300"
-                            : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"} gap-1`}>
+                        <button className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0 cursor-pointer ${
+                            dropdownConditions.length > 0
+                                ? "bg-blue-50 text-blue-700 border border-blue-300"
+                                : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
+                        }`}>
                             <SlidersHorizontal size={13} />
-                            {filtrButtonLabel}
+                            {filtrLabel}
                             <ChevronDown size={12} />
                         </button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" className="w-64 p-3 space-y-3">
-                        {/* Stav */}
+                    <PopoverContent align="start" className="w-60 p-3 space-y-3">
                         <div>
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Stav</p>
                             <div className="flex gap-3">
                                 {(["active", "inactive"] as const).map(s => (
                                     <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm">
                                         <input type="radio" name="stav" value={s} checked={stav === s}
-                                            onChange={() => setParam("stav", s === "active" ? null : s)}
+                                            onChange={() => setStavAndUrl(s)}
                                             className="accent-[#327600]" />
                                         {s === "active" ? "Aktivní" : "Neaktivní"}
                                     </label>
                                 ))}
                             </div>
                         </div>
-
-                        {/* Sleva */}
                         <div>
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Sleva</p>
                             <div className="space-y-1.5">
                                 {([["committee", "Výbor"], ["tom", "Vedoucí TOM"], ["individual", "Individuální"]] as const).map(([key, label]) => (
                                     <label key={key} className="flex items-center gap-2 cursor-pointer text-sm">
-                                        <Checkbox checked={slevaSet.has(key)}
-                                            onCheckedChange={() => toggleSleva(key)} id={`sleva-${key}`} />
-                                        <Label htmlFor={`sleva-${key}`} className="cursor-pointer">{label}</Label>
+                                        <Checkbox checked={slevaSet.has(key)} onCheckedChange={() => toggleSleva(key)} id={`sl-${key}`} />
+                                        <Label htmlFor={`sl-${key}`} className="cursor-pointer font-normal">{label}</Label>
                                     </label>
                                 ))}
                             </div>
                         </div>
-
-                        {/* Brigáda + Část roku */}
                         <div className="space-y-1.5">
                             <label className="flex items-center gap-2 cursor-pointer text-sm">
-                                <Checkbox checked={brigada}
-                                    onCheckedChange={v => setParam("brigada", v ? "none" : null)}
-                                    id="brigada-none" />
-                                <Label htmlFor="brigada-none" className="cursor-pointer">Bez brigády</Label>
+                                <Checkbox checked={brigada} onCheckedChange={v => setBrigadaAndUrl(Boolean(v))} id="no-brigade" />
+                                <Label htmlFor="no-brigade" className="cursor-pointer font-normal">Bez brigády</Label>
                             </label>
                             <label className="flex items-center gap-2 cursor-pointer text-sm">
-                                <Checkbox checked={castRoku}
-                                    onCheckedChange={v => setParam("cast", v ? "1" : null)}
-                                    id="cast-roku" />
-                                <Label htmlFor="cast-roku" className="cursor-pointer">Vstup / ukončení</Label>
+                                <Checkbox checked={castRoku} onCheckedChange={v => setCastRokuAndUrl(Boolean(v))} id="cast" />
+                                <Label htmlFor="cast" className="cursor-pointer font-normal">Vstup / ukončení</Label>
                             </label>
                         </div>
-
                         {dropdownConditions.length > 0 && (
-                            <button
-                                onClick={() => {
-                                    setParam("stav", null);
-                                    setParam("sleva", null);
-                                    setParam("brigada", null);
-                                    setParam("cast", null);
-                                }}
+                            <button onClick={() => { setStavAndUrl("active"); setSlevaSet(new Set()); setBrigadaAndUrl(false); setCastRokuAndUrl(false); updateUrl({ stav: null, sleva: null, brigada: null, cast: null }); }}
                                 className="text-xs text-gray-400 hover:text-gray-700 w-full text-left pt-1 border-t border-gray-100">
-                                Zrušit filtry dropdownu
+                                Zrušit filtry
                             </button>
                         )}
                     </PopoverContent>
@@ -311,15 +332,15 @@ export function MembersClient({ members, selectedYear }: Props) {
                 {/* Sort */}
                 <Popover>
                     <PopoverTrigger asChild>
-                        <button className={`${pillBase} bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 gap-1`}>
+                        <button className="inline-flex items-center gap-1 px-3 py-1.5 rounded-full text-sm font-medium bg-white text-gray-600 border border-gray-200 hover:bg-gray-50 shrink-0">
                             {sort === "lastName" ? "↑ Příjmení" : "↑ Jméno"}
                             <ChevronDown size={12} />
                         </button>
                     </PopoverTrigger>
-                    <PopoverContent align="start" className="w-40 p-2 space-y-0.5">
+                    <PopoverContent align="start" className="w-36 p-1.5 space-y-0.5">
                         {(["lastName", "firstName"] as SortKey[]).map(s => (
-                            <button key={s} onClick={() => setParam("sort", s)}
-                                className={`w-full text-left px-2 py-1.5 rounded text-sm transition-colors ${sort === s ? "bg-[#327600]/10 text-[#327600] font-medium" : "hover:bg-gray-50"}`}>
+                            <button key={s} onClick={() => setSortAndUrl(s)}
+                                className={`w-full text-left px-2.5 py-1.5 rounded text-sm transition-colors ${sort === s ? "bg-[#327600]/10 text-[#327600] font-medium" : "hover:bg-gray-50"}`}>
                                 {s === "lastName" ? "Příjmení" : "Jméno"}
                             </button>
                         ))}
@@ -327,7 +348,7 @@ export function MembersClient({ members, selectedYear }: Props) {
                 </Popover>
 
                 {hasActiveFilters && (
-                    <button onClick={() => router.replace(pathname)}
+                    <button onClick={resetAll}
                         className="text-xs text-gray-400 hover:text-gray-700 px-2 py-1.5 hover:bg-gray-50 rounded transition-colors">
                         × Zrušit vše
                     </button>
@@ -358,10 +379,12 @@ export function MembersClient({ members, selectedYear }: Props) {
                             </p>
                             {m.cskNumber && <p className="text-xs text-gray-400 mt-0.5">ČSK {m.cskNumber}</p>}
                         </div>
-                        <div className="flex items-center gap-1.5 shrink-0">
-                            <span className={`text-xs px-1.5 py-0.5 rounded ${contribColor(m)}`}>
-                                {contribLabel(m)}
-                            </span>
+                        <div className="flex items-center gap-1.5 shrink-0 flex-wrap justify-end">
+                            {m.hasContrib && (
+                                <span className={`text-xs px-1.5 py-0.5 rounded ${m.isPaid ? "bg-green-100 text-green-700" : "bg-orange-100 text-orange-700"}`}>
+                                    {m.isPaid ? "zapl." : "nedopl."}
+                                </span>
+                            )}
                             {m.todoNote && <span className="text-xs px-1.5 py-0.5 rounded bg-orange-100 text-orange-700">úkol</span>}
                         </div>
                     </button>
@@ -374,27 +397,21 @@ export function MembersClient({ members, selectedYear }: Props) {
                     <TableHeader>
                         <TableRow className="bg-gray-50">
                             <TableHead>Jméno</TableHead>
-                            <TableHead className="w-28">ČSK</TableHead>
+                            <TableHead className="w-24">ČSK</TableHead>
                             <TableHead>Info</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
                         {filtered.length === 0 && (
                             <TableRow>
-                                <TableCell colSpan={3} className="text-center text-gray-400 py-10">
-                                    Žádní členové
-                                </TableCell>
+                                <TableCell colSpan={3} className="text-center text-gray-400 py-10">Žádní členové</TableCell>
                             </TableRow>
                         )}
                         {filtered.map(m => (
-                            <TableRow key={m.id}
-                                className="hover:bg-gray-50/60 cursor-pointer"
-                                onClick={() => openDetail(m)}>
+                            <TableRow key={m.id} className="hover:bg-gray-50/60 cursor-pointer" onClick={() => openDetail(m)}>
                                 <TableCell className="font-medium py-3">
                                     {m.lastName} {m.firstName}
-                                    {m.nickname && (
-                                        <span className="text-gray-400 font-normal ml-1">({m.nickname})</span>
-                                    )}
+                                    {m.nickname && <span className="text-gray-400 font-normal ml-1">({m.nickname})</span>}
                                 </TableCell>
                                 <TableCell className="text-sm text-gray-500 font-mono">
                                     {m.cskNumber ?? <span className="text-gray-300">—</span>}
@@ -411,8 +428,16 @@ export function MembersClient({ members, selectedYear }: Props) {
             <AddMemberSheet
                 open={addOpen}
                 onOpenChange={setAddOpen}
-                onAdded={() => { router.refresh(); }}
+                onAdded={() => router.refresh()}
             />
         </div>
+    );
+}
+
+function PillCount({ n, active }: { n: number; active: boolean }) {
+    return (
+        <span className={`text-xs rounded-full px-1.5 ${active ? "bg-white/25" : "bg-gray-100 text-gray-500"}`}>
+            {n}
+        </span>
     );
 }
