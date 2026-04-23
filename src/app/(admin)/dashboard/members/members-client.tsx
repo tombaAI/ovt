@@ -44,7 +44,13 @@ function cmpField(a: string | number | null, b: string | number | null, dir: Sor
     return dir === "asc" ? cmp : -cmp;
 }
 
-function isActive(m: MemberWithFlags, year: number): boolean {
+// Aktivní DNES = memberTo je null nebo v budoucnosti
+const TODAY = new Date().toISOString().slice(0, 10);
+function isActiveToday(m: MemberWithFlags): boolean {
+    return m.memberFrom <= TODAY && (m.memberTo === null || m.memberTo >= TODAY);
+}
+// Byl v tomto roce členem (ale možná dnes již není)
+function wasActiveInYear(m: MemberWithFlags, year: number): boolean {
     return m.memberFrom <= `${year}-12-31` &&
         (m.memberTo === null || m.memberTo >= `${year}-01-01`);
 }
@@ -186,12 +192,13 @@ export function MembersClient({
 
     // ── Dropdown active conditions ──
     const dropdownConditions: string[] = [];
-    if (stav === "inactive") dropdownConditions.push("Neaktivní");
-    if (slevaSet.has("committee")) dropdownConditions.push("Výbor");
-    if (slevaSet.has("tom")) dropdownConditions.push("TOM");
-    if (slevaSet.has("individual")) dropdownConditions.push("Individuální");
-    if (brigada) dropdownConditions.push("Bez brigády");
-    if (castRoku) dropdownConditions.push("Část roku");
+    if (stav === "terminated") dropdownConditions.push("Letos ukončení");
+    if (stav === "inactive")   dropdownConditions.push("Neaktivní");
+    if (slevaSet.has("committee"))  dropdownConditions.push("Výbor");
+    if (slevaSet.has("tom"))         dropdownConditions.push("TOM");
+    if (slevaSet.has("individual"))  dropdownConditions.push("Individuální");
+    if (brigada)  dropdownConditions.push("Bez brigády");
+    if (castRoku) dropdownConditions.push("Vstup / ukončení");
 
     const filtrLabel = dropdownConditions.length === 0
         ? "Filtrovat"
@@ -202,14 +209,11 @@ export function MembersClient({
     const hasActiveFilters = filter !== "all" || dropdownConditions.length > 0 || q !== "";
 
     // ── Computed counts and filtered list ──
-    const counts = useMemo(() => {
-        const active = members.filter(m => isActive(m, selectedYear));
-        return {
-            all:        active.length,
-            todo:       members.filter(m => m.todoNote !== null).length,
-            unreviewed: members.filter(m => !m.membershipReviewed).length,
-        };
-    }, [members, selectedYear]);
+    const counts = useMemo(() => ({
+        all:        members.filter(m => isActiveToday(m)).length,
+        todo:       members.filter(m => m.todoNote !== null).length,
+        unreviewed: members.filter(m => !m.membershipReviewed).length,
+    }), [members]);
 
     const filtered = useMemo(() => {
         let list: MemberWithFlags[];
@@ -219,10 +223,16 @@ export function MembersClient({
         } else if (filter === "unreviewed") {
             list = members.filter(m => !m.membershipReviewed);
         } else {
-            if (stav === "inactive") {
-                list = members.filter(m => !isActive(m, selectedYear));
+            // filter === "all" — závisí na stav dropdownu
+            if (stav === "terminated") {
+                // Letos byli aktivní, ale dnes už nejsou
+                list = members.filter(m => wasActiveInYear(m, selectedYear) && !isActiveToday(m));
+            } else if (stav === "inactive") {
+                // Vůbec nemají záznam pro zvolený rok
+                list = members.filter(m => !wasActiveInYear(m, selectedYear));
             } else {
-                list = members.filter(m => isActive(m, selectedYear));
+                // "active" = aktivní dnes (výchozí)
+                list = members.filter(m => isActiveToday(m));
                 if (slevaSet.size > 0) {
                     list = list.filter(m =>
                         (slevaSet.has("committee") && m.isCommittee) ||
@@ -290,8 +300,8 @@ export function MembersClient({
                 />
 
                 {/* Badge pills */}
-                <button className={pill(filter === "all", "bg-[#327600] text-white", "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50")}
-                    onClick={() => setFilterAndUrl("all")}>
+                <button className={pill(filter === "all" && stav === "active", "bg-[#327600] text-white", "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50")}
+                    onClick={() => { setFilterAndUrl("all"); setStavAndUrl("active"); }}>
                     Aktivní <PillCount n={counts.all} active={filter === "all"} />
                 </button>
                 <button className={pill(
@@ -325,13 +335,17 @@ export function MembersClient({
                     <PopoverContent align="start" className="w-60 p-3 space-y-3">
                         <div>
                             <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1.5">Stav</p>
-                            <div className="flex gap-3">
-                                {(["active", "inactive"] as const).map(s => (
+                            <div className="space-y-1.5">
+                                {([
+                                    ["active",     "Aktivní dnes"],
+                                    ["terminated", "Letos ukončení"],
+                                    ["inactive",   "Neaktivní (letos vůbec)"],
+                                ] as const).map(([s, label]) => (
                                     <label key={s} className="flex items-center gap-1.5 cursor-pointer text-sm">
                                         <input type="radio" name="stav" value={s} checked={stav === s}
                                             onChange={() => setStavAndUrl(s)}
                                             className="accent-[#327600]" />
-                                        {s === "active" ? "Aktivní" : "Neaktivní"}
+                                        {label}
                                     </label>
                                 ))}
                             </div>
