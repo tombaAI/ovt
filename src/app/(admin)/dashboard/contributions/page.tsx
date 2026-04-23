@@ -51,6 +51,8 @@ export type ContribRow = {
     discountCommittee: number | null;
     discountTom: number | null;
     discountIndividual: number | null;
+    discountIndividualNote: string | null;
+    discountIndividualValidUntil: number | null;
     brigadeSurcharge: number | null;
     todoNote: string | null;
     reviewed: boolean;
@@ -113,8 +115,10 @@ export default async function ContributionsPage() {
             amountBoat3:        memberContributions.amountBoat3,
             discountCommittee:  memberContributions.discountCommittee,
             discountTom:        memberContributions.discountTom,
-            discountIndividual: memberContributions.discountIndividual,
-            brigadeSurcharge:   memberContributions.brigadeSurcharge,
+            discountIndividual:          memberContributions.discountIndividual,
+            discountIndividualNote:      memberContributions.discountIndividualNote,
+            discountIndividualValidUntil: memberContributions.discountIndividualValidUntil,
+            brigadeSurcharge:            memberContributions.brigadeSurcharge,
             todoNote:           memberContributions.todoNote,
             reviewed:           memberContributions.reviewed,
         })

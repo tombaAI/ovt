@@ -394,3 +394,196 @@ export async function updatePrescriptionAmounts(
         return { error: "Chyba při ukládání" };
     }
 }
+
+// ── Pomocná funkce: přepočet amountTotal ─────────────────────────────────────
+
+function recalcTotal(c: {
+    amountBase:         number | null;
+    amountBoat1:        number | null;
+    amountBoat2:        number | null;
+    amountBoat3:        number | null;
+    discountCommittee:  number | null;
+    discountTom:        number | null;
+    discountIndividual: number | null;
+    brigadeSurcharge:   number | null;
+}): number {
+    // Sleva výbor má přednost před TOM
+    const effectiveTom = c.discountCommittee ? null : c.discountTom;
+    return (
+        (c.amountBase         ?? 0) +
+        (c.amountBoat1        ?? 0) +
+        (c.amountBoat2        ?? 0) +
+        (c.amountBoat3        ?? 0) +
+        (c.discountCommittee  ?? 0) +
+        (effectiveTom         ?? 0) +
+        (c.discountIndividual ?? 0) +
+        (c.brigadeSurcharge   ?? 0)
+    );
+}
+
+// ── Přidat loď k předpisu ─────────────────────────────────────────────────────
+
+export async function addBoatToContrib(
+    contribId: number,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [c] = await db
+            .select({
+                id:                 memberContributions.id,
+                periodId:           memberContributions.periodId,
+                amountBase:         memberContributions.amountBase,
+                amountBoat1:        memberContributions.amountBoat1,
+                amountBoat2:        memberContributions.amountBoat2,
+                amountBoat3:        memberContributions.amountBoat3,
+                discountCommittee:  memberContributions.discountCommittee,
+                discountTom:        memberContributions.discountTom,
+                discountIndividual: memberContributions.discountIndividual,
+                brigadeSurcharge:   memberContributions.brigadeSurcharge,
+            })
+            .from(memberContributions)
+            .where(eq(memberContributions.id, contribId));
+
+        if (!c) return { error: "Předpis nenalezen" };
+
+        // Zjistit ceny lodí z období
+        const [period] = await db
+            .select({ amountBoat1: contributionPeriods.amountBoat1, amountBoat2: contributionPeriods.amountBoat2 })
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, c.periodId));
+
+        if (!period) return { error: "Období nenalezeno" };
+
+        const update: Partial<typeof c> = {};
+        if (!c.amountBoat1) {
+            update.amountBoat1 = period.amountBoat1;
+        } else if (!c.amountBoat2) {
+            update.amountBoat2 = period.amountBoat2;
+        } else if (!c.amountBoat3) {
+            update.amountBoat3 = period.amountBoat2;   // 3. loď = stejná sazba jako 2.
+        } else {
+            return { error: "Člen má již 3 lodě" };
+        }
+
+        const updated = { ...c, ...update };
+        const amountTotal = recalcTotal(updated);
+
+        await db.update(memberContributions)
+            .set({ ...update, amountTotal })
+            .where(eq(memberContributions.id, contribId));
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[addBoatToContrib]", e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+// ── Odebrat loď z předpisu ────────────────────────────────────────────────────
+
+export async function removeBoatFromContrib(
+    contribId: number,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [c] = await db
+            .select({
+                id:                 memberContributions.id,
+                periodId:           memberContributions.periodId,
+                amountBase:         memberContributions.amountBase,
+                amountBoat1:        memberContributions.amountBoat1,
+                amountBoat2:        memberContributions.amountBoat2,
+                amountBoat3:        memberContributions.amountBoat3,
+                discountCommittee:  memberContributions.discountCommittee,
+                discountTom:        memberContributions.discountTom,
+                discountIndividual: memberContributions.discountIndividual,
+                brigadeSurcharge:   memberContributions.brigadeSurcharge,
+            })
+            .from(memberContributions)
+            .where(eq(memberContributions.id, contribId));
+
+        if (!c) return { error: "Předpis nenalezen" };
+
+        const update: Partial<typeof c> = {};
+        if (c.amountBoat3) {
+            update.amountBoat3 = null;
+        } else if (c.amountBoat2) {
+            update.amountBoat2 = null;
+        } else if (c.amountBoat1) {
+            update.amountBoat1 = null;
+        } else {
+            return { error: "Žádná loď k odebrání" };
+        }
+
+        const updated = { ...c, ...update };
+        const amountTotal = recalcTotal(updated);
+
+        await db.update(memberContributions)
+            .set({ ...update, amountTotal })
+            .where(eq(memberContributions.id, contribId));
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[removeBoatFromContrib]", e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+// ── Individuální sleva ────────────────────────────────────────────────────────
+
+export type IndividualDiscountData = {
+    amount:     number;         // kladné číslo zadané adminem; 0 = zrušit slevu
+    note:       string | null;
+    validUntil: number | null;  // rok platnosti (např. 2028)
+};
+
+export async function setContribIndividualDiscount(
+    contribId: number,
+    data: IndividualDiscountData,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [c] = await db
+            .select({
+                id:                 memberContributions.id,
+                amountBase:         memberContributions.amountBase,
+                amountBoat1:        memberContributions.amountBoat1,
+                amountBoat2:        memberContributions.amountBoat2,
+                amountBoat3:        memberContributions.amountBoat3,
+                discountCommittee:  memberContributions.discountCommittee,
+                discountTom:        memberContributions.discountTom,
+                brigadeSurcharge:   memberContributions.brigadeSurcharge,
+            })
+            .from(memberContributions)
+            .where(eq(memberContributions.id, contribId));
+
+        if (!c) return { error: "Předpis nenalezen" };
+
+        const discountIndividual = data.amount > 0 ? -data.amount : null;
+        const amountTotal = recalcTotal({ ...c, discountIndividual });
+
+        await db.update(memberContributions).set({
+            discountIndividual,
+            discountIndividualNote:      data.amount > 0 ? (data.note ?? null) : null,
+            discountIndividualValidUntil: data.amount > 0 ? (data.validUntil ?? null) : null,
+            amountTotal,
+        }).where(eq(memberContributions.id, contribId));
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[setContribIndividualDiscount]", e);
+        return { error: "Chyba při ukládání" };
+    }
+}

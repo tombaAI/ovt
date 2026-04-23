@@ -437,6 +437,7 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                 open={sheetOpen}
                 onOpenChange={setSheetOpen}
                 row={paymentSheetRow}
+                period={period}
                 onPaymentUpdated={onPaymentUpdated}
             />
 
