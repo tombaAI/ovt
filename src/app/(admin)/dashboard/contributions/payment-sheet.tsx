@@ -9,7 +9,8 @@ import { Label } from "@/components/ui/label";
 import { Separator } from "@/components/ui/separator";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { setContributionTodo } from "@/lib/actions/contributions";
+import { Checkbox } from "@/components/ui/checkbox";
+import { setContributionTodo, setContribReviewed } from "@/lib/actions/contributions";
 import { createCashPaymentOnContrib, deleteContribAllocation } from "@/lib/actions/reconciliation";
 import { getContribEmailHistory, type ContribMailEvent } from "@/lib/actions/contrib-emails";
 import { SendEmailDialog } from "./send-email-dialog";
@@ -75,9 +76,10 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
     const [amount, setAmount] = useState("");
     const [paidAt, setPaidAt] = useState("");
     const [note, setNote]     = useState("");
-    const [addError, setAddError]   = useState<string | null>(null);
-    const [addPending, startAdd]    = useTransition();
-    const [delPending, startDel]    = useTransition();
+    const [addError, setAddError]        = useState<string | null>(null);
+    const [addPending, startAdd]         = useTransition();
+    const [delPending, startDel]         = useTransition();
+    const [reviewedPending, startRev]    = useTransition();
     const [mailHistory, setMailHistory]   = useState<ContribMailEvent[]>([]);
     const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
@@ -226,6 +228,24 @@ export function PaymentSheet({ open, onOpenChange, row, onPaymentUpdated }: Prop
                         if (r && "success" in r) onPaymentUpdated();
                     }}
                 />
+
+                {/* Provedena revize */}
+                <div className="flex items-center gap-2 rounded-xl border px-4 py-3 mt-4">
+                    <Checkbox
+                        id="chk-contrib-reviewed"
+                        checked={row.reviewed}
+                        disabled={reviewedPending}
+                        onCheckedChange={v => {
+                            startRev(async () => {
+                                const r = await setContribReviewed(row.contribId, Boolean(v));
+                                if ("success" in r) onPaymentUpdated();
+                            });
+                        }}
+                    />
+                    <Label htmlFor="chk-contrib-reviewed" className="cursor-pointer text-sm font-medium">
+                        Provedena revize
+                    </Label>
+                </div>
 
                 {/* Email history */}
                 <div className="rounded-xl border px-4 py-3 mt-4">

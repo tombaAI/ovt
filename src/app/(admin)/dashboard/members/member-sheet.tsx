@@ -17,7 +17,7 @@ import { InlineField } from "./inline-field";
 import {
     updateMemberField, setIndividualDiscount,
     setContributionFlags, terminateMembership,
-    getMemberHistory, getMemberAuditLog, saveMember, setMemberTodo,
+    getMemberHistory, getMemberAuditLog, saveMember, setMemberTodo, setMemberReviewed,
     type MemberFormState, type AuditEntry, type MemberYearRecord,
 } from "@/lib/actions/members";
 import { getMemberTjDiffs, updateMemberFieldFromTj, type TjDiff } from "@/lib/actions/sync";
@@ -473,6 +473,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
     const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
     const [committeePending, startCommitteeTransition] = useTransition();
     const [tomPending, startTomTransition] = useTransition();
+    const [reviewedPending, startReviewedTransition] = useTransition();
     const [toggleError, setToggleError] = useState<string | null>(null);
     const [optCommittee, setOptCommittee] = useState<boolean | null>(null);
     const [optTom, setOptTom]             = useState<boolean | null>(null);
@@ -594,6 +595,24 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                     if ("success" in r) onMemberUpdated();
                                 }}
                             />
+
+                            {/* Provedena revize */}
+                            <div className="flex items-center gap-2 rounded-xl border px-4 py-3 mb-4">
+                                <Checkbox
+                                    id="chk-reviewed"
+                                    checked={member.membershipReviewed}
+                                    disabled={reviewedPending}
+                                    onCheckedChange={v => {
+                                        startReviewedTransition(async () => {
+                                            const r = await setMemberReviewed(member.id, Boolean(v));
+                                            if ("success" in r) onMemberUpdated();
+                                        });
+                                    }}
+                                />
+                                <Label htmlFor="chk-reviewed" className="cursor-pointer text-sm font-medium">
+                                    Provedena revize
+                                </Label>
+                            </div>
 
                             {/* Current year flags */}
                             {member.hasContrib && (

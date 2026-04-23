@@ -6,9 +6,42 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { createBoat, updateBoat, deleteBoat } from "@/lib/actions/boats";
+import { createBoat, updateBoat, deleteBoat, setBoatTodo, setBoatReviewed } from "@/lib/actions/boats";
 import type { BoatRow } from "@/lib/actions/boats";
 import type { MemberOption } from "./page";
+import { Checkbox } from "@/components/ui/checkbox";
+
+// ── Todo section ─────────────────────────────────────────────────────────────
+function TodoSection({ currentNote, onSave }: {
+    currentNote: string | null;
+    onSave: (note: string | null) => Promise<void>;
+}) {
+    const [text, setText]     = useState(currentNote ?? "");
+    const [saving, setSaving] = useState(false);
+
+    useEffect(() => { setText(currentNote ?? ""); }, [currentNote]);
+
+    async function handleSave()    { setSaving(true); await onSave(text.trim() || null); setSaving(false); }
+    async function handleResolve() { setSaving(true); await onSave(null);                setSaving(false); }
+
+    return (
+        <div className={["rounded-xl border px-4 py-3 space-y-2", currentNote ? "border-orange-200 bg-orange-50/40" : ""].join(" ")}>
+            <p className="text-sm font-semibold text-gray-700">Úkol k řešení</p>
+            <Textarea value={text} onChange={e => setText(e.target.value)}
+                placeholder="Popište co je potřeba udělat…" rows={3} className="text-sm resize-none" />
+            <div className="flex gap-2">
+                <Button size="sm" onClick={handleSave} disabled={saving} className="bg-[#327600] hover:bg-[#2a6400]">
+                    {saving ? "Ukládám…" : "Uložit"}
+                </Button>
+                {currentNote && (
+                    <Button size="sm" variant="outline" onClick={handleResolve} disabled={saving}>
+                        ✓ Vyřešeno
+                    </Button>
+                )}
+            </div>
+        </div>
+    );
+}
 
 const GRID_OPTIONS = [
     { value: "",       label: "— neznámé —" },
@@ -39,9 +72,12 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
     const [storedTo,      setStoredTo]      = useState("");
     const [lastCheckedAt, setLastCheckedAt] = useState("");
     const [note,          setNote]          = useState("");
+    const [todoNote,      setTodoNote]      = useState("");
+    const [reviewed,      setReviewed]      = useState(false);
 
-    const [isPending, startTransition] = useTransition();
-    const [error, setError]            = useState<string | null>(null);
+    const [isPending,        startTransition] = useTransition();
+    const [reviewedPending,  startRevTrans]   = useTransition();
+    const [error,            setError]        = useState<string | null>(null);
 
     useEffect(() => {
         if (!open) return;
@@ -56,6 +92,8 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
             setStoredTo(boat.storedTo ?? "");
             setLastCheckedAt(boat.lastCheckedAt ?? "");
             setNote(boat.note ?? "");
+            setTodoNote(boat.todoNote ?? "");
+            setReviewed(boat.reviewed);
         } else {
             setOwnerId("");
             setDescription("");
@@ -67,6 +105,8 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
             setStoredTo("");
             setLastCheckedAt("");
             setNote("");
+            setTodoNote("");
+            setReviewed(false);
         }
         setError(null);
     }, [open, boat]);
@@ -92,7 +132,7 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
                 if (isNew) {
                     await createBoat(data);
                 } else {
-                    await updateBoat(boat.id, data);
+                    await updateBoat(boat.id, { ...data, todoNote: todoNote.trim() || null, reviewed });
                 }
                 onSaved();
                 onOpenChange(false);
@@ -128,6 +168,8 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
                 storedTo:      today,
                 lastCheckedAt: boat.lastCheckedAt,
                 note:          boat.note,
+                todoNote:      boat.todoNote,
+                reviewed:      boat.reviewed,
             });
             onSaved();
             onOpenChange(false);
@@ -270,6 +312,38 @@ export function BoatSheet({ open, onOpenChange, boat, allMembers, onSaved }: Pro
                             rows={2}
                         />
                     </div>
+
+                    {/* ── Úkol k řešení (pouze u existující lodě) ── */}
+                    {!isNew && (
+                        <TodoSection
+                            currentNote={boat?.todoNote ?? null}
+                            onSave={async (note) => {
+                                const r = await setBoatTodo(boat!.id, note);
+                                if ("success" in r) onSaved();
+                            }}
+                        />
+                    )}
+
+                    {/* ── Provedena revize ── */}
+                    {!isNew && (
+                        <div className="flex items-center gap-2 rounded-xl border px-4 py-3">
+                            <Checkbox
+                                id="boat-reviewed"
+                                checked={reviewed}
+                                disabled={reviewedPending}
+                                onCheckedChange={v => {
+                                    setReviewed(Boolean(v));
+                                    startRevTrans(async () => {
+                                        await setBoatReviewed(boat!.id, Boolean(v));
+                                        onSaved();
+                                    });
+                                }}
+                            />
+                            <Label htmlFor="boat-reviewed" className="cursor-pointer text-sm font-medium">
+                                Provedena revize
+                            </Label>
+                        </div>
+                    )}
 
                     {/* ── Chyba ── */}
                     {error && (

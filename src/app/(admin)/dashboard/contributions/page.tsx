@@ -53,6 +53,7 @@ export type ContribRow = {
     discountIndividual: number | null;
     brigadeSurcharge: number | null;
     todoNote: string | null;
+    reviewed: boolean;
     // Derived from payments table
     payments: Payment[];
     paidTotal: number;
@@ -115,6 +116,7 @@ export default async function ContributionsPage() {
             discountIndividual: memberContributions.discountIndividual,
             brigadeSurcharge:   memberContributions.brigadeSurcharge,
             todoNote:           memberContributions.todoNote,
+            reviewed:           memberContributions.reviewed,
         })
         .from(memberContributions)
         .innerJoin(members, eq(memberContributions.memberId, members.id))

@@ -27,6 +27,7 @@ export type MemberWithFlags = {
     birthNumber: string | null;
     note: string | null;
     todoNote: string | null;
+    membershipReviewed: boolean;
     // Member date range (always present)
     memberFrom: string;
     memberTo: string | null;
@@ -127,6 +128,7 @@ export default async function MembersPage() {
             birthNumber:        members.birthNumber,
             note:               members.note,
             todoNote:           members.todoNote,
+            membershipReviewed: members.membershipReviewed,
             memberFrom:         members.memberFrom,
             memberTo:           members.memberTo,
             memberToNote:       members.memberToNote,
@@ -168,6 +170,7 @@ export default async function MembersPage() {
             birthNumber:        r.birthNumber,
             note:               r.note,
             todoNote:           r.todoNote,
+            membershipReviewed: r.membershipReviewed,
             memberFrom:         mFrom,
             memberTo:           mTo,
             memberToNote:       r.memberToNote,

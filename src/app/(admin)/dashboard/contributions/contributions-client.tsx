@@ -16,16 +16,17 @@ import { deleteAllPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, PeriodDetail, PeriodStatus } from "./page";
 
-type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo";
+type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo" | "unreviewed";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
-    { key: "issues",    label: "Problémy"    },
-    { key: "unpaid",    label: "Nezaplaceno" },
-    { key: "underpaid", label: "Nedoplatek"  },
-    { key: "overpaid",  label: "Přeplatek"   },
-    { key: "paid",      label: "Zaplaceno"   },
-    { key: "todo",      label: "S úkolem"    },
-    { key: "all",       label: "Všichni"     },
+    { key: "issues",     label: "Problémy"    },
+    { key: "unpaid",     label: "Nezaplaceno" },
+    { key: "underpaid",  label: "Nedoplatek"  },
+    { key: "overpaid",   label: "Přeplatek"   },
+    { key: "paid",       label: "Zaplaceno"   },
+    { key: "todo",       label: "S úkolem"    },
+    { key: "unreviewed", label: "Bez revize"  },
+    { key: "all",        label: "Všichni"     },
 ];
 
 const STATUS_BADGE: Record<ContribRow["status"], { label: string; cls: string }> = {
@@ -119,14 +120,16 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
         overpaid:  rows.filter(r => r.status === "overpaid").length,
         underpaid: rows.filter(r => r.status === "underpaid").length,
         unpaid:    rows.filter(r => r.status === "unpaid").length,
-        issues:    rows.filter(r => r.status !== "paid").length,
-        todo:      rows.filter(r => r.todoNote !== null).length,
+        issues:     rows.filter(r => r.status !== "paid").length,
+        todo:       rows.filter(r => r.todoNote !== null).length,
+        unreviewed: rows.filter(r => !r.reviewed).length,
     }), [rows]);
 
     const filtered = useMemo(() => {
-        if (filter === "all")    return rows;
-        if (filter === "issues") return rows.filter(r => r.status !== "paid");
-        if (filter === "todo")   return rows.filter(r => r.todoNote !== null);
+        if (filter === "all")        return rows;
+        if (filter === "issues")     return rows.filter(r => r.status !== "paid");
+        if (filter === "todo")       return rows.filter(r => r.todoNote !== null);
+        if (filter === "unreviewed") return rows.filter(r => !r.reviewed);
         return rows.filter(r => r.status === filter);
     }, [rows, filter]);
 
@@ -238,9 +241,13 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "todo" ? "bg-orange-500 text-white" : "bg-[#327600] text-white"
+                                ? f.key === "todo"       ? "bg-orange-500 text-white"
+                                  : f.key === "unreviewed" ? "bg-violet-600 text-white"
+                                  : "bg-[#327600] text-white"
                                 : f.key === "todo" && counts.todo > 0
                                     ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
+                                : f.key === "unreviewed" && counts.unreviewed > 0
+                                    ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}

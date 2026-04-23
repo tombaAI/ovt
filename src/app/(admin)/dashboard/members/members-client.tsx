@@ -9,7 +9,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { MemberSheet } from "./member-sheet";
 import type { MemberWithFlags } from "./page";
 
-type FilterKey = "all" | "inactive" | "committee" | "tom" | "individual" | "partial" | "nobrigade" | "todo" | "tjdiffs";
+type FilterKey = "all" | "inactive" | "committee" | "tom" | "individual" | "partial" | "nobrigade" | "todo" | "tjdiffs" | "unreviewed";
 type SortKey   = "firstName" | "lastName";
 
 const FILTERS: { key: FilterKey; label: string }[] = [
@@ -22,6 +22,7 @@ const FILTERS: { key: FilterKey; label: string }[] = [
     { key: "nobrigade",  label: "Bez brigády"         },
     { key: "todo",       label: "S úkolem"           },
     { key: "tjdiffs",    label: "Změny z TJ"         },
+    { key: "unreviewed", label: "Bez revize"          },
 ];
 
 function fmtDate(iso: string) {
@@ -105,6 +106,7 @@ export function MembersClient({ members, selectedYear, periodId, currentYearDisc
             nobrigade:  active.filter(m => !m.hasBrigade).length,
             todo:       members.filter(m => m.todoNote !== null).length,
             tjdiffs:    members.filter(m => m.hasTjDiffs).length,
+            unreviewed: members.filter(m => !m.membershipReviewed).length,
         };
     }, [members, selectedYear]);
 
@@ -120,6 +122,7 @@ export function MembersClient({ members, selectedYear, periodId, currentYearDisc
             case "nobrigade":  list = active.filter(m => !m.hasBrigade); break;
             case "todo":       list = members.filter(m => m.todoNote !== null); break;
             case "tjdiffs":    list = members.filter(m => m.hasTjDiffs); break;
+            case "unreviewed": list = members.filter(m => !m.membershipReviewed); break;
             default:           list = active;
         }
         if (searchText.trim()) {
@@ -164,10 +167,11 @@ export function MembersClient({ members, selectedYear, periodId, currentYearDisc
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "todo"      ? "bg-orange-500 text-white"
-                                  : f.key === "tjdiffs"  ? "bg-sky-600 text-white"
+                                ? f.key === "todo"       ? "bg-orange-500 text-white"
+                                  : f.key === "tjdiffs"   ? "bg-sky-600 text-white"
                                   : f.key === "nobrigade" ? "bg-red-600 text-white"
                                   : f.key === "inactive"  ? "bg-gray-600 text-white"
+                                  : f.key === "unreviewed" ? "bg-violet-600 text-white"
                                   : "bg-[#327600] text-white"
                                 : f.key === "todo" && counts.todo > 0
                                     ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
@@ -175,6 +179,8 @@ export function MembersClient({ members, selectedYear, periodId, currentYearDisc
                                     ? "bg-sky-50 text-sky-700 border border-sky-300 hover:bg-sky-100"
                                 : f.key === "nobrigade" && counts.nobrigade > 0
                                     ? "bg-red-50 text-red-700 border border-red-300 hover:bg-red-100"
+                                : f.key === "unreviewed" && counts.unreviewed > 0
+                                    ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
                         {f.label}

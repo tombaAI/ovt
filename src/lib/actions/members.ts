@@ -509,6 +509,36 @@ export async function setMemberTodo(
     }
 }
 
+// ── setMemberReviewed ─────────────────────────────────────────────────────────
+export async function setMemberReviewed(
+    memberId: number,
+    reviewed: boolean
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const changedBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+    try {
+        const [current] = await db.select({ membershipReviewed: members.membershipReviewed })
+            .from(members).where(eq(members.id, memberId));
+        if (!current) return { error: "Člen nenalezen" };
+
+        await db.update(members).set({ membershipReviewed: reviewed, updatedAt: new Date() }).where(eq(members.id, memberId));
+
+        if (current.membershipReviewed !== reviewed) {
+            await db.insert(auditLog).values({
+                entityType: "member", entityId: memberId, action: "update",
+                changes: { membershipReviewed: { old: str(current.membershipReviewed), new: str(reviewed) } },
+                changedBy,
+            });
+        }
+        revalidatePath("/dashboard/members");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
 // ── getMemberAuditLog ────────────────────────────────────────────────────────
 export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]> {
     const db = getDb();

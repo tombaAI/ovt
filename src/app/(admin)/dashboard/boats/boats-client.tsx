@@ -16,11 +16,12 @@ const GRID_FILTERS = [
     { label: "Mříž 2",  value: "2" },
     { label: "Mříž 3",  value: "3" },
     { label: "Dlouhé",  value: "dlouhé" },
-    { label: "Neznámé", value: "" },       // grid === null
-    { label: "Chybí",   value: "__missing__" },  // is_present = false
+    { label: "Neznámé", value: "" },            // grid === null
+    { label: "Chybí",   value: "__missing__" }, // is_present = false
 ] as const;
 
 type GridFilter = typeof GRID_FILTERS[number]["value"];
+type ExtraFilter = "todo" | "unreviewed" | null;
 
 interface Props {
     boats: BoatRow[];
@@ -32,9 +33,10 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
 
-    const [gridFilter, setGridFilter] = useState<GridFilter>(null);
-    const [sheetOpen, setSheetOpen]   = useState(false);
-    const [editBoat, setEditBoat]     = useState<BoatRow | null>(null);
+    const [gridFilter, setGridFilter]   = useState<GridFilter>(null);
+    const [extraFilter, setExtraFilter] = useState<ExtraFilter>(null);
+    const [sheetOpen, setSheetOpen]     = useState(false);
+    const [editBoat, setEditBoat]       = useState<BoatRow | null>(null);
 
     function toggleArchived() {
         startTransition(() => {
@@ -57,13 +59,19 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
     }, [router]);
 
     const filtered = boats.filter(b => {
-        if (gridFilter === null) return true;
-        if (gridFilter === "__missing__") return !b.isPresent;
-        if (gridFilter === "") return b.grid === null;
-        return b.grid === gridFilter;
+        const gridOk = gridFilter === null ? true
+            : gridFilter === "__missing__" ? !b.isPresent
+            : gridFilter === "" ? b.grid === null
+            : b.grid === gridFilter;
+        const extraOk = extraFilter === null ? true
+            : extraFilter === "todo" ? Boolean(b.todoNote)
+            : !b.reviewed;
+        return gridOk && extraOk;
     });
 
-    const missingCount = boats.filter(b => !b.isPresent).length;
+    const todoCount       = boats.filter(b => Boolean(b.todoNote)).length;
+    const unreviewedCount = boats.filter(b => !b.reviewed).length;
+    const missingCount    = boats.filter(b => !b.isPresent).length;
 
     return (
         <div className="space-y-4">
@@ -120,6 +128,38 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
                         </button>
                     );
                 })}
+
+                {/* Extra filtry: úkol + bez revize */}
+                {todoCount > 0 && (
+                    <button
+                        onClick={() => setExtraFilter(extraFilter === "todo" ? null : "todo")}
+                        className={[
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
+                            extraFilter === "todo"
+                                ? "bg-orange-500 text-white"
+                                : "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100",
+                        ].join(" ")}>
+                        S úkolem
+                        <span className={`text-xs font-semibold ${extraFilter === "todo" ? "text-white/70" : "text-orange-500"}`}>
+                            {todoCount}
+                        </span>
+                    </button>
+                )}
+                {unreviewedCount > 0 && (
+                    <button
+                        onClick={() => setExtraFilter(extraFilter === "unreviewed" ? null : "unreviewed")}
+                        className={[
+                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors",
+                            extraFilter === "unreviewed"
+                                ? "bg-violet-600 text-white"
+                                : "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100",
+                        ].join(" ")}>
+                        Bez revize
+                        <span className={`text-xs font-semibold ${extraFilter === "unreviewed" ? "text-white/70" : "text-violet-500"}`}>
+                            {unreviewedCount}
+                        </span>
+                    </button>
+                )}
             </div>
 
             {/* ── Table ── */}

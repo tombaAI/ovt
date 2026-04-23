@@ -21,6 +21,8 @@ export type BoatRow = {
     storedTo: string | null;
     lastCheckedAt: string | null;
     note: string | null;
+    todoNote: string | null;
+    reviewed: boolean;
     contribYears: number[];   // roky, ve kterých má majitel lodě v příspěvcích
 };
 
@@ -43,6 +45,8 @@ export async function getBoats(includeArchived = false): Promise<BoatRow[]> {
             storedTo:      boats.storedTo,
             lastCheckedAt: boats.lastCheckedAt,
             note:          boats.note,
+            todoNote:      boats.todoNote,
+            reviewed:      boats.reviewed,
         })
         .from(boats)
         .leftJoin(members, eq(boats.ownerId, members.id))
@@ -98,6 +102,7 @@ export async function getBoats(includeArchived = false): Promise<BoatRow[]> {
         lastCheckedAt: r.lastCheckedAt as unknown as string | null,
         contribYears:  r.ownerId ? [...(contribMap.get(r.ownerId) ?? [])] : [],
     }));
+
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────────
@@ -112,6 +117,8 @@ export async function createBoat(data: {
     storedFrom: string | null;
     lastCheckedAt: string | null;
     note: string | null;
+    todoNote?: string | null;
+    reviewed?: boolean;
 }): Promise<{ id: number }> {
     const session = await auth();
     if (!session?.user?.email) throw new Error("Nepřihlášen");
@@ -149,6 +156,8 @@ export async function updateBoat(id: number, data: {
     storedTo: string | null;
     lastCheckedAt: string | null;
     note: string | null;
+    todoNote?: string | null;
+    reviewed?: boolean;
 }): Promise<void> {
     const session = await auth();
     if (!session?.user?.email) throw new Error("Nepřihlášen");
@@ -170,4 +179,38 @@ export async function deleteBoat(id: number): Promise<void> {
     await db.delete(boats).where(eq(boats.id, id));
 
     revalidatePath("/dashboard/boats");
+}
+
+export async function setBoatTodo(
+    boatId: number,
+    note: string | null
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    const db = getDb();
+    try {
+        await db.update(boats).set({ todoNote: note, updatedAt: new Date() }).where(eq(boats.id, boatId));
+        revalidatePath("/dashboard/boats");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
+}
+
+export async function setBoatReviewed(
+    boatId: number,
+    reviewed: boolean
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    const db = getDb();
+    try {
+        await db.update(boats).set({ reviewed, updatedAt: new Date() }).where(eq(boats.id, boatId));
+        revalidatePath("/dashboard/boats");
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při ukládání" };
+    }
 }

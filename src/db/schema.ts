@@ -106,6 +106,7 @@ export const memberContributions = appSchema.table(
         discountIndividualNote:       text("discount_individual_note"),
         discountIndividualValidUntil: smallint("discount_individual_valid_until"),
         todoNote:                     text("todo_note"),
+        reviewed:                     boolean("reviewed").notNull().default(false),
     },
     (t) => [
         index("member_contributions_member_idx").on(t.memberId),
@@ -327,6 +328,8 @@ export const boats = appSchema.table(
         storedTo:       date("stored_to"),       // null = stále aktivní
         lastCheckedAt:  date("last_checked_at"), // datum poslední fyzické kontroly
         note:           text("note"),
+        todoNote:       text("todo_note"),
+        reviewed:       boolean("reviewed").notNull().default(false),
         createdBy:   text("created_by").notNull(),
         createdAt:   timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt:   timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
