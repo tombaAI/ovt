@@ -16,17 +16,27 @@ import { deleteAllPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, PeriodDetail, PeriodStatus } from "./page";
 
-type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo" | "unreviewed";
+type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo"
+    | "state_new" | "state_reviewed" | "state_mailed";
+
+// Stav procesu příspěvku (nezávislý na stavu platby)
+function processState(r: ContribRow): "new" | "reviewed" | "mailed" {
+    if (r.emailSent)  return "mailed";
+    if (r.reviewed)   return "reviewed";
+    return "new";
+}
 
 const FILTERS: { key: FilterKey; label: string }[] = [
-    { key: "issues",     label: "Problémy"    },
-    { key: "unpaid",     label: "Nezaplaceno" },
-    { key: "underpaid",  label: "Nedoplatek"  },
-    { key: "overpaid",   label: "Přeplatek"   },
-    { key: "paid",       label: "Zaplaceno"   },
-    { key: "todo",       label: "S úkolem"    },
-    { key: "unreviewed", label: "Bez revize"  },
-    { key: "all",        label: "Všichni"     },
+    { key: "issues",        label: "Problémy"      },
+    { key: "unpaid",        label: "Nezaplaceno"   },
+    { key: "underpaid",     label: "Nedoplatek"    },
+    { key: "overpaid",      label: "Přeplatek"     },
+    { key: "paid",          label: "Zaplaceno"     },
+    { key: "todo",          label: "S úkolem"      },
+    { key: "state_new",     label: "Nový"          },
+    { key: "state_reviewed",label: "Zkontrolováno" },
+    { key: "state_mailed",  label: "Odeslán mail"  },
+    { key: "all",           label: "Všichni"       },
 ];
 
 const STATUS_BADGE: Record<ContribRow["status"], { label: string; cls: string }> = {
@@ -116,14 +126,16 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
     }
 
     const counts = useMemo(() => ({
-        all:       rows.length,
-        paid:      rows.filter(r => r.status === "paid").length,
-        overpaid:  rows.filter(r => r.status === "overpaid").length,
-        underpaid: rows.filter(r => r.status === "underpaid").length,
-        unpaid:    rows.filter(r => r.status === "unpaid").length,
-        issues:     rows.filter(r => r.status !== "paid").length,
-        todo:       rows.filter(r => r.todoNote !== null).length,
-        unreviewed: rows.filter(r => !r.reviewed).length,
+        all:            rows.length,
+        paid:           rows.filter(r => r.status === "paid").length,
+        overpaid:       rows.filter(r => r.status === "overpaid").length,
+        underpaid:      rows.filter(r => r.status === "underpaid").length,
+        unpaid:         rows.filter(r => r.status === "unpaid").length,
+        issues:         rows.filter(r => r.status !== "paid").length,
+        todo:           rows.filter(r => r.todoNote !== null).length,
+        state_new:      rows.filter(r => processState(r) === "new").length,
+        state_reviewed: rows.filter(r => processState(r) === "reviewed").length,
+        state_mailed:   rows.filter(r => processState(r) === "mailed").length,
     }), [rows]);
 
     const filtered = useMemo(() => {
@@ -147,10 +159,12 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
         }
 
         const result = rows.filter(matchesQuery);
-        if (filter === "all")        return result;
-        if (filter === "issues")     return result.filter(r => r.status !== "paid");
-        if (filter === "todo")       return result.filter(r => r.todoNote !== null);
-        if (filter === "unreviewed") return result.filter(r => !r.reviewed);
+        if (filter === "all")             return result;
+        if (filter === "issues")          return result.filter(r => r.status !== "paid");
+        if (filter === "todo")            return result.filter(r => r.todoNote !== null);
+        if (filter === "state_new")       return result.filter(r => processState(r) === "new");
+        if (filter === "state_reviewed")  return result.filter(r => processState(r) === "reviewed");
+        if (filter === "state_mailed")    return result.filter(r => processState(r) === "mailed");
         return result.filter(r => r.status === filter);
     }, [rows, filter, query]);
 
@@ -160,6 +174,7 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
     }), [rows]);
 
     const lifecycle = LIFECYCLE[period.status as PeriodStatus] ?? LIFECYCLE.collecting;
+    const anyEmailSent = rows.some(r => r.emailSent);
 
     return (
         <div className="space-y-5">
@@ -213,7 +228,9 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                             size="sm"
                             variant="outline"
                             onClick={() => setDeleteConfirmOpen(true)}
-                            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700"
+                            disabled={anyEmailSent}
+                            title={anyEmailSent ? "Nelze smazat — u některých předpisů byl odeslán email" : undefined}
+                            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                             <Trash2 className="w-3.5 h-3.5 mr-1" />
                             Smazat vše
@@ -282,12 +299,18 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                         className={[
                             "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
                             filter === f.key
-                                ? f.key === "todo"       ? "bg-orange-500 text-white"
-                                  : f.key === "unreviewed" ? "bg-violet-600 text-white"
+                                ? f.key === "todo"           ? "bg-orange-500 text-white"
+                                  : f.key === "state_new"    ? "bg-gray-600 text-white"
+                                  : f.key === "state_reviewed" ? "bg-blue-600 text-white"
+                                  : f.key === "state_mailed" ? "bg-violet-600 text-white"
                                   : "bg-[#327600] text-white"
                                 : f.key === "todo" && counts.todo > 0
                                     ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
-                                : f.key === "unreviewed" && counts.unreviewed > 0
+                                : f.key === "state_new" && counts.state_new > 0
+                                    ? "bg-gray-50 text-gray-700 border border-gray-300 hover:bg-gray-100"
+                                : f.key === "state_reviewed" && counts.state_reviewed > 0
+                                    ? "bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100"
+                                : f.key === "state_mailed" && counts.state_mailed > 0
                                     ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100"
                                     : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
                         ].join(" ")}>
@@ -296,7 +319,7 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                             "text-xs rounded-full px-1.5",
                             filter === f.key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
                         ].join(" ")}>
-                            {counts[f.key]}
+                            {counts[f.key as keyof typeof counts] ?? 0}
                         </span>
                     </button>
                 ))}

@@ -303,6 +303,14 @@ export async function deleteAllPrescriptions(
         if (!period) return { error: "Období nenalezeno" };
         if (period.status !== "draft") return { error: "Smazání je povoleno jen ve stavu Příprava" };
 
+        // Blokovat smazání pokud byl u jakéhokoli předpisu odeslán email
+        const [emailSentCheck] = await db
+            .select({ id: memberContributions.id })
+            .from(memberContributions)
+            .where(and(eq(memberContributions.periodId, periodId), eq(memberContributions.emailSent, true)));
+
+        if (emailSentCheck) return { error: "Nelze smazat — u některých předpisů byl odeslán email" };
+
         const deleted = await db
             .delete(memberContributions)
             .where(eq(memberContributions.periodId, periodId))

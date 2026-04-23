@@ -21,8 +21,10 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
     const [result, setResult] = useState<SendEmailResult | null>(null);
     const [error, setError]   = useState<string | null>(null);
 
-    const withEmail    = rows.filter(r => r.email);
-    const withoutEmail = rows.filter(r => !r.email);
+    const withEmail      = rows.filter(r => r.email);
+    const withoutEmail   = rows.filter(r => !r.email);
+    const notReviewed    = rows.filter(r => !r.reviewed);
+    const canSend        = withEmail.length > 0 && notReviewed.length === 0;
 
     function handleClose() {
         if (isPending) return;
@@ -108,6 +110,17 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
                             </div>
                         </div>
 
+                        {/* Varování — nerevidováno */}
+                        {notReviewed.length > 0 && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+                                <p className="font-semibold mb-1">Nerevidované předpisy ({notReviewed.length} — nelze odeslat):</p>
+                                {notReviewed.map(r => (
+                                    <p key={r.contribId}>{r.firstName} {r.lastName}</p>
+                                ))}
+                                <p className="mt-1 text-red-500">Nejdřív proveď revizi předpisu.</p>
+                            </div>
+                        )}
+
                         {/* Varování — bez emailu */}
                         {withoutEmail.length > 0 && (
                             <div className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
@@ -131,7 +144,7 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
                             </Button>
                             <Button
                                 onClick={handleSend}
-                                disabled={isPending || withEmail.length === 0}
+                                disabled={isPending || !canSend}
                                 className="bg-[#327600] hover:bg-[#327600]/90 text-white"
                             >
                                 {isPending

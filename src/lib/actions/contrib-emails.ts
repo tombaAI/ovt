@@ -47,6 +47,7 @@ export async function sendContributionEmails(
             contribId:          memberContributions.id,
             memberId:           memberContributions.memberId,
             periodId:           memberContributions.periodId,
+            reviewed:           memberContributions.reviewed,
             amountTotal:        memberContributions.amountTotal,
             amountBase:         memberContributions.amountBase,
             amountBoat1:        memberContributions.amountBoat1,
@@ -66,6 +67,13 @@ export async function sendContributionEmails(
         .where(inArray(memberContributions.id, contribIds));
 
     if (rows.length === 0) return { error: "Předpisy nenalezeny" };
+
+    // Blokovat odeslání na nerevidované předpisy
+    const unreviewed = rows.filter(r => !r.reviewed);
+    if (unreviewed.length > 0) {
+        const names = unreviewed.map(r => `${r.firstName} ${r.lastName}`).join(", ");
+        return { error: `Nelze odeslat email na nerevidované předpisy: ${names}` };
+    }
 
     // Načíst info o období (bankAccount, dueDate, year)
     const periodId = rows[0].periodId;
@@ -147,6 +155,11 @@ export async function sendContributionEmails(
         if (sendError) {
             failed++;
             errors.push(`${row.firstName} ${row.lastName}: ${sendError}`);
+        } else {
+            // Úspěšně odesláno — nastavit emailSent příznak na předpisu
+            await db.update(memberContributions)
+                .set({ emailSent: true })
+                .where(eq(memberContributions.id, row.contribId));
         }
 
         // Logovat do mail_events vždy (i při chybě)

@@ -379,7 +379,7 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                     <Checkbox
                         id="chk-contrib-reviewed"
                         checked={row.reviewed}
-                        disabled={reviewedPending}
+                        disabled={reviewedPending || (row.reviewed && row.emailSent)}
                         onCheckedChange={v => {
                             startRev(async () => {
                                 const r = await setContribReviewed(row.contribId, Boolean(v));
@@ -387,9 +387,12 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                             });
                         }}
                     />
-                    <Label htmlFor="chk-contrib-reviewed" className="cursor-pointer text-sm font-medium">
+                    <Label htmlFor="chk-contrib-reviewed" className={`text-sm font-medium ${row.reviewed && row.emailSent ? "cursor-not-allowed text-gray-400" : "cursor-pointer"}`}>
                         Provedena revize
                     </Label>
+                    {row.emailSent && (
+                        <span className="ml-auto text-xs text-violet-600 font-medium">Odeslán mail</span>
+                    )}
                 </div>
 
                 {/* Email history */}

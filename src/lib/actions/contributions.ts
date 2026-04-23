@@ -55,9 +55,12 @@ export async function setContribReviewed(
     const db = getDb();
     try {
         const [current] = await db
-            .select({ reviewed: memberContributions.reviewed, memberId: memberContributions.memberId })
+            .select({ reviewed: memberContributions.reviewed, emailSent: memberContributions.emailSent, memberId: memberContributions.memberId })
             .from(memberContributions).where(eq(memberContributions.id, contribId));
         if (!current) return { error: "Záznam nenalezen" };
+
+        // Po odeslání emailu nelze zrušit revizi
+        if (!reviewed && current.emailSent) return { error: "Nelze zrušit revizi — email byl odeslán" };
 
         await db.update(memberContributions).set({ reviewed }).where(eq(memberContributions.id, contribId));
 

@@ -107,6 +107,7 @@ export const memberContributions = appSchema.table(
         discountIndividualValidUntil: smallint("discount_individual_valid_until"),
         todoNote:                     text("todo_note"),
         reviewed:                     boolean("reviewed").notNull().default(false),
+        emailSent:                    boolean("email_sent").notNull().default(false),
     },
     (t) => [
         index("member_contributions_member_idx").on(t.memberId),
