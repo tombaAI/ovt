@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useTransition, useCallback } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { BoatSheet } from "./boat-sheet";
 import { fmtBoatLocation } from "@/lib/boats-utils";
@@ -33,8 +34,10 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
 
+    const searchParams = useSearchParams();
     const [gridFilter, setGridFilter]   = useState<GridFilter>(null);
     const [extraFilter, setExtraFilter] = useState<ExtraFilter>(null);
+    const [query, setQuery]             = useState(searchParams.get("q") ?? "");
     const [sheetOpen, setSheetOpen]     = useState(false);
     const [editBoat, setEditBoat]       = useState<BoatRow | null>(null);
 
@@ -42,6 +45,13 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
         startTransition(() => {
             router.push(`/dashboard/boats${includeArchived ? "" : "?archived=1"}`);
         });
+    }
+
+    function handleQuery(value: string) {
+        setQuery(value);
+        const params = new URLSearchParams(searchParams.toString());
+        if (value) params.set("q", value); else params.delete("q");
+        router.replace(`/dashboard/boats?${params.toString()}`, { scroll: false });
     }
 
     const openNew = useCallback(() => {
@@ -58,6 +68,7 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
         router.refresh();
     }, [router]);
 
+    const q = query.trim().toLowerCase();
     const filtered = boats.filter(b => {
         const gridOk = gridFilter === null ? true
             : gridFilter === "__missing__" ? !b.isPresent
@@ -66,7 +77,10 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
         const extraOk = extraFilter === null ? true
             : extraFilter === "todo" ? Boolean(b.todoNote)
             : !b.reviewed;
-        return gridOk && extraOk;
+        const textOk = q === "" ? true
+            : [b.ownerName, b.description, b.color]
+                .some(s => s?.toLowerCase().includes(q));
+        return gridOk && extraOk && textOk;
     });
 
     const todoCount       = boats.filter(b => Boolean(b.todoNote)).length;
@@ -93,6 +107,24 @@ export function BoatsClient({ boats, allMembers, includeArchived }: Props) {
                     className="text-sm text-gray-400 hover:text-gray-700 underline underline-offset-2 transition-colors shrink-0 mt-1">
                     {includeArchived ? "← Aktivní" : "Archiv"}
                 </button>
+            </div>
+
+            {/* ── Search ── */}
+            <div className="relative max-w-xs">
+                <Input
+                    type="search"
+                    placeholder="Hledat majitele, popis, barvu…"
+                    value={query}
+                    onChange={e => handleQuery(e.target.value)}
+                    className="pr-8 text-sm"
+                />
+                {query && (
+                    <button
+                        onClick={() => handleQuery("")}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-base leading-none">
+                        ×
+                    </button>
+                )}
             </div>
 
             {/* ── Filter pills ── */}
