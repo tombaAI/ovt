@@ -121,7 +121,7 @@ export default async function ContributionsPage() {
         .from(memberContributions)
         .innerJoin(members, eq(memberContributions.memberId, members.id))
         .where(eq(memberContributions.periodId, period.id))
-        .orderBy(asc(members.lastName), asc(members.firstName));
+        .orderBy(asc(members.firstName), asc(members.lastName));
 
     // Fetch all confirmed allocations from payment_ledger for these contributions
     const contribIds = contribs.map(c => c.contribId);
