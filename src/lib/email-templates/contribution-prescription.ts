@@ -52,14 +52,21 @@ function fmtVS(vs: number): string {
  * Pokrývá nejběžnější vzory — není 100% přesné pro exotická jména.
  */
 function vocative(name: string): string {
+    // Speciální vzory (musí být před obecnými pravidly)
+    // -něk → -ňku (Zbyněk→Zbyňku, Zdeněk→Zdeňku)
+    if (/něk$/.test(name))      return name.replace(/něk$/, "ňku");
+    // -ch → +u (Vojtěch→Vojtěchu)
+    if (/ch$/.test(name))       return name + "u";
     // Ženská: končí na -a nebo -á → nahradit za -o
-    if (/[aá]$/.test(name)) return name.slice(0, -1) + "o";
-    // Ženská: končí na -e → beze změny (Marie, Sofie…)
-    if (/e$/.test(name))    return name;
+    if (/[aá]$/.test(name))     return name.slice(0, -1) + "o";
+    // Ženská: končí na -e nebo -í → beze změny (Marie, Jiří…)
+    if (/[eí]$/.test(name))     return name;
+    // Mužská: končí na -o → beze změny (Hugo…)
+    if (/o$/.test(name))        return name;
     // Mužská: měkké hlásky a -j → přidat -i (Tomáš→Tomáši, Ondřej→Ondřeji…)
-    if (/[šžčřj]$/.test(name)) return name + "i";
+    if (/[šžčřj]$/.test(name))  return name + "i";
     // Mužská: -k → přidat -u (Marek→Marku, Dominik→Dominiku…)
-    if (/k$/.test(name))    return name + "u";
+    if (/k$/.test(name))        return name + "u";
     // Mužská: ostatní → přidat -e (Petr→Petre, Jan→Jane, Pavel→Pavle…)
     return name + "e";
 }
