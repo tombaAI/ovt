@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Mail, Minus, Plus } from "lucide-react";
+import { Mail, RefreshCw } from "lucide-react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -14,8 +14,8 @@ import { setContributionTodo, setContribReviewed } from "@/lib/actions/contribut
 import { createCashPaymentOnContrib, deleteContribAllocation } from "@/lib/actions/reconciliation";
 import { getContribEmailHistory, type ContribMailEvent } from "@/lib/actions/contrib-emails";
 import {
-    addBoatToContrib, removeBoatFromContrib,
     setContribIndividualDiscount, type IndividualDiscountData,
+    recalcContribForMember,
 } from "@/lib/actions/contribution-periods";
 import { SendEmailDialog } from "./send-email-dialog";
 import type { ContribRow, Payment, PeriodDetail } from "./page";
@@ -85,8 +85,8 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
     const [addPending, startAdd]           = useTransition();
     const [delPending, startDel]           = useTransition();
     const [reviewedPending, startRev]      = useTransition();
-    const [boatPending, startBoat]         = useTransition();
-    const [boatError, setBoatError]        = useState<string | null>(null);
+    const [recalcPending, startRecalc]     = useTransition();
+    const [recalcError, setRecalcError]    = useState<string | null>(null);
     const [discPending, startDisc]         = useTransition();
     const [discError, setDiscError]        = useState<string | null>(null);
     const [discAmount, setDiscAmount]      = useState("");
@@ -96,7 +96,7 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
     const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
     useEffect(() => {
-        if (open) { setAmount(""); setPaidAt(""); setNote(""); setAddError(null); setBoatError(null); setDiscError(null); }
+        if (open) { setAmount(""); setPaidAt(""); setNote(""); setAddError(null); setRecalcError(null); setDiscError(null); }
     }, [open]);
 
     // Předvyplnit individuální slevu z row
@@ -156,20 +156,11 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
         });
     }
 
-    function handleAddBoat() {
-        setBoatError(null);
-        startBoat(async () => {
-            const r = await addBoatToContrib(safeRow.contribId);
-            if ("error" in r) { setBoatError(r.error); return; }
-            onPaymentUpdated();
-        });
-    }
-
-    function handleRemoveBoat() {
-        setBoatError(null);
-        startBoat(async () => {
-            const r = await removeBoatFromContrib(safeRow.contribId);
-            if ("error" in r) { setBoatError(r.error); return; }
+    function handleRecalc() {
+        setRecalcError(null);
+        startRecalc(async () => {
+            const r = await recalcContribForMember(safeRow.contribId);
+            if ("error" in r) { setRecalcError(r.error); return; }
             onPaymentUpdated();
         });
     }
@@ -200,8 +191,6 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
         });
     }
 
-    // Počet aktuálních lodí
-    const boatCount = [row.amountBoat1, row.amountBoat2, row.amountBoat3].filter(Boolean).length;
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -210,41 +199,26 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                     <SheetTitle>{row.firstName} {row.lastName}</SheetTitle>
                 </SheetHeader>
 
-                {/* Prescription breakdown + boat management */}
+                {/* Prescription breakdown */}
                 {breakdown.length > 0 && (
                     <div className="rounded-xl border px-4 py-3 mb-4 text-sm space-y-1">
                         {breakdown.map((b, i) => <p key={i} className="text-gray-600">{b}</p>)}
                         <Separator className="my-2" />
                         <div className="flex items-center justify-between">
                             <p className="font-semibold text-gray-900">Předpis celkem: {fmt(row.amountTotal ?? 0)}</p>
-                            <div className="flex items-center gap-1.5">
-                                <span className="text-gray-400 text-xs mr-1">
-                                    {boatCount === 0 ? "Bez lodě" : `${boatCount} ${boatCount === 1 ? "loď" : boatCount < 5 ? "lodě" : "lodí"}`}
-                                </span>
+                            {!row.reviewed && (
                                 <button
-                                    onClick={handleRemoveBoat}
-                                    disabled={boatPending || boatCount === 0}
-                                    className="p-1 rounded border border-gray-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    title="Odebrat loď"
+                                    onClick={handleRecalc}
+                                    disabled={recalcPending}
+                                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#327600] disabled:opacity-40 transition-colors"
+                                    title="Přepočítat předpis podle aktuálního stavu (lodě, brigáda, výbor/TOM)"
                                 >
-                                    <Minus className="w-3 h-3" />
+                                    <RefreshCw className={`w-3 h-3 ${recalcPending ? "animate-spin" : ""}`} />
+                                    Přepočítat
                                 </button>
-                                <button
-                                    onClick={handleAddBoat}
-                                    disabled={boatPending || boatCount >= 3}
-                                    className="p-1 rounded border border-gray-200 hover:bg-[#327600]/10 hover:border-[#327600]/30 hover:text-[#327600] text-gray-400 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
-                                    title="Přidat loď"
-                                >
-                                    <Plus className="w-3 h-3" />
-                                </button>
-                            </div>
+                            )}
                         </div>
-                        {boatError && <p className="text-xs text-red-600 mt-1">{boatError}</p>}
-                        {period.amountBoat1 > 0 && (
-                            <p className="text-[11px] text-gray-400">
-                                Sazba: 1. loď {fmt(period.amountBoat1)}{period.amountBoat2 > 0 ? ` / 2.+ loď ${fmt(period.amountBoat2)}` : ""}
-                            </p>
-                        )}
+                        {recalcError && <p className="text-xs text-red-600 mt-1">{recalcError}</p>}
                     </div>
                 )}
 

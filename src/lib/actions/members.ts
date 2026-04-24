@@ -361,6 +361,12 @@ export async function setContributionFlags(
             discountTom:       isTom       ? -period.discountTom       : null,
         }).where(eq(memberContributions.id, contrib.id));
 
+        // Uložit trvalý příznak přímo na člena (zachová se i po smazání předpisů)
+        await db.update(members).set({
+            isCommitteeMember: isCommittee,
+            isTomLeader:       isTom,
+        }).where(eq(members.id, memberId));
+
         const flagChanges = diffObjects(
             { isCommittee: Boolean(contrib.discountCommittee), isTom: Boolean(contrib.discountTom) },
             { isCommittee, isTom }
