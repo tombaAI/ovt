@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { Mail, RefreshCw } from "lucide-react";
+import { RecalcConfirmDialog } from "./recalc-confirm-dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,7 +16,7 @@ import { createCashPaymentOnContrib, deleteContribAllocation } from "@/lib/actio
 import { getContribEmailHistory, type ContribMailEvent } from "@/lib/actions/contrib-emails";
 import {
     setContribIndividualDiscount, type IndividualDiscountData,
-    recalcContribForMember,
+    previewRecalcContrib, type RecalcProposed,
 } from "@/lib/actions/contribution-periods";
 import { SendEmailDialog } from "./send-email-dialog";
 import type { ContribRow, Payment, PeriodDetail } from "./page";
@@ -87,6 +88,8 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
     const [reviewedPending, startRev]      = useTransition();
     const [recalcPending, startRecalc]     = useTransition();
     const [recalcError, setRecalcError]    = useState<string | null>(null);
+    const [recalcProposed, setRecalcProposed] = useState<RecalcProposed | null>(null);
+    const [recalcDialogOpen, setRecalcDialogOpen] = useState(false);
     const [discPending, startDisc]         = useTransition();
     const [discError, setDiscError]        = useState<string | null>(null);
     const [discAmount, setDiscAmount]      = useState("");
@@ -159,9 +162,10 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
     function handleRecalc() {
         setRecalcError(null);
         startRecalc(async () => {
-            const r = await recalcContribForMember(safeRow.contribId);
+            const r = await previewRecalcContrib(safeRow.contribId);
             if ("error" in r) { setRecalcError(r.error); return; }
-            onPaymentUpdated();
+            setRecalcProposed(r.proposed);
+            setRecalcDialogOpen(true);
         });
     }
 
@@ -206,17 +210,15 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                         <Separator className="my-2" />
                         <div className="flex items-center justify-between">
                             <p className="font-semibold text-gray-900">Předpis celkem: {fmt(row.amountTotal ?? 0)}</p>
-                            {!row.reviewed && (
-                                <button
-                                    onClick={handleRecalc}
-                                    disabled={recalcPending}
-                                    className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#327600] disabled:opacity-40 transition-colors"
-                                    title="Přepočítat předpis podle aktuálního stavu (lodě, brigáda, výbor/TOM)"
-                                >
-                                    <RefreshCw className={`w-3 h-3 ${recalcPending ? "animate-spin" : ""}`} />
-                                    Přepočítat
-                                </button>
-                            )}
+                            <button
+                                onClick={handleRecalc}
+                                disabled={recalcPending}
+                                className="flex items-center gap-1 text-xs text-gray-400 hover:text-[#327600] disabled:opacity-40 transition-colors"
+                                title="Přepočítat předpis podle aktuálního stavu (lodě, brigáda, výbor/TOM)"
+                            >
+                                <RefreshCw className={`w-3 h-3 ${recalcPending ? "animate-spin" : ""}`} />
+                                Přepočítat
+                            </button>
                         </div>
                         {recalcError && <p className="text-xs text-red-600 mt-1">{recalcError}</p>}
                     </div>
@@ -419,6 +421,16 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                         onPaymentUpdated();
                     }}
                 />
+
+                {recalcProposed && (
+                    <RecalcConfirmDialog
+                        open={recalcDialogOpen}
+                        onOpenChange={v => { setRecalcDialogOpen(v); if (!v) setRecalcProposed(null); }}
+                        row={row}
+                        proposed={recalcProposed}
+                        onSaved={() => { setRecalcProposed(null); onPaymentUpdated(); }}
+                    />
+                )}
             </SheetContent>
         </Sheet>
     );

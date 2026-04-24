@@ -601,14 +601,130 @@ export async function setContribIndividualDiscount(
 
 // ── Přepočítat předpis podle aktuálního stavu člena ──────────────────────────
 
+export type RecalcProposed = {
+    amountBase:        number;
+    amountBoat1:       number | null;
+    amountBoat2:       number | null;
+    amountBoat3:       number | null;
+    discountCommittee: number | null;
+    discountTom:       number | null;
+    discountIndividual: number | null;
+    brigadeSurcharge:  number | null;
+    amountTotal:       number;
+};
+
+/** Sdílená výpočetní logika — vrátí navrhované hodnoty bez ukládání. */
+async function computeRecalc(contribId: number, db: ReturnType<typeof getDb>): Promise<
+    { error: string } | { proposed: RecalcProposed; discountIndividual: number | null }
+> {
+    const [c] = await db
+        .select({
+            memberId:            memberContributions.memberId,
+            periodId:            memberContributions.periodId,
+            discountIndividual:  memberContributions.discountIndividual,
+        })
+        .from(memberContributions)
+        .where(eq(memberContributions.id, contribId));
+
+    if (!c) return { error: "Předpis nenalezen" };
+
+    const [period] = await db
+        .select({
+            year:              contributionPeriods.year,
+            amountBase:        contributionPeriods.amountBase,
+            amountBoat1:       contributionPeriods.amountBoat1,
+            amountBoat2:       contributionPeriods.amountBoat2,
+            discountCommittee: contributionPeriods.discountCommittee,
+            discountTom:       contributionPeriods.discountTom,
+            brigadeSurcharge:  contributionPeriods.brigadeSurcharge,
+        })
+        .from(contributionPeriods)
+        .where(eq(contributionPeriods.id, c.periodId));
+
+    if (!period) return { error: "Období nenalezeno" };
+
+    const yearStart = `${period.year}-01-01`;
+    const yearEnd   = `${period.year}-12-31`;
+
+    const [member] = await db
+        .select({ isCommitteeMember: members.isCommitteeMember, isTomLeader: members.isTomLeader })
+        .from(members)
+        .where(eq(members.id, c.memberId));
+
+    if (!member) return { error: "Člen nenalezen" };
+
+    const boatRows = await db
+        .select({ id: boats.id })
+        .from(boats)
+        .where(and(
+            eq(boats.ownerId, c.memberId),
+            eq(boats.isPresent, true),
+            or(isNull(boats.storedFrom), lte(boats.storedFrom, yearEnd)),
+            or(isNull(boats.storedTo),   sql`${boats.storedTo} >= ${yearStart}`),
+        ));
+    const boatCount = boatRows.length;
+
+    const brigadeSet = await getBrigadeMemberIdsByYear(period.year - 1);
+    const didBrigade = brigadeSet.has(c.memberId);
+
+    const discountCommittee    = member.isCommitteeMember ? -period.discountCommittee : null;
+    const discountTom          = member.isTomLeader       ? -period.discountTom       : null;
+    const effectiveDiscountTom = discountCommittee ? null : discountTom;
+    const brigadeSurcharge     = didBrigade ? 0 : period.brigadeSurcharge;
+
+    const amountBoat1 = boatCount >= 1 ? period.amountBoat1 : null;
+    const amountBoat2 = boatCount >= 2 ? period.amountBoat2 : null;
+    const amountBoat3 = boatCount >= 3 ? period.amountBoat2 : null;
+
+    const amountTotal =
+        period.amountBase +
+        (amountBoat1 ?? 0) + (amountBoat2 ?? 0) + (amountBoat3 ?? 0) +
+        (discountCommittee   ?? 0) +
+        (effectiveDiscountTom ?? 0) +
+        (c.discountIndividual ?? 0) +
+        brigadeSurcharge;
+
+    return {
+        proposed: {
+            amountBase: period.amountBase,
+            amountBoat1,
+            amountBoat2,
+            amountBoat3,
+            discountCommittee,
+            discountTom,
+            discountIndividual: c.discountIndividual,
+            brigadeSurcharge:   brigadeSurcharge || null,
+            amountTotal,
+        },
+        discountIndividual: c.discountIndividual,
+    };
+}
+
 /**
- * Přepočítá předpis příspěvku pro člena.
- * Zachová individuální slevu, vše ostatní přepočítá znovu:
- *   - základní příspěvek z období
- *   - lodě: aktivní lodě v krakorcích (isPresent = true)
- *   - brigádu: z předchozího roku
- *   - výbor/TOM: z trvalých příznaků na members tabulce
- * Povoleno pouze pokud reviewed = false.
+ * Vrátí navrhované přepočítané hodnoty bez uložení.
+ * Používá se pro preview v potvrzovacím dialogu.
+ */
+export async function previewRecalcContrib(
+    contribId: number,
+): Promise<{ error: string } | { success: true; proposed: RecalcProposed }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const result = await computeRecalc(contribId, db);
+        if ("error" in result) return result;
+        return { success: true, proposed: result.proposed };
+    } catch (e) {
+        console.error("[previewRecalcContrib]", e);
+        return { error: "Chyba při výpočtu" };
+    }
+}
+
+/**
+ * Uloží přepočítaný předpis (po potvrzení uživatelem).
+ * Zachová individuální slevu, vše ostatní přepočítá znovu.
+ * Povoleno i pro revidované/odeslané předpisy (po potvrzení opravy chyby).
  */
 export async function recalcContribForMember(
     contribId: number,
@@ -618,95 +734,20 @@ export async function recalcContribForMember(
 
     const db = getDb();
     try {
-        // 1. Načíst předpis
-        const [c] = await db
-            .select({
-                id:                          memberContributions.id,
-                memberId:                    memberContributions.memberId,
-                periodId:                    memberContributions.periodId,
-                reviewed:                    memberContributions.reviewed,
-                discountIndividual:          memberContributions.discountIndividual,
-                discountIndividualNote:      memberContributions.discountIndividualNote,
-                discountIndividualValidUntil: memberContributions.discountIndividualValidUntil,
-            })
-            .from(memberContributions)
-            .where(eq(memberContributions.id, contribId));
+        const result = await computeRecalc(contribId, db);
+        if ("error" in result) return result;
 
-        if (!c) return { error: "Předpis nenalezen" };
-        if (c.reviewed) return { error: "Nelze přepočítat revidovaný předpis" };
-
-        // 2. Načíst období
-        const [period] = await db
-            .select({
-                year:              contributionPeriods.year,
-                amountBase:        contributionPeriods.amountBase,
-                amountBoat1:       contributionPeriods.amountBoat1,
-                amountBoat2:       contributionPeriods.amountBoat2,
-                discountCommittee: contributionPeriods.discountCommittee,
-                discountTom:       contributionPeriods.discountTom,
-                brigadeSurcharge:  contributionPeriods.brigadeSurcharge,
-            })
-            .from(contributionPeriods)
-            .where(eq(contributionPeriods.id, c.periodId));
-
-        if (!period) return { error: "Období nenalezeno" };
-
-        const yearStart = `${period.year}-01-01`;
-        const yearEnd   = `${period.year}-12-31`;
-
-        // 3. Příznaky výboru/TOM z members
-        const [member] = await db
-            .select({ isCommitteeMember: members.isCommitteeMember, isTomLeader: members.isTomLeader })
-            .from(members)
-            .where(eq(members.id, c.memberId));
-
-        if (!member) return { error: "Člen nenalezen" };
-
-        // 4. Aktivní lodě v krakorcích
-        const boatRows = await db
-            .select({ id: boats.id })
-            .from(boats)
-            .where(and(
-                eq(boats.ownerId, c.memberId),
-                eq(boats.isPresent, true),
-                or(isNull(boats.storedFrom), lte(boats.storedFrom, yearEnd)),
-                or(isNull(boats.storedTo),   sql`${boats.storedTo} >= ${yearStart}`),
-            ));
-        const boatCount = boatRows.length;
-
-        // 5. Brigáda z předchozího roku
-        const brigadeSet = await getBrigadeMemberIdsByYear(period.year - 1);
-        const didBrigade = brigadeSet.has(c.memberId);
-
-        // 6. Výpočet
-        const discountCommittee    = member.isCommitteeMember ? -period.discountCommittee : null;
-        const discountTom          = member.isTomLeader       ? -period.discountTom       : null;
-        const effectiveDiscountTom = discountCommittee ? null : discountTom;
-        const brigadeSurcharge     = didBrigade ? 0 : period.brigadeSurcharge;
-
-        const amountBoat1 = boatCount >= 1 ? period.amountBoat1 : null;
-        const amountBoat2 = boatCount >= 2 ? period.amountBoat2 : null;
-        const amountBoat3 = boatCount >= 3 ? period.amountBoat2 : null; // 3. loď = sazba 2.
-
-        const amountTotal =
-            period.amountBase +
-            (amountBoat1 ?? 0) + (amountBoat2 ?? 0) + (amountBoat3 ?? 0) +
-            (discountCommittee  ?? 0) +
-            (effectiveDiscountTom ?? 0) +
-            (c.discountIndividual ?? 0) +
-            brigadeSurcharge;
-
-        // 7. Uložit — zachovat individuální slevu, přepsat vše ostatní
+        const { proposed } = result;
         await db.update(memberContributions).set({
-            amountBase:        period.amountBase,
-            amountBoat1,
-            amountBoat2,
-            amountBoat3,
-            discountCommittee,
-            discountTom,
-            brigadeSurcharge:  brigadeSurcharge || null,
-            amountTotal,
-            // individuální sleva zůstává beze změny (není v .set())
+            amountBase:        proposed.amountBase,
+            amountBoat1:       proposed.amountBoat1,
+            amountBoat2:       proposed.amountBoat2,
+            amountBoat3:       proposed.amountBoat3,
+            discountCommittee: proposed.discountCommittee,
+            discountTom:       proposed.discountTom,
+            brigadeSurcharge:  proposed.brigadeSurcharge,
+            amountTotal:       proposed.amountTotal,
+            // individuální sleva, reviewed, emailSent — beze změny
         }).where(eq(memberContributions.id, contribId));
 
         revalidatePath("/dashboard/contributions");
