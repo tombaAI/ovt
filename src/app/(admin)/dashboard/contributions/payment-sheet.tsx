@@ -63,6 +63,26 @@ function fmtDate(iso: string) {
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
+function buildFullVS(vs: number): number {
+    if (vs >= 100_000_000) return vs;
+    return 207_101_000 + (vs % 1000);
+}
+
+function buildPayliboUrl(amount: number, vs: number, bankAccount: string, year: number): string {
+    const [accountNumber, bankCode] = bankAccount.split("/");
+    const message = encodeURIComponent(`Příspěvky OVT Bohemians ${year}`);
+    return (
+        `https://api.paylibo.com/paylibo/generator/czech/image` +
+        `?accountNumber=${accountNumber}` +
+        `&bankCode=${bankCode}` +
+        `&amount=${amount}` +
+        `&currency=CZK` +
+        `&vs=${buildFullVS(vs)}` +
+        `&message=${message}` +
+        `&size=200`
+    );
+}
+
 const EMAIL_TYPE_LABEL: Record<string, string> = {
     prescription: "Předpis příspěvků",
     reminder:     "Upomínka",
@@ -370,6 +390,45 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                         <span className="ml-auto text-xs text-violet-600 font-medium">Odeslán mail</span>
                     )}
                 </div>
+
+                {/* QR kód a platební údaje */}
+                {row.amountTotal && row.amountTotal > 0 && row.variableSymbol && (
+                    <div className="rounded-xl border px-4 py-3 mt-4">
+                        <p className="text-sm font-semibold text-gray-700 mb-3">QR platba</p>
+                        <div className="flex flex-col sm:flex-row gap-4 items-start">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img
+                                src={buildPayliboUrl(row.amountTotal, row.variableSymbol, period.bankAccount, period.year)}
+                                alt="QR kód pro platbu"
+                                width={160}
+                                height={160}
+                                className="border border-gray-200 rounded-lg p-1.5 shrink-0 bg-white"
+                            />
+                            <div className="space-y-2 text-sm min-w-0">
+                                <div>
+                                    <p className="text-xs text-gray-400">Číslo účtu</p>
+                                    <p className="font-mono font-semibold text-gray-800">{period.bankAccount}</p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-400">Variabilní symbol</p>
+                                    <p className="font-mono font-semibold text-gray-800">
+                                        {String(buildFullVS(row.variableSymbol)).replace(/(\d{3})(\d{3})(\d{3})/, "$1 $2 $3")}
+                                    </p>
+                                </div>
+                                <div>
+                                    <p className="text-xs text-gray-400">Částka</p>
+                                    <p className="font-semibold text-[#327600]">{fmt(row.amountTotal)}</p>
+                                </div>
+                                {period.dueDate && (
+                                    <div>
+                                        <p className="text-xs text-gray-400">Datum splatnosti</p>
+                                        <p className="font-semibold text-gray-800">{fmtDate(String(period.dueDate))}</p>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                )}
 
                 {/* Email history */}
                 <div className="rounded-xl border px-4 py-3 mt-4">
