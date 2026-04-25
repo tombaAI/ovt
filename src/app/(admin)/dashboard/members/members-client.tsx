@@ -108,7 +108,7 @@ function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
 }
 
 export function MembersClient({
-    members, selectedYear, periodId, currentYearDiscounts,
+    members, selectedYear, periodId,
     initialFilter, initialSort, initialSortDir, initialQ, initialStav, initialSleva, initialBrigada, initialCastRoku,
 }: Props) {
     const router = useRouter();
@@ -324,7 +324,6 @@ export function MembersClient({
                 member={inlineMember}
                 selectedYear={selectedYear}
                 periodId={periodId}
-                currentYearDiscounts={currentYearDiscounts}
                 onBack={closeInlineDetail}
                 onNavigatedAway={() => setInlineDetailId(null)}
             />

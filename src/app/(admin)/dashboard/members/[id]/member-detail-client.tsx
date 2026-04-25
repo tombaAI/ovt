@@ -16,7 +16,7 @@ import { InlineField } from "../inline-field";
 import { BackButton } from "@/components/back-button";
 import { pushNavStack } from "@/lib/nav-stack";
 import {
-    updateMemberField, setIndividualDiscount, setContributionFlags,
+    updateMemberField, setContributionFlags,
     terminateMembership, getMemberAuditLog,
     setMemberTodo, setMemberReviewed,
     type AuditEntry,
@@ -99,92 +99,6 @@ function AuditHistory({ memberId }: { memberId: number }) {
                 </div>
             ))}
         </div>
-    );
-}
-
-// ── Individual discount dialog ────────────────────────────────────────────────
-
-function DiscountDialog({
-    open, onOpenChange, member, periodId, selectedYear, currentDiscount, onDone,
-}: {
-    open: boolean; onOpenChange: (v: boolean) => void;
-    member: MemberWithFlags; periodId: number | null;
-    selectedYear: number; currentDiscount: number | null; onDone: () => void;
-}) {
-    const [amount, setAmount]   = useState(currentDiscount ? Math.abs(currentDiscount) : 0);
-    const [note, setNote]       = useState("");
-    const [validUntil, setValid] = useState<number>(selectedYear);
-    const [remove, setRemove]   = useState(false);
-    const [error, setError]     = useState<string | null>(null);
-    const [pending, startT]     = useTransition();
-
-    useEffect(() => {
-        if (open) {
-            setAmount(currentDiscount ? Math.abs(currentDiscount) : 0);
-            setNote(""); setValid(selectedYear); setRemove(false); setError(null);
-        }
-    }, [open, currentDiscount, selectedYear]);
-
-    function handleConfirm() {
-        if (!periodId) { setError("Příspěvkový záznam nenalezen"); return; }
-        if (!remove && !note.trim()) { setError("Poznámka je povinná"); return; }
-        if (!remove && amount <= 0) { setError("Částka musí být větší než 0"); return; }
-        startT(async () => {
-            const result = await setIndividualDiscount(member.id, periodId, remove ? null : amount, note, remove ? null : validUntil);
-            if ("error" in result) { setError(result.error); return; }
-            onDone(); onOpenChange(false);
-        });
-    }
-
-    return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-sm">
-                <DialogHeader>
-                    <DialogTitle>Individuální sleva — {member.firstName} {member.lastName}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3 py-2">
-                    {currentDiscount !== null && (
-                        <div className="flex items-center gap-2">
-                            <Checkbox id="rm-disc" checked={remove} onCheckedChange={v => setRemove(Boolean(v))} />
-                            <Label htmlFor="rm-disc" className="cursor-pointer text-red-600">Zrušit slevu</Label>
-                        </div>
-                    )}
-                    {!remove && (
-                        <>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="disc-amt">Částka slevy (Kč) *</Label>
-                                <Input id="disc-amt" type="number" min={1} value={amount || ""} placeholder="0"
-                                    onChange={e => setAmount(Number(e.target.value))} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="disc-note">Důvod *</Label>
-                                <Textarea id="disc-note" rows={2} placeholder="Proč tato sleva?"
-                                    value={note} onChange={e => { setNote(e.target.value); setError(null); }} />
-                            </div>
-                            <div className="space-y-1.5">
-                                <Label htmlFor="disc-valid">Platí do roku</Label>
-                                <select id="disc-valid" value={validUntil}
-                                    onChange={e => setValid(Number(e.target.value))}
-                                    className="w-full border border-gray-300 rounded-md px-3 py-1.5 text-sm">
-                                    {[selectedYear, selectedYear + 1, selectedYear + 2].map(y =>
-                                        <option key={y} value={y}>{y}</option>
-                                    )}
-                                    <option value={9999}>Neurčito</option>
-                                </select>
-                            </div>
-                        </>
-                    )}
-                    {error && <p className="text-xs text-red-600">{error}</p>}
-                </div>
-                <DialogFooter className="gap-2">
-                    <Button variant="outline" onClick={() => onOpenChange(false)}>Zrušit</Button>
-                    <Button onClick={handleConfirm} disabled={pending}
-                        className={remove ? "bg-red-600 hover:bg-red-700" : "bg-[#327600] hover:bg-[#2a6400]"}>
-                        {pending ? "Ukládám…" : remove ? "Zrušit slevu" : "Uložit"}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     );
 }
 
@@ -306,18 +220,16 @@ interface Props {
     member: MemberWithFlags;
     selectedYear: number;
     periodId: number | null;
-    currentYearDiscounts: { committee: number; tom: number } | null;
     // Inline mode (render z cache v přehledu):
     onBack?: () => void;          // back šipka zavolá toto místo BackButton
     onNavigatedAway?: () => void; // volá se při navigaci na jinou stránku (Příspěvky, Lodě…)
 }
 
-export function MemberDetailClient({ member: initialMember, selectedYear, periodId, currentYearDiscounts, onBack, onNavigatedAway }: Props) {
+export function MemberDetailClient({ member: initialMember, selectedYear, periodId, onBack, onNavigatedAway }: Props) {
     const router = useRouter();
     const member = initialMember;
     const [activeField, setActiveField]               = useState<string | null>(null);
     const [tjDiffs, setTjDiffs]                       = useState<Record<string, string | null>>({});
-    const [discountOpen, setDiscountOpen]             = useState(false);
     const [terminateOpen, setTerminateOpen]           = useState(false);
     const [auditOpen, setAuditOpen]                   = useState(false);
     const [committeePending, startCommitteeT]         = useTransition();
@@ -523,11 +435,6 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                                     }} />
                                 <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
                                     Člen výboru
-                                    {currentYearDiscounts && (
-                                        <span className="text-gray-400 font-normal ml-1">
-                                            (−{currentYearDiscounts.committee} Kč)
-                                        </span>
-                                    )}
                                 </Label>
                             </div>
 
@@ -541,31 +448,10 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                                     }} />
                                 <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
                                     Vedoucí TOM
-                                    {currentYearDiscounts && (
-                                        <span className="text-gray-400 font-normal ml-1">
-                                            (−{currentYearDiscounts.tom} Kč)
-                                        </span>
-                                    )}
                                 </Label>
                             </div>
 
                             {toggleError && <p className="text-xs text-red-600">{toggleError}</p>}
-
-                            <Separator />
-
-                            <div className="flex items-center justify-between">
-                                <div>
-                                    <p className="text-sm">Individuální sleva</p>
-                                    {member.discountIndividual !== null
-                                        ? <p className="text-sm font-semibold text-purple-700">−{Math.abs(member.discountIndividual)} Kč</p>
-                                        : <p className="text-sm text-gray-400">Žádná</p>
-                                    }
-                                </div>
-                                <button onClick={() => setDiscountOpen(true)}
-                                    className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2">
-                                    {member.discountIndividual !== null ? "Upravit" : "Nastavit"}
-                                </button>
-                            </div>
                         </>
                     )}
 
@@ -594,15 +480,6 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
             </div>
 
             {/* Dialogs */}
-            <DiscountDialog
-                open={discountOpen}
-                onOpenChange={setDiscountOpen}
-                member={member}
-                periodId={periodId}
-                selectedYear={selectedYear}
-                currentDiscount={member.discountIndividual}
-                onDone={refresh}
-            />
             <TerminateDialog
                 open={terminateOpen}
                 onOpenChange={setTerminateOpen}

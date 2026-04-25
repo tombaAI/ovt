@@ -27,17 +27,6 @@ export default async function MemberDetailPage({
 
     const period = allPeriods.find(p => p.year === selectedYear) ?? null;
 
-    let currentYearDiscounts: { committee: number; tom: number } | null = null;
-    if (period) {
-        const [pd] = await db
-            .select({
-                discountCommittee: contributionPeriods.discountCommittee,
-                discountTom: contributionPeriods.discountTom,
-            })
-            .from(contributionPeriods)
-            .where(eq(contributionPeriods.id, period.id));
-        if (pd) currentYearDiscounts = { committee: pd.discountCommittee, tom: pd.discountTom };
-    }
 
     const actualYear = period?.year ?? selectedYear;
 
@@ -167,7 +156,6 @@ export default async function MemberDetailPage({
             member={member}
             selectedYear={actualYear}
             periodId={period?.id ?? null}
-            currentYearDiscounts={currentYearDiscounts}
         />
     );
 }
