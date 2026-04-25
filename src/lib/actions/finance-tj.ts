@@ -2,7 +2,7 @@
 
 import { getDb } from "@/lib/db";
 import { importFinTjImports, importFinTjTransactions, importFinTjImportLines } from "@/db/schema";
-import { desc, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-parser";
@@ -190,23 +190,46 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
 
 export async function getFinanceTjImports(): Promise<FinanceTjImport[]> {
     const db = getDb();
-    return db
-        .select({
-            id:            importFinTjImports.id,
-            reportDate:    importFinTjImports.reportDate,
-            costCenter:    importFinTjImports.costCenter,
-            filterFrom:    importFinTjImports.filterFrom,
-            filterTo:      importFinTjImports.filterTo,
-            filterRaw:     importFinTjImports.filterRaw,
-            fileName:      importFinTjImports.fileName,
-            importedBy:    importFinTjImports.importedBy,
-            importedAt:    importFinTjImports.importedAt,
-            addedCount:    sql<number>`(SELECT COUNT(*) FROM app.import_fin_tj_import_lines l WHERE l.import_id = ${importFinTjImports.id} AND l.status = 'added')`.mapWith(Number),
-            matchedCount:  sql<number>`(SELECT COUNT(*) FROM app.import_fin_tj_import_lines l WHERE l.import_id = ${importFinTjImports.id} AND l.status = 'matched')`.mapWith(Number),
-            conflictCount: sql<number>`(SELECT COUNT(*) FROM app.import_fin_tj_import_lines l WHERE l.import_id = ${importFinTjImports.id} AND l.status = 'conflict')`.mapWith(Number),
+
+    // Correlated subquery nefunguje správně v Drizzle sql template — použijeme GROUP BY
+    const [imports, lineCounts] = await Promise.all([
+        db.select({
+            id:         importFinTjImports.id,
+            reportDate: importFinTjImports.reportDate,
+            costCenter: importFinTjImports.costCenter,
+            filterFrom: importFinTjImports.filterFrom,
+            filterTo:   importFinTjImports.filterTo,
+            filterRaw:  importFinTjImports.filterRaw,
+            fileName:   importFinTjImports.fileName,
+            importedBy: importFinTjImports.importedBy,
+            importedAt: importFinTjImports.importedAt,
+        }).from(importFinTjImports).orderBy(desc(importFinTjImports.importedAt)),
+
+        db.select({
+            importId: importFinTjImportLines.importId,
+            status:   importFinTjImportLines.status,
+            count:    sql<number>`COUNT(*)`.mapWith(Number),
         })
-        .from(importFinTjImports)
-        .orderBy(desc(importFinTjImports.importedAt));
+        .from(importFinTjImportLines)
+        .groupBy(importFinTjImportLines.importId, importFinTjImportLines.status),
+    ]);
+
+    // Sestavit mapu počtů per import
+    const countMap = new Map<number, { added: number; matched: number; conflict: number }>();
+    for (const row of lineCounts) {
+        if (!countMap.has(row.importId)) countMap.set(row.importId, { added: 0, matched: 0, conflict: 0 });
+        const c = countMap.get(row.importId)!;
+        if (row.status === "added")    c.added    = row.count;
+        if (row.status === "matched")  c.matched  = row.count;
+        if (row.status === "conflict") c.conflict = row.count;
+    }
+
+    return imports.map(imp => ({
+        ...imp,
+        addedCount:    countMap.get(imp.id)?.added    ?? 0,
+        matchedCount:  countMap.get(imp.id)?.matched  ?? 0,
+        conflictCount: countMap.get(imp.id)?.conflict ?? 0,
+    }));
 }
 
 export async function getFinanceTjTransactions(): Promise<FinanceTjTransaction[]> {
@@ -222,7 +245,7 @@ export async function getImportLines(importId: number): Promise<ImportLine[]> {
     const rows = await db
         .select()
         .from(importFinTjImportLines)
-        .where(sql`${importFinTjImportLines.importId} = ${importId}`)
+        .where(eq(importFinTjImportLines.importId, importId))
         .orderBy(importFinTjImportLines.docDate);
     return rows.map(r => ({
         ...r,
