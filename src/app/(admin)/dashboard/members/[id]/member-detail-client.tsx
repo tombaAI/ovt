@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { Eye, EyeOff, MoreHorizontal } from "lucide-react";
+import { Eye, EyeOff, MoreHorizontal, ChevronLeft } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
@@ -307,9 +307,12 @@ interface Props {
     selectedYear: number;
     periodId: number | null;
     currentYearDiscounts: { committee: number; tom: number } | null;
+    // Inline mode (render z cache v přehledu):
+    onBack?: () => void;          // back šipka zavolá toto místo BackButton
+    onNavigatedAway?: () => void; // volá se při navigaci na jinou stránku (Příspěvky, Lodě…)
 }
 
-export function MemberDetailClient({ member: initialMember, selectedYear, periodId, currentYearDiscounts }: Props) {
+export function MemberDetailClient({ member: initialMember, selectedYear, periodId, currentYearDiscounts, onBack, onNavigatedAway }: Props) {
     const router = useRouter();
     const member = initialMember;
     const [activeField, setActiveField]               = useState<string | null>(null);
@@ -380,6 +383,8 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
     }
 
     function navigateTo(url: string, label?: string) {
+        // Při přechodu z inline módu nejdřív uvolnit inline stav
+        onNavigatedAway?.();
         pushNavStack({ url: `/dashboard/members/${member.id}`, label: label ?? `Člen: ${member.firstName} ${member.lastName}` });
         router.push(url);
     }
@@ -393,7 +398,15 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                 {/* ── Page header ── */}
                 <div className="flex items-center gap-3 mb-6">
                     <div className="shrink-0">
-                        <BackButton />
+                        {onBack ? (
+                            <button onClick={onBack}
+                                className="flex items-center gap-0.5 text-sm text-gray-500 hover:text-gray-900 transition-colors">
+                                <ChevronLeft size={16} className="shrink-0" />
+                                <span>Seznam členů</span>
+                            </button>
+                        ) : (
+                            <BackButton />
+                        )}
                     </div>
 
                     <div className="flex-1 min-w-0">

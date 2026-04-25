@@ -11,7 +11,11 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { SlidersHorizontal, ChevronDown, Plus } from "lucide-react";
 import { pushNavStack } from "@/lib/nav-stack";
 import { AddMemberSheet } from "./add-member-sheet";
+import { MemberDetailClient } from "./[id]/member-detail-client";
 import type { MemberWithFlags } from "./page";
+
+// Modul-level cache — žije po celou dobu session v záložce, sdílí se mezi rendery
+const memberDataCache = new Map<number, MemberWithFlags>();
 
 type FilterKey = "all" | "todo" | "unreviewed";
 type SortKey   = "lastName" | "firstName" | "nickname" | "cskNumber" | "variableSymbol" | "email" | "phone";
@@ -104,7 +108,7 @@ function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
 }
 
 export function MembersClient({
-    members, selectedYear,
+    members, selectedYear, periodId, currentYearDiscounts,
     initialFilter, initialSort, initialSortDir, initialQ, initialStav, initialSleva, initialBrigada, initialCastRoku,
 }: Props) {
     const router = useRouter();
@@ -123,6 +127,25 @@ export function MembersClient({
     const [brigada, setBrigada]   = useState(initialBrigada);
     const [castRoku, setCastRoku] = useState(initialCastRoku);
     const [addOpen, setAddOpen]   = useState(false);
+    const [inlineDetailId, setInlineDetailId] = useState<number | null>(null);
+
+    // Naplnit cache při načtení seznamu
+    useEffect(() => {
+        members.forEach(m => memberDataCache.set(m.id, m));
+    }, [members]);
+
+    // Vrátit se na seznam při browser back
+    useEffect(() => {
+        function onPopState(e: PopStateEvent) {
+            if (typeof e.state?.memberId === "number") {
+                setInlineDetailId(e.state.memberId as number);
+            } else {
+                setInlineDetailId(null);
+            }
+        }
+        window.addEventListener("popstate", onPopState);
+        return () => window.removeEventListener("popstate", onPopState);
+    }, []);
 
     // Debounce search — update URL and filtering state after 250ms idle
     useEffect(() => {
@@ -281,9 +304,31 @@ export function MembersClient({
     }, [members, filter, sort, sortDir, q, stav, slevaSet, brigada, castRoku, selectedYear]);
 
     function openDetail(m: MemberWithFlags) {
+        memberDataCache.set(m.id, m);
         const currentUrl = window.location.pathname + window.location.search;
         pushNavStack({ url: currentUrl, label: "Seznam členů" });
-        router.push(`/dashboard/members/${m.id}`);
+        // Změnit URL bez Next.js navigace → okamžitý render z cache
+        window.history.pushState({ memberId: m.id }, "", `/dashboard/members/${m.id}`);
+        setInlineDetailId(m.id);
+    }
+
+    function closeInlineDetail() {
+        window.history.back(); // spustí popstate → setInlineDetailId(null)
+    }
+
+    // ── Inline detail render — okamžitě z cache ──
+    const inlineMember = inlineDetailId !== null ? (memberDataCache.get(inlineDetailId) ?? null) : null;
+    if (inlineMember) {
+        return (
+            <MemberDetailClient
+                member={inlineMember}
+                selectedYear={selectedYear}
+                periodId={periodId}
+                currentYearDiscounts={currentYearDiscounts}
+                onBack={closeInlineDetail}
+                onNavigatedAway={() => setInlineDetailId(null)}
+            />
+        );
     }
 
     // ── Pill styles ──
