@@ -1,8 +1,8 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { importFinTjImports, importFinTjTransactions } from "@/db/schema";
-import { desc, eq, sql } from "drizzle-orm";
+import { importFinTjImports, importFinTjTransactions, importFinTjImportLines } from "@/db/schema";
+import { desc, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-parser";
@@ -10,16 +10,18 @@ import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
 export type FinanceTjImport = {
-    id:         number;
-    reportDate: string;
-    costCenter: string;
-    filterFrom: string | null;
-    filterTo:   string | null;
-    filterRaw:  string | null;
-    fileName:   string | null;
-    importedBy: string;
-    importedAt: Date;
-    txCount:    number;
+    id:            number;
+    reportDate:    string;
+    costCenter:    string;
+    filterFrom:    string | null;
+    filterTo:      string | null;
+    filterRaw:     string | null;
+    fileName:      string | null;
+    importedBy:    string;
+    importedAt:    Date;
+    addedCount:    number;
+    matchedCount:  number;
+    conflictCount: number;
 };
 
 export type FinanceTjTransaction = {
@@ -35,9 +37,25 @@ export type FinanceTjTransaction = {
     credit:      string;
 };
 
+export type ImportLine = {
+    id:             number;
+    importId:       number;
+    transactionId:  number | null;
+    docNumber:      string;
+    status:         "added" | "matched" | "conflict";
+    conflictFields: string[];
+    docDate:        string;
+    sourceCode:     string;
+    description:    string;
+    accountCode:    string;
+    accountName:    string;
+    debit:          string;
+    credit:         string;
+};
+
 export type ImportResult =
     | { error: string }
-    | { success: true; importId: number; inserted: number; skipped: number };
+    | { success: true; importId: number; added: number; matched: number; conflicts: number };
 
 // ── Import PDF ────────────────────────────────────────────────────────────────
 
@@ -57,13 +75,13 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
         const { text, totalPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
         const fullText = Array.isArray(text) ? text.join("\n") : text;
         console.log(`[finance-tj] PDF extrahován: ${totalPages} stran, ${fullText.length} znaků`);
-        console.log(`[finance-tj] První 500 znaků textu:\n${fullText.slice(0, 500)}`);
+        console.log(`[finance-tj] První 500 znaků:\n${fullText.slice(0, 500)}`);
 
         const parsed: TjParseResult = parseTjFinancePdf(fullText);
-        console.log(`[finance-tj] Parser meta:`, parsed.meta);
-        console.log(`[finance-tj] Nalezeno transakcí: ${parsed.transactions.length}`);
+        console.log(`[finance-tj] Meta:`, parsed.meta);
+        console.log(`[finance-tj] Transakcí: ${parsed.transactions.length}`);
         parsed.transactions.forEach((tx, i) =>
-            console.log(`[finance-tj]   tx[${i}]: ${tx.docDate} ${tx.docNumber} ${tx.sourceCode} | ${tx.accountCode} ${tx.accountName} | MD=${tx.debit} D=${tx.credit} | ${tx.description}`)
+            console.log(`[finance-tj]   tx[${i}]: ${tx.docDate} ${tx.docNumber} ${tx.sourceCode} MD=${tx.debit} D=${tx.credit} | ${tx.description}`)
         );
 
         if (!parsed.meta.reportDate) {
@@ -79,21 +97,33 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
         const [importRow] = await db
             .insert(importFinTjImports)
             .values({
-                reportDate:  parsed.meta.reportDate,
-                costCenter:  parsed.meta.costCenter,
-                filterFrom:  parsed.meta.filterFrom ?? undefined,
-                filterTo:    parsed.meta.filterTo   ?? undefined,
-                filterRaw:   parsed.meta.filterRaw  ?? undefined,
-                fileName:    file.name,
-                importedBy:  session.user.email,
+                reportDate: parsed.meta.reportDate,
+                costCenter: parsed.meta.costCenter,
+                filterFrom: parsed.meta.filterFrom ?? undefined,
+                filterTo:   parsed.meta.filterTo   ?? undefined,
+                filterRaw:  parsed.meta.filterRaw  ?? undefined,
+                fileName:   file.name,
+                importedBy: session.user.email,
             })
             .returning({ id: importFinTjImports.id });
 
-        // Idempotentní insert — při konfliktu na doc_number nic neudělá
-        const result = await db
-            .insert(importFinTjTransactions)
-            .values(
-                parsed.transactions.map(tx => ({
+        // Batch lookup existujících transakcí podle doc_number
+        const docNumbers = parsed.transactions.map(tx => tx.docNumber);
+        const existingRows = await db
+            .select()
+            .from(importFinTjTransactions)
+            .where(inArray(importFinTjTransactions.docNumber, docNumbers));
+        const existingMap = new Map(existingRows.map(r => [r.docNumber, r]));
+
+        // Rozdělit na nové a existující
+        const newTxs = parsed.transactions.filter(tx => !existingMap.has(tx.docNumber));
+
+        // Batch insert nových transakcí do master listu
+        const newTxIdMap = new Map<string, number>(); // docNumber → id
+        if (newTxs.length > 0) {
+            const inserted = await db
+                .insert(importFinTjTransactions)
+                .values(newTxs.map(tx => ({
                     importId:    importRow.id,
                     docDate:     tx.docDate,
                     docNumber:   tx.docNumber,
@@ -103,16 +133,53 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
                     accountName: tx.accountName,
                     debit:       tx.debit.toFixed(2),
                     credit:      tx.credit.toFixed(2),
-                }))
-            )
-            .onConflictDoNothing({ target: importFinTjTransactions.docNumber })
-            .returning({ id: importFinTjTransactions.id });
+                })))
+                .returning({ id: importFinTjTransactions.id, docNumber: importFinTjTransactions.docNumber });
+            for (const row of inserted) newTxIdMap.set(row.docNumber, row.id);
+        }
 
-        const inserted = result.length;
-        const skipped  = parsed.transactions.length - inserted;
+        // Sestavit rekonciliační log pro každý řádek importu
+        const lines: Array<typeof importFinTjImportLines.$inferInsert> = [];
+        let added = 0, matched = 0, conflicts = 0;
+
+        for (const tx of parsed.transactions) {
+            const existing = existingMap.get(tx.docNumber);
+            const base = {
+                importId:    importRow.id,
+                docNumber:   tx.docNumber,
+                docDate:     tx.docDate,
+                sourceCode:  tx.sourceCode,
+                description: tx.description,
+                accountCode: tx.accountCode,
+                accountName: tx.accountName,
+                debit:       tx.debit.toFixed(2),
+                credit:      tx.credit.toFixed(2),
+            };
+
+            if (existing) {
+                const diff: string[] = [];
+                if (existing.docDate    !== tx.docDate)             diff.push("docDate");
+                if (parseFloat(existing.debit)  !== tx.debit)       diff.push("debit");
+                if (parseFloat(existing.credit) !== tx.credit)      diff.push("credit");
+                if (existing.description !== tx.description)        diff.push("description");
+                if (existing.accountCode !== tx.accountCode)        diff.push("accountCode");
+                if (existing.accountName !== tx.accountName)        diff.push("accountName");
+
+                const status = diff.length === 0 ? "matched" as const : "conflict" as const;
+                if (status === "matched") matched++; else conflicts++;
+                console.log(`[finance-tj]   ${tx.docNumber}: ${status}${diff.length ? ` (${diff.join(", ")})` : ""}`);
+                lines.push({ ...base, transactionId: existing.id, status, conflictFields: diff });
+            } else {
+                added++;
+                console.log(`[finance-tj]   ${tx.docNumber}: added`);
+                lines.push({ ...base, transactionId: newTxIdMap.get(tx.docNumber), status: "added", conflictFields: [] });
+            }
+        }
+
+        await db.insert(importFinTjImportLines).values(lines);
 
         revalidatePath("/dashboard/finance");
-        return { success: true, importId: importRow.id, inserted, skipped };
+        return { success: true, importId: importRow.id, added, matched, conflicts };
     } catch (e) {
         console.error("importTjFinancePdf error:", e);
         return { error: "Chyba při zpracování PDF" };
@@ -123,37 +190,42 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
 
 export async function getFinanceTjImports(): Promise<FinanceTjImport[]> {
     const db = getDb();
-    const rows = await db
+    return db
         .select({
-            id:         importFinTjImports.id,
-            reportDate: importFinTjImports.reportDate,
-            costCenter: importFinTjImports.costCenter,
-            filterFrom: importFinTjImports.filterFrom,
-            filterTo:   importFinTjImports.filterTo,
-            filterRaw:  importFinTjImports.filterRaw,
-            fileName:   importFinTjImports.fileName,
-            importedBy: importFinTjImports.importedBy,
-            importedAt: importFinTjImports.importedAt,
-            txCount:    sql<number>`(
-                SELECT COUNT(*) FROM app.import_fin_tj_transactions t
-                WHERE t.import_id = ${importFinTjImports.id}
-            )`.mapWith(Number),
+            id:            importFinTjImports.id,
+            reportDate:    importFinTjImports.reportDate,
+            costCenter:    importFinTjImports.costCenter,
+            filterFrom:    importFinTjImports.filterFrom,
+            filterTo:      importFinTjImports.filterTo,
+            filterRaw:     importFinTjImports.filterRaw,
+            fileName:      importFinTjImports.fileName,
+            importedBy:    importFinTjImports.importedBy,
+            importedAt:    importFinTjImports.importedAt,
+            addedCount:    sql<number>`(SELECT COUNT(*) FROM app.import_fin_tj_import_lines l WHERE l.import_id = ${importFinTjImports.id} AND l.status = 'added')`.mapWith(Number),
+            matchedCount:  sql<number>`(SELECT COUNT(*) FROM app.import_fin_tj_import_lines l WHERE l.import_id = ${importFinTjImports.id} AND l.status = 'matched')`.mapWith(Number),
+            conflictCount: sql<number>`(SELECT COUNT(*) FROM app.import_fin_tj_import_lines l WHERE l.import_id = ${importFinTjImports.id} AND l.status = 'conflict')`.mapWith(Number),
         })
         .from(importFinTjImports)
-        .orderBy(desc(importFinTjImports.reportDate));
-
-    return rows;
+        .orderBy(desc(importFinTjImports.importedAt));
 }
 
-export async function getFinanceTjTransactions(importId?: number): Promise<FinanceTjTransaction[]> {
+export async function getFinanceTjTransactions(): Promise<FinanceTjTransaction[]> {
     const db = getDb();
-    const query = db
+    return db
         .select()
         .from(importFinTjTransactions)
         .orderBy(desc(importFinTjTransactions.docDate));
+}
 
-    if (importId !== undefined) {
-        return query.where(eq(importFinTjTransactions.importId, importId));
-    }
-    return query;
+export async function getImportLines(importId: number): Promise<ImportLine[]> {
+    const db = getDb();
+    const rows = await db
+        .select()
+        .from(importFinTjImportLines)
+        .where(sql`${importFinTjImportLines.importId} = ${importId}`)
+        .orderBy(importFinTjImportLines.docDate);
+    return rows.map(r => ({
+        ...r,
+        conflictFields: r.conflictFields as string[],
+    }));
 }

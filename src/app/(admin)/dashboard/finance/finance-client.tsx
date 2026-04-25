@@ -4,9 +4,11 @@ import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ImportDialog } from "./import-dialog";
+import { ImportHistory } from "./import-history";
 import type { FinanceTjImport, FinanceTjTransaction } from "@/lib/actions/finance-tj";
 import { FileText } from "lucide-react";
 
@@ -16,13 +18,8 @@ interface Props {
 }
 
 const SOURCE_LABELS: Record<string, string> = {
-    BV: "Banka",
-    IN: "Interní",
-    FP: "Fakt. přij.",
-    FV: "Fakt. vyd.",
-    PO: "Pokladna",
-    OP: "Ost. pohled.",
-    OZ: "Ost. závazek",
+    BV: "Banka", IN: "Interní", FP: "Fakt. přij.", FV: "Fakt. vyd.",
+    PO: "Pokladna", OP: "Ost. pohled.", OZ: "Ost. závazek",
 };
 
 function formatAmount(val: string): string {
@@ -74,9 +71,12 @@ function ImportPopover({ imp }: { imp: FinanceTjImport }) {
                         <dt className="text-gray-500">Importováno</dt>
                         <dd className="text-gray-800">{imp.importedAt.toLocaleDateString("cs-CZ")}</dd>
                     </div>
-                    <div className="flex justify-between gap-2">
-                        <dt className="text-gray-500">Transakcí celkem</dt>
-                        <dd className="text-gray-800">{imp.txCount}</dd>
+                    <div className="flex gap-4 pt-1 border-t border-gray-100 mt-1">
+                        <span className="text-green-700 font-medium">+{imp.addedCount} nových</span>
+                        <span className="text-gray-500">{imp.matchedCount} shodných</span>
+                        {imp.conflictCount > 0 && (
+                            <span className="text-amber-700 font-medium">{imp.conflictCount} konfliktů</span>
+                        )}
                     </div>
                 </dl>
             </PopoverContent>
@@ -84,14 +84,79 @@ function ImportPopover({ imp }: { imp: FinanceTjImport }) {
     );
 }
 
+// ── Přehled transakcí ─────────────────────────────────────────────────────────
+
+function TransactionsTable({ transactions, imports }: { transactions: FinanceTjTransaction[]; imports: FinanceTjImport[] }) {
+    const importMap = new Map(imports.map(i => [i.id, i]));
+    const sorted = [...transactions].sort((a, b) => b.docDate.localeCompare(a.docDate));
+
+    if (sorted.length === 0) {
+        return (
+            <div className="rounded-lg border bg-white p-12 text-center text-gray-400">
+                <p className="text-sm">Zatím žádné transakce.</p>
+                <p className="text-xs mt-1">Nahrajte PDF výsledovky pomocí tlačítka výše.</p>
+            </div>
+        );
+    }
+
+    return (
+        <div className="rounded-lg border bg-white overflow-hidden">
+            <Table>
+                <TableHeader>
+                    <TableRow>
+                        <TableHead className="w-24">Datum</TableHead>
+                        <TableHead className="w-28">Doklad</TableHead>
+                        <TableHead className="w-20">Zdroj</TableHead>
+                        <TableHead className="hidden md:table-cell">Účet</TableHead>
+                        <TableHead>Popis</TableHead>
+                        <TableHead className="text-right w-32">MD</TableHead>
+                        <TableHead className="text-right w-32">D</TableHead>
+                        <TableHead className="w-24 text-center hidden sm:table-cell">Import</TableHead>
+                    </TableRow>
+                </TableHeader>
+                <TableBody>
+                    {sorted.map(tx => {
+                        const imp = importMap.get(tx.importId);
+                        return (
+                            <TableRow key={tx.id}>
+                                <TableCell className="text-gray-700 tabular-nums">{formatDate(tx.docDate)}</TableCell>
+                                <TableCell className="font-mono text-xs text-gray-600">{tx.docNumber}</TableCell>
+                                <TableCell>
+                                    <Badge variant="outline" className="text-xs font-normal">
+                                        {SOURCE_LABELS[tx.sourceCode] ?? tx.sourceCode}
+                                    </Badge>
+                                </TableCell>
+                                <TableCell className="hidden md:table-cell text-gray-500 text-xs">
+                                    {tx.accountCode} {tx.accountName}
+                                </TableCell>
+                                <TableCell className="text-gray-800">{tx.description}</TableCell>
+                                <TableCell className={cn(
+                                    "text-right font-mono text-sm tabular-nums",
+                                    parseFloat(tx.debit) > 0 ? "text-red-700" : "text-gray-300"
+                                )}>
+                                    {formatAmount(tx.debit)}
+                                </TableCell>
+                                <TableCell className={cn(
+                                    "text-right font-mono text-sm tabular-nums",
+                                    parseFloat(tx.credit) > 0 ? "text-green-700" : "text-gray-300"
+                                )}>
+                                    {formatAmount(tx.credit)}
+                                </TableCell>
+                                <TableCell className="text-center hidden sm:table-cell">
+                                    {imp && <ImportPopover imp={imp} />}
+                                </TableCell>
+                            </TableRow>
+                        );
+                    })}
+                </TableBody>
+            </Table>
+        </div>
+    );
+}
+
 // ── Hlavní klient ─────────────────────────────────────────────────────────────
 
 export function FinanceClient({ imports, transactions }: Props) {
-    const importMap = new Map(imports.map(i => [i.id, i]));
-
-    // Seřadit transakce podle data dokladu sestupně
-    const sorted = [...transactions].sort((a, b) => b.docDate.localeCompare(a.docDate));
-
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between">
@@ -99,70 +164,27 @@ export function FinanceClient({ imports, transactions }: Props) {
                 <ImportDialog />
             </div>
 
-            {sorted.length === 0 ? (
-                <div className="rounded-lg border bg-white p-12 text-center text-gray-400">
-                    <p className="text-sm">Zatím žádné transakce.</p>
-                    <p className="text-xs mt-1">Nahrajte PDF výsledovky pomocí tlačítka výše.</p>
-                </div>
-            ) : (
-                <div className="rounded-lg border bg-white overflow-hidden">
-                    <Table>
-                        <TableHeader>
-                            <TableRow>
-                                <TableHead className="w-24">Datum</TableHead>
-                                <TableHead className="w-28">Doklad</TableHead>
-                                <TableHead className="w-20">Zdroj</TableHead>
-                                <TableHead className="hidden md:table-cell">Účet</TableHead>
-                                <TableHead>Popis</TableHead>
-                                <TableHead className="text-right w-32">MD</TableHead>
-                                <TableHead className="text-right w-32">D</TableHead>
-                                <TableHead className="w-24 text-center hidden sm:table-cell">Import</TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody>
-                            {sorted.map(tx => {
-                                const imp = importMap.get(tx.importId);
-                                return (
-                                    <TableRow key={tx.id}>
-                                        <TableCell className="text-gray-700 tabular-nums">
-                                            {formatDate(tx.docDate)}
-                                        </TableCell>
-                                        <TableCell className="font-mono text-xs text-gray-600">
-                                            {tx.docNumber}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant="outline" className="text-xs font-normal">
-                                                {SOURCE_LABELS[tx.sourceCode] ?? tx.sourceCode}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="hidden md:table-cell text-gray-500 text-xs">
-                                            {tx.accountCode} {tx.accountName}
-                                        </TableCell>
-                                        <TableCell className="text-gray-800">
-                                            {tx.description}
-                                        </TableCell>
-                                        <TableCell className={cn(
-                                            "text-right font-mono text-sm tabular-nums",
-                                            parseFloat(tx.debit) > 0 ? "text-red-700" : "text-gray-300"
-                                        )}>
-                                            {formatAmount(tx.debit)}
-                                        </TableCell>
-                                        <TableCell className={cn(
-                                            "text-right font-mono text-sm tabular-nums",
-                                            parseFloat(tx.credit) > 0 ? "text-green-700" : "text-gray-300"
-                                        )}>
-                                            {formatAmount(tx.credit)}
-                                        </TableCell>
-                                        <TableCell className="text-center hidden sm:table-cell">
-                                            {imp && <ImportPopover imp={imp} />}
-                                        </TableCell>
-                                    </TableRow>
-                                );
-                            })}
-                        </TableBody>
-                    </Table>
-                </div>
-            )}
+            <Tabs defaultValue="prehled">
+                <TabsList>
+                    <TabsTrigger value="prehled">Přehled účetnictví</TabsTrigger>
+                    <TabsTrigger value="historie">
+                        Historie importů
+                        {imports.some(i => i.conflictCount > 0) && (
+                            <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-medium text-white">
+                                {imports.reduce((s, i) => s + i.conflictCount, 0)}
+                            </span>
+                        )}
+                    </TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="prehled" className="mt-4">
+                    <TransactionsTable transactions={transactions} imports={imports} />
+                </TabsContent>
+
+                <TabsContent value="historie" className="mt-4">
+                    <ImportHistory imports={imports} />
+                </TabsContent>
+            </Tabs>
         </div>
     );
 }

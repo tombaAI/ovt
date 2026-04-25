@@ -501,6 +501,34 @@ export const notebookNoteVersions = appSchema.table(
     ]
 );
 
+/**
+ * Log každého řádku v importu výsledovky TJ s výsledkem rekonciliace.
+ * status: 'added' = přidáno do master listu, 'matched' = nalezeno a shoduje se, 'conflict' = nalezeno ale liší se
+ */
+export const importFinTjImportLines = appSchema.table(
+    "import_fin_tj_import_lines",
+    {
+        id:             serial("id").primaryKey(),
+        importId:       integer("import_id").notNull().references(() => importFinTjImports.id, { onDelete: "cascade" }),
+        transactionId:  integer("transaction_id").references(() => importFinTjTransactions.id, { onDelete: "set null" }),
+        docNumber:      text("doc_number").notNull(),
+        status:         text("status", { enum: ["added", "matched", "conflict"] }).notNull(),
+        conflictFields: jsonb("conflict_fields").notNull().default([]),
+        // Snapshot dat z tohoto importu (pro zobrazení a porovnání)
+        docDate:        date("doc_date").notNull(),
+        sourceCode:     text("source_code").notNull(),
+        description:    text("description").notNull(),
+        accountCode:    text("account_code").notNull(),
+        accountName:    text("account_name").notNull(),
+        debit:          numeric("debit",  { precision: 12, scale: 2 }).notNull().default("0"),
+        credit:         numeric("credit", { precision: 12, scale: 2 }).notNull().default("0"),
+    },
+    (t) => [
+        index("import_fin_tj_lines_import_idx").on(t.importId),
+        index("import_fin_tj_lines_tx_idx").on(t.transactionId),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(
