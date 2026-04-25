@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
-import { Mail, RefreshCw } from "lucide-react";
+import { Mail, RefreshCw, Trash2 } from "lucide-react";
 import { RecalcConfirmDialog } from "./recalc-confirm-dialog";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
@@ -17,6 +17,7 @@ import { getContribEmailHistory, type ContribMailEvent } from "@/lib/actions/con
 import {
     setContribIndividualDiscount, type IndividualDiscountData,
     previewRecalcContrib, type RecalcProposed,
+    deleteContribPrescription,
 } from "@/lib/actions/contribution-periods";
 import { SendEmailDialog } from "./send-email-dialog";
 import type { ContribRow, Payment, PeriodDetail } from "./page";
@@ -111,6 +112,8 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
     const [recalcProposed, setRecalcProposed] = useState<RecalcProposed | null>(null);
     const [recalcDialogOpen, setRecalcDialogOpen] = useState(false);
     const [discPending, startDisc]         = useTransition();
+    const [deletePending, startDelete]     = useTransition();
+    const [deleteConfirm, setDeleteConfirm] = useState(false);
     const [discError, setDiscError]        = useState<string | null>(null);
     const [discAmount, setDiscAmount]      = useState("");
     const [discNote, setDiscNote]          = useState("");
@@ -119,7 +122,7 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
     const [sendEmailOpen, setSendEmailOpen] = useState(false);
 
     useEffect(() => {
-        if (open) { setAmount(""); setPaidAt(""); setNote(""); setAddError(null); setRecalcError(null); setDiscError(null); }
+        if (open) { setAmount(""); setPaidAt(""); setNote(""); setAddError(null); setRecalcError(null); setDiscError(null); setDeleteConfirm(false); }
     }, [open]);
 
     // Předvyplnit individuální slevu z row
@@ -215,6 +218,15 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
         });
     }
 
+    function handleDeletePrescription() {
+        startDelete(async () => {
+            const r = await deleteContribPrescription(safeRow.contribId);
+            if ("success" in r) {
+                onOpenChange(false);
+                onPaymentUpdated();
+            }
+        });
+    }
 
     return (
         <Sheet open={open} onOpenChange={onOpenChange}>
@@ -469,6 +481,48 @@ export function PaymentSheet({ open, onOpenChange, row, period, onPaymentUpdated
                             ))}
                         </div>
                     )}
+                </div>
+
+                {/* Smazat předpis */}
+                <div className="rounded-xl border border-red-100 px-4 py-3 mt-4">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <p className="text-sm font-semibold text-gray-700">Smazat předpis</p>
+                            <p className="text-xs text-gray-400 mt-0.5">Použij v případě, že člen ukončil členství nebo předpis byl vytvořen omylem.</p>
+                        </div>
+                        {!deleteConfirm ? (
+                            <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setDeleteConfirm(true)}
+                                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700 shrink-0 ml-4"
+                            >
+                                <Trash2 className="w-3.5 h-3.5 mr-1" />
+                                Smazat
+                            </Button>
+                        ) : (
+                            <div className="flex items-center gap-2 shrink-0 ml-4">
+                                <span className="text-xs text-red-600 font-medium">Opravdu smazat?</span>
+                                <Button
+                                    size="sm"
+                                    onClick={handleDeletePrescription}
+                                    disabled={deletePending}
+                                    className="bg-red-600 hover:bg-red-700 text-white h-7 px-2.5 text-xs"
+                                >
+                                    {deletePending ? "Mažu…" : "Ano, smazat"}
+                                </Button>
+                                <Button
+                                    size="sm"
+                                    variant="outline"
+                                    onClick={() => setDeleteConfirm(false)}
+                                    disabled={deletePending}
+                                    className="h-7 px-2.5 text-xs"
+                                >
+                                    Zrušit
+                                </Button>
+                            </div>
+                        )}
+                    </div>
                 </div>
 
                 <SendEmailDialog

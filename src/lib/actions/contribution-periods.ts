@@ -757,3 +757,28 @@ export async function recalcContribForMember(
         return { error: "Chyba při přepočtu" };
     }
 }
+
+// ── Smazat předpis jednoho člena ─────────────────────────────────────────────
+
+export async function deleteContribPrescription(
+    contribId: number,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const deleted = await db
+            .delete(memberContributions)
+            .where(eq(memberContributions.id, contribId))
+            .returning({ id: memberContributions.id });
+
+        if (deleted.length === 0) return { error: "Předpis nenalezen" };
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[deleteContribPrescription]", e);
+        return { error: "Chyba při mazání" };
+    }
+}
