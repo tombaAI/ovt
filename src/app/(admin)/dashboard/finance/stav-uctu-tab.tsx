@@ -75,11 +75,11 @@ function RokKarta({ rok }: { rok: StavRok }) {
                         colorClass={startBalance < 0 ? "text-red-700" : "text-gray-700"}
                     />
                 )}
-                <Radek label="Náklady" value={naklady} colorClass="text-red-700" />
-                <Radek label="Výnosy"  value={vynosy}  colorClass="text-green-700" />
 
                 {isComplete ? (
                     <>
+                        <Radek label="Náklady" value={naklady} colorClass="text-red-700" />
+                        <Radek label="Výnosy"  value={vynosy}  colorClass="text-green-700" />
                         <Radek
                             label="Konečný zůstatek"
                             sub={`k 31.12.${year}`}
