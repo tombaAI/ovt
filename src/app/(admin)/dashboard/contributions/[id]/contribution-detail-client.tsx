@@ -230,15 +230,15 @@ function TodoSection({ currentNote, onSave }: {
     );
 }
 
-function PaymentRow({ payment, onDelete, onOpenPayments, deleting }: {
+function PaymentRow({ payment, onDelete, onOpenPayment, deleting }: {
     payment: Payment;
     onDelete: () => void;
-    onOpenPayments: () => void;
+    onOpenPayment: () => void;
     deleting: boolean;
 }) {
     return (
         <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2 text-sm">
-            <button type="button" onClick={onOpenPayments} className="flex min-w-0 flex-1 items-center gap-2 text-left">
+            <button type="button" onClick={onOpenPayment} className="flex min-w-0 flex-1 items-center gap-2 text-left">
                 <span className="shrink-0 font-semibold text-gray-900">{fmtAmount(payment.amount)}</span>
                 <span className="shrink-0 text-gray-500">{fmtDate(payment.paidAt)}</span>
                 <Badge className={`border text-xs font-normal ${SOURCE_BADGE[payment.sourceType] ?? "bg-gray-100 text-gray-600 border-gray-200"}`}>
@@ -325,6 +325,10 @@ export function ContributionDetailClient({ row, period }: Props) {
     function openPaymentsOverview(ledgerId?: number) {
         const suffix = ledgerId ? `&focus=${ledgerId}` : "";
         navigateTo(`/dashboard/payments?member=${row.memberId}&year=${period.year}${suffix}`);
+    }
+
+    function openPaymentDetail(ledgerId: number) {
+        navigateTo(`/dashboard/payments/${ledgerId}?year=${period.year}`);
     }
 
     function handleAddPayment() {
@@ -589,7 +593,7 @@ export function ContributionDetailClient({ row, period }: Props) {
                                     key={payment.allocationId}
                                     payment={payment}
                                     onDelete={() => handleDeleteAllocation(payment.allocationId)}
-                                    onOpenPayments={() => openPaymentsOverview(payment.ledgerId)}
+                                    onOpenPayment={() => openPaymentDetail(payment.ledgerId)}
                                     deleting={delPending}
                                 />
                             ))

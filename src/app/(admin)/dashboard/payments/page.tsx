@@ -1,67 +1,46 @@
-import Link from "next/link";
-import {
-    loadLedgerRows,
-    getLedgerStats,
-    type ReconciliationStatus,
-} from "@/lib/actions/reconciliation";
-import { PaymentsClient } from "./payments-client";
 import { getSelectedYear } from "@/lib/actions/year";
+import { loadPaymentMemberOptions, loadPaymentRows } from "./data";
+import { PaymentsOverviewClient } from "./payments-overview-client";
 
 export const dynamic = "force-dynamic";
 
-const VALID_SOURCES = ["fio_bank", "file_import", "cash"] as const;
-type SourceFilter = typeof VALID_SOURCES[number];
-
-export default async function PaymentsPage(props: {
-    searchParams: Promise<{ status?: string; source?: string; profileId?: string }>;
+export default async function PaymentsPage({
+    searchParams,
+}: {
+    searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
-    const { status: statusParam, source: sourceParam, profileId: profileIdParam } = await props.searchParams;
-
-    const selectedYear = await getSelectedYear();
-
-    const validStatuses: ReconciliationStatus[] = ["unmatched", "suggested", "confirmed", "ignored"];
-    const statusFilter = validStatuses.includes(statusParam as ReconciliationStatus)
-        ? (statusParam as ReconciliationStatus)
-        : undefined;
-
-    const sourceFilter = VALID_SOURCES.includes(sourceParam as SourceFilter)
-        ? (sourceParam as SourceFilter)
-        : undefined;
-
-    const profileIdFilter = profileIdParam ? Number(profileIdParam) : undefined;
-
-    const [rows, stats] = await Promise.all([
-        loadLedgerRows({ year: selectedYear, status: statusFilter, source: sourceFilter, profileId: profileIdFilter }),
-        getLedgerStats(selectedYear),
+    const [selectedYear, params, memberOptions] = await Promise.all([
+        getSelectedYear(),
+        searchParams,
+        loadPaymentMemberOptions(),
     ]);
 
-    return (
-        <div className="space-y-4">
-            <div className="flex items-start justify-between gap-4">
-                <div>
-                    <h1 className="text-xl font-semibold">Platební ledger</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        Přehled příchozích plateb z Fio banky, bankovních souborů a hotovosti
-                        za rok {selectedYear} — celkem {stats.total} plateb:{" "}
-                        <span className="text-amber-600 font-medium">{stats.unmatched} nespárováno</span>,{" "}
-                        <span className="text-blue-600 font-medium">{stats.suggested} ke kontrole</span>,{" "}
-                        <span className="text-green-700 font-medium">{stats.confirmed} potvrzeno</span>.
-                    </p>
-                </div>
-                <Link href="/dashboard/payments/history"
-                    className="shrink-0 text-xs text-muted-foreground hover:text-foreground border border-gray-200 rounded-full px-3 py-1.5 bg-white hover:bg-gray-50 transition-colors">
-                    Historie importů →
-                </Link>
-            </div>
+    const yearParam = typeof params.year === "string" ? params.year : null;
+    const parsedYear = yearParam && yearParam !== "all" ? Number(yearParam) : NaN;
+    const yearMode: number | "all" = yearParam === "all"
+        ? "all"
+        : Number.isInteger(parsedYear) && parsedYear > 0
+            ? parsedYear
+            : selectedYear;
 
-            <PaymentsClient
+    const rows = await loadPaymentRows(yearMode);
+    const initialMemberParam = typeof params.member === "string" ? Number(params.member) : NaN;
+    const initialProfileParam = typeof params.profileId === "string" ? Number(params.profileId) : NaN;
+
+    return (
+        <PaymentsOverviewClient
                 rows={rows}
-                stats={stats}
+            memberOptions={memberOptions}
+            yearMode={yearMode}
                 selectedYear={selectedYear}
-                statusFilter={statusFilter}
-                sourceFilter={sourceFilter}
-                profileIdFilter={profileIdFilter}
-            />
-        </div>
+            initialStatus={(params.status as string) ?? "open"}
+            initialSource={(params.source as string) ?? "all"}
+            initialProfileId={Number.isInteger(initialProfileParam) && initialProfileParam > 0 ? initialProfileParam : null}
+            initialQ={(params.q as string) ?? ""}
+            initialMemberId={Number.isInteger(initialMemberParam) && initialMemberParam > 0 ? initialMemberParam : null}
+            initialSort={(params.sort as string) ?? "paidAt"}
+            initialSortDir={(params.dir as string) ?? "desc"}
+            initialWithoutVs={(params.withoutVs as string) ?? "0"}
+        />
     );
 }

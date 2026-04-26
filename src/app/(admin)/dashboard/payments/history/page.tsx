@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { BackButton } from "@/components/back-button";
 import { Badge } from "@/components/ui/badge";
 import { getPaymentHistoryRuns } from "@/lib/actions/reconciliation";
 import type { ImportRunSummary } from "@/lib/actions/reconciliation";
@@ -79,12 +80,7 @@ export default async function PaymentHistoryPage() {
 
     return (
         <div className="space-y-4">
-            <div className="flex items-center gap-3">
-                <Link href="/dashboard/payments"
-                    className="text-sm text-muted-foreground hover:text-foreground">
-                    ← Platební ledger
-                </Link>
-            </div>
+            <BackButton />
 
             <div>
                 <h1 className="text-xl font-semibold">Historie importů plateb</h1>

@@ -655,6 +655,43 @@ export async function ignorePayment(
     return { success: true };
 }
 
+export async function retryAutoMatchPayment(ledgerId: number): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    const createdBy = session?.user?.email ?? "unknown";
+    const db = getDb();
+
+    const [ledger] = await db
+        .select({
+            id: paymentLedger.id,
+            paidAt: paymentLedger.paidAt,
+            amount: paymentLedger.amount,
+            variableSymbol: paymentLedger.variableSymbol,
+            reconciliationStatus: paymentLedger.reconciliationStatus,
+        })
+        .from(paymentLedger)
+        .where(eq(paymentLedger.id, ledgerId));
+
+    if (!ledger) return { error: "Platba nenalezena" };
+    if (ledger.reconciliationStatus === "confirmed") return { error: "Potvrzenou platbu nejdřív odpárujte" };
+
+    await db.delete(paymentAllocations).where(eq(paymentAllocations.ledgerId, ledgerId));
+    await db.update(paymentLedger)
+        .set({ reconciliationStatus: "unmatched", updatedAt: new Date() })
+        .where(eq(paymentLedger.id, ledgerId));
+
+    await autoMatchLedgerEntry(
+        db,
+        ledger.id,
+        ledger.variableSymbol,
+        Number(ledger.amount),
+        ledger.paidAt as unknown as string,
+        createdBy,
+    );
+
+    revalidatePath("/dashboard/payments");
+    return { success: true };
+}
+
 // ── Výpis ledger záznamů ──────────────────────────────────────────────────────
 
 export async function loadLedgerRows(filters: {
