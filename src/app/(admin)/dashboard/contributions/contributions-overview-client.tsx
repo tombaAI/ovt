@@ -605,18 +605,11 @@ export function ContributionsOverviewClient({
                         </button>
                     )}
 
-                    {canPrepare && yearMode !== "all" && (
-                        <div className="ml-auto">
-                            <Button onClick={() => setPrepareOpen(true)} className="h-8 bg-[#327600] text-white hover:bg-[#327600]/90">
-                                Připravit předpisy
-                            </Button>
-                        </div>
-                    )}
                 </div>
 
-                <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-                    <div className="flex min-w-max items-stretch gap-3 pb-1">
-                        <div className="flex items-center gap-2 rounded-xl border bg-gray-50 px-3 py-3 text-sm text-gray-600">
+                <div className="rounded-xl border bg-gray-50 px-4 py-3">
+                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
                             {period ? (
                                 <>
                                     <span className="whitespace-nowrap"><span className="text-gray-400">Člen</span> <strong className="text-gray-700">{period.amountBase.toLocaleString("cs-CZ")} Kč</strong></span>
@@ -630,31 +623,42 @@ export function ContributionsOverviewClient({
                                     <span className="whitespace-nowrap"><span className="text-gray-400">Účet</span> <strong className="font-mono text-gray-700">{period.bankAccount}</strong></span>
                                 </>
                             ) : (
-                                <span className="whitespace-nowrap text-gray-500">Historie všech roků — globální rok vpravo nahoře zůstává {selectedYear}</span>
+                                <span className="text-gray-500">Historie všech roků — globální rok vpravo nahoře zůstává {selectedYear}</span>
                             )}
                         </div>
 
-                        <SummaryCard
-                            title="Vybráno / očekáváno"
-                            value={fmtAmount(summary.collected)}
-                            subvalue={`z ${fmtAmount(summary.expected)}`}
-                        />
-                        <SummaryCard
-                            title="Potvrzený předpis"
-                            value={fmtAmount(summary.confirmedPrescription)}
-                            subvalue={`Rozdíl: ${fmtAmount(summary.difference)}`}
-                        />
-                        <SummaryCard
-                            title="Problematické k řešení"
-                            value={String(summary.problematic)}
-                            subvalue="zaplaceno jinak, než čekáme"
-                        />
-                        <SummaryCard
-                            title="Platby k párování"
-                            value={String(summary.matchingCandidates)}
-                            subvalue="zatím fixně 0"
-                        />
+                        {canPrepare && yearMode !== "all" && (
+                            <Button
+                                onClick={() => setPrepareOpen(true)}
+                                className="h-8 shrink-0 bg-[#327600] text-white hover:bg-[#327600]/90"
+                            >
+                                Definuj parametry příspěvků
+                            </Button>
+                        )}
                     </div>
+                </div>
+
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                    <SummaryCard
+                        title="Vybráno / očekáváno"
+                        value={fmtAmount(summary.collected)}
+                        subvalue={`z ${fmtAmount(summary.expected)}`}
+                    />
+                    <SummaryCard
+                        title="Potvrzený předpis"
+                        value={fmtAmount(summary.confirmedPrescription)}
+                        subvalue={`Rozdíl: ${fmtAmount(summary.difference)}`}
+                    />
+                    <SummaryCard
+                        title="Problematické k řešení"
+                        value={String(summary.problematic)}
+                        subvalue="zaplaceno jinak, než čekáme"
+                    />
+                    <SummaryCard
+                        title="Platby k párování"
+                        value={String(summary.matchingCandidates)}
+                        subvalue="zatím fixně 0"
+                    />
                 </div>
             </div>
 
