@@ -31,6 +31,7 @@ import type { ContribRow, MemberOption, PeriodDetail } from "./data";
 type FilterKey = "issues" | "unpaid" | "todo";
 type PaymentStateFilter = "all" | "unpaid" | "underpaid" | "overpaid" | "paid";
 type ProcessStateFilter = "all" | "new" | "reviewed" | "mailed";
+type BadgeFilterKey = "boat" | "noBrigade" | "committee" | "tom" | "individual";
 type SortKey = "firstName" | "lastName" | "nickname" | "date" | "status";
 type SortDir = "asc" | "desc";
 
@@ -38,6 +39,14 @@ const FILTERS: Array<{ key: FilterKey; label: string }> = [
     { key: "issues", label: "Problémy" },
     { key: "unpaid", label: "Nezaplaceno" },
     { key: "todo", label: "S úkolem" },
+];
+
+const BADGE_FILTERS: Array<{ key: BadgeFilterKey; label: string }> = [
+    { key: "boat", label: "Loď" },
+    { key: "noBrigade", label: "Bez brigády" },
+    { key: "committee", label: "Výbor" },
+    { key: "tom", label: "TOM" },
+    { key: "individual", label: "Indiv" },
 ];
 
 const STATUS_BADGE: Record<ContribRow["status"], { label: string; className: string }> = {
@@ -83,17 +92,30 @@ function processState(row: ContribRow): ProcessStateFilter {
     return "new";
 }
 
+function hasContributionBadge(row: ContribRow, key: BadgeFilterKey): boolean {
+    if (key === "boat") return [row.amountBoat1, row.amountBoat2, row.amountBoat3].some(value => (value ?? 0) > 0);
+    if (key === "noBrigade") return (row.brigadeSurcharge ?? 0) > 0;
+    if (key === "committee") return (row.discountCommittee ?? 0) > 0;
+    if (key === "tom") return (row.discountTom ?? 0) > 0;
+    return (row.discountIndividual ?? 0) > 0;
+}
+
 function contributionBadges(row: ContribRow, showYear: boolean): string[] {
     const badges: string[] = [];
     if (showYear) badges.push(String(row.periodYear));
-    if (row.amountBoat1) badges.push("Loď");
-    if (row.amountBoat2) badges.push("2. loď");
-    if (row.amountBoat3) badges.push("3. loď");
-    if (row.brigadeSurcharge && row.brigadeSurcharge > 0) badges.push("Bez brigády");
-    if (row.discountCommittee) badges.push("Výbor");
-    if (row.discountTom) badges.push("TOM");
-    if (row.todoNote) badges.push("📋 úkol");
+    BADGE_FILTERS.forEach(item => {
+        if (hasContributionBadge(row, item.key)) badges.push(item.label);
+    });
     return badges;
+}
+
+function parseBadgeFilters(value: string): BadgeFilterKey[] {
+    if (!value) return [];
+
+    const parts = new Set(value.split(",").map(item => item.trim()).filter(Boolean));
+    return BADGE_FILTERS
+        .map(item => item.key)
+        .filter(key => parts.has(key));
 }
 
 function normalizedMemberLabel(member: MemberOption | null): string {
@@ -136,6 +158,7 @@ interface Props {
     initialMemberId: number | null;
     initialPaymentState: string;
     initialProcessState: string;
+    initialBadgeFilters: string;
     canPrepare?: boolean;
     prepareDefaults?: Partial<PeriodFormData>;
 }
@@ -153,6 +176,7 @@ export function ContributionsOverviewClient({
     initialMemberId,
     initialPaymentState,
     initialProcessState,
+    initialBadgeFilters,
     canPrepare = false,
     prepareDefaults = {},
 }: Props) {
@@ -179,6 +203,9 @@ export function ContributionsOverviewClient({
         initialProcessState === "new" || initialProcessState === "reviewed" || initialProcessState === "mailed"
             ? initialProcessState
             : "all"
+    );
+    const [selectedBadgeFilters, setSelectedBadgeFilters] = useState<BadgeFilterKey[]>(
+        () => parseBadgeFilters(initialBadgeFilters)
     );
     const [prepareOpen, setPrepareOpen] = useState(false);
     const [editRow, setEditRow] = useState<ContribRow | null>(null);
@@ -256,6 +283,10 @@ export function ContributionsOverviewClient({
         if (filter === "unpaid") next = next.filter(row => row.status === "unpaid");
         if (filter === "todo") next = next.filter(row => row.todoNote !== null);
 
+        if (selectedBadgeFilters.length > 0) {
+            next = next.filter(row => selectedBadgeFilters.every(key => hasContributionBadge(row, key)));
+        }
+
         if (paymentState !== "all") next = next.filter(row => row.status === paymentState);
         if (process !== "all") next = next.filter(row => processState(row) === process);
 
@@ -281,7 +312,7 @@ export function ContributionsOverviewClient({
             if (lastNameCmp !== 0) return lastNameCmp;
             return compareText(left.firstName, right.firstName, "asc");
         });
-    }, [filter, memberScopedRows, paymentState, process, q, sort, sortDir, yearMode]);
+    }, [filter, memberScopedRows, paymentState, process, q, selectedBadgeFilters, sort, sortDir, yearMode]);
 
     const filterMenuLabel = useMemo(() => {
         const labels: string[] = [];
@@ -308,6 +339,7 @@ export function ContributionsOverviewClient({
     }, [paymentState, process, yearMode]);
 
     const hasActiveFilters = filter !== "issues"
+        || selectedBadgeFilters.length > 0
         || paymentState !== "all"
         || process !== "all"
         || memberId !== null
@@ -352,6 +384,22 @@ export function ContributionsOverviewClient({
         updateUrl({ member: nextMemberId ? String(nextMemberId) : null });
     }
 
+    function toggleBadgeFilter(key: BadgeFilterKey) {
+        setSelectedBadgeFilters(current => {
+            const next = current.includes(key)
+                ? current.filter(item => item !== key)
+                : [...current, key];
+
+            const serialized = BADGE_FILTERS
+                .map(item => item.key)
+                .filter(item => next.includes(item))
+                .join(",");
+
+            updateUrl({ badges: serialized || null });
+            return next;
+        });
+    }
+
     function handleYearModeChange(next: string) {
         const url = new URL(window.location.href);
         if (next === String(selectedYear)) url.searchParams.delete("year");
@@ -375,6 +423,7 @@ export function ContributionsOverviewClient({
 
     function resetAllFilters() {
         setFilter("issues");
+        setSelectedBadgeFilters([]);
         setPaymentState("all");
         setProcess("all");
         setSearchDraft("");
@@ -386,6 +435,7 @@ export function ContributionsOverviewClient({
 
         const url = new URL(window.location.href);
         url.searchParams.delete("filter");
+        url.searchParams.delete("badges");
         url.searchParams.delete("state");
         url.searchParams.delete("process");
         url.searchParams.delete("q");
@@ -677,7 +727,29 @@ export function ContributionsOverviewClient({
                                     Přezdívka {renderSortArrow("nickname")}
                                 </button>
                             </TableHead>
-                            <TableHead>Badges</TableHead>
+                            <TableHead className="w-[280px]">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    {BADGE_FILTERS.map(item => {
+                                        const isActive = selectedBadgeFilters.includes(item.key);
+                                        return (
+                                            <button
+                                                key={item.key}
+                                                type="button"
+                                                aria-pressed={isActive}
+                                                onClick={() => toggleBadgeFilter(item.key)}
+                                                className={[
+                                                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                                                    isActive
+                                                        ? "border-[#327600] bg-[#327600]/10 text-[#327600] hover:bg-[#327600]/15"
+                                                        : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200",
+                                                ].join(" ")}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </TableHead>
                             <TableHead className="text-right">Předpis</TableHead>
                             <TableHead className="text-right">Zaplaceno</TableHead>
                             <TableHead className="text-right">Rozdíl</TableHead>

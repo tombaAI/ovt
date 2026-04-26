@@ -64,6 +64,7 @@ export default async function ContributionsPage({
             initialMemberId={Number.isInteger(initialMemberParam) && initialMemberParam > 0 ? initialMemberParam : null}
             initialPaymentState={(params.state as string) ?? "all"}
             initialProcessState={(params.process as string) ?? "all"}
+            initialBadgeFilters={(params.badges as string) ?? ""}
             canPrepare={period !== null}
             prepareDefaults={prepareDefaults}
         />
