@@ -102,6 +102,14 @@ function RokKarta({ rok }: { rok: StavRok }) {
                             )}
                         </div>
                     </>
+                ) : endBalance !== null && txCount === 0 ? (
+                    /* Rok bez transakcí — jen zobrazíme známý rok-end zůstatek */
+                    <Radek
+                        label={`Stav k 31.12.${year}`}
+                        sub="z přenosu dalšího roku"
+                        value={endBalance}
+                        bold
+                    />
                 ) : (
                     /* Neuzavřený rok — timeline */
                     <>
@@ -176,7 +184,7 @@ function RokKarta({ rok }: { rok: StavRok }) {
 // ── Hlavní tab ────────────────────────────────────────────────────────────────
 
 export function StavUctuTab({ data }: { data: StavUctuData }) {
-    const { years, oddilName } = data;
+    const { years, oddilName, currentBalance, currentDate, currentIsExact } = data;
 
     if (years.length === 0) {
         return (
@@ -189,9 +197,31 @@ export function StavUctuTab({ data }: { data: StavUctuData }) {
 
     return (
         <div className="space-y-3">
-            {oddilName && (
-                <p className="text-xs text-gray-400 px-0.5">{oddilName}</p>
+            {/* Summary: aktuální zůstatek nahoře */}
+            {currentBalance !== null && currentDate && (
+                <div className={cn(
+                    "rounded-lg border px-5 py-4 flex items-center justify-between gap-4 flex-wrap",
+                    currentBalance < 0
+                        ? "bg-red-50 border-red-200"
+                        : "bg-green-50 border-green-200"
+                )}>
+                    <div>
+                        <p className="text-xs text-gray-500 mb-0.5">
+                            {currentIsExact ? "Zůstatek na podúčtu" : "Odhadovaný zůstatek na podúčtu"}
+                            <span className="ml-1.5">· k {formatDate(currentDate)}</span>
+                            {!currentIsExact && <span className="ml-1.5 text-gray-400">(bez dalšího výsledku hospodaření)</span>}
+                        </p>
+                        <p className={cn(
+                            "text-2xl font-bold font-mono tabular-nums",
+                            currentBalance < 0 ? "text-red-700" : "text-green-700"
+                        )}>
+                            {fmtKc(currentBalance)}
+                        </p>
+                    </div>
+                    {oddilName && <p className="text-xs text-gray-400">{oddilName}</p>}
+                </div>
             )}
+
             {years.map(rok => (
                 <RokKarta key={rok.year} rok={rok} />
             ))}

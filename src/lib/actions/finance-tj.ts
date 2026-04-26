@@ -481,8 +481,12 @@ export type StavRok = {
 };
 
 export type StavUctuData = {
-    oddilName: string;
-    years:     StavRok[];
+    oddilName:      string;
+    years:          StavRok[];
+    // Nejlepší aktuální odhad zůstatku pro summary nahoře
+    currentBalance: number | null;
+    currentDate:    string | null;  // ISO datum ke kterému je odhad platný
+    currentIsExact: boolean;        // true = ověřený roční zůstatek, false = odhad
 };
 
 // ── Stav účtu: dotaz ──────────────────────────────────────────────────────────
@@ -515,15 +519,13 @@ export async function getStavUctu(): Promise<StavUctuData> {
 
     const oddilName = rows[0]?.oddilName ?? "";
 
-    if (rows.length === 0) return { oddilName, years: [] };
+    if (rows.length === 0) return { oddilName, years: [], currentBalance: null, currentDate: null, currentIsExact: false };
 
     // Všechny transakce (z libovolného počtu importů výsledovek)
     const allTx = await db
         .select({ docDate: importFinTjTransactions.docDate, debit: importFinTjTransactions.debit, credit: importFinTjTransactions.credit })
         .from(importFinTjTransactions)
         .orderBy(importFinTjTransactions.docDate);
-
-    if (allTx.length === 0) return { oddilName, years: [] };
 
     // ── Sestav mapu zůstatků k 31.12.roku ────────────────────────────────────
     // Zdroje (priorita: přímá roční tabulka > prevod dalšího importu):
@@ -549,12 +551,23 @@ export async function getStavUctu(): Promise<StavUctuData> {
     const tabulky = [...uniqueMap.values()].sort((a, b) => a.periodTo.localeCompare(b.periodTo));
 
     // ── Rozsah roků ──────────────────────────────────────────────────────────
-    const firstTxYear = parseInt(allTx[0].docDate.substring(0, 4));
-    const lastTxYear  = parseInt(allTx[allTx.length - 1].docDate.substring(0, 4));
+    // Zahrnout i roky kde máme yearEnd data (např. 2023 z prevod 2024 tabulky)
+    const yearEndKeys = [...yearEnd.keys()];
+    const firstTxYear = allTx.length > 0 ? parseInt(allTx[0].docDate.substring(0, 4)) : null;
+    const lastTxYear  = allTx.length > 0 ? parseInt(allTx[allTx.length - 1].docDate.substring(0, 4)) : null;
+    const minYear = Math.min(
+        firstTxYear ?? Infinity,
+        yearEndKeys.length > 0 ? Math.min(...yearEndKeys) : Infinity,
+    );
+    const maxYear = Math.max(
+        lastTxYear ?? -Infinity,
+        yearEndKeys.length > 0 ? Math.max(...yearEndKeys) : -Infinity,
+    );
+    if (!isFinite(minYear) || !isFinite(maxYear)) return { oddilName, years: [], currentBalance: null, currentDate: null, currentIsExact: false };
 
     const years: StavRok[] = [];
 
-    for (let year = firstTxYear; year <= lastTxYear; year++) {
+    for (let year = minYear; year <= maxYear; year++) {
         const yStr  = year.toString();
         const from  = `${yStr}-01-01`;
         const to    = `${yStr}-12-31`;
@@ -603,5 +616,30 @@ export async function getStavUctu(): Promise<StavUctuData> {
         years.push({ year, startBalance, endBalance, naklady, vynosy, txVysledek, txCount: yearTx.length, isComplete, matches, snapshot, latestTxDate });
     }
 
-    return { oddilName, years };
+    // Summary: nejlepší aktuální odhad zůstatku
+    const lastYear = years[years.length - 1] ?? null;
+    let currentBalance: number | null = null;
+    let currentDate:    string | null = null;
+    let currentIsExact  = false;
+
+    if (lastYear) {
+        if (lastYear.endBalance !== null && lastYear.isComplete) {
+            // Uzavřený rok — přesný roční zůstatek
+            currentBalance = lastYear.endBalance;
+            currentDate    = `${lastYear.year}-12-31`;
+            currentIsExact = true;
+        } else if (lastYear.snapshot && lastYear.startBalance !== null) {
+            // Neuzavřený rok se snapshotem — odhad k datu poslední transakce
+            currentBalance = lastYear.startBalance + lastYear.txVysledek;
+            currentDate    = lastYear.latestTxDate;
+            currentIsExact = false;
+        } else if (lastYear.endBalance !== null) {
+            // Jen rok-end zůstatek bez kompletní rekonciliace
+            currentBalance = lastYear.endBalance;
+            currentDate    = `${lastYear.year}-12-31`;
+            currentIsExact = false;
+        }
+    }
+
+    return { oddilName, years, currentBalance, currentDate, currentIsExact };
 }
