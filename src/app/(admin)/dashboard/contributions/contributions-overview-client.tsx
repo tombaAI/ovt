@@ -100,12 +100,16 @@ function hasContributionBadge(row: ContribRow, key: BadgeFilterKey): boolean {
     return (row.discountIndividual ?? 0) > 0;
 }
 
-function contributionBadges(row: ContribRow, showYear: boolean): string[] {
+function contributionRowBadges(row: ContribRow, showYear: boolean): string[] {
     const badges: string[] = [];
     if (showYear) badges.push(String(row.periodYear));
-    BADGE_FILTERS.forEach(item => {
-        if (hasContributionBadge(row, item.key)) badges.push(item.label);
-    });
+    if ((row.amountBoat1 ?? 0) > 0) badges.push("Loď");
+    if ((row.amountBoat2 ?? 0) > 0) badges.push("2. loď");
+    if ((row.amountBoat3 ?? 0) > 0) badges.push("3. loď");
+    if ((row.brigadeSurcharge ?? 0) > 0) badges.push("Bez brigády");
+    if ((row.discountCommittee ?? 0) > 0) badges.push("Výbor");
+    if ((row.discountTom ?? 0) > 0) badges.push("TOM");
+    if ((row.discountIndividual ?? 0) > 0) badges.push("Indiv");
     return badges;
 }
 
@@ -782,7 +786,7 @@ export function ContributionsOverviewClient({
                         )}
                         {filteredRows.map(row => {
                             const balance = row.amountTotal === null ? null : row.paidTotal - row.amountTotal;
-                            const badges = contributionBadges(row, showYearBadge);
+                            const badges = contributionRowBadges(row, showYearBadge);
                             const statusBadge = STATUS_BADGE[row.status];
 
                             return (
@@ -858,7 +862,7 @@ export function ContributionsOverviewClient({
                     </div>
                 )}
                 {filteredRows.map(row => {
-                    const badges = contributionBadges(row, showYearBadge);
+                    const badges = contributionRowBadges(row, showYearBadge);
                     const statusBadge = STATUS_BADGE[row.status];
                     const context = row.lastPaidAt
                         ? `Předpis ${fmtAmount(row.amountTotal)} · Datum ${fmtDate(row.lastPaidAt)}`
