@@ -8,11 +8,11 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { ChevronDown, ChevronRight, FileText, BarChart3 } from "lucide-react";
 import { getImportLines } from "@/lib/actions/finance-tj";
-import type { FinanceTjImport, ImportLine, HospodareniImport } from "@/lib/actions/finance-tj";
+import type { FinanceTjImport, ImportLine, HospodareniWithReconciliation } from "@/lib/actions/finance-tj";
 
 interface Props {
-    imports:             FinanceTjImport[];
-    hospodareniImports:  HospodareniImport[];
+    imports:     FinanceTjImport[];
+    hospodareni: HospodareniWithReconciliation[];
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -157,32 +157,78 @@ function VysledovkaRow({ imp }: { imp: FinanceTjImport }) {
     );
 }
 
-// ── Řádek hospodaření (bez expandování) ──────────────────────────────────────
+// ── Řádek hospodaření (expandovatelný, zobrazí data našeho oddílu) ───────────
 
-function HospodareniRow({ imp }: { imp: HospodareniImport }) {
+function HospodareniRow({ item }: { item: HospodareniWithReconciliation }) {
+    const { imp, oddilRow } = item;
+    const [expanded, setExpanded] = useState(false);
+
+    function fmtKc(n: number): string {
+        if (n === 0) return "—";
+        return n.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
+    }
+
     return (
-        <TableRow>
-            <TableCell className="w-6" />
-            <TableCell>
-                <div className="flex items-center gap-2">
-                    <BarChart3 className="h-4 w-4 text-gray-400 shrink-0" />
-                    <div>
-                        <div className="flex items-center gap-2">
-                            <span className="font-medium text-gray-800 text-sm">{imp.fileName ?? "—"}</span>
-                            <Badge variant="outline" className="text-xs font-normal text-gray-500">tabulka stavů</Badge>
-                        </div>
-                        <div className="text-xs text-gray-400 mt-0.5">
-                            Období {formatDate(imp.periodFrom)} – {formatDate(imp.periodTo)}
-                            {imp.prevodYear && ` · přenos z roku ${imp.prevodYear}`}
-                            {" · "}importováno {imp.importedAt.toLocaleDateString("cs-CZ")}
+        <>
+            <TableRow className="cursor-pointer hover:bg-gray-50" onClick={() => setExpanded(v => !v)}>
+                <TableCell className="w-6 text-gray-400">
+                    {expanded ? <ChevronDown className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+                </TableCell>
+                <TableCell>
+                    <div className="flex items-center gap-2">
+                        <BarChart3 className="h-4 w-4 text-gray-400 shrink-0" />
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-800 text-sm">{imp.fileName ?? "—"}</span>
+                                <Badge variant="outline" className="text-xs font-normal text-gray-500">tabulka stavů</Badge>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                                Období {formatDate(imp.periodFrom)} – {formatDate(imp.periodTo)}
+                                {imp.prevodYear && ` · přenos z roku ${imp.prevodYear}`}
+                                {" · "}importováno {imp.importedAt.toLocaleDateString("cs-CZ")}
+                            </div>
                         </div>
                     </div>
-                </div>
-            </TableCell>
-            <TableCell className="text-right">
-                <span className="text-xs text-gray-500">{imp.rowCount} oddílů</span>
-            </TableCell>
-        </TableRow>
+                </TableCell>
+                <TableCell className="text-right">
+                    <span className="text-xs text-gray-500">{imp.rowCount} oddílů</span>
+                </TableCell>
+            </TableRow>
+
+            {expanded && oddilRow && (
+                <TableRow className="hover:bg-transparent">
+                    <TableCell colSpan={3} className="p-0 border-t border-gray-100 bg-gray-50/50">
+                        <div className="px-8 py-3 text-sm">
+                            <p className="font-medium text-gray-700 mb-2 text-xs">
+                                Oddíl {oddilRow.oddilId} · {oddilRow.oddilName}
+                            </p>
+                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-6 gap-y-1 text-xs">
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-gray-500">Náklady</span>
+                                    <span className={cn("font-mono tabular-nums", oddilRow.naklady > 0 ? "text-red-700" : "text-gray-400")}>{fmtKc(oddilRow.naklady)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-gray-500">Výnosy</span>
+                                    <span className={cn("font-mono tabular-nums", oddilRow.vynosy > 0 ? "text-green-700" : "text-gray-400")}>{fmtKc(oddilRow.vynosy)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-gray-500">Výsledek</span>
+                                    <span className={cn("font-mono tabular-nums font-medium", oddilRow.vysledek < 0 ? "text-red-700" : "text-green-700")}>{fmtKc(oddilRow.vysledek)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4">
+                                    <span className="text-gray-500">Přenos {imp.prevodYear ? `z ${imp.prevodYear}` : ""}</span>
+                                    <span className={cn("font-mono tabular-nums", oddilRow.prevod < 0 ? "text-red-700" : "text-gray-700")}>{fmtKc(oddilRow.prevod)}</span>
+                                </div>
+                                <div className="flex justify-between gap-4 sm:col-span-2">
+                                    <span className="text-gray-700 font-semibold">Zůstatek na podúčtu</span>
+                                    <span className={cn("font-mono tabular-nums font-bold", oddilRow.celkem < 0 ? "text-red-700" : "text-green-700")}>{fmtKc(oddilRow.celkem)}</span>
+                                </div>
+                            </div>
+                        </div>
+                    </TableCell>
+                </TableRow>
+            )}
+        </>
     );
 }
 
@@ -190,13 +236,17 @@ function HospodareniRow({ imp }: { imp: HospodareniImport }) {
 
 type CombinedItem =
     | { kind: "vysledovka"; imp: FinanceTjImport }
-    | { kind: "hospodareni"; imp: HospodareniImport };
+    | { kind: "hospodareni"; item: HospodareniWithReconciliation };
 
-export function ImportHistory({ imports, hospodareniImports }: Props) {
+export function ImportHistory({ imports, hospodareni }: Props) {
     const combined: CombinedItem[] = [
         ...imports.map(imp => ({ kind: "vysledovka" as const, imp })),
-        ...hospodareniImports.map(imp => ({ kind: "hospodareni" as const, imp })),
-    ].sort((a, b) => b.imp.importedAt.getTime() - a.imp.importedAt.getTime());
+        ...hospodareni.map(item => ({ kind: "hospodareni" as const, item })),
+    ].sort((a, b) => {
+        const aT = a.kind === "vysledovka" ? a.imp.importedAt.getTime() : a.item.imp.importedAt.getTime();
+        const bT = b.kind === "vysledovka" ? b.imp.importedAt.getTime() : b.item.imp.importedAt.getTime();
+        return bT - aT;
+    });
 
     if (combined.length === 0) {
         return (
@@ -221,7 +271,7 @@ export function ImportHistory({ imports, hospodareniImports }: Props) {
                     {combined.map(item =>
                         item.kind === "vysledovka"
                             ? <VysledovkaRow key={`v-${item.imp.id}`} imp={item.imp} />
-                            : <HospodareniRow key={`h-${item.imp.id}`} imp={item.imp} />
+                            : <HospodareniRow key={`h-${item.item.imp.id}`} item={item.item} />
                     )}
                 </TableBody>
             </Table>

@@ -10,14 +10,15 @@ import { cn } from "@/lib/utils";
 import { ImportDialog } from "./import-dialog";
 import { ImportHospodareniDialog } from "./import-hospodareni-dialog";
 import { ImportHistory } from "./import-history";
-import { HospodareniTab } from "./hospodareni-tab";
-import type { FinanceTjImport, FinanceTjTransaction, HospodareniImport, HospodareniWithReconciliation } from "@/lib/actions/finance-tj";
+import { StavUctuTab } from "./stav-uctu-tab";
+import type { FinanceTjImport, FinanceTjTransaction, HospodareniWithReconciliation, StavUctuData } from "@/lib/actions/finance-tj";
 import { FileText } from "lucide-react";
 
 interface Props {
-    imports:             FinanceTjImport[];
-    transactions:        FinanceTjTransaction[];
-    hospodareni:         HospodareniWithReconciliation[];
+    imports:      FinanceTjImport[];
+    transactions: FinanceTjTransaction[];
+    hospodareni:  HospodareniWithReconciliation[];
+    stavUctu:     StavUctuData;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -159,8 +160,7 @@ function TransactionsTable({ transactions, imports }: { transactions: FinanceTjT
 
 // ── Hlavní klient ─────────────────────────────────────────────────────────────
 
-export function FinanceClient({ imports, transactions, hospodareni }: Props) {
-    const hospodareniImports: HospodareniImport[] = hospodareni.map(h => h.imp);
+export function FinanceClient({ imports, transactions, hospodareni, stavUctu }: Props) {
     const conflictCount = imports.reduce((s, i) => s + i.conflictCount, 0);
 
     return (
@@ -176,14 +176,7 @@ export function FinanceClient({ imports, transactions, hospodareni }: Props) {
             <Tabs defaultValue="prehled">
                 <TabsList>
                     <TabsTrigger value="prehled">Přehled účetnictví</TabsTrigger>
-                    <TabsTrigger value="stavy">
-                        Přehled stavů
-                        {hospodareni.length > 0 && (
-                            <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-medium text-gray-600">
-                                {hospodareni.length}
-                            </span>
-                        )}
-                    </TabsTrigger>
+                    <TabsTrigger value="stav">Stav účtu</TabsTrigger>
                     <TabsTrigger value="historie">
                         Historie importů
                         {conflictCount > 0 && (
@@ -198,12 +191,12 @@ export function FinanceClient({ imports, transactions, hospodareni }: Props) {
                     <TransactionsTable transactions={transactions} imports={imports} />
                 </TabsContent>
 
-                <TabsContent value="stavy" className="mt-4">
-                    <HospodareniTab data={hospodareni} />
+                <TabsContent value="stav" className="mt-4">
+                    <StavUctuTab data={stavUctu} />
                 </TabsContent>
 
                 <TabsContent value="historie" className="mt-4">
-                    <ImportHistory imports={imports} hospodareniImports={hospodareniImports} />
+                    <ImportHistory imports={imports} hospodareni={hospodareni} />
                 </TabsContent>
             </Tabs>
         </div>

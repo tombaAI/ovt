@@ -451,3 +451,125 @@ export async function getAllHospodareniWithReconciliation(): Promise<Hospodareni
         };
     });
 }
+
+// ── Stav účtu: typy ───────────────────────────────────────────────────────────
+
+export type StavMilnik = {
+    importId:   number;
+    date:       string;        // ISO — period_to importu (= datum ke kterému je stav platný)
+    periodFrom: string;        // ISO — začátek období v dokumentu
+    balance:    number;        // celkem pro náš oddíl
+    fileName:   string | null;
+    prevodYear: number | null;
+    oddilName:  string;
+    isYearEnd:  boolean;       // period_to == 31.12.YYYY
+};
+
+export type StavSegment = {
+    fromDate:    string;       // exclusive — datum předchozího milníku
+    toDate:      string;       // inclusive — datum tohoto milníku
+    fromBalance: number;
+    toBalance:   number;
+    delta:       number;       // toBalance - fromBalance (očekávaný pohyb)
+    txVysledek:  number;       // SUM(credit - debit) z výsledovek v tomto segmentu
+    txCount:     number;
+    matches:     boolean;
+};
+
+export type StavUctuData = {
+    milestones: StavMilnik[];
+    segments:   StavSegment[];  // segments[i] = segment PŘEDCHÁZEJÍCÍ milestones[i+1]
+};
+
+// ── Stav účtu: dotaz ──────────────────────────────────────────────────────────
+
+export async function getStavUctu(): Promise<StavUctuData> {
+    const db     = getDb();
+    const oddilId = process.env.TJ_ODDIL_ID ?? "207";
+
+    // Všechny hospodaření importy s řádkem pro náš oddíl, seřazené dle period_to
+    const rows = await db
+        .select({
+            importId:   importFinTjHospodareniImports.id,
+            periodFrom: importFinTjHospodareniImports.periodFrom,
+            periodTo:   importFinTjHospodareniImports.periodTo,
+            prevodYear: importFinTjHospodareniImports.prevodYear,
+            fileName:   importFinTjHospodareniImports.fileName,
+            celkem:     importFinTjHospodareniRows.celkem,
+            oddilName:  importFinTjHospodareniRows.oddilName,
+        })
+        .from(importFinTjHospodareniImports)
+        .innerJoin(
+            importFinTjHospodareniRows,
+            and(
+                eq(importFinTjHospodareniRows.importId, importFinTjHospodareniImports.id),
+                eq(importFinTjHospodareniRows.oddilId, oddilId),
+            )
+        )
+        .orderBy(importFinTjHospodareniImports.periodTo, importFinTjHospodareniImports.id);
+
+    if (rows.length === 0) return { milestones: [], segments: [] };
+
+    // Deduplikace: pro stejné period_to ponecháme import s nejvyšším id (nejnovější)
+    const uniqueMap = new Map<string, typeof rows[0]>();
+    for (const r of rows) {
+        const existing = uniqueMap.get(r.periodTo);
+        if (!existing || r.importId > existing.importId) uniqueMap.set(r.periodTo, r);
+    }
+    const deduped = [...uniqueMap.values()].sort((a, b) => a.periodTo.localeCompare(b.periodTo));
+
+    const milestones: StavMilnik[] = deduped.map(r => {
+        const isYearEnd = r.periodTo.endsWith("-12-31");
+        return {
+            importId:   r.importId,
+            date:       r.periodTo,
+            periodFrom: r.periodFrom,
+            balance:    parseFloat(r.celkem),
+            fileName:   r.fileName,
+            prevodYear: r.prevodYear,
+            oddilName:  r.oddilName,
+            isYearEnd,
+        };
+    });
+
+    if (milestones.length < 2) return { milestones, segments: [] };
+
+    // Všechny transakce z výsledovek (seřazené dle data)
+    const allTx = await db
+        .select({
+            docDate: importFinTjTransactions.docDate,
+            debit:   importFinTjTransactions.debit,
+            credit:  importFinTjTransactions.credit,
+        })
+        .from(importFinTjTransactions)
+        .orderBy(importFinTjTransactions.docDate);
+
+    // Segmenty mezi po sobě jdoucími milníky
+    // Transakce s datem == datum milníku jsou "součástí" milníku (před ním), tedy:
+    // segment (T_prev, T_next] = transakce kde doc_date > T_prev AND doc_date <= T_next
+    const segments: StavSegment[] = [];
+    for (let i = 0; i < milestones.length - 1; i++) {
+        const from = milestones[i];
+        const to   = milestones[i + 1];
+
+        const segTx = allTx.filter(tx => tx.docDate > from.date && tx.docDate <= to.date);
+        const txVysledek = segTx.reduce(
+            (sum, tx) => sum + parseFloat(tx.credit) - parseFloat(tx.debit),
+            0
+        );
+        const delta = to.balance - from.balance;
+
+        segments.push({
+            fromDate:    from.date,
+            toDate:      to.date,
+            fromBalance: from.balance,
+            toBalance:   to.balance,
+            delta,
+            txVysledek,
+            txCount:     segTx.length,
+            matches:     Math.abs(delta - txVysledek) < 0.01,
+        });
+    }
+
+    return { milestones, segments };
+}
