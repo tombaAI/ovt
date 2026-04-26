@@ -39,20 +39,28 @@ function parseCzechDate(s: string): string {
     return `${y}-${m.padStart(2, "0")}-${d.padStart(2, "0")}`;
 }
 
-// Zpracuje jeden token částky: "- Kč" → 0, "25 316,00 Kč" → 25316, "- 25 316,00 Kč" → -25316
+/**
+ * Zpracuje jeden token částky.
+ * Formáty (dle reálného PDF exportu):
+ *   "- Kč"            → 0        (nula)
+ *   "25 316,00 Kč"    → +25316   (kladné)
+ *   "25 316,00 Kč-"   → -25316   (záporné — minus ZA Kč, účetní konvence)
+ *   "- 25 316,00 Kč"  → -25316   (záporné — minus PŘED číslem, fallback)
+ */
 function parseAmountToken(s: string): number {
     const t = s.trim();
-    // Nula: jen "- Kč" bez čísla
     if (/^-\s*Kč$/.test(t)) return 0;
+    // Záporné: minus za Kč  →  "25 316,00 Kč-"
+    if (t.endsWith("-")) {
+        const numStr = t.replace(/\s*Kč\s*-$/, "").replace(/\s/g, "").replace(",", ".");
+        const v = parseFloat(numStr);
+        return isNaN(v) ? 0 : -v;
+    }
+    // Záporné: minus před číslem  →  "- 25 316,00 Kč"
     const negative = t.startsWith("-");
-    const numStr = t
-        .replace(/^-\s*/, "")
-        .replace(/\s*Kč$/, "")
-        .replace(/\s/g, "")
-        .replace(",", ".");
+    const numStr = t.replace(/^-\s*/, "").replace(/\s*Kč$/, "").replace(/\s/g, "").replace(",", ".");
     const value = parseFloat(numStr);
-    if (isNaN(value)) return 0;
-    return negative ? -value : value;
+    return isNaN(value) ? 0 : (negative ? -value : value);
 }
 
 // ── Regex konstanty ────────────────────────────────────────────────────────────
@@ -63,9 +71,9 @@ const PERIOD_RE = /(\d{1,2}\.\d{1,2}\.\d{4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4}
 // Rok v záhlaví sloupce: "PŘEVOD Z ROKU 2024"
 const PREVOD_YEAR_RE = /P[RŘ]EVOD Z ROKU\s+(\d{4})/i;
 
-// Částka: záporná / nulová / kladná
-// Pořadí je důležité: nejdříve "- číslo Kč", pak "- Kč", pak kladné
-const AMOUNT_RE = /-\s*\d[\d ]*,\d{2}\s*Kč|-\s*Kč|\d[\d ]*,\d{2}\s*Kč/g;
+// Částka: záporná (postfix -, tj. "Kč-") / nulová ("- Kč") / kladná
+// Pořadí je důležité: nejdříve "číslo Kč-" (postfix záporné), pak "- Kč" (nula), pak kladné
+const AMOUNT_RE = /\d[\d ]*,\d{2}\s*Kč\s*-|-\s*Kč|\d[\d ]*,\d{2}\s*Kč/g;
 
 // Začátek řádku oddílu: 3ciferné číslo + jméno velkými písmeny (vč. háčků)
 // Lookahead zajistí, že za jménem následuje částka

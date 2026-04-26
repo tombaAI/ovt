@@ -5,7 +5,7 @@ import {
     importFinTjImports, importFinTjTransactions, importFinTjImportLines,
     importFinTjHospodareniImports, importFinTjHospodareniRows,
 } from "@/db/schema";
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-parser";
@@ -381,13 +381,14 @@ export async function getAllHospodareniWithReconciliation(): Promise<Hospodareni
 
     const importIds = imports.map(i => i.id);
 
-    // Řádky pro náš oddíl
+    // Řádky pro náš oddíl (inArray je bezpečnější než raw ANY)
     const oddilRows = await db
         .select()
         .from(importFinTjHospodareniRows)
-        .where(
-            sql`${importFinTjHospodareniRows.importId} = ANY(${importIds}) AND ${importFinTjHospodareniRows.oddilId} = ${oddilId}`
-        );
+        .where(and(
+            inArray(importFinTjHospodareniRows.importId, importIds),
+            eq(importFinTjHospodareniRows.oddilId, oddilId),
+        ));
     const oddilRowMap = new Map(oddilRows.map(r => [r.importId, r]));
 
     // Počty řádků per import
@@ -397,11 +398,11 @@ export async function getAllHospodareniWithReconciliation(): Promise<Hospodareni
             count:    sql<number>`COUNT(*)`.mapWith(Number),
         })
         .from(importFinTjHospodareniRows)
-        .where(sql`${importFinTjHospodareniRows.importId} = ANY(${importIds})`)
+        .where(inArray(importFinTjHospodareniRows.importId, importIds))
         .groupBy(importFinTjHospodareniRows.importId);
     const rowCountMap = new Map(rowCounts.map(r => [r.importId, r.count]));
 
-    // Rekonciliace: součet výsledovky per období (jeden SQL pro všechny importy)
+    // Rekonciliace: součet výsledovky per období (jeden SQL pro všechny importy najednou)
     type ReconRow = { import_id: number; tx_vysledek: string; tx_from: string | null; tx_to: string | null };
     const reconResult = await db.execute<ReconRow>(sql`
         SELECT
@@ -412,7 +413,7 @@ export async function getAllHospodareniWithReconciliation(): Promise<Hospodareni
         FROM app.import_fin_tj_hospodareni_imports h
         LEFT JOIN app.import_fin_tj_transactions tx
                ON tx.doc_date BETWEEN h.period_from AND h.period_to
-        WHERE h.id = ANY(${importIds})
+        WHERE h.id = ANY(${sql.raw(`ARRAY[${importIds.join(",")}]::integer[]`)})
         GROUP BY h.id
     `);
     const reconRows = reconResult as unknown as ReconRow[];
