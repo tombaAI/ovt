@@ -7,6 +7,8 @@ import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getSelectedYear } from "@/lib/actions/year";
+import { getStavUctu } from "@/lib/actions/finance-tj";
+import { cn } from "@/lib/utils";
 
 function formatKc(amount: number): string {
     return new Intl.NumberFormat("cs-CZ").format(Math.round(amount)) + "\u00a0Kč";
@@ -164,6 +166,42 @@ async function BoatsCard() {
     );
 }
 
+async function FinanceCard() {
+    const { currentBalance, currentDate, currentIsExact } = await getStavUctu();
+
+    function formatDate(iso: string) {
+        const [y, m, d] = iso.split("-");
+        return `${d}.${m}.${y}`;
+    }
+
+    return (
+        <Link href="/dashboard/finance">
+            <Card className="hover:shadow-md transition-shadow cursor-pointer">
+                <CardHeader className="pb-2">
+                    <p className="text-sm font-medium text-gray-500">Podúčet TJ</p>
+                </CardHeader>
+                <CardContent>
+                    {currentBalance !== null ? (
+                        <>
+                            <p className={cn(
+                                "text-2xl font-semibold",
+                                currentBalance < 0 ? "text-red-700" : "text-green-700"
+                            )}>
+                                {new Intl.NumberFormat("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(currentBalance)}&nbsp;Kč
+                            </p>
+                            <p className="text-xs text-gray-400 mt-0.5">
+                                {currentIsExact ? "zůstatek" : "odhad"} k {currentDate ? formatDate(currentDate) : "—"}
+                            </p>
+                        </>
+                    ) : (
+                        <p className="text-xs text-gray-400">Žádná data</p>
+                    )}
+                </CardContent>
+            </Card>
+        </Link>
+    );
+}
+
 async function BrigadesCard({ year }: { year: number }) {
     const db = getDb();
     const today = new Date().toISOString().slice(0, 10);
@@ -219,6 +257,9 @@ export default async function DashboardPage() {
                 </Suspense>
                 <Suspense fallback={<CardSkeleton label={`Brigády ${selectedYear}`} />}>
                     <BrigadesCard year={selectedYear} />
+                </Suspense>
+                <Suspense fallback={<CardSkeleton label="Podúčet TJ" />}>
+                    <FinanceCard />
                 </Suspense>
 
                 <Link href="/dashboard/imports">
