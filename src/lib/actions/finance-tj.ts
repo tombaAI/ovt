@@ -480,10 +480,6 @@ export type StavUctuData = {
 
 // ── Stav účtu: dotaz ──────────────────────────────────────────────────────────
 
-function txSum(list: { credit: string; debit: string }[]): number {
-    return list.reduce((s, tx) => s + parseFloat(tx.credit) - parseFloat(tx.debit), 0);
-}
-
 export async function getStavUctu(): Promise<StavUctuData> {
     const db      = getDb();
     const oddilId = process.env.TJ_ODDIL_ID ?? "207";
