@@ -18,16 +18,17 @@ import type { MemberWithFlags } from "./page";
 const memberDataCache = new Map<number, MemberWithFlags>();
 
 type FilterKey = "all" | "todo" | "unreviewed";
-type MemberBadgeFilterKey = "committee" | "tom" | "individual" | "noBrigade" | "partialYear";
+type MemberBadgeFilterKey = "todo" | "partialYear" | "committee" | "tom" | "individual" | "noBrigade";
 type SortKey   = "lastName" | "firstName" | "nickname" | "cskNumber" | "variableSymbol" | "email" | "phone";
 type SortDir   = "asc" | "desc";
 
 const MEMBER_BADGE_FILTERS: Array<{ key: MemberBadgeFilterKey; label: string }> = [
+    { key: "todo", label: "S úkolem" },
+    { key: "partialYear", label: "Noví" },
     { key: "committee", label: "Výbor" },
     { key: "tom", label: "TOM" },
     { key: "individual", label: "Indiv" },
     { key: "noBrigade", label: "Bez brigády" },
-    { key: "partialYear", label: "Část roku" },
 ];
 
 interface Props {
@@ -74,6 +75,7 @@ function fmtDate(iso: string) {
 }
 
 function hasMemberBadge(member: MemberWithFlags, key: MemberBadgeFilterKey): boolean {
+    if (key === "todo") return member.todoNote !== null;
     if (key === "committee") return member.isCommittee;
     if (key === "tom") return member.isTom;
     if (key === "individual") return member.discountIndividual !== null;
@@ -249,18 +251,18 @@ export function MembersClient({
     const hasActiveFilters = filter !== "all" || dropdownConditions.length > 0 || q !== "";
     const selectedBadgeFilters = useMemo<MemberBadgeFilterKey[]>(() => {
         const next: MemberBadgeFilterKey[] = [];
+        if (filter === "todo") next.push("todo");
+        if (castRoku) next.push("partialYear");
         if (slevaSet.has("committee")) next.push("committee");
         if (slevaSet.has("tom")) next.push("tom");
         if (slevaSet.has("individual")) next.push("individual");
         if (brigada) next.push("noBrigade");
-        if (castRoku) next.push("partialYear");
         return next;
-    }, [brigada, castRoku, slevaSet]);
+    }, [brigada, castRoku, filter, slevaSet]);
 
     // ── Computed counts and filtered list ──
     const counts = useMemo(() => ({
         all:        members.filter(m => isActiveToday(m)).length,
-        todo:       members.filter(m => m.todoNote !== null).length,
         unreviewed: members.filter(m => !m.membershipReviewed).length,
     }), [members]);
 
@@ -321,6 +323,10 @@ export function MembersClient({
     }, [members, filter, sort, sortDir, q, selectedBadgeFilters, stav, selectedYear]);
 
     function toggleHeaderBadgeFilter(key: MemberBadgeFilterKey) {
+        if (key === "todo") {
+            setFilterAndUrl(filter === "todo" ? "all" : "todo");
+            return;
+        }
         if (key === "noBrigade") {
             setBrigadaAndUrl(!brigada);
             return;
@@ -368,6 +374,7 @@ export function MembersClient({
             {/* ── Header row ── */}
             <div className="flex flex-wrap items-center gap-2">
                 <h1 className="text-xl font-semibold text-gray-900 mr-0.5">Členové {selectedYear}</h1>
+                <span className="text-sm text-gray-400">Zobrazeno {filtered.length}</span>
 
                 <Input
                     placeholder="Hledat…"
@@ -380,13 +387,6 @@ export function MembersClient({
                 <button className={pill(filter === "all" && stav === "active", "bg-[#327600] text-white", "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50")}
                     onClick={() => { setFilterAndUrl("all"); setStavAndUrl("active"); }}>
                     Aktivní <PillCount n={counts.all} active={filter === "all"} />
-                </button>
-                <button className={pill(
-                    filter === "todo",
-                    "bg-orange-500 text-white",
-                    counts.todo > 0 ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100" : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50"
-                )} onClick={() => setFilterAndUrl("todo")}>
-                    S úkolem <PillCount n={counts.todo} active={filter === "todo"} />
                 </button>
                 <button className={pill(
                     filter === "unreviewed",
@@ -525,7 +525,7 @@ export function MembersClient({
                             <TableHead className="py-2">
                                 <SortBtn field="phone" label="Telefon" sort={sort} dir={sortDir} onSort={handleSort} />
                             </TableHead>
-                            <TableHead className="w-[320px] py-2">
+                            <TableHead className="w-[380px] py-2">
                                 <div className="flex flex-wrap items-center gap-1.5">
                                     {MEMBER_BADGE_FILTERS.map(item => {
                                         const isActive = selectedBadgeFilters.includes(item.key);
@@ -543,6 +543,11 @@ export function MembersClient({
                                                 ].join(" ")}
                                             >
                                                 {item.label}
+                                                {isActive && (
+                                                    <span className="rounded-full bg-[#327600]/10 px-1.5 py-0.5 text-[10px] leading-none text-[#327600]">
+                                                        {filtered.length}
+                                                    </span>
+                                                )}
                                             </button>
                                         );
                                     })}
