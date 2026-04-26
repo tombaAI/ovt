@@ -454,69 +454,41 @@ export async function getAllHospodareniWithReconciliation(): Promise<Hospodareni
 
 // ── Stav účtu: typy ───────────────────────────────────────────────────────────
 
-export type StavMilnik = {
-    importId:    number;
-    date:        string;        // ISO — period_to (datum ke kterému je stav platný)
-    periodFrom:  string;        // ISO — začátek tabulkového období
-    balance:     number;        // celkem
-    prevod:      number;        // přenos (= počáteční zůstatek tabulkového období)
-    naklady:     number;
-    vynosy:      number;
-    fileName:    string | null;
-    prevodYear:  number | null;
-    oddilName:   string;
-    isYearEnd:   boolean;
-    // Rekonciliace: transakce z výsledovek v [period_from, period_to]
-    txVysledek:  number;
-    txCount:     number;
-    matches:     boolean;
-};
-
-// Mezera mezi dvěma milníky, kde tabulka neexistuje.
-// Začíná po konci předchozího milníku a končí ke konci roku (implied z prevod dalšího milníku).
-export type StavBridge = {
-    fromDate:         string;   // exclusive — date předchozího milníku
-    toDate:           string;   // inclusive — 31.12.YYYY (implied year-end)
-    fromBalance:      number;
-    impliedToBalance: number;   // prevod dalšího milníku = zůstatek k toDate
-    delta:            number;   // impliedToBalance - fromBalance
-    txVysledek:       number;   // SUM(credit - debit) v (fromDate, toDate]
-    txCount:          number;
-    matches:          boolean;
-};
-
-export type StavTrailingSegment = {
-    fromDate:         string;
-    fromBalance:      number;
-    txVysledek:       number;
-    txCount:          number;
-    latestTxDate:     string | null;
-    estimatedBalance: number;
+export type StavRok = {
+    year:         number;
+    startBalance: number | null;  // zůstatek k 31.12.(year-1), null = neznámý
+    endBalance:   number | null;  // zůstatek k 31.12.year, null = rok ještě neskončil
+    naklady:      number;         // SUM debits z výsledovek pro celý rok
+    vynosy:       number;         // SUM credits z výsledovek pro celý rok
+    txVysledek:   number;         // vynosy - naklady
+    txCount:      number;
+    isComplete:   boolean;        // startBalance i endBalance jsou známé
+    matches:      boolean | null; // null = nelze ověřit (chybí start nebo end)
+    // Pro neuzavřené roky: nejnovější průběžná tabulka jako kontrolní bod
+    snapshot: {
+        date:    string;
+        balance: number;
+        source:  string | null;
+    } | null;
+    latestTxDate: string | null;  // datum poslední transakce v roce
 };
 
 export type StavUctuData = {
-    milestones:      StavMilnik[];
-    // bridges[i] = mezera MEZI milestones[i] a milestones[i+1] (null = žádná mezera)
-    bridges:         (StavBridge | null)[];
-    trailingSegment: StavTrailingSegment | null;
+    oddilName: string;
+    years:     StavRok[];
 };
 
 // ── Stav účtu: dotaz ──────────────────────────────────────────────────────────
 
-function isoAddDay(iso: string): string {
-    const d = new Date(iso + "T00:00:00Z");
-    d.setUTCDate(d.getUTCDate() + 1);
-    return d.toISOString().substring(0, 10);
-}
-
-function txSum(txList: { credit: string; debit: string }[]): number {
-    return txList.reduce((s, tx) => s + parseFloat(tx.credit) - parseFloat(tx.debit), 0);
+function txSum(list: { credit: string; debit: string }[]): number {
+    return list.reduce((s, tx) => s + parseFloat(tx.credit) - parseFloat(tx.debit), 0);
 }
 
 export async function getStavUctu(): Promise<StavUctuData> {
     const db      = getDb();
     const oddilId = process.env.TJ_ODDIL_ID ?? "207";
 
+    // Tabulky hospodaření pro náš oddíl
     const rows = await db
         .select({
             importId:   importFinTjHospodareniImports.id,
@@ -526,8 +498,6 @@ export async function getStavUctu(): Promise<StavUctuData> {
             fileName:   importFinTjHospodareniImports.fileName,
             celkem:     importFinTjHospodareniRows.celkem,
             prevod:     importFinTjHospodareniRows.prevod,
-            naklady:    importFinTjHospodareniRows.naklady,
-            vynosy:     importFinTjHospodareniRows.vynosy,
             oddilName:  importFinTjHospodareniRows.oddilName,
         })
         .from(importFinTjHospodareniImports)
@@ -540,92 +510,81 @@ export async function getStavUctu(): Promise<StavUctuData> {
         )
         .orderBy(importFinTjHospodareniImports.periodTo, importFinTjHospodareniImports.id);
 
-    if (rows.length === 0) return { milestones: [], bridges: [], trailingSegment: null };
+    const oddilName = rows[0]?.oddilName ?? "";
 
-    // Deduplikace: pro stejné period_to ponecháme nejnovější import
-    const uniqueMap = new Map<string, typeof rows[0]>();
-    for (const r of rows) {
-        const ex = uniqueMap.get(r.periodTo);
-        if (!ex || r.importId > ex.importId) uniqueMap.set(r.periodTo, r);
-    }
-    const deduped = [...uniqueMap.values()].sort((a, b) => a.periodTo.localeCompare(b.periodTo));
+    if (rows.length === 0) return { oddilName, years: [] };
 
-    // Všechny transakce z výsledovek (z libovolného počtu importů)
+    // Všechny transakce (z libovolného počtu importů výsledovek)
     const allTx = await db
         .select({ docDate: importFinTjTransactions.docDate, debit: importFinTjTransactions.debit, credit: importFinTjTransactions.credit })
         .from(importFinTjTransactions)
         .orderBy(importFinTjTransactions.docDate);
 
-    // Milníky: rekonciliace vůči vlastní tabulkové periodě [period_from, period_to]
-    const milestones: StavMilnik[] = deduped.map(r => {
-        const periodTx  = allTx.filter(tx => tx.docDate >= r.periodFrom && tx.docDate <= r.periodTo);
-        const tvysledek = txSum(periodTx);
-        const tabVysl   = parseFloat(r.vynosy) - parseFloat(r.naklady);
-        return {
-            importId:   r.importId,
-            date:       r.periodTo,
-            periodFrom: r.periodFrom,
-            balance:    parseFloat(r.celkem),
-            prevod:     parseFloat(r.prevod),
-            naklady:    parseFloat(r.naklady),
-            vynosy:     parseFloat(r.vynosy),
-            fileName:   r.fileName,
-            prevodYear: r.prevodYear,
-            oddilName:  r.oddilName,
-            isYearEnd:  r.periodTo.endsWith("-12-31"),
-            txVysledek: tvysledek,
-            txCount:    periodTx.length,
-            matches:    Math.abs(tabVysl - tvysledek) < 0.01,
-        };
-    });
+    if (allTx.length === 0) return { oddilName, years: [] };
 
-    // Mezery (bridges): pokud period_from dalšího milníku je více než +1 den po konci předchozího,
-    // existuje nepokryté období. Zůstatek na konci mezery = prevod dalšího milníku.
-    const bridges: (StavBridge | null)[] = [];
-    for (let i = 0; i < milestones.length - 1; i++) {
-        const curr = milestones[i];
-        const next = milestones[i + 1];
+    // ── Sestav mapu zůstatků k 31.12.roku ────────────────────────────────────
+    // Zdroje (priorita: přímá roční tabulka > prevod dalšího importu):
+    const yearEnd = new Map<number, number>();
 
-        // Mezera existuje když next.periodFrom > curr.date + 1 den
-        const gapExists = next.periodFrom > isoAddDay(curr.date);
-        if (!gapExists || next.prevodYear === null) {
-            bridges.push(null);
-            continue;
+    for (const r of rows) {
+        // Přímý roční zůstatek
+        if (r.periodTo.endsWith("-12-31")) {
+            const y = parseInt(r.periodTo.substring(0, 4));
+            yearEnd.set(y, parseFloat(r.celkem));
         }
+        // Implied zůstatek z prevod dalšího roku (nižší priorita)
+        if (r.prevodYear !== null && !yearEnd.has(r.prevodYear)) {
+            yearEnd.set(r.prevodYear, parseFloat(r.prevod));
+        }
+    }
+    // Deduplikace tabulek: pro stejné period_to ponecháme nejnovější import
+    const uniqueMap = new Map<string, typeof rows[0]>();
+    for (const r of rows) {
+        const ex = uniqueMap.get(r.periodTo);
+        if (!ex || r.importId > ex.importId) uniqueMap.set(r.periodTo, r);
+    }
+    const tabulky = [...uniqueMap.values()].sort((a, b) => a.periodTo.localeCompare(b.periodTo));
 
-        // Konec mezery = 31.12.prevodYear (implied year-end ze sloupce "PŘEVOD Z ROKU X")
-        const toDate   = `${next.prevodYear}-12-31`;
-        const bridgeTx = allTx.filter(tx => tx.docDate > curr.date && tx.docDate <= toDate);
-        const tvysl    = txSum(bridgeTx);
-        const delta    = next.prevod - curr.balance;
+    // ── Rozsah roků ──────────────────────────────────────────────────────────
+    const firstTxYear = parseInt(allTx[0].docDate.substring(0, 4));
+    const lastTxYear  = parseInt(allTx[allTx.length - 1].docDate.substring(0, 4));
 
-        bridges.push({
-            fromDate:         curr.date,
-            toDate,
-            fromBalance:      curr.balance,
-            impliedToBalance: next.prevod,
-            delta,
-            txVysledek:       tvysl,
-            txCount:          bridgeTx.length,
-            matches:          Math.abs(delta - tvysl) < 0.01,
-        });
+    const years: StavRok[] = [];
+
+    for (let year = firstTxYear; year <= lastTxYear; year++) {
+        const yStr  = year.toString();
+        const from  = `${yStr}-01-01`;
+        const to    = `${yStr}-12-31`;
+        const yearTx = allTx.filter(tx => tx.docDate >= from && tx.docDate <= to);
+
+        if (yearTx.length === 0 && !yearEnd.has(year) && !yearEnd.has(year - 1)) continue;
+
+        const naklady    = yearTx.reduce((s, tx) => s + parseFloat(tx.debit),   0);
+        const vynosy     = yearTx.reduce((s, tx) => s + parseFloat(tx.credit),  0);
+        const txVysledek = vynosy - naklady;
+        const startBalance = yearEnd.get(year - 1) ?? null;
+        const endBalance   = yearEnd.get(year)     ?? null;
+        const isComplete   = startBalance !== null && endBalance !== null;
+        const delta        = isComplete ? endBalance! - startBalance! : null;
+        const matches      = isComplete && delta !== null
+            ? Math.abs(delta - txVysledek) < 0.01
+            : null;
+
+        // Nejnovější průběžná tabulka v tomto roce (jako snapshot pro neuzavřené roky)
+        const yearTabs = tabulky.filter(t =>
+            t.periodTo >= from && t.periodTo <= to && !t.periodTo.endsWith("-12-31")
+        );
+        const latestTab = yearTabs[yearTabs.length - 1] ?? null;
+        const snapshot  = latestTab ? {
+            date:    latestTab.periodTo,
+            balance: parseFloat(latestTab.celkem),
+            source:  latestTab.fileName,
+        } : null;
+
+        const latestTxDate = yearTx.length > 0 ? yearTx[yearTx.length - 1].docDate : null;
+
+        years.push({ year, startBalance, endBalance, naklady, vynosy, txVysledek, txCount: yearTx.length, isComplete, matches, snapshot, latestTxDate });
     }
 
-    // Trailing: transakce po posledním milníku
-    let trailingSegment: StavTrailingSegment | null = null;
-    const lastM      = milestones[milestones.length - 1];
-    const trailingTx = allTx.filter(tx => tx.docDate > lastM.date);
-    if (trailingTx.length > 0) {
-        const tvysl = txSum(trailingTx);
-        trailingSegment = {
-            fromDate:         lastM.date,
-            fromBalance:      lastM.balance,
-            txVysledek:       tvysl,
-            txCount:          trailingTx.length,
-            latestTxDate:     trailingTx[trailingTx.length - 1].docDate,
-            estimatedBalance: lastM.balance + tvysl,
-        };
-    }
-
-    return { milestones, bridges, trailingSegment };
+    return { oddilName, years };
 }
