@@ -8,13 +8,16 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
 import { ImportDialog } from "./import-dialog";
+import { ImportHospodareniDialog } from "./import-hospodareni-dialog";
 import { ImportHistory } from "./import-history";
-import type { FinanceTjImport, FinanceTjTransaction } from "@/lib/actions/finance-tj";
+import { HospodareniTab } from "./hospodareni-tab";
+import type { FinanceTjImport, FinanceTjTransaction, HospodareniImport, HospodareniWithReconciliation } from "@/lib/actions/finance-tj";
 import { FileText } from "lucide-react";
 
 interface Props {
-    imports:      FinanceTjImport[];
-    transactions: FinanceTjTransaction[];
+    imports:             FinanceTjImport[];
+    transactions:        FinanceTjTransaction[];
+    hospodareni:         HospodareniWithReconciliation[];
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -33,7 +36,7 @@ function formatDate(iso: string): string {
     return `${d}.${m}.${y}`;
 }
 
-// ── Detail importu v popoveru ──────────────────────────────────────────────────
+// ── Detail importu výsledovky v popoveru ──────────────────────────────────────
 
 function ImportPopover({ imp }: { imp: FinanceTjImport }) {
     return (
@@ -84,7 +87,7 @@ function ImportPopover({ imp }: { imp: FinanceTjImport }) {
     );
 }
 
-// ── Přehled transakcí ─────────────────────────────────────────────────────────
+// ── Přehled transakcí z výsledovek ───────────────────────────────────────────
 
 function TransactionsTable({ transactions, imports }: { transactions: FinanceTjTransaction[]; imports: FinanceTjImport[] }) {
     const importMap = new Map(imports.map(i => [i.id, i]));
@@ -156,22 +159,36 @@ function TransactionsTable({ transactions, imports }: { transactions: FinanceTjT
 
 // ── Hlavní klient ─────────────────────────────────────────────────────────────
 
-export function FinanceClient({ imports, transactions }: Props) {
+export function FinanceClient({ imports, transactions, hospodareni }: Props) {
+    const hospodareniImports: HospodareniImport[] = hospodareni.map(h => h.imp);
+    const conflictCount = imports.reduce((s, i) => s + i.conflictCount, 0);
+
     return (
         <div className="space-y-4">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3 flex-wrap">
                 <h1 className="text-2xl font-semibold text-gray-900">Finance z TJ</h1>
-                <ImportDialog />
+                <div className="flex items-center gap-2">
+                    <ImportHospodareniDialog />
+                    <ImportDialog />
+                </div>
             </div>
 
             <Tabs defaultValue="prehled">
                 <TabsList>
                     <TabsTrigger value="prehled">Přehled účetnictví</TabsTrigger>
+                    <TabsTrigger value="stavy">
+                        Přehled stavů
+                        {hospodareni.length > 0 && (
+                            <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-gray-200 px-1 text-[10px] font-medium text-gray-600">
+                                {hospodareni.length}
+                            </span>
+                        )}
+                    </TabsTrigger>
                     <TabsTrigger value="historie">
                         Historie importů
-                        {imports.some(i => i.conflictCount > 0) && (
+                        {conflictCount > 0 && (
                             <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-amber-500 px-1 text-[10px] font-medium text-white">
-                                {imports.reduce((s, i) => s + i.conflictCount, 0)}
+                                {conflictCount}
                             </span>
                         )}
                     </TabsTrigger>
@@ -181,8 +198,12 @@ export function FinanceClient({ imports, transactions }: Props) {
                     <TransactionsTable transactions={transactions} imports={imports} />
                 </TabsContent>
 
+                <TabsContent value="stavy" className="mt-4">
+                    <HospodareniTab data={hospodareni} />
+                </TabsContent>
+
                 <TabsContent value="historie" className="mt-4">
-                    <ImportHistory imports={imports} />
+                    <ImportHistory imports={imports} hospodareniImports={hospodareniImports} />
                 </TabsContent>
             </Tabs>
         </div>

@@ -6,12 +6,13 @@ import {
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
-import { ChevronDown, ChevronRight, FileText } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, BarChart3 } from "lucide-react";
 import { getImportLines } from "@/lib/actions/finance-tj";
-import type { FinanceTjImport, ImportLine } from "@/lib/actions/finance-tj";
+import type { FinanceTjImport, ImportLine, HospodareniImport } from "@/lib/actions/finance-tj";
 
 interface Props {
-    imports: FinanceTjImport[];
+    imports:             FinanceTjImport[];
+    hospodareniImports:  HospodareniImport[];
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -49,18 +50,16 @@ function StatusBadge({ status, conflictFields }: { status: ImportLine["status"];
     );
 }
 
-// ── Jeden import (collapsible, lazy načítá lines) ─────────────────────────────
+// ── Řádek výsledovky (collapsible, lazy načítá lines) ─────────────────────────
 
-function ImportHistoryRow({ imp }: { imp: FinanceTjImport }) {
-    const [expanded, setExpanded]  = useState(false);
-    const [lines, setLines]        = useState<ImportLine[] | null>(null);
+function VysledovkaRow({ imp }: { imp: FinanceTjImport }) {
+    const [expanded, setExpanded]      = useState(false);
+    const [lines, setLines]            = useState<ImportLine[] | null>(null);
     const [isPending, startTransition] = useTransition();
 
     function toggle() {
         if (!expanded && lines === null) {
-            startTransition(async () => {
-                setLines(await getImportLines(imp.id));
-            });
+            startTransition(async () => setLines(await getImportLines(imp.id)));
         }
         setExpanded(v => !v);
     }
@@ -76,30 +75,29 @@ function ImportHistoryRow({ imp }: { imp: FinanceTjImport }) {
                 <TableCell>
                     <div className="flex items-center gap-2">
                         <FileText className="h-4 w-4 text-gray-400 shrink-0" />
-                        <span className="font-medium text-gray-800 text-sm">{imp.fileName ?? "—"}</span>
-                    </div>
-                    <div className="text-xs text-gray-400 mt-0.5 pl-6">
-                        Sestava ze dne {formatDate(imp.reportDate)} · importováno {imp.importedAt.toLocaleDateString("cs-CZ")}
-                        {imp.filterFrom && imp.filterTo && ` · období ${formatDate(imp.filterFrom)}–${formatDate(imp.filterTo)}`}
+                        <div>
+                            <div className="flex items-center gap-2">
+                                <span className="font-medium text-gray-800 text-sm">{imp.fileName ?? "—"}</span>
+                                <Badge variant="outline" className="text-xs font-normal text-gray-500">výsledovka</Badge>
+                            </div>
+                            <div className="text-xs text-gray-400 mt-0.5">
+                                Sestava ze dne {formatDate(imp.reportDate)} · importováno {imp.importedAt.toLocaleDateString("cs-CZ")}
+                                {imp.filterFrom && imp.filterTo && ` · období ${formatDate(imp.filterFrom)}–${formatDate(imp.filterTo)}`}
+                            </div>
+                        </div>
                     </div>
                 </TableCell>
                 <TableCell className="text-right">
                     <div className="flex items-center justify-end gap-2 flex-wrap">
                         <span className="text-xs text-gray-500">{totalCount} řádků</span>
                         {imp.addedCount > 0 && (
-                            <Badge className="bg-green-100 text-green-800 border-green-200 font-normal text-xs">
-                                +{imp.addedCount} nových
-                            </Badge>
+                            <Badge className="bg-green-100 text-green-800 border-green-200 font-normal text-xs">+{imp.addedCount} nových</Badge>
                         )}
                         {imp.matchedCount > 0 && (
-                            <Badge className="bg-gray-100 text-gray-600 border-gray-200 font-normal text-xs">
-                                {imp.matchedCount} shodných
-                            </Badge>
+                            <Badge className="bg-gray-100 text-gray-600 border-gray-200 font-normal text-xs">{imp.matchedCount} shodných</Badge>
                         )}
                         {imp.conflictCount > 0 && (
-                            <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-normal text-xs">
-                                {imp.conflictCount} konfliktů
-                            </Badge>
+                            <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-normal text-xs">{imp.conflictCount} konfliktů</Badge>
                         )}
                     </div>
                 </TableCell>
@@ -126,35 +124,20 @@ function ImportHistoryRow({ imp }: { imp: FinanceTjImport }) {
                                 </TableHeader>
                                 <TableBody>
                                     {lines.map(line => (
-                                        <TableRow key={line.id} className={cn(
-                                            "text-sm",
-                                            line.status === "conflict" && "bg-amber-50/60"
-                                        )}>
-                                            <TableCell className="pl-8 tabular-nums text-gray-600">
-                                                {formatDate(line.docDate)}
-                                            </TableCell>
-                                            <TableCell className="font-mono text-xs text-gray-600">
-                                                {line.docNumber}
-                                            </TableCell>
+                                        <TableRow key={line.id} className={cn("text-sm", line.status === "conflict" && "bg-amber-50/60")}>
+                                            <TableCell className="pl-8 tabular-nums text-gray-600">{formatDate(line.docDate)}</TableCell>
+                                            <TableCell className="font-mono text-xs text-gray-600">{line.docNumber}</TableCell>
                                             <TableCell>
                                                 <Badge variant="outline" className="text-xs font-normal">
                                                     {SOURCE_LABELS[line.sourceCode] ?? line.sourceCode}
                                                 </Badge>
                                             </TableCell>
-                                            <TableCell className="hidden md:table-cell text-xs text-gray-500">
-                                                {line.accountCode} {line.accountName}
-                                            </TableCell>
+                                            <TableCell className="hidden md:table-cell text-xs text-gray-500">{line.accountCode} {line.accountName}</TableCell>
                                             <TableCell className="text-gray-800">{line.description}</TableCell>
-                                            <TableCell className={cn(
-                                                "text-right font-mono text-xs tabular-nums",
-                                                parseFloat(line.debit) > 0 ? "text-red-700" : "text-gray-300"
-                                            )}>
+                                            <TableCell className={cn("text-right font-mono text-xs tabular-nums", parseFloat(line.debit) > 0 ? "text-red-700" : "text-gray-300")}>
                                                 {formatAmount(line.debit)}
                                             </TableCell>
-                                            <TableCell className={cn(
-                                                "text-right font-mono text-xs tabular-nums",
-                                                parseFloat(line.credit) > 0 ? "text-green-700" : "text-gray-300"
-                                            )}>
+                                            <TableCell className={cn("text-right font-mono text-xs tabular-nums", parseFloat(line.credit) > 0 ? "text-green-700" : "text-gray-300")}>
                                                 {formatAmount(line.credit)}
                                             </TableCell>
                                             <TableCell>
@@ -174,14 +157,52 @@ function ImportHistoryRow({ imp }: { imp: FinanceTjImport }) {
     );
 }
 
+// ── Řádek hospodaření (bez expandování) ──────────────────────────────────────
+
+function HospodareniRow({ imp }: { imp: HospodareniImport }) {
+    return (
+        <TableRow>
+            <TableCell className="w-6" />
+            <TableCell>
+                <div className="flex items-center gap-2">
+                    <BarChart3 className="h-4 w-4 text-gray-400 shrink-0" />
+                    <div>
+                        <div className="flex items-center gap-2">
+                            <span className="font-medium text-gray-800 text-sm">{imp.fileName ?? "—"}</span>
+                            <Badge variant="outline" className="text-xs font-normal text-gray-500">tabulka stavů</Badge>
+                        </div>
+                        <div className="text-xs text-gray-400 mt-0.5">
+                            Období {formatDate(imp.periodFrom)} – {formatDate(imp.periodTo)}
+                            {imp.prevodYear && ` · přenos z roku ${imp.prevodYear}`}
+                            {" · "}importováno {imp.importedAt.toLocaleDateString("cs-CZ")}
+                        </div>
+                    </div>
+                </div>
+            </TableCell>
+            <TableCell className="text-right">
+                <span className="text-xs text-gray-500">{imp.rowCount} oddílů</span>
+            </TableCell>
+        </TableRow>
+    );
+}
+
 // ── Export ────────────────────────────────────────────────────────────────────
 
-export function ImportHistory({ imports }: Props) {
-    if (imports.length === 0) {
+type CombinedItem =
+    | { kind: "vysledovka"; imp: FinanceTjImport }
+    | { kind: "hospodareni"; imp: HospodareniImport };
+
+export function ImportHistory({ imports, hospodareniImports }: Props) {
+    const combined: CombinedItem[] = [
+        ...imports.map(imp => ({ kind: "vysledovka" as const, imp })),
+        ...hospodareniImports.map(imp => ({ kind: "hospodareni" as const, imp })),
+    ].sort((a, b) => b.imp.importedAt.getTime() - a.imp.importedAt.getTime());
+
+    if (combined.length === 0) {
         return (
             <div className="rounded-lg border bg-white p-12 text-center text-gray-400">
                 <p className="text-sm">Zatím žádné importy.</p>
-                <p className="text-xs mt-1">Nahrajte PDF výsledovky pomocí tlačítka výše.</p>
+                <p className="text-xs mt-1">Použijte tlačítka importu výše.</p>
             </div>
         );
     }
@@ -193,13 +214,15 @@ export function ImportHistory({ imports }: Props) {
                     <TableRow>
                         <TableHead className="w-6" />
                         <TableHead>Soubor importu</TableHead>
-                        <TableHead className="text-right">Výsledek rekonciliace</TableHead>
+                        <TableHead className="text-right">Výsledek</TableHead>
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {imports.map(imp => (
-                        <ImportHistoryRow key={imp.id} imp={imp} />
-                    ))}
+                    {combined.map(item =>
+                        item.kind === "vysledovka"
+                            ? <VysledovkaRow key={`v-${item.imp.id}`} imp={item.imp} />
+                            : <HospodareniRow key={`h-${item.imp.id}`} imp={item.imp} />
+                    )}
                 </TableBody>
             </Table>
         </div>

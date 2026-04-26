@@ -1,11 +1,15 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { importFinTjImports, importFinTjTransactions, importFinTjImportLines } from "@/db/schema";
+import {
+    importFinTjImports, importFinTjTransactions, importFinTjImportLines,
+    importFinTjHospodareniImports, importFinTjHospodareniRows,
+} from "@/db/schema";
 import { desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-parser";
+import { parseHospodareniPdf } from "@/lib/parsers/tj-hospodareni-parser";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -251,4 +255,198 @@ export async function getImportLines(importId: number): Promise<ImportLine[]> {
         ...r,
         conflictFields: r.conflictFields as string[],
     }));
+}
+
+// ── Hospodaření oddílů: typy ──────────────────────────────────────────────────
+
+export type HospodareniImport = {
+    id:          number;
+    periodFrom:  string;
+    periodTo:    string;
+    prevodYear:  number | null;
+    fileName:    string | null;
+    importedBy:  string;
+    importedAt:  Date;
+    rowCount:    number;
+};
+
+export type HospodareniOddilRow = {
+    oddilId:   string;
+    oddilName: string;
+    naklady:   number;
+    vynosy:    number;
+    vysledek:  number;
+    prevod:    number;
+    celkem:    number;
+};
+
+export type HospodareniWithReconciliation = {
+    imp:           HospodareniImport;
+    oddilRow:      HospodareniOddilRow | null;  // řádek pro náš oddíl (TJ_ODDIL_ID)
+    txVysledek:    number;                      // SUM(credit) - SUM(debit) z výsledovek za stejné období
+    txFrom:        string | null;               // nejstarší datum transakce v období
+    txTo:          string | null;               // nejnovější datum transakce v období
+};
+
+// ── Hospodaření: import PDF ───────────────────────────────────────────────────
+
+export type HospodareniImportResult =
+    | { error: string }
+    | { success: true; importId: number; rowCount: number };
+
+export async function importTjHospodareniPdf(formData: FormData): Promise<HospodareniImportResult> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+    const file = formData.get("file") as File | null;
+    if (!file) return { error: "Chybí soubor" };
+    if (!file.name.toLowerCase().endsWith(".pdf")) return { error: "Očekáván PDF soubor" };
+
+    try {
+        const buffer = Buffer.from(await file.arrayBuffer());
+        const { extractText } = await import("unpdf");
+        const { text } = await extractText(new Uint8Array(buffer), { mergePages: true });
+        const fullText = Array.isArray(text) ? text.join("\n") : text;
+        console.log(`[hospodareni] PDF extrahován, ${fullText.length} znaků`);
+        console.log(`[hospodareni] První 500 znaků:\n${fullText.slice(0, 500)}`);
+
+        const parsed = parseHospodareniPdf(fullText);
+        console.log(`[hospodareni] Meta:`, parsed.meta);
+        console.log(`[hospodareni] Řádků oddílů: ${parsed.rows.length}`);
+        parsed.rows.forEach(r =>
+            console.log(`[hospodareni]   ${r.oddilId} ${r.oddilName}: náklady=${r.naklady} výnosy=${r.vynosy} výsledek=${r.vysledek} prevod=${r.prevod} celkem=${r.celkem}`)
+        );
+
+        if (!parsed.meta.periodFrom || !parsed.meta.periodTo) {
+            return { error: "Nepodařilo se rozpoznat období sestavy. Je toto správný dokument?" };
+        }
+        if (parsed.rows.length === 0) {
+            return { error: "Nebyly nalezeny žádné řádky oddílů. Zkontrolujte formát PDF." };
+        }
+
+        const db = getDb();
+
+        const [importRow] = await db
+            .insert(importFinTjHospodareniImports)
+            .values({
+                periodFrom:  parsed.meta.periodFrom,
+                periodTo:    parsed.meta.periodTo,
+                prevodYear:  parsed.meta.prevodYear ?? undefined,
+                fileName:    file.name,
+                importedBy:  session.user.email,
+            })
+            .returning({ id: importFinTjHospodareniImports.id });
+
+        await db.insert(importFinTjHospodareniRows).values(
+            parsed.rows.map(r => ({
+                importId:  importRow.id,
+                oddilId:   r.oddilId,
+                oddilName: r.oddilName,
+                naklady:   r.naklady.toFixed(2),
+                vynosy:    r.vynosy.toFixed(2),
+                vysledek:  r.vysledek.toFixed(2),
+                prevod:    r.prevod.toFixed(2),
+                celkem:    r.celkem.toFixed(2),
+            }))
+        );
+
+        revalidatePath("/dashboard/finance");
+        return { success: true, importId: importRow.id, rowCount: parsed.rows.length };
+    } catch (e) {
+        console.error("importTjHospodareniPdf error:", e);
+        return { error: "Chyba při zpracování PDF" };
+    }
+}
+
+// ── Hospodaření: dotazy ───────────────────────────────────────────────────────
+
+export async function getAllHospodareniWithReconciliation(): Promise<HospodareniWithReconciliation[]> {
+    const db = getDb();
+    const oddilId = process.env.TJ_ODDIL_ID ?? "207";
+
+    const imports = await db
+        .select({
+            id:         importFinTjHospodareniImports.id,
+            periodFrom: importFinTjHospodareniImports.periodFrom,
+            periodTo:   importFinTjHospodareniImports.periodTo,
+            prevodYear: importFinTjHospodareniImports.prevodYear,
+            fileName:   importFinTjHospodareniImports.fileName,
+            importedBy: importFinTjHospodareniImports.importedBy,
+            importedAt: importFinTjHospodareniImports.importedAt,
+        })
+        .from(importFinTjHospodareniImports)
+        .orderBy(desc(importFinTjHospodareniImports.periodTo));
+
+    if (imports.length === 0) return [];
+
+    const importIds = imports.map(i => i.id);
+
+    // Řádky pro náš oddíl
+    const oddilRows = await db
+        .select()
+        .from(importFinTjHospodareniRows)
+        .where(
+            sql`${importFinTjHospodareniRows.importId} = ANY(${importIds}) AND ${importFinTjHospodareniRows.oddilId} = ${oddilId}`
+        );
+    const oddilRowMap = new Map(oddilRows.map(r => [r.importId, r]));
+
+    // Počty řádků per import
+    const rowCounts = await db
+        .select({
+            importId: importFinTjHospodareniRows.importId,
+            count:    sql<number>`COUNT(*)`.mapWith(Number),
+        })
+        .from(importFinTjHospodareniRows)
+        .where(sql`${importFinTjHospodareniRows.importId} = ANY(${importIds})`)
+        .groupBy(importFinTjHospodareniRows.importId);
+    const rowCountMap = new Map(rowCounts.map(r => [r.importId, r.count]));
+
+    // Rekonciliace: součet výsledovky per období (jeden SQL pro všechny importy)
+    type ReconRow = { import_id: number; tx_vysledek: string; tx_from: string | null; tx_to: string | null };
+    const reconResult = await db.execute<ReconRow>(sql`
+        SELECT
+            h.id                                                              AS import_id,
+            COALESCE(SUM(tx.credit::numeric) - SUM(tx.debit::numeric), 0)    AS tx_vysledek,
+            MIN(tx.doc_date::text)                                            AS tx_from,
+            MAX(tx.doc_date::text)                                            AS tx_to
+        FROM app.import_fin_tj_hospodareni_imports h
+        LEFT JOIN app.import_fin_tj_transactions tx
+               ON tx.doc_date BETWEEN h.period_from AND h.period_to
+        WHERE h.id = ANY(${importIds})
+        GROUP BY h.id
+    `);
+    const reconRows = reconResult as unknown as ReconRow[];
+    const reconMap = new Map<number, ReconRow>(reconRows.map(r => [r.import_id, r]));
+
+    return imports.map(imp => {
+        const row    = oddilRowMap.get(imp.id) ?? null;
+        const recon  = reconMap.get(imp.id);
+
+        const oddilRow: HospodareniOddilRow | null = row ? {
+            oddilId:   row.oddilId,
+            oddilName: row.oddilName,
+            naklady:   parseFloat(row.naklady),
+            vynosy:    parseFloat(row.vynosy),
+            vysledek:  parseFloat(row.vysledek),
+            prevod:    parseFloat(row.prevod),
+            celkem:    parseFloat(row.celkem),
+        } : null;
+
+        return {
+            imp: {
+                id:         imp.id,
+                periodFrom: imp.periodFrom,
+                periodTo:   imp.periodTo,
+                prevodYear: imp.prevodYear,
+                fileName:   imp.fileName,
+                importedBy: imp.importedBy,
+                importedAt: imp.importedAt,
+                rowCount:   rowCountMap.get(imp.id) ?? 0,
+            },
+            oddilRow,
+            txVysledek: recon ? parseFloat(recon.tx_vysledek) : 0,
+            txFrom:     recon?.tx_from ?? null,
+            txTo:       recon?.tx_to   ?? null,
+        };
+    });
 }

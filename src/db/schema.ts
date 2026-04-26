@@ -467,6 +467,37 @@ export const importFinTjTransactions = appSchema.table(
     ]
 );
 
+// ── Hospodaření oddílů TJ ────────────────────────────────────────────────────
+
+export const importFinTjHospodareniImports = appSchema.table("import_fin_tj_hospodareni_imports", {
+    id:          serial("id").primaryKey(),
+    periodFrom:  date("period_from").notNull(),   // "1.1.2025" → "2025-01-01"
+    periodTo:    date("period_to").notNull(),      // "23.1.2025" → "2025-01-23"
+    prevodYear:  integer("prevod_year"),           // rok ze sloupce "PŘEVOD Z ROKU X"
+    fileName:    text("file_name"),
+    importedBy:  text("imported_by").notNull(),
+    importedAt:  timestamp("imported_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const importFinTjHospodareniRows = appSchema.table(
+    "import_fin_tj_hospodareni_rows",
+    {
+        id:        serial("id").primaryKey(),
+        importId:  integer("import_id").notNull().references(() => importFinTjHospodareniImports.id, { onDelete: "cascade" }),
+        oddilId:   text("oddil_id").notNull(),    // "207"
+        oddilName: text("oddil_name").notNull(),  // "VODNÍ TURISTIKA"
+        naklady:   numeric("naklady",  { precision: 14, scale: 2 }).notNull().default("0"),
+        vynosy:    numeric("vynosy",   { precision: 14, scale: 2 }).notNull().default("0"),
+        vysledek:  numeric("vysledek", { precision: 14, scale: 2 }).notNull().default("0"),
+        prevod:    numeric("prevod",   { precision: 14, scale: 2 }).notNull().default("0"),
+        celkem:    numeric("celkem",   { precision: 14, scale: 2 }).notNull().default("0"),
+    },
+    (t) => [
+        index("import_fin_tj_hosp_import_idx").on(t.importId),
+        index("import_fin_tj_hosp_oddil_idx").on(t.oddilId),
+    ]
+);
+
 // ── Notebook tables ──────────────────────────────────────────────────────────
 
 export const notebookNotes = appSchema.table(
