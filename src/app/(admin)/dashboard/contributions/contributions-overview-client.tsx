@@ -608,8 +608,8 @@ export function ContributionsOverviewClient({
                 </div>
 
                 <div className="rounded-xl border bg-gray-50 px-4 py-3">
-                    <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
+                    <div className="flex flex-col gap-3 lg:flex-row lg:items-start lg:justify-between">
+                        <div className="min-w-0 flex-1 flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
                             {period ? (
                                 <>
                                     <span className="whitespace-nowrap"><span className="text-gray-400">Člen</span> <span className="font-medium text-gray-600">{period.amountBase.toLocaleString("cs-CZ")} Kč</span></span>
@@ -630,7 +630,7 @@ export function ContributionsOverviewClient({
                         {canPrepare && yearMode !== "all" && (
                             <Button
                                 onClick={() => setPrepareOpen(true)}
-                                className="h-8 shrink-0 bg-[#327600] text-white hover:bg-[#327600]/90"
+                                className="h-8 shrink-0 self-start bg-[#327600] text-white hover:bg-[#327600]/90 lg:ml-4"
                             >
                                 Definuj
                             </Button>
