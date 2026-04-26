@@ -609,18 +609,18 @@ export function ContributionsOverviewClient({
 
                 <div className="rounded-xl border bg-gray-50 px-4 py-3">
                     <div className="flex flex-col gap-3 xl:flex-row xl:items-start xl:justify-between">
-                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm text-gray-600">
+                        <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-xs text-gray-500">
                             {period ? (
                                 <>
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Člen</span> <strong className="text-gray-700">{period.amountBase.toLocaleString("cs-CZ")} Kč</strong></span>
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Loď</span> <strong className="text-gray-700">{period.amountBoat1.toLocaleString("cs-CZ")} Kč / {period.amountBoat2.toLocaleString("cs-CZ")} Kč</strong></span>
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Brigáda</span> <strong className="text-gray-700">+{period.brigadeSurcharge.toLocaleString("cs-CZ")} Kč</strong></span>
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Sleva výbor</span> <strong className="text-gray-700">−{period.discountCommittee.toLocaleString("cs-CZ")} Kč</strong></span>
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Sleva TOM</span> <strong className="text-gray-700">−{period.discountTom.toLocaleString("cs-CZ")} Kč</strong></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Člen</span> <span className="font-medium text-gray-600">{period.amountBase.toLocaleString("cs-CZ")} Kč</span></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Loď</span> <span className="font-medium text-gray-600">{period.amountBoat1.toLocaleString("cs-CZ")} Kč / {period.amountBoat2.toLocaleString("cs-CZ")} Kč</span></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Brigáda</span> <span className="font-medium text-gray-600">+{period.brigadeSurcharge.toLocaleString("cs-CZ")} Kč</span></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Sleva výbor</span> <span className="font-medium text-gray-600">−{period.discountCommittee.toLocaleString("cs-CZ")} Kč</span></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Sleva TOM</span> <span className="font-medium text-gray-600">−{period.discountTom.toLocaleString("cs-CZ")} Kč</span></span>
                                     {period.dueDate && (
-                                        <span className="whitespace-nowrap"><span className="text-gray-400">Splatnost</span> <strong className="text-gray-700">{period.dueDate}</strong></span>
+                                        <span className="whitespace-nowrap"><span className="text-gray-400">Splatnost</span> <span className="font-medium text-gray-600">{period.dueDate}</span></span>
                                     )}
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Účet</span> <strong className="font-mono text-gray-700">{period.bankAccount}</strong></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Účet</span> <span className="font-mono font-medium text-gray-600">{period.bankAccount}</span></span>
                                 </>
                             ) : (
                                 <span className="text-gray-500">Historie všech roků — globální rok vpravo nahoře zůstává {selectedYear}</span>
@@ -632,7 +632,7 @@ export function ContributionsOverviewClient({
                                 onClick={() => setPrepareOpen(true)}
                                 className="h-8 shrink-0 bg-[#327600] text-white hover:bg-[#327600]/90"
                             >
-                                Definuj parametry příspěvků
+                                Definuj
                             </Button>
                         )}
                     </div>
