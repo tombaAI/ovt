@@ -2,7 +2,7 @@
 
 import { CheckCircle2, AlertTriangle, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { StavUctuData, StavMilnik, StavSegment, StavTrailingSegment } from "@/lib/actions/finance-tj";
+import type { StavUctuData, StavMilnik, StavBridge, StavTrailingSegment } from "@/lib/actions/finance-tj";
 
 function formatDate(iso: string): string {
     const [y, m, d] = iso.split("-");
@@ -45,17 +45,12 @@ function KartaRadek({
 
 // ── Karta jednoho milníku ─────────────────────────────────────────────────────
 
-function MilnikKarta({ m, segment }: { m: StavMilnik; segment: StavSegment | null }) {
+function MilnikKarta({ m }: { m: StavMilnik }) {
     const year    = parseInt(m.date.substring(0, 4));
     const partial = !m.isYearEnd;
 
-    // Rekonciliace: tabulkový výsledek vs. součet z položek
-    const tabVysledek = m.vynosy - m.naklady;
-    const matches     = segment ? Math.abs(tabVysledek - segment.txVysledek) < 0.01 : null;
-
     return (
         <div className="rounded-lg border bg-white overflow-hidden">
-            {/* Záhlaví */}
             <div className="px-4 py-2 bg-gray-50 border-b flex items-baseline justify-between gap-3 flex-wrap">
                 <div className="flex items-baseline gap-2">
                     <span className="font-semibold text-gray-900">{year}</span>
@@ -69,41 +64,87 @@ function MilnikKarta({ m, segment }: { m: StavMilnik; segment: StavSegment | nul
                 )}
             </div>
 
-            {/* Tělo */}
             <div className="px-4 py-3 space-y-1.5">
                 <KartaRadek
-                    label={`Počáteční zůstatek`}
+                    label="Počáteční zůstatek"
                     sub={m.prevodYear ? `přenos z roku ${m.prevodYear}` : `k ${formatDate(m.periodFrom)}`}
                     value={m.prevod}
                     colorClass={m.prevod < 0 ? "text-red-700" : "text-gray-700"}
                 />
-                <KartaRadek label="Náklady"  value={m.naklady}  colorClass="text-red-700" />
-                <KartaRadek label="Výnosy"   value={m.vynosy}   colorClass="text-green-700" />
+                <KartaRadek label="Náklady" value={m.naklady} colorClass="text-red-700" />
+                <KartaRadek label="Výnosy"  value={m.vynosy}  colorClass="text-green-700" />
                 <KartaRadek
-                    label={partial ? `Zůstatek k ${formatDate(m.date)}` : `Konečný zůstatek`}
+                    label={partial ? `Zůstatek k ${formatDate(m.date)}` : "Konečný zůstatek"}
                     sub={partial ? undefined : `k ${formatDate(m.date)}`}
                     value={m.balance}
                     bold
                 />
-
-                {/* Rekonciliace */}
-                {segment !== null && (
-                    <div className="flex items-center justify-between gap-2 pt-0.5 text-xs">
-                        <span className="text-gray-400">
-                            Rekonciliace z výsledovek ({segment.txCount} položek)
+                <div className="flex items-center justify-between gap-2 pt-0.5 text-xs">
+                    <span className="text-gray-400">Rekonciliace z výsledovek ({m.txCount} položek)</span>
+                    {m.matches ? (
+                        <span className="flex items-center gap-0.5 text-green-600 font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Sedí
                         </span>
-                        {matches === true ? (
-                            <span className="flex items-center gap-0.5 text-green-600 font-medium">
-                                <CheckCircle2 className="h-3.5 w-3.5" /> Sedí
-                            </span>
-                        ) : (
-                            <span className="flex items-center gap-0.5 text-amber-600 font-medium">
-                                <AlertTriangle className="h-3.5 w-3.5" />
-                                {segment.txCount === 0 ? "Bez dat z výsledovek" : `Rozdíl ${fmtKc(Math.abs(tabVysledek - segment.txVysledek))}`}
-                            </span>
-                        )}
-                    </div>
-                )}
+                    ) : (
+                        <span className="flex items-center gap-0.5 text-amber-600 font-medium">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {m.txCount === 0 ? "Bez dat z výsledovek" : `Rozdíl ${fmtKc(Math.abs((m.vynosy - m.naklady) - m.txVysledek))}`}
+                        </span>
+                    )}
+                </div>
+            </div>
+        </div>
+    );
+}
+
+// ── Karta mezery (bridge) ─────────────────────────────────────────────────────
+
+function BridgeKarta({ b }: { b: StavBridge }) {
+    const fromYear = parseInt(b.fromDate.substring(0, 4));
+    const toYear   = parseInt(b.toDate.substring(0, 4));
+    const yearLabel = fromYear === toYear ? `${fromYear}` : `${fromYear}–${toYear}`;
+
+    return (
+        <div className="rounded-lg border border-gray-200 bg-gray-50/60 overflow-hidden">
+            <div className="px-4 py-2 border-b border-gray-200 flex items-baseline justify-between gap-3 flex-wrap">
+                <div className="flex items-baseline gap-2">
+                    <span className="font-semibold text-gray-700">{yearLabel}</span>
+                    <span className="text-xs text-gray-400">
+                        bez tabulky · {formatDate(b.fromDate)} – {formatDate(b.toDate)}
+                    </span>
+                </div>
+            </div>
+            <div className="px-4 py-3 space-y-1.5">
+                <KartaRadek
+                    label="Počáteční stav"
+                    sub={`k ${formatDate(b.fromDate)}`}
+                    value={b.fromBalance}
+                    colorClass={b.fromBalance < 0 ? "text-red-700" : "text-gray-700"}
+                />
+                <KartaRadek
+                    label="Pohyb z výsledovek"
+                    sub={`${b.txCount} položek`}
+                    value={b.txVysledek}
+                />
+                <KartaRadek
+                    label="Stav k 31.12."
+                    sub="z přenosu následujícího roku"
+                    value={b.impliedToBalance}
+                    bold
+                />
+                <div className="flex items-center justify-between gap-2 pt-0.5 text-xs">
+                    <span className="text-gray-400">Rekonciliace ({b.txCount} položek)</span>
+                    {b.matches ? (
+                        <span className="flex items-center gap-0.5 text-green-600 font-medium">
+                            <CheckCircle2 className="h-3.5 w-3.5" /> Sedí
+                        </span>
+                    ) : (
+                        <span className="flex items-center gap-0.5 text-amber-600 font-medium">
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            {b.txCount === 0 ? "Bez dat z výsledovek" : `Rozdíl ${fmtKc(Math.abs(b.delta - b.txVysledek))}`}
+                        </span>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -152,7 +193,7 @@ function TrailingKarta({ s }: { s: StavTrailingSegment }) {
 // ── Hlavní tab ────────────────────────────────────────────────────────────────
 
 export function StavUctuTab({ data }: { data: StavUctuData }) {
-    const { milestones, segments, trailingSegment } = data;
+    const { milestones, bridges, trailingSegment } = data;
 
     if (milestones.length === 0 && !trailingSegment) {
         return (
@@ -171,11 +212,10 @@ export function StavUctuTab({ data }: { data: StavUctuData }) {
                 </p>
             )}
             {milestones.map((m, i) => (
-                <MilnikKarta
-                    key={m.importId}
-                    m={m}
-                    segment={i > 0 ? segments[i - 1] : null}
-                />
+                <div key={m.importId}>
+                    <MilnikKarta m={m} />
+                    {bridges[i] && <BridgeKarta b={bridges[i]!} />}
+                </div>
             ))}
             {trailingSegment && (
                 <TrailingKarta s={trailingSegment} />
