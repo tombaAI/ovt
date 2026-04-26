@@ -459,6 +459,9 @@ export type StavMilnik = {
     date:       string;        // ISO — period_to importu (= datum ke kterému je stav platný)
     periodFrom: string;        // ISO — začátek období v dokumentu
     balance:    number;        // celkem pro náš oddíl
+    prevod:     number;        // přenos z předchozího roku (= počáteční zůstatek)
+    naklady:    number;        // z tabulky hospodaření
+    vynosy:     number;        // z tabulky hospodaření
     fileName:   string | null;
     prevodYear: number | null;
     oddilName:  string;
@@ -506,6 +509,9 @@ export async function getStavUctu(): Promise<StavUctuData> {
             prevodYear: importFinTjHospodareniImports.prevodYear,
             fileName:   importFinTjHospodareniImports.fileName,
             celkem:     importFinTjHospodareniRows.celkem,
+            prevod:     importFinTjHospodareniRows.prevod,
+            naklady:    importFinTjHospodareniRows.naklady,
+            vynosy:     importFinTjHospodareniRows.vynosy,
             oddilName:  importFinTjHospodareniRows.oddilName,
         })
         .from(importFinTjHospodareniImports)
@@ -528,19 +534,19 @@ export async function getStavUctu(): Promise<StavUctuData> {
     }
     const deduped = [...uniqueMap.values()].sort((a, b) => a.periodTo.localeCompare(b.periodTo));
 
-    const milestones: StavMilnik[] = deduped.map(r => {
-        const isYearEnd = r.periodTo.endsWith("-12-31");
-        return {
-            importId:   r.importId,
-            date:       r.periodTo,
-            periodFrom: r.periodFrom,
-            balance:    parseFloat(r.celkem),
-            fileName:   r.fileName,
-            prevodYear: r.prevodYear,
-            oddilName:  r.oddilName,
-            isYearEnd,
-        };
-    });
+    const milestones: StavMilnik[] = deduped.map(r => ({
+        importId:   r.importId,
+        date:       r.periodTo,
+        periodFrom: r.periodFrom,
+        balance:    parseFloat(r.celkem),
+        prevod:     parseFloat(r.prevod),
+        naklady:    parseFloat(r.naklady),
+        vynosy:     parseFloat(r.vynosy),
+        fileName:   r.fileName,
+        prevodYear: r.prevodYear,
+        oddilName:  r.oddilName,
+        isYearEnd:  r.periodTo.endsWith("-12-31"),
+    }));
 
     if (milestones.length < 2) return { milestones, segments: [], trailingSegment: null };
 
