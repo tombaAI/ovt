@@ -14,7 +14,7 @@ import { PrepareDialog } from "./prepare-dialog";
 import { EditPrescriptionDialog } from "./edit-prescription-dialog";
 import { deleteAllPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
-import type { ContribRow, PeriodDetail, PeriodStatus } from "./page";
+import type { ContribRow, PeriodDetail } from "./page";
 
 type FilterKey = "all" | "issues" | "paid" | "underpaid" | "overpaid" | "unpaid" | "todo"
     | "state_new" | "state_reviewed" | "state_mailed";
@@ -44,13 +44,6 @@ const STATUS_BADGE: Record<ContribRow["status"], { label: string; cls: string }>
     overpaid:  { label: "Více",        cls: "bg-orange-100 text-orange-700 border-0"        },
     underpaid: { label: "Méně",        cls: "bg-red-100 text-red-700 border-0"              },
     unpaid:    { label: "Nezaplaceno", cls: "bg-red-50 text-red-600 border border-red-200"  },
-};
-
-const LIFECYCLE: Record<PeriodStatus, { label: string; cls: string }> = {
-    draft:      { label: "Příprava",        cls: "bg-gray-100 text-gray-700 border border-gray-300" },
-    confirmed:  { label: "Potvrzeno",       cls: "bg-blue-100 text-blue-700 border border-blue-200" },
-    collecting: { label: "Výběr příspěvků", cls: "bg-[#327600]/10 text-[#327600] border border-[#327600]/20" },
-    closed:     { label: "Uzavřeno",        cls: "bg-slate-100 text-slate-500 border border-slate-200" },
 };
 
 function fmt(n: number | null) {
@@ -173,7 +166,6 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
         expected:  rows.reduce((s, r) => s + (r.amountTotal ?? 0), 0),
     }), [rows]);
 
-    const lifecycle = LIFECYCLE[period.status as PeriodStatus] ?? LIFECYCLE.collecting;
     const anyEmailSent = rows.some(r => r.emailSent);
 
     return (
@@ -245,9 +237,6 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                             Připravit předpisy
                         </Button>
                     )}
-                    <Badge className={`${lifecycle.cls} text-sm font-medium px-3 py-1`}>
-                        {lifecycle.label}
-                    </Badge>
                 </div>
             </div>
 

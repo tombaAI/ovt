@@ -64,7 +64,6 @@ export async function preparePrescriptions(
                 brigadeSurcharge:   data.brigadeSurcharge,
                 dueDate:            data.dueDate,
                 bankAccount:        data.bankAccount,
-                status:             "draft",
             })
             .onConflictDoUpdate({
                 target: contributionPeriods.year,
@@ -288,7 +287,6 @@ export async function getDefaultsFromPrevYear(year: number): Promise<Partial<Per
 
 /**
  * Smaže všechny member_contributions pro dané období.
- * Povoleno jen pokud je období ve stavu "draft".
  */
 export async function deleteAllPrescriptions(
     periodId: number,
@@ -299,12 +297,11 @@ export async function deleteAllPrescriptions(
     const db = getDb();
     try {
         const [period] = await db
-            .select({ status: contributionPeriods.status })
+            .select({ id: contributionPeriods.id })
             .from(contributionPeriods)
             .where(eq(contributionPeriods.id, periodId));
 
         if (!period) return { error: "Období nenalezeno" };
-        if (period.status !== "draft") return { error: "Smazání je povoleno jen ve stavu Příprava" };
 
         // Blokovat smazání pokud byl u jakéhokoli předpisu odeslán email
         const [emailSentCheck] = await db
@@ -342,7 +339,6 @@ export type PrescriptionAmounts = {
 
 /**
  * Aktualizuje složky předpisu a přepočítá amountTotal.
- * Povoleno jen pokud je příslušné období ve stavu "draft".
  */
 export async function updatePrescriptionAmounts(
     contribId: number,
@@ -364,12 +360,11 @@ export async function updatePrescriptionAmounts(
         if (!contrib) return { error: "Předpis nenalezen" };
 
         const [period] = await db
-            .select({ status: contributionPeriods.status })
+            .select({ id: contributionPeriods.id })
             .from(contributionPeriods)
             .where(eq(contributionPeriods.id, contrib.periodId));
 
         if (!period) return { error: "Období nenalezeno" };
-        if (period.status !== "draft") return { error: "Úprava je povolena jen ve stavu Příprava" };
 
         // Slevy se ukládají jako záporná čísla
         // Sleva výbor má přednost — pokud ji člen má, sleva TOM se do součtu nezapočítá

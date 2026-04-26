@@ -3,18 +3,10 @@ import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, events, boats, brigades, payments } from "@/db/schema";
 import { eq, sql, isNull, lte, and, or } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
-import { Badge } from "@/components/ui/badge";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
 import { Suspense } from "react";
 import { getSelectedYear } from "@/lib/actions/year";
-
-const PERIOD_STATUS: Record<string, { label: string; className: string }> = {
-    draft:      { label: "Návrh",      className: "bg-gray-100 text-gray-600 border-gray-200" },
-    confirmed:  { label: "Potvrzeno",  className: "bg-blue-100 text-blue-700 border-blue-200" },
-    collecting: { label: "Vybírání",   className: "bg-green-100 text-green-800 border-green-200" },
-    closed:     { label: "Uzavřeno",   className: "bg-zinc-200 text-zinc-600 border-zinc-300" },
-};
 
 function formatKc(amount: number): string {
     return new Intl.NumberFormat("cs-CZ").format(Math.round(amount)) + "\u00a0Kč";
@@ -70,7 +62,7 @@ async function MembersCard({ year }: { year: number }) {
 
 async function ContributionsCard({ year }: { year: number }) {
     const db = getDb();
-    const [period] = await db.select({ id: contributionPeriods.id, status: contributionPeriods.status })
+    const [period] = await db.select({ id: contributionPeriods.id })
         .from(contributionPeriods)
         .where(eq(contributionPeriods.year, year));
 
@@ -88,18 +80,11 @@ async function ContributionsCard({ year }: { year: number }) {
     .where(eq(memberContributions.periodId, period.id))
     : [{ collected: 0 }];
 
-    const periodStatus = PERIOD_STATUS[period?.status ?? "draft"];
-
     return (
         <Link href="/dashboard/contributions">
             <Card className="hover:shadow-md transition-shadow cursor-pointer">
-                <CardHeader className="pb-2 flex flex-row items-center justify-between">
+                <CardHeader className="pb-2">
                     <p className="text-sm font-medium text-gray-500">Příspěvky {year}</p>
-                    {period && (
-                        <Badge className={periodStatus.className} variant="outline">
-                            {periodStatus.label}
-                        </Badge>
-                    )}
                 </CardHeader>
                 <CardContent>
                     <p className="text-2xl font-semibold text-gray-900">

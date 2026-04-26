@@ -85,6 +85,7 @@ Díky tomu:
 - Sdílení URL = sdílení přesného pohledu.
 - Po návratu z detailu = přesně stejný filtr (prohlížeč zpět, nebo back šipka z detailu).
 - Z jiné části systému lze odkazovat na přehled s předvyplněným filtrem.
+- Speciální hodnota `year=all` je jen lokální temporary režim daného přehledu a nemění globální `YearSelector` vpravo nahoře.
 
 ---
 
@@ -235,7 +236,7 @@ Inline editing se vztahuje na textové hodnoty, data a jednoduché výběry. Slo
 |---|---|---|---|
 | Člen | `/members` | `/members/[id]` | Editace polí, rok členství, sleva, úkol, email |
 | Příspěvek | `/contributions` | `/contributions/[id]` | Přidat platbu, úkol, upomínka |
-| Platba | `/payments` | `/payments/[id]` | Potvrdit, rozdělit, přesunout, zamítnout |
+| Platba | `/payments` | `/payments/[id]` | Spárovat, potvrdit, rozdělit, ignorovat |
 | Loď | `/boats` | `/boats/[id]` | Editace, poloha, vlastník |
 | Brigáda | `/brigades` | `/brigades/[id]` | Přidat účastníka, uzavřít |
 | Akce (event) | `/events` | `/events/[id]` | Editace, sync GCal, brigády |
@@ -372,11 +373,11 @@ Návrh pro budoucí architekturu: `members` tabulka se rozšíří o příznak `
 ```
 - Back šipka jen pokud zásobník není prázdný
 - Akce vpravo (max 3 vizuální prvky):
-  - `Příspěvky` — přímé tlačítko → přehled příspěvků filtrovaný na člena, **bez roku** (všechny roky)
+  - `Příspěvky` — přímé tlačítko → přehled příspěvků filtrovaný na člena s `year=all`; globální `YearSelector` se tím nemění
   - `Lodě` — přímé tlačítko → přehled lodí filtrovaný na člena, bez roku
   - `▾` rozbalovací menu: Brigády / Platby / Audit log / Ukončit členství
 
-**Navigace „bez roku":** Přehledy příspěvků, lodí, brigád a plateb mají v URL filtru možnost `year=all` (nebo chybějící year param = všechny roky). Z detailu člena se vždy odkazuje bez roku — uživatel vidí kompletní historii a může si rok sám nastavit v přehledu. Tato možnost „všechny roky" je v přehledech dostupná, ale záměrně trochu schovaná (není v badge filtrech, je v rozbalovacím filtru).
+**Navigace na kompletní historii:** Přehledy příspěvků, brigád a plateb mají v URL filtru explicitní režim `year=all`. Z detailu člena se na ně v tomto případě odkazuje s `year=all` — uživatel vidí kompletní historii, ale globální `YearSelector` zůstává na naposledy zvoleném konkrétním roce. Volba „všechny roky" je v přehledech dostupná, ale záměrně trochu schovaná (není v badge filtrech, je v rozbalovacím filtru).
 
 ---
 
@@ -417,10 +418,10 @@ Individuální sleva   —    [Nastavit]
 ---
 
 **Navigace z detailu (do zásobníku):**
-- `Příspěvky` → `/dashboard/contributions?member=123` (bez roku), label: `← Člen: Jan Novák`
+- `Příspěvky` → `/dashboard/contributions?member=123&year=all`, label: `← Člen: Jan Novák`
 - `Lodě` → `/dashboard/boats?member=123` (bez roku), label: `← Člen: Jan Novák`
 - `Brigády` → `/dashboard/brigades?member=123`, label: `← Člen: Jan Novák`
-- `Platby` → `/dashboard/payments?member=123`, label: `← Člen: Jan Novák`
+- `Platby` → `/dashboard/payments?member=123&year=all`, label: `← Člen: Jan Novák`
 - `Audit log` → otevře modální overlay nebo novou stránku s kompletní historií změn pro tohoto člena
 
 ---
@@ -433,7 +434,396 @@ Individuální sleva   —    [Nastavit]
 
 ---
 
-## 11. Co není součástí tohoto zadání
+## 11. Popis stránek — Příspěvky
+
+### 11.1 Přehled příspěvků (`/dashboard/contributions`)
+
+**Navigační titulek (back šipka z jiné stránky):** `← Přehled příspěvků`
+
+**URL parametry:** `?year=2026&filter=issues&member=123&q=novák&sort=lastName&dir=asc`
+
+---
+
+**Horní pracovní řádek** — vše mezi nadpisem stránky a hlavičkou tabulky je na desktopu jeden souvislý řádek; na mobilu zůstává jako jeden horizontálně scrollovatelný pás, ne jako několik samostatných bloků pod sebou.
+
+Tento řádek obsahuje:
+- **Pracovní ovládání**: lokální titulek (`Příspěvky 2026` nebo `Příspěvky — všechny roky`), `Hledat`, tři hlavní badge filtry, případný `MemberFilterChip`, `Filtrovat ▾` a podle potřeby servisní akci `Připravit předpisy`
+- **Rozpad roční konfigurace příspěvků**: `Člen 1 500 Kč`, `Loď 1 200 Kč / 800 Kč`, `Brigáda +400 Kč`, `Sleva výbor −500 Kč`, `Sleva TOM −500 Kč`, `Splatnost 2026-05-29`, `Účet 2701772934/2010`
+- **Souhrnné boxy** v tomto přesném pořadí: `Vybráno / očekáváno`, `Potvrzený předpis`, `Problematické k řešení`, `Platby k párování`
+
+- Rok pochází z globálního `YearSelector`; při `year=all` jde jen o lokální temporary režim tohoto přehledu a globální rok vpravo nahoře se nemění
+- Pokud je aktivní filtr na člena, vybraný člen je zobrazen jako odstraňovatelný chip vedle badge filtrů
+- Textové hledání je v jednom řádku s filtry; hledá minimálně jméno, příjmení, přezdívku a částku
+- V záhlaví není žádný badge ani jiný prvek pro `stav období`
+
+**Souhrnné boxy — přesný obsah a pořadí:**
+- `Vybráno / očekáváno` — hlavní hodnota `0 Kč`, pod ní druhý řádek `z 113 110 Kč`
+- `Potvrzený předpis` — hlavní hodnota `109 210 Kč`, pod ní druhý řádek `Rozdíl: 3 900 Kč`
+- `Problematické k řešení` — počet předpisů, kde je něco zaplaceno, ale jinak, než očekáváme
+- `Platby k párování` — počet plateb, které jsou kandidáti na párování; zatím bude tato hodnota v návrhu fixně `0`
+
+**Filtry (badge pills — max 3):**
+- `Problémy` — výchozí; vše kromě přesně zaplacených předpisů
+- `Nezaplaceno` — `paidTotal = 0`
+- `S úkolem` — mají `todo_note`
+
+**Rozbalovací filtr „Filtrovat ▾":**
+- **Stav platby** — radio: Nezaplaceno / Nedoplatek / Přeplatek / Zaplaceno
+- **Stav zpracování** — radio: Nový / Zkontrolováno / Odeslán mail
+- **Člen** — shared autocomplete + chip (`MemberFilterChip`)
+- **Rok** — aktuální rok / všechny roky; `year=all` je jen lokální override přehledu a nemění globální `YearSelector`
+
+**Řazení** — v záhlaví: `Jméno` / `Příjmení` / `Přezdívka` / `Datum` / `Stav`
+- `Jméno`, `Příjmení` a `Přezdívka` se řadí úplně stejně jako na members
+- `Datum` = datum poslední potvrzené platby; pokud ještě žádná není, zobrazuje se `—`
+- `Stav` = hlavní stav předpisu (`Nezaplaceno` / `Méně` / `Více` / `V pořádku`)
+- Výchozí řazení pro roční pracovní pohled: `Příjmení ASC`
+
+---
+
+**Tabulka — desktop (roční pracovní pohled):**
+
+| Člen | Badges | Předpis | Zaplaceno | Rozdíl | Datum | Stav |
+|---|---|---|---|---|---|---|
+| Jan Novák (Johny) | `Loď` `Výbor` | 3 200 Kč | 0 Kč | -3 200 Kč | — | `Nezaplaceno` |
+| Marie Hořejší | `📋 úkol` | 1 000 Kč | 1 000 Kč | 0 Kč | 20. 3. 2026 | `V pořádku` |
+| Petr Kolář | `Bez brigády` | 1 500 Kč | 2 000 Kč | +500 Kč | 1. 3. 2026 | `Více` |
+
+- V ročním přehledu má každý člen právě jeden řádek
+- **Člen** = `{jméno} {příjmení}` + `({přezdívka})` pokud existuje; stejné klikatelné části slouží i pro řazení jako na members
+- **Badges** mají vlastní samostatný sloupec a nesmí být vmáčknuté pod jméno člena
+- **Předpis** = `amount_total`
+- **Zaplaceno** = součet potvrzených alokací
+- **Rozdíl** = `paidTotal - amountTotal`; záporná hodnota = nedoplatek, kladná = přeplatek
+- **Datum** = datum poslední potvrzené platby; pokud ještě žádná není, `—`
+- **Stav** = hlavní stav předpisu
+- Klik na řádek → detail příspěvku; back label zachová kontext (`← Příspěvky 2026` nebo `← Příspěvky: Jan Novák`)
+
+**Tabulka — mobil:**
+
+| Člen | Stav | Kontext |
+|---|---|---|
+| Jan Novák (Johny) | `Nezaplaceno` | Předpis 3 200 Kč · Zaplaceno 0 Kč |
+| Marie Hořejší | `V pořádku` | Předpis 1 000 Kč · Datum 20. 3. 2026 |
+
+- Každý člen má v ročním pohledu jednu kartu
+- Badges zůstávají na samostatném řádku karty, nelepí se do názvu člena
+- Kontextový řádek zobrazuje minimálně `Předpis`, `Zaplaceno`, `Rozdíl` nebo `Datum` podle toho, co je pro řádek nejdůležitější
+
+**Prázdné stavy:**
+- Pokud filtr vrátí 0 řádků: `Žádné výsledky` + `Zrušit filtry`
+- Pokud pro zvolený rok neexistují připravené příspěvky: jednoduchý stav `Pro rok 2026 zatím nejsou připravené příspěvky.` + CTA `Připravit předpisy`
+
+---
+
+**Architektonická poznámka — hranice contributions vs. payments:**
+
+Přehled příspěvků zobrazuje **předpisy a jejich krytí platbami**, nikoli frontu bankovní rekonciliace. Nevyřešené, navržené nebo rozdělované bankovní transakce patří na `/dashboard/payments`; do contributions se propisuje až jejich výsledek vůči konkrétnímu předpisu.
+
+---
+
+### 11.2 Detail příspěvku (`/dashboard/contributions/[id]`)
+
+**Navigační titulek (pro zásobník):** `Příspěvky 2026: Jan Novák`
+
+**URL:** `/dashboard/contributions/456?year=2026`
+
+---
+
+**Horní lišta:**
+```
+[← Příspěvky 2026]        Příspěvky 2026: Jan Novák        [Člen]  [Přidat platbu]  [▾ Odeslat email / Platby / Audit log / Přepočítat / Smazat předpis]
+```
+- Back šipka jen pokud zásobník není prázdný
+- Akce vpravo (max 3 vizuální prvky):
+  - `Člen` — přímé tlačítko → detail člena pro stejný rok
+  - `Přidat platbu` — přímé tlačítko → skok na sekci plateb / otevření formuláře pro novou platbu
+  - `▾` rozbalovací menu: Odeslat email / Platby / Audit log / Přepočítat předpis / Smazat předpis
+
+---
+
+**Souhrn příspěvku** — horní sekce stránky:
+
+```
+Člen              Jan Novák        [otevřít detail člena]
+Rok               2026
+Stav platby       nezaplaceno / méně / více / v pořádku
+Stav zpracování   nový / zkontrolováno / mail odeslán
+Datum splatnosti  31. 3. 2026
+```
+
+- Jméno člena je klikatelné a vede na detail člena
+- Stav platby je hlavní stav detailu; stav zpracování je sekundární metadata
+
+**Předpis** — rozpad částek:
+
+```
+Základní příspěvek      1 000 Kč
+Loď 1                   1 200 Kč
+Loď 2                     800 Kč
+Penále bez brigády        500 Kč
+Sleva výbor              −200 Kč
+Sleva TOM                  —
+Individuální sleva       −300 Kč   [upravit]
+Předpis celkem          3 000 Kč
+```
+
+- Většina řádků je odvozená z pravidel roku a z dat člena; přímo editovatelná zůstává hlavně individuální sleva
+- Manuální zásah do výpočtu nebo přepočet předpisu je akce z funkčního menu, ne rozesetá tlačítka uvnitř obsahu
+
+**Platby** — samostatná sekce na stránce:
+
+| Datum | Částka | Zdroj | Poznámka |
+|---|---|---|---|
+| 15. 2. 2026 | 1 000 Kč | Banka / hotově | — |
+| 20. 3. 2026 | 2 000 Kč | Banka / hotově | doplatek |
+
+- Každá platba je kliknutelná a vede na detail platby
+- Pod seznamem je souhrn `Zaplaceno celkem` + `Nedoplatek/Přeplatek`
+- Přidání platby je součástí stejné sekce; na mobilu může být formulář sbalený pod CTA `Přidat platbu`
+
+**Úkol a komunikace:**
+
+```
+Úkol                — [edit + Vyřešeno]
+☐ Zrevidováno
+Poslední email      12. 2. 2026 14:20 — Upomínka
+```
+
+- Úkol zůstává inline editovatelný stejně jako na members
+- Revize je jednoduchý checkbox v detailu příspěvku
+- Historie emailů je na stránce viditelná jako seznam, audit log může být samostatná stránka nebo overlay z menu
+
+**Platební údaje:**
+
+```
+Číslo účtu          2701772934/2010
+Variabilní symbol   207 101 123
+Částka              3 000 Kč
+QR platba           [QR]
+```
+
+- Sekce se zobrazuje jen pokud má předpis nenulovou částku
+- QR a platební údaje slouží jako podklad pro email/reminder i pro ruční sdílení
+
+---
+
+**Navigace z detailu (do zásobníku):**
+- `Člen` → `/dashboard/members/123?year=2026`, label: `← Příspěvky 2026: Jan Novák`
+- `Platby` → `/dashboard/payments?member=123&year=2026`, label: `← Příspěvky 2026: Jan Novák`
+- konkrétní platba v seznamu → `/dashboard/payments/[id]`, label: `← Příspěvky 2026: Jan Novák`
+
+---
+
+### 11.3 Rozhodnutí — Příspěvky
+
+- **`year=all` v přehledu** ✅ — ano; je to explicitní lokální temporary režim přehledu a nemění globální `YearSelector`
+- **Stav období rušíme** ✅ — pryč z UI i z databáze včetně sloupce a navázané funkčnosti; zůstává jen roční konfigurace příspěvků a procesní akce nad předpisy
+- **Detail příspěvku** ✅ — ano; samostatná stránka jako page varianta dnešního `PaymentSheetu`
+- **Rekonciliace banky zůstává v Payments** ✅ — ano; contributions pracují s předpisem a jeho krytím, nikoli s frontou nevyřešených bankovních transakcí
+- **Bez připravených příspěvků pro rok** ✅ — co nejjednodušší prázdný stav + jedno CTA `Připravit předpisy`; další workflow teď neřešíme
+
+---
+
+## 12. Popis stránek — Platby
+
+### 12.1 Přehled plateb (`/dashboard/payments`)
+
+**Navigační titulek (back šipka z jiné stránky):** `← Platební ledger`
+
+**URL parametry:** `?year=2026&status=open&member=123&source=fio_bank&q=123456&sort=paidAt&dir=desc`
+
+---
+
+**Záhlaví + ovládací prvky** — na širší obrazovce na jednom řádku, na užší se zalomí:
+```
+Platby 2026   [🔍 Hledat…]   [K řešení|9] [Nespárováno|5] [Ke kontrole|4] [Jan Novák ✕]   [Filtrovat ▾]   [Historie importů]
+```
+- Stránka reprezentuje **ledger příchozích plateb**, ne seznam ručně evidovaných plateb člena
+- Rok pochází z globálního `YearSelector`; je i součástí URL
+- Přehled musí podporovat i `year=all`; tato volba je primárně pro příchod z detailu člena a z detailu příspěvku na kompletní historii plateb
+- Textové hledání hledá minimálně variabilní symbol, jméno člena, protistranu a zprávu pro příjemce
+- Pokud je aktivní filtr na člena, vybraný člen je zobrazen jako odstraňovatelný chip vedle badge filtrů
+
+**Filtry (badge pills — max 3):**
+- `K řešení` — výchozí; sjednocuje `Nespárováno` + `Ke kontrole`
+- `Nespárováno` — ledger položky bez alokace
+- `Ke kontrole` — auto-match návrhy čekající na potvrzení adminem
+
+**Rozbalovací filtr „Filtrovat ▾":**
+- **Stav** — radio: Nespárováno / Ke kontrole / Potvrzeno / Ignorováno
+- **Zdroj** — radio nebo grouped choices: Fio banka / konkrétní profil bankovního souboru / Hotovost
+- **Člen** — shared autocomplete + chip (`MemberFilterChip`)
+- **Rok** — aktuální rok / všechny roky
+- **Další** — toggle: Bez VS
+
+**Řazení** — v záhlaví: `Datum` / `Částka` / `Stav` / `Zdroj`
+- Výchozí řazení: `Datum DESC`
+- Sekundární řazení: `Částka DESC`, pak `ID DESC`
+
+---
+
+**Tabulka — desktop:**
+
+| Datum | Částka | VS | Protistrana / Zpráva | Zdroj | Stav | Párování |
+|---|---|---|---|---|---|---|
+| 15. 2. 2026 | 1 000 Kč | 12345 | Jan Novák / členský příspěvek | `Fio` | `Nespárováno` | — |
+| 20. 2. 2026 | 3 000 Kč | 12345 | Jan Novák | `Air Bank` | `Ke kontrole` | `Jan Novák — 2026` |
+| 1. 3. 2026 | 2 000 Kč | 54321 | Marie Hořejší | `Hotovost` | `Potvrzeno` | `Marie Hořejší — 2026` |
+
+- **Datum** = datum přijetí platby
+- **Částka** = částka ledger položky, ne částka jednotlivé alokace
+- **VS** = variabilní symbol; při chybějícím VS se zobrazí `—`
+- **Protistrana / Zpráva** = jméno účtu protistrany, číslo účtu a zpráva; dlouhé texty se krátí
+- **Zdroj** = Fio banka / bankovní soubor podle profilu / hotovost
+- **Stav** = `Nespárováno` / `Ke kontrole` / `Potvrzeno` / `Ignorováno`
+- **Párování** = jméno člena nebo seznam alokací; při splitu se zobrazí více řádků nebo badge položky
+- Klik na řádek → detail platby; back label zachová kontext (`← Platby 2026`, `← Platby: Jan Novák`, `← Platby k příspěvku 2026`)
+
+**Tabulka — mobil:**
+
+| Částka | Stav | Kontext |
+|---|---|---|
+| 1 000 Kč | `Nespárováno` | 15. 2. 2026 · VS 12345 |
+| 3 000 Kč | `Ke kontrole` | Air Bank · Jan Novák |
+
+- Karta zobrazuje částku a stav v prvním řádku, datum/VS/zdroj ve druhém a případné párování ve třetím
+- U potvrzených nebo navržených plateb se na kartě ukazuje jméno člena; u splitu počet alokačních řádků (`2 alokace`)
+
+**Prázdné stavy:**
+- Pokud filtr vrátí 0 řádků: `Žádné výsledky` + `Zrušit filtry`
+- Pokud ve zvoleném roce nejsou žádné ledger položky: `Pro rok 2026 zatím nejsou evidované žádné platby.`
+- Pokud nejsou žádné importy bankovních výpisů: CTA na nahrání výpisu z importů
+
+---
+
+**Kontextová stránka — historie importů:**
+
+`/dashboard/payments/history` je **kontextový přehled** navázaný na payments, ne samostatná byznys entita. Zobrazuje importní běhy bankovních souborů, jejich profil, soubor a stav spárování. Zpět vede vždy do přehledu payments.
+
+---
+
+### 12.2 Detail platby (`/dashboard/payments/[id]`)
+
+**Navigační titulek (pro zásobník):** `Platba 1 000 Kč — 15. 2. 2026`
+
+**URL:** `/dashboard/payments/123?year=2026`
+
+---
+
+**Horní lišta:**
+
+**Varianta A — nespárovaná platba:**
+```
+[← Platby 2026]        Platba 1 000 Kč        [Spárovat]  [Rozdělit]  [▾ Zkusit auto-match / Ignorovat / Historie importu]
+```
+
+**Varianta B — navržené párování:**
+```
+[← Platby 2026]        Platba 3 000 Kč        [Potvrdit]  [Jiný člen]  [▾ Rozdělit / Ignorovat / Historie importu]
+```
+
+**Varianta C — potvrzená platba:**
+```
+[← Platby 2026]        Platba 3 000 Kč        [Příspěvek]  [Člen]  [▾ Odpárovat / Historie importu]
+```
+
+- Back šipka jen pokud zásobník není prázdný
+- Složení akční lišty je **stavové**; vždy max 3 vizuální prvky vpravo
+- U splitu může být `Příspěvek` nahrazen rozbalovacím menu `Otevřít alokaci…`
+
+---
+
+**Souhrn platby** — horní sekce stránky:
+
+```
+Datum přijetí         15. 2. 2026
+Částka               1 000 Kč
+Stav                 nespárováno / ke kontrole / potvrzeno / ignorováno
+Zdroj                Fio banka / Air Bank / hotovost
+Variabilní symbol    12345
+Protistrana          Jan Novák
+Číslo účtu           123456789/2010
+Zpráva               členský příspěvek
+Poznámka             —
+```
+
+- Zdroj u bankovního souboru zobrazuje i název importního profilu
+- U `ignored` stavu se zobrazuje důvod ignorace jako součást souhrnu
+
+**Párování / alokace** — klíčová sekce detailu:
+
+| Člen | Příspěvek | Částka | Stav |
+|---|---|---|---|
+| Jan Novák | 2026 | 1 000 Kč | `auto-návrh` |
+| Marie Hořejší | 2026 | 2 000 Kč | `potvrzeno` |
+
+- Každý řádek je kliknutelný: jméno člena vede na detail člena, předpis vede na detail příspěvku
+- Jedna platba může mít 0, 1 nebo více alokací
+- U `Ke kontrole` je zřetelně odlišené, že jde o návrh, ne potvrzené spárování
+
+**Workflow sekce** — podle stavu platby:
+
+**Nespárováno:**
+```
+[autocomplete člen / VS]
+Vybraný člen: Jan Novák — zbývá 1 000 Kč
+[Potvrdit párování]
+
+[Rozdělit platbu]
+část 1 → Jan Novák → 1 000 Kč
+část 2 → Marie Hořejší → 2 000 Kč
+```
+
+**Ke kontrole:**
+```
+Navrhované párování: Jan Novák — 2026
+[Potvrdit] [Jiný člen] [Rozdělit]
+```
+
+**Ignorováno:**
+```
+Důvod ignorace: vratka / nečlenská platba / test
+[Obnovit]
+```
+
+- Složitější operace `Spárovat`, `Rozdělit`, `Jiný člen` zůstávají modální workflow i na detail stránce, jen se nespouštějí ze sheetu
+- Split musí průběžně ukazovat součet částí a rozdíl vůči celé částce
+
+**Importní kontext:**
+
+```
+Importní běh         10. 4. 2026 14:44
+Profil              Air Bank
+Zdrojový soubor     airbank_1024298088_2026-04-10_14-44.csv
+[Otevřít historii importů]
+```
+
+- Sekce se zobrazuje jen u plateb pocházejících z bankovního souboru
+- U Fio transakcí může být místo toho zobrazen identifikátor bankovní transakce
+
+---
+
+**Navigace z detailu (do zásobníku):**
+- `Člen` → `/dashboard/members/123?year=2026`, label: `← Platba 1 000 Kč`
+- `Příspěvek` → `/dashboard/contributions/456?year=2026`, label: `← Platba 1 000 Kč`
+- `Historie importu` → `/dashboard/payments/history`, label: `← Platba 1 000 Kč`
+
+---
+
+### 12.3 Rozhodnutí — Platby
+
+- **Payments = ledger příchozích plateb** ✅ — tato sekce neřeší předpisy, ale příchozí transakce a jejich alokaci na předpisy
+- **Split je first-class scénář** ✅ — jedna platba může krýt více předpisů; detail i přehled to musí umět zobrazit bez „hacků"
+- **Výchozí filtr = `K řešení`** ✅ — operational view je prioritně o nevyřešených položkách (`Nespárováno` + `Ke kontrole`)
+- **Zdrojový filtr patří do `Filtrovat`** ✅ — kvůli více import profilům se nevejde do sady 3 hlavních badge filtrů
+- **`year=all` musí fungovat i zde** ✅ — nutné pro příchod z detailu člena a z detailu příspěvku na kompletní historii plateb
+- **Historie importů je kontextový view** ✅ — není to detail entity, ale servisní přehled dostupný z payments
+- **Detail platby = page varianta dnešního `PaymentSheetu`** ✅ — převzít současné workflow `match / split / ignore / unmatch`, ale přesunout ho do samostatné detail stránky
+
+---
+
+## 13. Co není součástí tohoto zadání
 
 - Změna datového modelu (to řeší separátní zadání pro V1 ledger, rekonciliaci apod.)
 - Nové funkce (brigády, akce apod.) — UX model se na ně aplikuje, ale obsah jejich detailů řeší separátní zadání
@@ -451,7 +841,7 @@ Individuální sleva   —    [Nastavit]
 
 ---
 
-*Dokument se průběžně doplňuje. Poslední aktualizace: 2026-04-23*
+*Dokument se průběžně doplňuje. Poslední aktualizace: 2026-04-26*
 
 ### Změnový log
 
@@ -464,3 +854,6 @@ Individuální sleva   —    [Nastavit]
 | 2026-04-23 | Sekce 10: detailní popis stránek Členové (přehled + detail) |
 | 2026-04-23 | Sekce 10 přepracována: záhlaví na 1 řádek, sloupce, GDPR pole, akcní menu, rok=all, nečlenové arch. poznámka |
 | 2026-04-23 | Sekce 2.4: obecné principy řazení (klik na záhlaví, ASC/DESC toggle, null na konci, sekundární klíč, URL) |
+| 2026-04-26 | Sekce 11: detailní popis stránek Příspěvky (přehled + detail), `year=all`, hranice vůči Payments, dva typy stavů a prázdný stav bez období |
+| 2026-04-26 | Sekce 11 upravena: `year=all` jako lokální temporary filtr, horní pracovní pás v jednom řádku včetně rozpisu sazeb a KPI boxů, jeden řádek na člena a zrušení `stavu období` |
+| 2026-04-26 | Sekce 12: detailní popis stránek Platby (ledger overview + detail), stavové akce, split jako first-class scénář, `K řešení` jako výchozí filtr a historie importů jako kontextový view |

@@ -249,12 +249,12 @@ export function NoPeriodView({ year, defaults }: NoPeriodViewProps) {
         <div className="space-y-4">
             <h1 className="text-2xl font-semibold text-gray-900">Příspěvky {year}</h1>
             <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-                <p className="text-gray-500">Pro rok {year} zatím nejsou připraveny předpisy příspěvků.</p>
+                <p className="text-gray-500">Pro rok {year} zatím nejsou připravené příspěvky.</p>
                 <Button
                     onClick={() => setOpen(true)}
                     className="bg-[#327600] hover:bg-[#327600]/90 text-white"
                 >
-                    Připravit předpisy {year}
+                    Připravit předpisy
                 </Button>
             </div>
 

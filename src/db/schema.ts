@@ -82,7 +82,6 @@ export const contributionPeriods = appSchema.table("contribution_periods", {
     brigadeSurcharge:    integer("brigade_surcharge").notNull().default(0),
     dueDate:             date("due_date"),
     bankAccount:         text("bank_account").notNull().default("2701772934/2010"),
-    status:              text("status", { enum: ["draft", "confirmed", "collecting", "closed"] }).notNull().default("collecting"),
     createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

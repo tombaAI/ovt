@@ -336,7 +336,7 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                     {/* Action buttons — max 3 visual elements */}
                     <div className="flex items-center gap-2 shrink-0">
                         <Button size="sm" variant="outline" className="h-8 text-xs"
-                            onClick={() => navigateTo(`/dashboard/contributions?member=${member.id}`, memberLabel)}>
+                            onClick={() => navigateTo(`/dashboard/contributions?member=${member.id}&year=all`, memberLabel)}>
                             Příspěvky
                         </Button>
                         <Button size="sm" variant="outline" className="h-8 text-xs"
@@ -353,7 +353,7 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                                 {(["Brigády", "Platby"] as const).map(label => (
                                     <button key={label}
                                         onClick={() => navigateTo(
-                                            `/dashboard/${label === "Brigády" ? "brigades" : "payments"}?member=${member.id}`,
+                                            `/dashboard/${label === "Brigády" ? "brigades" : "payments"}?member=${member.id}${label === "Platby" ? "&year=all" : ""}`,
                                             memberLabel
                                         )}
                                         className="w-full text-left px-2.5 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors">
