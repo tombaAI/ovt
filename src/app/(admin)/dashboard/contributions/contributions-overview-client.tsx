@@ -429,218 +429,232 @@ export function ContributionsOverviewClient({
 
     return (
         <div className="space-y-5">
-            <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
-                <div className="flex min-w-max items-stretch gap-3 pb-1">
-                    <div className="flex items-center gap-3 rounded-xl border bg-white px-3 py-3">
-                        <h1 className="text-2xl font-semibold text-gray-900 whitespace-nowrap">{headerTitle}</h1>
+            <div className="space-y-3">
+                <div className="flex flex-wrap items-center gap-2">
+                    <h1 className="mr-0.5 whitespace-nowrap text-xl font-semibold text-gray-900">{headerTitle}</h1>
 
-                        <div className="relative w-72">
-                            <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
-                            <Input
-                                type="search"
-                                value={searchDraft}
-                                onChange={event => setSearchDraft(event.target.value)}
-                                placeholder="Hledat jméno, přezdívku, částku…"
-                                className="h-9 pl-8 pr-8 text-sm"
-                            />
-                            {searchDraft && (
-                                <button
-                                    type="button"
-                                    onClick={() => setSearchDraft("")}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
-                                >
-                                    <X className="h-3.5 w-3.5" />
-                                </button>
-                            )}
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                            {FILTERS.map(item => (
-                                <button
-                                    key={item.key}
-                                    type="button"
-                                    onClick={() => handleFilter(item.key)}
-                                    className={[
-                                        "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
-                                        filter === item.key
-                                            ? item.key === "todo"
-                                                ? "border-orange-500 bg-orange-500 text-white"
-                                                : "border-[#327600] bg-[#327600] text-white"
-                                            : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
-                                    ].join(" ")}
-                                >
-                                    {item.label}
-                                    <span className={filter === item.key ? "text-white/80 text-xs" : "text-gray-400 text-xs"}>
-                                        {badgeCounts[item.key]}
-                                    </span>
-                                </button>
-                            ))}
-                        </div>
-
-                        {activeMember && (
+                    <div className="relative w-72 max-w-full">
+                        <Search className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-gray-400" />
+                        <Input
+                            type="search"
+                            value={searchDraft}
+                            onChange={event => setSearchDraft(event.target.value)}
+                            placeholder="Hledat jméno, přezdívku, částku…"
+                            className="h-8 pl-8 pr-8 text-sm"
+                        />
+                        {searchDraft && (
                             <button
                                 type="button"
-                                onClick={() => handleMemberSelect(null)}
-                                className="inline-flex items-center gap-1 rounded-full border border-[#327600]/20 bg-[#327600]/10 px-3 py-1.5 text-sm text-[#327600]"
+                                onClick={() => setSearchDraft("")}
+                                className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
                             >
-                                {normalizedMemberLabel(activeMember)}
                                 <X className="h-3.5 w-3.5" />
                             </button>
                         )}
+                    </div>
 
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button variant="outline" className="h-9 gap-2 text-sm">
-                                    <SlidersHorizontal className="h-3.5 w-3.5" />
-                                    {filterMenuLabel}
-                                    <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                    <div className="flex flex-wrap items-center gap-2">
+                        {FILTERS.map(item => (
+                            <button
+                                key={item.key}
+                                type="button"
+                                onClick={() => handleFilter(item.key)}
+                                className={[
+                                    "inline-flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-sm font-medium transition-colors",
+                                    filter === item.key
+                                        ? item.key === "todo"
+                                            ? "border-orange-500 bg-orange-500 text-white"
+                                            : "border-[#327600] bg-[#327600] text-white"
+                                        : "border-gray-200 bg-white text-gray-600 hover:bg-gray-50",
+                                ].join(" ")}
+                            >
+                                {item.label}
+                                <span className={filter === item.key ? "text-xs text-white/80" : "text-xs text-gray-400"}>
+                                    {badgeCounts[item.key]}
+                                </span>
+                            </button>
+                        ))}
+                    </div>
+
+                    {activeMember && (
+                        <button
+                            type="button"
+                            onClick={() => handleMemberSelect(null)}
+                            className="inline-flex items-center gap-1 rounded-full border border-[#327600]/20 bg-[#327600]/10 px-3 py-1.5 text-sm text-[#327600]"
+                        >
+                            {normalizedMemberLabel(activeMember)}
+                            <X className="h-3.5 w-3.5" />
+                        </button>
+                    )}
+
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button variant="outline" className="h-8 gap-2 text-sm">
+                                <SlidersHorizontal className="h-3.5 w-3.5" />
+                                {filterMenuLabel}
+                                <ChevronDown className="h-3.5 w-3.5 text-gray-400" />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="start" className="w-96 space-y-4 p-4">
+                            <div className="space-y-1.5">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Stav platby</p>
+                                <Select value={paymentState} onValueChange={value => {
+                                    const next = value as PaymentStateFilter;
+                                    setPaymentState(next);
+                                    updateUrl({ state: next === "all" ? null : next });
+                                }}>
+                                    <SelectTrigger className="h-9 text-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Vše</SelectItem>
+                                        <SelectItem value="unpaid">Nezaplaceno</SelectItem>
+                                        <SelectItem value="underpaid">Nedoplatek</SelectItem>
+                                        <SelectItem value="overpaid">Přeplatek</SelectItem>
+                                        <SelectItem value="paid">Zaplaceno</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Stav zpracování</p>
+                                <Select value={process} onValueChange={value => {
+                                    const next = value as ProcessStateFilter;
+                                    setProcess(next);
+                                    updateUrl({ process: next === "all" ? null : next });
+                                }}>
+                                    <SelectTrigger className="h-9 text-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="all">Vše</SelectItem>
+                                        <SelectItem value="new">Nový</SelectItem>
+                                        <SelectItem value="reviewed">Zkontrolováno</SelectItem>
+                                        <SelectItem value="mailed">Odeslán mail</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-1.5">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Rok</p>
+                                <Select value={String(yearMode)} onValueChange={handleYearModeChange}>
+                                    <SelectTrigger className="h-9 text-sm">
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value={String(selectedYear)}>Aktuální rok ({selectedYear})</SelectItem>
+                                        <SelectItem value="all">Všechny roky</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+
+                            <div className="space-y-2">
+                                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Člen</p>
+                                <Input
+                                    value={memberSearch}
+                                    onChange={event => setMemberSearch(event.target.value)}
+                                    placeholder="Hledat člena…"
+                                    className="h-9 text-sm"
+                                />
+                                <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border p-1">
+                                    {memberCandidates.length === 0 ? (
+                                        <p className="px-2 py-1.5 text-sm text-gray-400">Žádný člen</p>
+                                    ) : (
+                                        memberCandidates.map(option => {
+                                            const label = normalizedMemberLabel(option);
+                                            return (
+                                                <button
+                                                    key={option.id}
+                                                    type="button"
+                                                    onClick={() => handleMemberSelect(option.id)}
+                                                    className={[
+                                                        "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors",
+                                                        option.id === memberId
+                                                            ? "bg-[#327600]/10 text-[#327600]"
+                                                            : "hover:bg-gray-50",
+                                                    ].join(" ")}
+                                                >
+                                                    <span>
+                                                        {label}
+                                                        {option.nickname && (
+                                                            <span className="ml-1 text-gray-400">({option.nickname})</span>
+                                                        )}
+                                                    </span>
+                                                </button>
+                                            );
+                                        })
+                                    )}
+                                </div>
+                            </div>
+
+                            <div className="flex justify-end">
+                                <Button variant="ghost" onClick={clearDropdownFilters} className="h-8 px-2 text-sm text-gray-500">
+                                    Zrušit filtry
                                 </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="start" className="w-96 space-y-4 p-4">
-                                <div className="space-y-1.5">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Stav platby</p>
-                                    <Select value={paymentState} onValueChange={value => {
-                                        const next = value as PaymentStateFilter;
-                                        setPaymentState(next);
-                                        updateUrl({ state: next === "all" ? null : next });
-                                    }}>
-                                        <SelectTrigger className="h-9 text-sm">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Vše</SelectItem>
-                                            <SelectItem value="unpaid">Nezaplaceno</SelectItem>
-                                            <SelectItem value="underpaid">Nedoplatek</SelectItem>
-                                            <SelectItem value="overpaid">Přeplatek</SelectItem>
-                                            <SelectItem value="paid">Zaplaceno</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                            </div>
+                        </PopoverContent>
+                    </Popover>
 
-                                <div className="space-y-1.5">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Stav zpracování</p>
-                                    <Select value={process} onValueChange={value => {
-                                        const next = value as ProcessStateFilter;
-                                        setProcess(next);
-                                        updateUrl({ process: next === "all" ? null : next });
-                                    }}>
-                                        <SelectTrigger className="h-9 text-sm">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="all">Vše</SelectItem>
-                                            <SelectItem value="new">Nový</SelectItem>
-                                            <SelectItem value="reviewed">Zkontrolováno</SelectItem>
-                                            <SelectItem value="mailed">Odeslán mail</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
+                    {hasActiveFilters && (
+                        <button
+                            type="button"
+                            onClick={resetAllFilters}
+                            className="rounded px-2 py-1.5 text-xs text-gray-400 transition-colors hover:bg-gray-50 hover:text-gray-700"
+                        >
+                            × Zrušit vše
+                        </button>
+                    )}
 
-                                <div className="space-y-1.5">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Rok</p>
-                                    <Select value={String(yearMode)} onValueChange={handleYearModeChange}>
-                                        <SelectTrigger className="h-9 text-sm">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value={String(selectedYear)}>Aktuální rok ({selectedYear})</SelectItem>
-                                            <SelectItem value="all">Všechny roky</SelectItem>
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-
-                                <div className="space-y-2">
-                                    <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Člen</p>
-                                    <Input
-                                        value={memberSearch}
-                                        onChange={event => setMemberSearch(event.target.value)}
-                                        placeholder="Hledat člena…"
-                                        className="h-9 text-sm"
-                                    />
-                                    <div className="max-h-44 space-y-1 overflow-y-auto rounded-lg border p-1">
-                                        {memberCandidates.length === 0 ? (
-                                            <p className="px-2 py-1.5 text-sm text-gray-400">Žádný člen</p>
-                                        ) : (
-                                            memberCandidates.map(option => {
-                                                const label = normalizedMemberLabel(option);
-                                                return (
-                                                    <button
-                                                        key={option.id}
-                                                        type="button"
-                                                        onClick={() => handleMemberSelect(option.id)}
-                                                        className={[
-                                                            "flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-sm transition-colors",
-                                                            option.id === memberId
-                                                                ? "bg-[#327600]/10 text-[#327600]"
-                                                                : "hover:bg-gray-50",
-                                                        ].join(" ")}
-                                                    >
-                                                        <span>
-                                                            {label}
-                                                            {option.nickname && (
-                                                                <span className="ml-1 text-gray-400">({option.nickname})</span>
-                                                            )}
-                                                        </span>
-                                                    </button>
-                                                );
-                                            })
-                                        )}
-                                    </div>
-                                </div>
-
-                                <div className="flex justify-end">
-                                    <Button variant="ghost" onClick={clearDropdownFilters} className="h-8 px-2 text-sm text-gray-500">
-                                        Zrušit filtry
-                                    </Button>
-                                </div>
-                            </PopoverContent>
-                        </Popover>
-
-                        {canPrepare && yearMode !== "all" && (
-                            <Button onClick={() => setPrepareOpen(true)} className="h-9 bg-[#327600] text-white hover:bg-[#327600]/90">
+                    {canPrepare && yearMode !== "all" && (
+                        <div className="ml-auto">
+                            <Button onClick={() => setPrepareOpen(true)} className="h-8 bg-[#327600] text-white hover:bg-[#327600]/90">
                                 Připravit předpisy
                             </Button>
-                        )}
-                    </div>
+                        </div>
+                    )}
+                </div>
 
-                    <div className="flex items-center gap-2 rounded-xl border bg-gray-50 px-3 py-3 text-sm text-gray-600">
-                        {period ? (
-                            <>
-                                <span className="whitespace-nowrap"><span className="text-gray-400">Člen</span> <strong className="text-gray-700">{period.amountBase.toLocaleString("cs-CZ")} Kč</strong></span>
-                                <span className="whitespace-nowrap"><span className="text-gray-400">Loď</span> <strong className="text-gray-700">{period.amountBoat1.toLocaleString("cs-CZ")} Kč / {period.amountBoat2.toLocaleString("cs-CZ")} Kč</strong></span>
-                                <span className="whitespace-nowrap"><span className="text-gray-400">Brigáda</span> <strong className="text-gray-700">+{period.brigadeSurcharge.toLocaleString("cs-CZ")} Kč</strong></span>
-                                <span className="whitespace-nowrap"><span className="text-gray-400">Sleva výbor</span> <strong className="text-gray-700">−{period.discountCommittee.toLocaleString("cs-CZ")} Kč</strong></span>
-                                <span className="whitespace-nowrap"><span className="text-gray-400">Sleva TOM</span> <strong className="text-gray-700">−{period.discountTom.toLocaleString("cs-CZ")} Kč</strong></span>
-                                {period.dueDate && (
-                                    <span className="whitespace-nowrap"><span className="text-gray-400">Splatnost</span> <strong className="text-gray-700">{period.dueDate}</strong></span>
-                                )}
-                                <span className="whitespace-nowrap"><span className="text-gray-400">Účet</span> <strong className="font-mono text-gray-700">{period.bankAccount}</strong></span>
-                            </>
-                        ) : (
-                            <span className="whitespace-nowrap text-gray-500">Historie všech roků — globální rok vpravo nahoře zůstává {selectedYear}</span>
-                        )}
-                    </div>
+                <div className="-mx-4 overflow-x-auto px-4 md:mx-0 md:px-0">
+                    <div className="flex min-w-max items-stretch gap-3 pb-1">
+                        <div className="flex items-center gap-2 rounded-xl border bg-gray-50 px-3 py-3 text-sm text-gray-600">
+                            {period ? (
+                                <>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Člen</span> <strong className="text-gray-700">{period.amountBase.toLocaleString("cs-CZ")} Kč</strong></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Loď</span> <strong className="text-gray-700">{period.amountBoat1.toLocaleString("cs-CZ")} Kč / {period.amountBoat2.toLocaleString("cs-CZ")} Kč</strong></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Brigáda</span> <strong className="text-gray-700">+{period.brigadeSurcharge.toLocaleString("cs-CZ")} Kč</strong></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Sleva výbor</span> <strong className="text-gray-700">−{period.discountCommittee.toLocaleString("cs-CZ")} Kč</strong></span>
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Sleva TOM</span> <strong className="text-gray-700">−{period.discountTom.toLocaleString("cs-CZ")} Kč</strong></span>
+                                    {period.dueDate && (
+                                        <span className="whitespace-nowrap"><span className="text-gray-400">Splatnost</span> <strong className="text-gray-700">{period.dueDate}</strong></span>
+                                    )}
+                                    <span className="whitespace-nowrap"><span className="text-gray-400">Účet</span> <strong className="font-mono text-gray-700">{period.bankAccount}</strong></span>
+                                </>
+                            ) : (
+                                <span className="whitespace-nowrap text-gray-500">Historie všech roků — globální rok vpravo nahoře zůstává {selectedYear}</span>
+                            )}
+                        </div>
 
-                    <SummaryCard
-                        title="Vybráno / očekáváno"
-                        value={fmtAmount(summary.collected)}
-                        subvalue={`z ${fmtAmount(summary.expected)}`}
-                    />
-                    <SummaryCard
-                        title="Potvrzený předpis"
-                        value={fmtAmount(summary.confirmedPrescription)}
-                        subvalue={`Rozdíl: ${fmtAmount(summary.difference)}`}
-                    />
-                    <SummaryCard
-                        title="Problematické k řešení"
-                        value={String(summary.problematic)}
-                        subvalue="zaplaceno jinak, než čekáme"
-                    />
-                    <SummaryCard
-                        title="Platby k párování"
-                        value={String(summary.matchingCandidates)}
-                        subvalue="zatím fixně 0"
-                    />
+                        <SummaryCard
+                            title="Vybráno / očekáváno"
+                            value={fmtAmount(summary.collected)}
+                            subvalue={`z ${fmtAmount(summary.expected)}`}
+                        />
+                        <SummaryCard
+                            title="Potvrzený předpis"
+                            value={fmtAmount(summary.confirmedPrescription)}
+                            subvalue={`Rozdíl: ${fmtAmount(summary.difference)}`}
+                        />
+                        <SummaryCard
+                            title="Problematické k řešení"
+                            value={String(summary.problematic)}
+                            subvalue="zaplaceno jinak, než čekáme"
+                        />
+                        <SummaryCard
+                            title="Platby k párování"
+                            value={String(summary.matchingCandidates)}
+                            subvalue="zatím fixně 0"
+                        />
+                    </div>
                 </div>
             </div>
 
