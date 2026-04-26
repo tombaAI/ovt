@@ -32,6 +32,7 @@ type FilterKey = "issues" | "unpaid" | "todo";
 type PaymentStateFilter = "all" | "unpaid" | "underpaid" | "overpaid" | "paid";
 type ProcessStateFilter = "all" | "new" | "reviewed" | "mailed";
 type BadgeFilterKey = "boat" | "noBrigade" | "committee" | "tom" | "individual";
+type RowBadge = { key: string; label: string; className: string };
 type SortKey = "firstName" | "lastName" | "nickname" | "date" | "status";
 type SortDir = "asc" | "desc";
 
@@ -95,21 +96,49 @@ function processState(row: ContribRow): ProcessStateFilter {
 function hasContributionBadge(row: ContribRow, key: BadgeFilterKey): boolean {
     if (key === "boat") return [row.amountBoat1, row.amountBoat2, row.amountBoat3].some(value => (value ?? 0) > 0);
     if (key === "noBrigade") return (row.brigadeSurcharge ?? 0) > 0;
-    if (key === "committee") return (row.discountCommittee ?? 0) > 0;
-    if (key === "tom") return (row.discountTom ?? 0) > 0;
-    return (row.discountIndividual ?? 0) > 0;
+    if (key === "committee") return row.discountCommittee !== null;
+    if (key === "tom") return row.discountTom !== null;
+    return row.discountIndividual !== null;
 }
 
-function contributionRowBadges(row: ContribRow, showYear: boolean): string[] {
-    const badges: string[] = [];
-    if (showYear) badges.push(String(row.periodYear));
-    if ((row.amountBoat1 ?? 0) > 0) badges.push("Loď");
-    if ((row.amountBoat2 ?? 0) > 0) badges.push("2. loď");
-    if ((row.amountBoat3 ?? 0) > 0) badges.push("3. loď");
-    if ((row.brigadeSurcharge ?? 0) > 0) badges.push("Bez brigády");
-    if ((row.discountCommittee ?? 0) > 0) badges.push("Výbor");
-    if ((row.discountTom ?? 0) > 0) badges.push("TOM");
-    if ((row.discountIndividual ?? 0) > 0) badges.push("Indiv");
+function contributionRowBadges(row: ContribRow, showYear: boolean): RowBadge[] {
+    const badges: RowBadge[] = [];
+    if (showYear) {
+        badges.push({
+            key: `year-${row.periodYear}`,
+            label: String(row.periodYear),
+            className: "bg-slate-100 text-slate-600",
+        });
+    }
+    if ((row.amountBoat1 ?? 0) > 0) {
+        badges.push({ key: "boat-1", label: "Loď", className: "bg-slate-100 text-slate-600" });
+    }
+    if ((row.amountBoat2 ?? 0) > 0) {
+        badges.push({ key: "boat-2", label: "2. loď", className: "bg-slate-100 text-slate-600" });
+    }
+    if ((row.amountBoat3 ?? 0) > 0) {
+        badges.push({ key: "boat-3", label: "3. loď", className: "bg-slate-100 text-slate-600" });
+    }
+    if ((row.brigadeSurcharge ?? 0) > 0) {
+        badges.push({
+            key: "no-brigade",
+            label: "Bez brigády",
+            className: "border border-red-200 bg-red-50 text-red-600",
+        });
+    }
+    if (row.discountCommittee !== null) {
+        badges.push({ key: "committee", label: "Výbor", className: "bg-amber-100 text-amber-700" });
+    }
+    if (row.discountTom !== null) {
+        badges.push({ key: "tom", label: "TOM", className: "bg-blue-100 text-blue-700" });
+    }
+    if (row.discountIndividual !== null) {
+        badges.push({
+            key: "individual",
+            label: `Sleva ${Math.abs(row.discountIndividual)} Kč`,
+            className: "bg-purple-100 text-purple-700",
+        });
+    }
     return badges;
 }
 
@@ -805,10 +834,10 @@ export function ContributionsOverviewClient({
                                             ) : (
                                                 badges.map(badge => (
                                                     <span
-                                                        key={badge}
-                                                        className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600"
+                                                        key={badge.key}
+                                                        className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs ${badge.className}`}
                                                     >
-                                                        {badge}
+                                                        {badge.label}
                                                     </span>
                                                 ))
                                             )}
@@ -884,8 +913,8 @@ export function ContributionsOverviewClient({
                                     {badges.length > 0 && (
                                         <div className="mt-1 flex flex-wrap gap-1">
                                             {badges.map(badge => (
-                                                <span key={badge} className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">
-                                                    {badge}
+                                                <span key={badge.key} className={`inline-flex items-center rounded px-1.5 py-0.5 text-xs ${badge.className}`}>
+                                                    {badge.label}
                                                 </span>
                                             ))}
                                         </div>
