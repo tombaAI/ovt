@@ -456,21 +456,28 @@ export async function getAllHospodareniWithReconciliation(): Promise<Hospodareni
 
 export type StavRok = {
     year:         number;
-    startBalance: number | null;  // zůstatek k 31.12.(year-1), null = neznámý
-    endBalance:   number | null;  // zůstatek k 31.12.year, null = rok ještě neskončil
-    naklady:      number;         // SUM debits z výsledovek pro celý rok
-    vynosy:       number;         // SUM credits z výsledovek pro celý rok
-    txVysledek:   number;         // vynosy - naklady
+    startBalance: number | null;
+    endBalance:   number | null;
+    naklady:      number;
+    vynosy:       number;
+    txVysledek:   number;
     txCount:      number;
-    isComplete:   boolean;        // startBalance i endBalance jsou známé
-    matches:      boolean | null; // null = nelze ověřit (chybí start nebo end)
+    isComplete:   boolean;
+    matches:      boolean | null;
+    latestTxDate: string | null;
     // Pro neuzavřené roky: nejnovější průběžná tabulka jako kontrolní bod
     snapshot: {
-        date:    string;
-        balance: number;
-        source:  string | null;
+        date:           string;
+        balance:        number;
+        source:         string | null;
+        // transakce od začátku roku DO data snapshotu
+        txToSum:        number;
+        txToCount:      number;
+        snapshotMatches: boolean;    // startBalance + txToSum ≈ snapshot.balance
+        // transakce PO datu snapshotu
+        txAfterSum:     number;
+        txAfterCount:   number;
     } | null;
-    latestTxDate: string | null;  // datum poslední transakce v roce
 };
 
 export type StavUctuData = {
@@ -566,16 +573,30 @@ export async function getStavUctu(): Promise<StavUctuData> {
             ? Math.abs(delta - txVysledek) < 0.01
             : null;
 
-        // Nejnovější průběžná tabulka v tomto roce (jako snapshot pro neuzavřené roky)
+        // Nejnovější průběžná tabulka v tomto roce (snapshot pro neuzavřené roky)
         const yearTabs = tabulky.filter(t =>
             t.periodTo >= from && t.periodTo <= to && !t.periodTo.endsWith("-12-31")
         );
         const latestTab = yearTabs[yearTabs.length - 1] ?? null;
-        const snapshot  = latestTab ? {
-            date:    latestTab.periodTo,
-            balance: parseFloat(latestTab.celkem),
-            source:  latestTab.fileName,
-        } : null;
+        let snapshot: StavRok["snapshot"] = null;
+        if (latestTab) {
+            const snapDate    = latestTab.periodTo;
+            const snapBalance = parseFloat(latestTab.celkem);
+            const txTo        = yearTx.filter(tx => tx.docDate <= snapDate);
+            const txAfter     = yearTx.filter(tx => tx.docDate >  snapDate);
+            const txToSum     = txTo.reduce((s, tx) => s + parseFloat(tx.credit) - parseFloat(tx.debit), 0);
+            const txAfterSum  = txAfter.reduce((s, tx) => s + parseFloat(tx.credit) - parseFloat(tx.debit), 0);
+            snapshot = {
+                date:            snapDate,
+                balance:         snapBalance,
+                source:          latestTab.fileName,
+                txToSum,
+                txToCount:       txTo.length,
+                snapshotMatches: startBalance !== null && Math.abs((startBalance + txToSum) - snapBalance) < 0.01,
+                txAfterSum,
+                txAfterCount:    txAfter.length,
+            };
+        }
 
         const latestTxDate = yearTx.length > 0 ? yearTx[yearTx.length - 1].docDate : null;
 

@@ -103,7 +103,61 @@ function RokKarta({ rok }: { rok: StavRok }) {
                         </div>
                     </>
                 ) : (
+                    /* Neuzavřený rok — timeline */
                     <>
+                        {snapshot ? (
+                            <>
+                                {/* Perioda: rok-start → snapshot */}
+                                <div className="bg-gray-50 rounded-md px-3 py-2 text-xs border border-gray-100 space-y-0.5">
+                                    <div className="flex justify-between items-center gap-4">
+                                        <span className="text-gray-500">
+                                            Transakce 1.1.–{formatDate(snapshot.date)}
+                                            <span className="ml-1.5 text-gray-400">· {snapshot.txToCount} položek</span>
+                                        </span>
+                                        <div className="flex items-center gap-1.5 shrink-0">
+                                            <span className={cn("font-mono tabular-nums font-medium", snapshot.txToSum < 0 ? "text-red-700" : "text-green-700")}>
+                                                {snapshot.txToSum >= 0 ? "+" : ""}{fmtKc(snapshot.txToSum)}
+                                            </span>
+                                            {snapshot.snapshotMatches
+                                                ? <span className="flex items-center gap-0.5 text-green-600 font-medium"><CheckCircle2 className="h-3 w-3" /> Sedí</span>
+                                                : <span className="flex items-center gap-0.5 text-amber-600 font-medium"><AlertTriangle className="h-3 w-3" /> Nesedí</span>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Snapshot z tabulky */}
+                                <Radek
+                                    label={`Stav k ${formatDate(snapshot.date)}`}
+                                    sub="tabulka hospodaření"
+                                    value={snapshot.balance}
+                                    colorClass={snapshot.balance < 0 ? "text-red-700" : "text-gray-700"}
+                                />
+
+                                {/* Perioda: snapshot → dnes */}
+                                {snapshot.txAfterCount > 0 && (
+                                    <div className="bg-gray-50 rounded-md px-3 py-2 text-xs border border-gray-100">
+                                        <div className="flex justify-between items-center gap-4">
+                                            <span className="text-gray-500">
+                                                Transakce {formatDate(snapshot.date)}–{latestTxDate ? formatDate(latestTxDate) : "dnes"}
+                                                <span className="ml-1.5 text-gray-400">· {snapshot.txAfterCount} položek</span>
+                                            </span>
+                                            <span className={cn("font-mono tabular-nums font-medium shrink-0", snapshot.txAfterSum < 0 ? "text-red-700" : "text-green-700")}>
+                                                {snapshot.txAfterSum >= 0 ? "+" : ""}{fmtKc(snapshot.txAfterSum)}
+                                            </span>
+                                        </div>
+                                    </div>
+                                )}
+                            </>
+                        ) : (
+                            /* Žádný snapshot — jen agregát */
+                            <>
+                                <Radek label="Náklady" value={naklady} colorClass="text-red-700" />
+                                <Radek label="Výnosy"  value={vynosy}  colorClass="text-green-700" />
+                            </>
+                        )}
+
+                        {/* Odhadovaný zůstatek */}
                         {estimatedBalance !== null && (
                             <Radek
                                 label="Odhadovaný zůstatek"
@@ -111,18 +165,6 @@ function RokKarta({ rok }: { rok: StavRok }) {
                                 value={estimatedBalance}
                                 bold
                             />
-                        )}
-                        {/* Průběžná tabulka jako ověřovací bod */}
-                        {snapshot && (
-                            <div className="flex items-center justify-between gap-2 pt-0.5 text-xs">
-                                <span className="text-gray-400">
-                                    Tabulka k {formatDate(snapshot.date)}: {fmtKc(snapshot.balance)}
-                                </span>
-                                {estimatedBalance !== null && (() => {
-                                    // Ověř snapshot vůči startBalance + tx do data snapshotu
-                                    return null; // jednoduše zobrazíme hodnotu bez extra checkboxu
-                                })()}
-                            </div>
                         )}
                     </>
                 )}
