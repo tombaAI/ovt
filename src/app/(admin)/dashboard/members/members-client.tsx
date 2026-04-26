@@ -18,8 +18,17 @@ import type { MemberWithFlags } from "./page";
 const memberDataCache = new Map<number, MemberWithFlags>();
 
 type FilterKey = "all" | "todo" | "unreviewed";
+type MemberBadgeFilterKey = "committee" | "tom" | "individual" | "noBrigade" | "partialYear";
 type SortKey   = "lastName" | "firstName" | "nickname" | "cskNumber" | "variableSymbol" | "email" | "phone";
 type SortDir   = "asc" | "desc";
+
+const MEMBER_BADGE_FILTERS: Array<{ key: MemberBadgeFilterKey; label: string }> = [
+    { key: "committee", label: "Výbor" },
+    { key: "tom", label: "TOM" },
+    { key: "individual", label: "Indiv" },
+    { key: "noBrigade", label: "Bez brigády" },
+    { key: "partialYear", label: "Část roku" },
+];
 
 interface Props {
     members: MemberWithFlags[];
@@ -62,6 +71,14 @@ function wasActiveInYear(m: MemberWithFlags, year: number): boolean {
 function fmtDate(iso: string) {
     const [y, m, d] = iso.split("-");
     return `${Number(d)}. ${Number(m)}. ${y!.slice(2)}`;
+}
+
+function hasMemberBadge(member: MemberWithFlags, key: MemberBadgeFilterKey): boolean {
+    if (key === "committee") return member.isCommittee;
+    if (key === "tom") return member.isTom;
+    if (key === "individual") return member.discountIndividual !== null;
+    if (key === "noBrigade") return !member.hasBrigade;
+    return member.fromDate !== null || member.toDate !== null;
 }
 
 function MemberInfoBadges({ m }: { m: MemberWithFlags }) {
@@ -230,6 +247,15 @@ export function MembersClient({
             : `Filtrovat (${dropdownConditions.length})`;
 
     const hasActiveFilters = filter !== "all" || dropdownConditions.length > 0 || q !== "";
+    const selectedBadgeFilters = useMemo<MemberBadgeFilterKey[]>(() => {
+        const next: MemberBadgeFilterKey[] = [];
+        if (slevaSet.has("committee")) next.push("committee");
+        if (slevaSet.has("tom")) next.push("tom");
+        if (slevaSet.has("individual")) next.push("individual");
+        if (brigada) next.push("noBrigade");
+        if (castRoku) next.push("partialYear");
+        return next;
+    }, [brigada, castRoku, slevaSet]);
 
     // ── Computed counts and filtered list ──
     const counts = useMemo(() => ({
@@ -241,31 +267,22 @@ export function MembersClient({
     const filtered = useMemo(() => {
         let list: MemberWithFlags[];
 
-        if (filter === "todo") {
-            list = members.filter(m => m.todoNote !== null);
-        } else if (filter === "unreviewed") {
-            list = members.filter(m => !m.membershipReviewed);
+        if (stav === "terminated") {
+            list = members.filter(m => wasActiveInYear(m, selectedYear) && !isActiveToday(m));
+        } else if (stav === "inactive") {
+            list = members.filter(m => !wasActiveInYear(m, selectedYear));
         } else {
-            // filter === "all" — závisí na stav dropdownu
-            if (stav === "terminated") {
-                // Letos byli aktivní, ale dnes už nejsou
-                list = members.filter(m => wasActiveInYear(m, selectedYear) && !isActiveToday(m));
-            } else if (stav === "inactive") {
-                // Vůbec nemají záznam pro zvolený rok
-                list = members.filter(m => !wasActiveInYear(m, selectedYear));
-            } else {
-                // "active" = aktivní dnes (výchozí)
-                list = members.filter(m => isActiveToday(m));
-                if (slevaSet.size > 0) {
-                    list = list.filter(m =>
-                        (slevaSet.has("committee") && m.isCommittee) ||
-                        (slevaSet.has("tom") && m.isTom) ||
-                        (slevaSet.has("individual") && m.discountIndividual !== null)
-                    );
-                }
-                if (brigada)   list = list.filter(m => !m.hasBrigade);
-                if (castRoku)  list = list.filter(m => m.fromDate !== null || m.toDate !== null);
-            }
+            list = members.filter(m => isActiveToday(m));
+        }
+
+        if (filter === "todo") {
+            list = list.filter(m => m.todoNote !== null);
+        } else if (filter === "unreviewed") {
+            list = list.filter(m => !m.membershipReviewed);
+        }
+
+        if (selectedBadgeFilters.length > 0) {
+            list = list.filter(member => selectedBadgeFilters.every(key => hasMemberBadge(member, key)));
         }
 
         if (q.trim()) {
@@ -301,7 +318,19 @@ export function MembersClient({
                     return cmpField(a.lastName, b.lastName, sortDir) || a.firstName.localeCompare(b.firstName, "cs");
             }
         });
-    }, [members, filter, sort, sortDir, q, stav, slevaSet, brigada, castRoku, selectedYear]);
+    }, [members, filter, sort, sortDir, q, selectedBadgeFilters, stav, selectedYear]);
+
+    function toggleHeaderBadgeFilter(key: MemberBadgeFilterKey) {
+        if (key === "noBrigade") {
+            setBrigadaAndUrl(!brigada);
+            return;
+        }
+        if (key === "partialYear") {
+            setCastRokuAndUrl(!castRoku);
+            return;
+        }
+        toggleSleva(key);
+    }
 
     function openDetail(m: MemberWithFlags) {
         memberDataCache.set(m.id, m);
@@ -496,7 +525,29 @@ export function MembersClient({
                             <TableHead className="py-2">
                                 <SortBtn field="phone" label="Telefon" sort={sort} dir={sortDir} onSort={handleSort} />
                             </TableHead>
-                            <TableHead className="py-2">Info</TableHead>
+                            <TableHead className="w-[320px] py-2">
+                                <div className="flex flex-wrap items-center gap-1.5">
+                                    {MEMBER_BADGE_FILTERS.map(item => {
+                                        const isActive = selectedBadgeFilters.includes(item.key);
+                                        return (
+                                            <button
+                                                key={item.key}
+                                                type="button"
+                                                aria-pressed={isActive}
+                                                onClick={() => toggleHeaderBadgeFilter(item.key)}
+                                                className={[
+                                                    "inline-flex items-center rounded-full border px-2 py-0.5 text-[10px] font-medium transition-colors",
+                                                    isActive
+                                                        ? "border-[#327600] bg-[#327600]/10 text-[#327600] hover:bg-[#327600]/15"
+                                                        : "border-slate-200 bg-slate-100 text-slate-600 hover:bg-slate-200",
+                                                ].join(" ")}
+                                            >
+                                                {item.label}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
+                            </TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
