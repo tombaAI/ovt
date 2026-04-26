@@ -1,8 +1,8 @@
 "use client";
 
-import { CheckCircle2, AlertTriangle, MinusCircle, Circle } from "lucide-react";
+import { CheckCircle2, AlertTriangle, MinusCircle, Circle, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
-import type { StavUctuData, StavMilnik, StavSegment } from "@/lib/actions/finance-tj";
+import type { StavUctuData, StavMilnik, StavSegment, StavTrailingSegment } from "@/lib/actions/finance-tj";
 
 function formatDate(iso: string): string {
     const [y, m, d] = iso.split("-");
@@ -119,6 +119,59 @@ function SegmentRow({ s }: { s: StavSegment }) {
     );
 }
 
+// ── Trailing segment (transakce po posledním milníku) ─────────────────────────
+
+function TrailingSegmentBlock({ s }: { s: StavTrailingSegment }) {
+    const isNeg = s.estimatedBalance < 0;
+
+    return (
+        <div>
+            {/* Segment čára + obsah */}
+            <div className="flex items-start gap-3 py-2">
+                <div className="flex flex-col items-center shrink-0 w-4">
+                    <div className="w-px flex-1 bg-gray-200 min-h-[28px]" />
+                </div>
+                <div className="flex-1 min-w-0 bg-blue-50 rounded-md px-3 py-2 text-xs border border-blue-100">
+                    <div className="flex items-start justify-between gap-4 flex-wrap">
+                        <span className="text-gray-500">
+                            Transakce {formatDate(s.fromDate)} – {s.latestTxDate ? formatDate(s.latestTxDate) : "dnes"}
+                            <span className="ml-2 text-gray-400">· {s.txCount} položek</span>
+                        </span>
+                        <span className={cn(
+                            "font-mono tabular-nums font-medium",
+                            s.txVysledek < 0 ? "text-red-700" : "text-green-700"
+                        )}>
+                            {s.txVysledek >= 0 ? "+" : ""}{fmtKc(s.txVysledek)}
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Odhadovaný aktuální zůstatek */}
+            <div className="flex items-start gap-3 py-3">
+                <div className="flex flex-col items-center shrink-0 mt-0.5">
+                    <TrendingUp className="h-4 w-4 text-blue-400" />
+                </div>
+                <div className="flex-1 min-w-0">
+                    <div className="flex items-baseline justify-between gap-4 flex-wrap">
+                        <div>
+                            <span className="text-xs text-gray-400 mr-2">{s.latestTxDate ? formatDate(s.latestTxDate) : "dnes"}</span>
+                            <span className="font-medium text-sm text-gray-600">Odhadovaný aktuální zůstatek</span>
+                        </div>
+                        <span className={cn(
+                            "font-mono tabular-nums font-semibold text-base",
+                            isNeg ? "text-red-700" : "text-green-700"
+                        )}>
+                            {fmtKc(s.estimatedBalance)}
+                        </span>
+                    </div>
+                    <p className="text-xs text-gray-400 mt-0.5">bez dalšího výsledku hospodaření</p>
+                </div>
+            </div>
+        </div>
+    );
+}
+
 // ── Oddělovač roku ────────────────────────────────────────────────────────────
 
 function YearDivider({ year, isCurrent }: { year: number; isCurrent: boolean }) {
@@ -136,7 +189,7 @@ function YearDivider({ year, isCurrent }: { year: number; isCurrent: boolean }) 
 // ── Hlavní tab ────────────────────────────────────────────────────────────────
 
 export function StavUctuTab({ data }: { data: StavUctuData }) {
-    const { milestones, segments } = data;
+    const { milestones, segments, trailingSegment } = data;
 
     if (milestones.length === 0) {
         return (
@@ -174,6 +227,11 @@ export function StavUctuTab({ data }: { data: StavUctuData }) {
                         </div>
                     );
                 })}
+
+                {/* Trailing: transakce po posledním milníku */}
+                {trailingSegment && (
+                    <TrailingSegmentBlock s={trailingSegment} />
+                )}
             </div>
         </div>
     );

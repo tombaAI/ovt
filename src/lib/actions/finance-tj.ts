@@ -476,9 +476,19 @@ export type StavSegment = {
     matches:     boolean;
 };
 
+export type StavTrailingSegment = {
+    fromDate:         string;   // datum posledního milníku (exclusive)
+    fromBalance:      number;   // zůstatek posledního milníku
+    txVysledek:       number;   // SUM(credit - debit) po posledním milníku
+    txCount:          number;
+    latestTxDate:     string | null;
+    estimatedBalance: number;   // fromBalance + txVysledek
+};
+
 export type StavUctuData = {
-    milestones: StavMilnik[];
-    segments:   StavSegment[];  // segments[i] = segment PŘEDCHÁZEJÍCÍ milestones[i+1]
+    milestones:      StavMilnik[];
+    segments:        StavSegment[];  // segments[i] = segment PŘEDCHÁZEJÍCÍ milestones[i+1]
+    trailingSegment: StavTrailingSegment | null;  // transakce za posledním milníkem
 };
 
 // ── Stav účtu: dotaz ──────────────────────────────────────────────────────────
@@ -508,7 +518,7 @@ export async function getStavUctu(): Promise<StavUctuData> {
         )
         .orderBy(importFinTjHospodareniImports.periodTo, importFinTjHospodareniImports.id);
 
-    if (rows.length === 0) return { milestones: [], segments: [] };
+    if (rows.length === 0) return { milestones: [], segments: [], trailingSegment: null };
 
     // Deduplikace: pro stejné period_to ponecháme import s nejvyšším id (nejnovější)
     const uniqueMap = new Map<string, typeof rows[0]>();
@@ -532,7 +542,7 @@ export async function getStavUctu(): Promise<StavUctuData> {
         };
     });
 
-    if (milestones.length < 2) return { milestones, segments: [] };
+    if (milestones.length < 2) return { milestones, segments: [], trailingSegment: null };
 
     // Všechny transakce z výsledovek (seřazené dle data)
     const allTx = await db
@@ -571,5 +581,24 @@ export async function getStavUctu(): Promise<StavUctuData> {
         });
     }
 
-    return { milestones, segments };
+    // Trailing segment: transakce po posledním milníku (bez odpovídající tabulky)
+    let trailingSegment: StavTrailingSegment | null = null;
+    const lastM = milestones[milestones.length - 1];
+    const trailingTx = allTx.filter(tx => tx.docDate > lastM.date);
+    if (trailingTx.length > 0) {
+        const txVysledek = trailingTx.reduce(
+            (sum, tx) => sum + parseFloat(tx.credit) - parseFloat(tx.debit),
+            0
+        );
+        trailingSegment = {
+            fromDate:         lastM.date,
+            fromBalance:      lastM.balance,
+            txVysledek,
+            txCount:          trailingTx.length,
+            latestTxDate:     trailingTx[trailingTx.length - 1].docDate,
+            estimatedBalance: lastM.balance + txVysledek,
+        };
+    }
+
+    return { milestones, segments, trailingSegment };
 }

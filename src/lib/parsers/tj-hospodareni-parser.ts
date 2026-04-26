@@ -50,9 +50,9 @@ function parseCzechDate(s: string): string {
 function parseAmountToken(s: string): number {
     const t = s.trim();
     if (/^-\s*Kč$/.test(t)) return 0;
-    // Záporné: minus za Kč  →  "25 316,00 Kč-"
-    if (t.endsWith("-")) {
-        const numStr = t.replace(/\s*Kč\s*-$/, "").replace(/\s/g, "").replace(",", ".");
+    // Záporné: minus přímo za Kč bez mezery  →  "25 316,00 Kč-"
+    if (t.endsWith("Kč-")) {
+        const numStr = t.replace(/\s*Kč-$/, "").replace(/\s/g, "").replace(",", ".");
         const v = parseFloat(numStr);
         return isNaN(v) ? 0 : -v;
     }
@@ -71,9 +71,13 @@ const PERIOD_RE = /(\d{1,2}\.\d{1,2}\.\d{4})\s*[-–]\s*(\d{1,2}\.\d{1,2}\.\d{4}
 // Rok v záhlaví sloupce: "PŘEVOD Z ROKU 2024"
 const PREVOD_YEAR_RE = /P[RŘ]EVOD Z ROKU\s+(\d{4})/i;
 
-// Částka: záporná (postfix -, tj. "Kč-") / nulová ("- Kč") / kladná
-// Pořadí je důležité: nejdříve "číslo Kč-" (postfix záporné), pak "- Kč" (nula), pak kladné
-const AMOUNT_RE = /\d[\d ]*,\d{2}\s*Kč\s*-|-\s*Kč|\d[\d ]*,\d{2}\s*Kč/g;
+// Částka — tři formy (pořadí priorit je důležité!):
+//   1. "25 316,00 Kč-"  záporná (minus PŘÍMO za Kč, žádná mezera)
+//   2. "- Kč"           nula
+//   3. "25 316,00 Kč"   kladná
+// POZOR: "25 316,00 Kč -" (mezera před minus) NESMÍ matchovat jako záporná —
+// to je kladná buňka NÁKLADY za níž ihned následuje nulová buňka "- Kč" výnosy.
+const AMOUNT_RE = /\d[\d ]*,\d{2}\s*Kč-|-\s*Kč|\d[\d ]*,\d{2}\s*Kč/g;
 
 // Začátek řádku oddílu: 3ciferné číslo + jméno velkými písmeny (vč. háčků)
 // Lookahead zajistí, že za jménem následuje částka
