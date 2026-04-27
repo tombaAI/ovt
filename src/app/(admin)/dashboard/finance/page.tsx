@@ -6,13 +6,17 @@ import {
 import { FinanceClient } from "./finance-client";
 
 export default async function FinancePage() {
-    const [imports, transactions, hospodareni, stavUctu, allocSums, contribs] = await Promise.all([
+    const [imports, transactions, hospodareni, stavUctu] = await Promise.all([
         getFinanceTjImports(),
         getFinanceTjTransactions(),
         getAllHospodareniWithReconciliation(),
         getStavUctu(),
-        getAllTjAllocationSums(),
-        getContribsForAllocation(),
+    ]);
+
+    // Odolné — funguje i bez migrace import_fin_tj_allocations (tabulka nemusí existovat)
+    const [allocSumsMap, contribs] = await Promise.all([
+        getAllTjAllocationSums().catch(() => new Map<number, number>()),
+        getContribsForAllocation().catch(() => []),
     ]);
 
     return (
@@ -21,7 +25,7 @@ export default async function FinancePage() {
             transactions={transactions}
             hospodareni={hospodareni}
             stavUctu={stavUctu}
-            allocSums={Object.fromEntries(allocSums)}
+            allocSums={Object.fromEntries(allocSumsMap)}
             contribs={contribs}
         />
     );
