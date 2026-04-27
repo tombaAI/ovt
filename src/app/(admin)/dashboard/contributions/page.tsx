@@ -57,7 +57,7 @@ export default async function ContributionsPage({
             memberOptions={memberOptions}
             yearMode={yearMode}
             selectedYear={selectedYear}
-            initialFilter={(params.filter as string) ?? "issues"}
+            initialFilter={(params.filter as string) ?? "all"}
             initialSort={(params.sort as string) ?? "lastName"}
             initialSortDir={(params.dir as string) ?? "asc"}
             initialQ={(params.q as string) ?? ""}

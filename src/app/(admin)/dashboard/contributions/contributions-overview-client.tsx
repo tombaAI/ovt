@@ -28,7 +28,7 @@ import { EditPrescriptionDialog } from "./edit-prescription-dialog";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, MemberOption, PeriodDetail } from "./data";
 
-type FilterKey = "issues" | "unpaid" | "todo";
+type FilterKey = "all" | "issues" | "unpaid" | "todo";
 type PaymentStateFilter = "all" | "unpaid" | "underpaid" | "overpaid" | "paid";
 type ProcessStateFilter = "all" | "new" | "reviewed" | "mailed";
 type BadgeFilterKey = "boat" | "noBrigade" | "committee" | "tom" | "individual";
@@ -216,7 +216,7 @@ export function ContributionsOverviewClient({
     const router = useRouter();
     const pathname = usePathname();
     const [filter, setFilter] = useState<FilterKey>(
-        initialFilter === "unpaid" || initialFilter === "todo" ? initialFilter : "issues"
+        initialFilter === "unpaid" || initialFilter === "todo" || initialFilter === "issues" ? initialFilter : "all"
     );
     const [sort, setSort] = useState<SortKey>(
         initialSort === "firstName" || initialSort === "nickname" || initialSort === "date" || initialSort === "status"
@@ -274,9 +274,10 @@ export function ContributionsOverviewClient({
     );
 
     const badgeCounts = useMemo(() => ({
+        all:    memberScopedRows.length,
         issues: memberScopedRows.filter(row => row.status !== "paid").length,
         unpaid: memberScopedRows.filter(row => row.status === "unpaid").length,
-        todo: memberScopedRows.filter(row => row.todoNote !== null).length,
+        todo:   memberScopedRows.filter(row => row.todoNote !== null).length,
     }), [memberScopedRows]);
 
     const summary = useMemo(() => {
@@ -375,7 +376,7 @@ export function ContributionsOverviewClient({
         return `Filtrovat (${labels.length})`;
     }, [paymentState, process, yearMode]);
 
-    const hasActiveFilters = filter !== "issues"
+    const hasActiveFilters = filter !== "all"
         || selectedBadgeFilters.length > 0
         || paymentState !== "all"
         || process !== "all"
@@ -412,7 +413,7 @@ export function ContributionsOverviewClient({
 
     function handleFilter(next: FilterKey) {
         setFilter(next);
-        updateUrl({ filter: next === "issues" ? null : next });
+        updateUrl({ filter: next === "all" ? null : next });
     }
 
     function handleMemberSelect(nextMemberId: number | null) {
@@ -459,7 +460,7 @@ export function ContributionsOverviewClient({
     }
 
     function resetAllFilters() {
-        setFilter("issues");
+        setFilter("all");
         setSelectedBadgeFilters([]);
         setPaymentState("all");
         setProcess("all");
