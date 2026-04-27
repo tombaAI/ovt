@@ -4,6 +4,7 @@ import { getDb } from "@/lib/db";
 import {
     importFinTjImports, importFinTjTransactions, importFinTjImportLines,
     importFinTjHospodareniImports, importFinTjHospodareniRows,
+    importFinTjAllocations, memberContributions, contributionPeriods, members,
 } from "@/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -642,4 +643,125 @@ export async function getStavUctu(): Promise<StavUctuData> {
     }
 
     return { oddilName, years, currentBalance, currentDate, currentIsExact };
+}
+
+// ── TJ Alokace: typy ──────────────────────────────────────────────────────────
+
+export type TjAllocation = {
+    id:              number;
+    tjTransactionId: number;
+    contribId:       number;
+    memberId:        number;
+    memberName:      string;
+    year:            number;
+    amount:          string;
+    note:            string | null;
+    createdBy:       string;
+    createdAt:       Date;
+};
+
+export type ContribOption = {
+    contribId:   number;
+    memberId:    number;
+    memberName:  string;
+    year:        number;
+    amountTotal: number | null;
+};
+
+export type AllocResult = { error: string } | { success: true };
+
+// ── TJ Alokace: akce ─────────────────────────────────────────────────────────
+
+export async function getTjAllocations(tjTransactionId: number): Promise<TjAllocation[]> {
+    const db = getDb();
+    const rows = await db
+        .select({
+            id:              importFinTjAllocations.id,
+            tjTransactionId: importFinTjAllocations.tjTransactionId,
+            contribId:       importFinTjAllocations.contribId,
+            memberId:        importFinTjAllocations.memberId,
+            memberName:      members.fullName,
+            year:            contributionPeriods.year,
+            amount:          importFinTjAllocations.amount,
+            note:            importFinTjAllocations.note,
+            createdBy:       importFinTjAllocations.createdBy,
+            createdAt:       importFinTjAllocations.createdAt,
+        })
+        .from(importFinTjAllocations)
+        .innerJoin(members, eq(members.id, importFinTjAllocations.memberId))
+        .innerJoin(memberContributions, eq(memberContributions.id, importFinTjAllocations.contribId))
+        .innerJoin(contributionPeriods, eq(contributionPeriods.id, memberContributions.periodId))
+        .where(eq(importFinTjAllocations.tjTransactionId, tjTransactionId))
+        .orderBy(importFinTjAllocations.createdAt);
+    return rows.map(r => ({ ...r, year: Number(r.year) }));
+}
+
+export async function getAllTjAllocationSums(): Promise<Map<number, number>> {
+    const db = getDb();
+    const rows = await db
+        .select({
+            tjTransactionId: importFinTjAllocations.tjTransactionId,
+            total:           sql<number>`SUM(amount::numeric)`.mapWith(Number),
+        })
+        .from(importFinTjAllocations)
+        .groupBy(importFinTjAllocations.tjTransactionId);
+    return new Map(rows.map(r => [r.tjTransactionId, r.total]));
+}
+
+export async function getContribsForAllocation(): Promise<ContribOption[]> {
+    const db = getDb();
+    const rows = await db
+        .select({
+            contribId:   memberContributions.id,
+            memberId:    memberContributions.memberId,
+            memberName:  members.fullName,
+            year:        contributionPeriods.year,
+            amountTotal: memberContributions.amountTotal,
+        })
+        .from(memberContributions)
+        .innerJoin(members, eq(members.id, memberContributions.memberId))
+        .innerJoin(contributionPeriods, eq(contributionPeriods.id, memberContributions.periodId))
+        .orderBy(members.lastName, members.firstName, desc(contributionPeriods.year));
+    return rows.map(r => ({ ...r, year: Number(r.year) }));
+}
+
+export async function createTjAllocation(params: {
+    tjTransactionId: number;
+    contribId:       number;
+    memberId:        number;
+    amount:          number;
+    note?:           string;
+}): Promise<AllocResult> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    try {
+        const db = getDb();
+        await db.insert(importFinTjAllocations).values({
+            tjTransactionId: params.tjTransactionId,
+            contribId:       params.contribId,
+            memberId:        params.memberId,
+            amount:          params.amount.toFixed(2),
+            note:            params.note || null,
+            createdBy:       session.user.email,
+        });
+        revalidatePath("/dashboard/finance");
+        return { success: true };
+    } catch (e) {
+        console.error("createTjAllocation error:", e);
+        return { error: "Chyba při ukládání alokace" };
+    }
+}
+
+export async function deleteTjAllocation(allocationId: number): Promise<AllocResult> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    try {
+        const db = getDb();
+        await db.delete(importFinTjAllocations).where(eq(importFinTjAllocations.id, allocationId));
+        revalidatePath("/dashboard/finance");
+        return { success: true };
+    } catch (e) {
+        console.error("deleteTjAllocation error:", e);
+        return { error: "Chyba při mazání alokace" };
+    }
 }

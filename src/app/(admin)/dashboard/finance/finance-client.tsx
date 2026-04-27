@@ -1,9 +1,11 @@
 "use client";
 
+import { useState } from "react";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
@@ -11,14 +13,17 @@ import { ImportDialog } from "./import-dialog";
 import { ImportHospodareniDialog } from "./import-hospodareni-dialog";
 import { ImportHistory } from "./import-history";
 import { StavUctuTab } from "./stav-uctu-tab";
-import type { FinanceTjImport, FinanceTjTransaction, HospodareniWithReconciliation, StavUctuData } from "@/lib/actions/finance-tj";
-import { FileText } from "lucide-react";
+import { AllocDialog } from "./alloc-dialog";
+import type { FinanceTjImport, FinanceTjTransaction, HospodareniWithReconciliation, StavUctuData, ContribOption } from "@/lib/actions/finance-tj";
+import { FileText, Link2 } from "lucide-react";
 
 interface Props {
     imports:      FinanceTjImport[];
     transactions: FinanceTjTransaction[];
     hospodareni:  HospodareniWithReconciliation[];
     stavUctu:     StavUctuData;
+    allocSums:    Record<number, number>;   // txId → součet alokací
+    contribs:     ContribOption[];          // všechny předpisy pro dialog
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -90,9 +95,17 @@ function ImportPopover({ imp }: { imp: FinanceTjImport }) {
 
 // ── Přehled transakcí z výsledovek ───────────────────────────────────────────
 
-function TransactionsTable({ transactions, imports }: { transactions: FinanceTjTransaction[]; imports: FinanceTjImport[] }) {
+function TransactionsTable({
+    transactions, imports, allocSums, contribs,
+}: {
+    transactions: FinanceTjTransaction[];
+    imports:      FinanceTjImport[];
+    allocSums:    Record<number, number>;
+    contribs:     ContribOption[];
+}) {
     const importMap = new Map(imports.map(i => [i.id, i]));
     const sorted = [...transactions].sort((a, b) => b.docDate.localeCompare(a.docDate));
+    const [allocTx, setAllocTx] = useState<FinanceTjTransaction | null>(null);
 
     if (sorted.length === 0) {
         return (
@@ -104,63 +117,102 @@ function TransactionsTable({ transactions, imports }: { transactions: FinanceTjT
     }
 
     return (
-        <div className="rounded-lg border bg-white overflow-hidden">
-            <Table>
-                <TableHeader>
-                    <TableRow>
-                        <TableHead className="w-24">Datum</TableHead>
-                        <TableHead className="w-28">Doklad</TableHead>
-                        <TableHead className="w-20">Zdroj</TableHead>
-                        <TableHead className="hidden md:table-cell">Účet</TableHead>
-                        <TableHead>Popis</TableHead>
-                        <TableHead className="text-right w-32">MD</TableHead>
-                        <TableHead className="text-right w-32">D</TableHead>
-                        <TableHead className="w-24 text-center hidden sm:table-cell">Import</TableHead>
-                    </TableRow>
-                </TableHeader>
-                <TableBody>
-                    {sorted.map(tx => {
-                        const imp = importMap.get(tx.importId);
-                        return (
-                            <TableRow key={tx.id}>
-                                <TableCell className="text-gray-700 tabular-nums">{formatDate(tx.docDate)}</TableCell>
-                                <TableCell className="font-mono text-xs text-gray-600">{tx.docNumber}</TableCell>
-                                <TableCell>
-                                    <Badge variant="outline" className="text-xs font-normal">
-                                        {SOURCE_LABELS[tx.sourceCode] ?? tx.sourceCode}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="hidden md:table-cell text-gray-500 text-xs">
-                                    {tx.accountCode} {tx.accountName}
-                                </TableCell>
-                                <TableCell className="text-gray-800">{tx.description}</TableCell>
-                                <TableCell className={cn(
-                                    "text-right font-mono text-sm tabular-nums",
-                                    parseFloat(tx.debit) > 0 ? "text-red-700" : "text-gray-300"
-                                )}>
-                                    {formatAmount(tx.debit)}
-                                </TableCell>
-                                <TableCell className={cn(
-                                    "text-right font-mono text-sm tabular-nums",
-                                    parseFloat(tx.credit) > 0 ? "text-green-700" : "text-gray-300"
-                                )}>
-                                    {formatAmount(tx.credit)}
-                                </TableCell>
-                                <TableCell className="text-center hidden sm:table-cell">
-                                    {imp && <ImportPopover imp={imp} />}
-                                </TableCell>
-                            </TableRow>
-                        );
-                    })}
-                </TableBody>
-            </Table>
-        </div>
+        <>
+            <div className="rounded-lg border bg-white overflow-hidden">
+                <Table>
+                    <TableHeader>
+                        <TableRow>
+                            <TableHead className="w-24">Datum</TableHead>
+                            <TableHead className="w-28">Doklad</TableHead>
+                            <TableHead className="w-20">Zdroj</TableHead>
+                            <TableHead className="hidden md:table-cell">Účet</TableHead>
+                            <TableHead>Popis</TableHead>
+                            <TableHead className="text-right w-32">MD</TableHead>
+                            <TableHead className="text-right w-32">D</TableHead>
+                            <TableHead className="w-32 text-center">Párování</TableHead>
+                            <TableHead className="w-20 text-center hidden sm:table-cell">Import</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {sorted.map(tx => {
+                            const imp = importMap.get(tx.importId);
+                            const credit = parseFloat(tx.credit);
+                            const allocated = allocSums[tx.id] ?? 0;
+                            const isPaired = credit > 0 && Math.abs(allocated - credit) < 0.01;
+                            const isPartial = credit > 0 && allocated > 0 && !isPaired;
+
+                            return (
+                                <TableRow key={tx.id}>
+                                    <TableCell className="text-gray-700 tabular-nums">{formatDate(tx.docDate)}</TableCell>
+                                    <TableCell className="font-mono text-xs text-gray-600">{tx.docNumber}</TableCell>
+                                    <TableCell>
+                                        <Badge variant="outline" className="text-xs font-normal">
+                                            {SOURCE_LABELS[tx.sourceCode] ?? tx.sourceCode}
+                                        </Badge>
+                                    </TableCell>
+                                    <TableCell className="hidden md:table-cell text-gray-500 text-xs">
+                                        {tx.accountCode} {tx.accountName}
+                                    </TableCell>
+                                    <TableCell className="text-gray-800">{tx.description}</TableCell>
+                                    <TableCell className={cn(
+                                        "text-right font-mono text-sm tabular-nums",
+                                        parseFloat(tx.debit) > 0 ? "text-red-700" : "text-gray-300"
+                                    )}>
+                                        {formatAmount(tx.debit)}
+                                    </TableCell>
+                                    <TableCell className={cn(
+                                        "text-right font-mono text-sm tabular-nums",
+                                        credit > 0 ? "text-green-700" : "text-gray-300"
+                                    )}>
+                                        {formatAmount(tx.credit)}
+                                    </TableCell>
+                                    <TableCell className="text-center">
+                                        {credit > 0 ? (
+                                            isPaired ? (
+                                                <Badge className="bg-green-100 text-green-800 border-green-200 font-normal text-xs cursor-pointer"
+                                                    onClick={() => setAllocTx(tx)}>
+                                                    Napárováno
+                                                </Badge>
+                                            ) : isPartial ? (
+                                                <Badge className="bg-amber-100 text-amber-800 border-amber-200 font-normal text-xs cursor-pointer"
+                                                    onClick={() => setAllocTx(tx)}>
+                                                    Částečně
+                                                </Badge>
+                                            ) : (
+                                                <Button size="sm" variant="outline"
+                                                    className="h-6 text-xs px-2 gap-1"
+                                                    onClick={() => setAllocTx(tx)}>
+                                                    <Link2 className="h-3 w-3" />
+                                                    Napárovat
+                                                </Button>
+                                            )
+                                        ) : <span className="text-gray-300">—</span>}
+                                    </TableCell>
+                                    <TableCell className="text-center hidden sm:table-cell">
+                                        {imp && <ImportPopover imp={imp} />}
+                                    </TableCell>
+                                </TableRow>
+                            );
+                        })}
+                    </TableBody>
+                </Table>
+            </div>
+
+            {allocTx && (
+                <AllocDialog
+                    tx={allocTx}
+                    contribs={contribs}
+                    open={true}
+                    onClose={() => setAllocTx(null)}
+                />
+            )}
+        </>
     );
 }
 
 // ── Hlavní klient ─────────────────────────────────────────────────────────────
 
-export function FinanceClient({ imports, transactions, hospodareni, stavUctu }: Props) {
+export function FinanceClient({ imports, transactions, hospodareni, stavUctu, allocSums, contribs }: Props) {
     const conflictCount = imports.reduce((s, i) => s + i.conflictCount, 0);
 
     return (
@@ -188,7 +240,7 @@ export function FinanceClient({ imports, transactions, hospodareni, stavUctu }: 
                 </TabsList>
 
                 <TabsContent value="prehled" className="mt-4">
-                    <TransactionsTable transactions={transactions} imports={imports} />
+                    <TransactionsTable transactions={transactions} imports={imports} allocSums={allocSums} contribs={contribs} />
                 </TabsContent>
 
                 <TabsContent value="stav" className="mt-4">

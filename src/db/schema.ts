@@ -559,6 +559,28 @@ export const importFinTjImportLines = appSchema.table(
     ]
 );
 
+/**
+ * Alokace TJ transakce na předpis příspěvků konkrétního člena.
+ * Umožňuje napárovat platbu z TJ účetnictví (výsledovka) na member_contributions.
+ */
+export const importFinTjAllocations = appSchema.table(
+    "import_fin_tj_allocations",
+    {
+        id:              serial("id").primaryKey(),
+        tjTransactionId: integer("tj_transaction_id").notNull().references(() => importFinTjTransactions.id, { onDelete: "cascade" }),
+        contribId:       integer("contrib_id").notNull().references(() => memberContributions.id),
+        memberId:        integer("member_id").notNull().references(() => members.id),
+        amount:          numeric("amount", { precision: 12, scale: 2 }).notNull(),
+        note:            text("note"),
+        createdBy:       text("created_by").notNull(),
+        createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("import_fin_tj_alloc_tx_idx").on(t.tjTransactionId),
+        index("import_fin_tj_alloc_contrib_idx").on(t.contribId),
+    ]
+);
+
 // ── System tables ────────────────────────────────────────────────────────────
 
 export const mailEvents = appSchema.table(
