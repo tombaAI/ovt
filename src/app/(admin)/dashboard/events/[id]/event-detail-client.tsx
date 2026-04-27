@@ -10,7 +10,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InlineField } from "@/app/(admin)/dashboard/members/inline-field";
 import {
     updateEventField, deleteEvent, getEventAuditLog,
@@ -473,6 +472,9 @@ function GcalSyncStarter({ event, onSaved }: { event: EventRow; onSaved: () => v
 
 // ── Registrations tab ─────────────────────────────────────────────────────────
 
+const fmtShortDate = (d: Date) =>
+    new Intl.DateTimeFormat("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
+
 function RegistrationsTab({ eventId }: { eventId: number }) {
     const [rows, setRows]       = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
@@ -490,52 +492,56 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
         <p className="text-sm text-gray-400 py-8 text-center">Žádné přihlášky</p>
     );
 
+    const totalPersons = rows.reduce((s, r) => s + r.personsCount, 0);
+
     return (
         <div className="space-y-3">
-            <p className="text-xs text-gray-400">{rows.length} přihlášek · celkem {rows.reduce((s, r) => s + r.personsCount, 0)} osob</p>
-            <div className="rounded-xl border bg-white overflow-hidden">
-                <Table>
-                    <TableHeader>
-                        <TableRow className="bg-gray-50/70">
-                            <TableHead className="text-xs font-medium text-gray-400">Jméno</TableHead>
-                            <TableHead className="hidden sm:table-cell text-xs font-medium text-gray-400">Kontakt</TableHead>
-                            <TableHead className="text-xs font-medium text-gray-400 w-16 text-center">Osob</TableHead>
-                            <TableHead className="hidden md:table-cell text-xs font-medium text-gray-400">Účastníci</TableHead>
-                            <TableHead className="text-xs font-medium text-gray-400 w-24">Platba</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {rows.map(r => (
-                            <TableRow key={r.registrationId} className="text-sm">
-                                <TableCell>
-                                    <p className="font-medium text-gray-900">{r.firstName} {r.lastName}</p>
-                                    <p className="text-xs text-gray-400 mt-0.5 tabular-nums">
-                                        {new Intl.DateTimeFormat("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(r.createdAt))}
-                                    </p>
-                                    <p className="text-xs text-gray-500 mt-0.5 sm:hidden">
-                                        {r.email}{r.phone ? ` · ${r.phone}` : ""}
-                                    </p>
-                                </TableCell>
-                                <TableCell className="hidden sm:table-cell text-gray-600 text-xs">
-                                    <p>{r.email}</p>
-                                    {r.phone && <p className="text-gray-400 mt-0.5">{r.phone}</p>}
-                                </TableCell>
-                                <TableCell className="text-center text-gray-700">{r.personsCount}</TableCell>
-                                <TableCell className="hidden md:table-cell text-xs text-gray-600">
-                                    {r.participantNames.join(", ") || "—"}
-                                </TableCell>
-                                <TableCell>
-                                    <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-normal`}>
-                                        {PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus}
-                                    </Badge>
-                                    <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
-                                        {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
-                                    </p>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+            <p className="text-xs text-gray-400">
+                {rows.length} {rows.length === 1 ? "přihláška" : rows.length < 5 ? "přihlášky" : "přihlášek"}
+                {" · "}celkem {totalPersons} {totalPersons === 1 ? "osoba" : totalPersons < 5 ? "osoby" : "osob"}
+            </p>
+
+            <div className="rounded-xl border bg-white overflow-hidden divide-y">
+                {rows.map((r, groupIdx) => {
+                    const participants = r.participants.length > 0 ? r.participants : r.participantNames.map((name, i) => ({ fullName: name, isPrimary: i === 0, participantOrder: i + 1 }));
+                    const rowBg = groupIdx % 2 === 1 ? "bg-gray-50/60" : "bg-white";
+
+                    return (
+                        <div key={r.registrationId} className={rowBg}>
+                            {/* ── Hlavička přihlášky ── */}
+                            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 flex-wrap">
+                                <span className="text-xs font-medium text-gray-700">
+                                    {r.firstName} {r.lastName}
+                                </span>
+                                <span className="text-xs text-gray-400">{r.email}</span>
+                                {r.phone && <span className="text-xs text-gray-400">{r.phone}</span>}
+                                <span className="text-xs text-gray-300">·</span>
+                                <span className="text-xs text-gray-400 tabular-nums">{fmtShortDate(r.createdAt)}</span>
+                                <span className="text-xs text-gray-300">·</span>
+                                <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-normal`}>
+                                    {PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus}
+                                </Badge>
+                                <span className="text-xs text-gray-500 tabular-nums ml-auto">
+                                    {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
+                                </span>
+                            </div>
+
+                            {/* ── Řádky účastníků ── */}
+                            {participants.map(p => (
+                                <div key={p.participantOrder}
+                                    className="flex items-center gap-2 px-4 py-2 text-sm border-b border-gray-100 last:border-0">
+                                    <span className="text-gray-400 text-xs w-4 shrink-0 text-right">{p.participantOrder}.</span>
+                                    <span className="text-gray-900">{p.fullName}</span>
+                                    {p.isPrimary && (
+                                        <span className="text-[11px] text-gray-400 border border-gray-200 rounded px-1 py-px shrink-0">
+                                            kontakt
+                                        </span>
+                                    )}
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
             </div>
         </div>
     );
