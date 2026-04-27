@@ -34,7 +34,10 @@ SELECT
     btrim(parts.name) AS full_name,
     (parts.ord = 1) AS is_primary
 FROM app.event_registrations r
-CROSS JOIN LATERAL regexp_split_to_table(coalesce(r.persons_names, ''), E'[\\n;,]+') WITH ORDINALITY AS parts(name, ord)
+CROSS JOIN LATERAL regexp_split_to_table(
+        coalesce(r.persons_names, ''),
+        '[' || chr(10) || ',;]+'
+) WITH ORDINALITY AS parts(name, ord)
 WHERE btrim(parts.name) <> ''
   AND parts.ord <= 50;
 
@@ -56,7 +59,7 @@ WITH participant_rollup AS (
     SELECT
         p.registration_id,
         COUNT(*)::smallint AS persons_count,
-        string_agg(p.full_name, E'\n' ORDER BY p.participant_order) AS persons_names
+        string_agg(p.full_name, chr(10) ORDER BY p.participant_order) AS persons_names
     FROM app.event_registration_participants p
     GROUP BY p.registration_id
 )
