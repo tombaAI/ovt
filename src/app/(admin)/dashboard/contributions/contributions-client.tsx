@@ -26,17 +26,21 @@ function processState(r: ContribRow): "new" | "reviewed" | "mailed" {
     return "new";
 }
 
-const FILTERS: { key: FilterKey; label: string }[] = [
-    { key: "issues",        label: "Problémy"      },
-    { key: "unpaid",        label: "Nezaplaceno"   },
-    { key: "underpaid",     label: "Nedoplatek"    },
-    { key: "overpaid",      label: "Přeplatek"     },
-    { key: "paid",          label: "Zaplaceno"     },
-    { key: "todo",          label: "S úkolem"      },
-    { key: "state_new",     label: "Nový"          },
-    { key: "state_reviewed",label: "Zkontrolováno" },
-    { key: "state_mailed",  label: "Odeslán mail"  },
-    { key: "all",           label: "Všichni"       },
+// Dvě skupiny filtrů
+const PAYMENT_FILTERS: { key: FilterKey; label: string }[] = [
+    { key: "issues",    label: "Problémy"    },
+    { key: "unpaid",    label: "Nezaplaceno" },
+    { key: "paid",      label: "Zaplaceno"   },
+    { key: "underpaid", label: "Nedoplatek"  },
+    { key: "overpaid",  label: "Přeplatek"   },
+    { key: "all",       label: "Všichni"     },
+];
+
+const PROCESS_FILTERS: { key: FilterKey; label: string }[] = [
+    { key: "state_new",      label: "Nový"          },
+    { key: "state_reviewed", label: "Zkontrolováno" },
+    { key: "state_mailed",   label: "Odeslán mail"  },
+    { key: "todo",           label: "S úkolem"      },
 ];
 
 const STATUS_BADGE: Record<ContribRow["status"], { label: string; cls: string }> = {
@@ -73,6 +77,51 @@ function contribBadges(r: ContribRow): ContribBadge[] {
     if (r.discountCommittee) badges.push({ label: "Výbor",   cls: good });
     if (r.discountTom)    badges.push({ label: "TOM",         cls: good });
     return badges;
+}
+
+// ── Filter pill komponenta ────────────────────────────────────────────────────
+
+function FilterPill({ f, active, count, onClick }: {
+    f: { key: FilterKey; label: string };
+    active: boolean;
+    count: number;
+    onClick: () => void;
+}) {
+    const activeClass =
+        f.key === "todo"            ? "bg-orange-500 text-white"
+        : f.key === "state_new"     ? "bg-gray-600 text-white"
+        : f.key === "state_reviewed"? "bg-blue-600 text-white"
+        : f.key === "state_mailed"  ? "bg-violet-600 text-white"
+        : "bg-[#327600] text-white";
+
+    const inactiveClass =
+        f.key === "todo" && count > 0
+            ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
+        : f.key === "state_new" && count > 0
+            ? "bg-gray-50 text-gray-700 border border-gray-300 hover:bg-gray-100"
+        : f.key === "state_reviewed" && count > 0
+            ? "bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100"
+        : f.key === "state_mailed" && count > 0
+            ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100"
+        : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50";
+
+    return (
+        <button
+            onClick={onClick}
+            className={[
+                "inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-sm font-medium transition-colors shrink-0",
+                active ? activeClass : inactiveClass,
+            ].join(" ")}
+        >
+            {f.label}
+            <span className={[
+                "text-xs rounded-full px-1.5",
+                active ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
+            ].join(" ")}>
+                {count}
+            </span>
+        </button>
+    );
 }
 
 interface Props {
@@ -281,37 +330,20 @@ export function ContributionsClient({ period, rows, canPrepare = false, prepareD
                 )}
             </div>
 
-            {/* ── Filter pills ── */}
-            <div className="flex gap-2 overflow-x-auto pb-1 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
-                {FILTERS.map(f => (
-                    <button key={f.key} onClick={() => setFilter(f.key)}
-                        className={[
-                            "inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium transition-colors shrink-0",
-                            filter === f.key
-                                ? f.key === "todo"           ? "bg-orange-500 text-white"
-                                  : f.key === "state_new"    ? "bg-gray-600 text-white"
-                                  : f.key === "state_reviewed" ? "bg-blue-600 text-white"
-                                  : f.key === "state_mailed" ? "bg-violet-600 text-white"
-                                  : "bg-[#327600] text-white"
-                                : f.key === "todo" && counts.todo > 0
-                                    ? "bg-orange-50 text-orange-700 border border-orange-300 hover:bg-orange-100"
-                                : f.key === "state_new" && counts.state_new > 0
-                                    ? "bg-gray-50 text-gray-700 border border-gray-300 hover:bg-gray-100"
-                                : f.key === "state_reviewed" && counts.state_reviewed > 0
-                                    ? "bg-blue-50 text-blue-700 border border-blue-300 hover:bg-blue-100"
-                                : f.key === "state_mailed" && counts.state_mailed > 0
-                                    ? "bg-violet-50 text-violet-700 border border-violet-300 hover:bg-violet-100"
-                                    : "bg-white text-gray-600 border border-gray-200 hover:bg-gray-50",
-                        ].join(" ")}>
-                        {f.label}
-                        <span className={[
-                            "text-xs rounded-full px-1.5",
-                            filter === f.key ? "bg-white/20 text-white" : "bg-gray-100 text-gray-500",
-                        ].join(" ")}>
-                            {counts[f.key as keyof typeof counts] ?? 0}
-                        </span>
-                    </button>
-                ))}
+            {/* ── Filter pills — dvě skupiny ── */}
+            <div className="space-y-2">
+                {/* Platební stav */}
+                <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
+                    {PAYMENT_FILTERS.map(f => (
+                        <FilterPill key={f.key} f={f} active={filter === f.key} count={counts[f.key as keyof typeof counts] ?? 0} onClick={() => setFilter(f.key)} />
+                    ))}
+                </div>
+                {/* Stav procesu */}
+                <div className="flex gap-1.5 overflow-x-auto pb-0.5 -mx-4 px-4 md:mx-0 md:px-0 md:flex-wrap scrollbar-none">
+                    {PROCESS_FILTERS.map(f => (
+                        <FilterPill key={f.key} f={f} active={filter === f.key} count={counts[f.key as keyof typeof counts] ?? 0} onClick={() => setFilter(f.key)} />
+                    ))}
+                </div>
             </div>
 
             {/* ── Mobile cards ── */}
