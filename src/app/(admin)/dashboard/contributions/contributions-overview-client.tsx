@@ -312,8 +312,12 @@ export function ContributionsOverviewClient({
             return fullName.includes(query) || nickname.includes(query) || (queryDigits !== "" && amount.includes(queryDigits));
         });
 
-        if (filter === "issues") next = next.filter(row => row.status !== "paid");
-        if (filter === "unpaid") next = next.filter(row => row.status === "unpaid");
+        // Pill filtr aplikuje statusový check jen pokud není nastaven paymentState
+        // (paymentState dropdown má přednost před pill filtrem pro stav platby)
+        if (paymentState === "all") {
+            if (filter === "issues") next = next.filter(row => row.status !== "paid");
+            if (filter === "unpaid") next = next.filter(row => row.status === "unpaid");
+        }
         if (filter === "todo") next = next.filter(row => row.todoNote !== null);
 
         if (selectedBadgeFilters.length > 0) {
