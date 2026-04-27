@@ -118,19 +118,19 @@ function TransactionsTable({
 
     return (
         <>
-            <div className="rounded-lg border bg-white overflow-hidden">
+            <div className="rounded-lg border bg-white overflow-x-auto">
                 <Table>
                     <TableHeader>
                         <TableRow>
-                            <TableHead className="w-24">Datum</TableHead>
-                            <TableHead className="w-28">Doklad</TableHead>
-                            <TableHead className="w-20">Zdroj</TableHead>
-                            <TableHead className="hidden md:table-cell">Účet</TableHead>
-                            <TableHead>Popis</TableHead>
-                            <TableHead className="text-right w-32">MD</TableHead>
-                            <TableHead className="text-right w-32">D</TableHead>
-                            <TableHead className="w-32 text-center">Párování</TableHead>
-                            <TableHead className="w-20 text-center hidden sm:table-cell">Import</TableHead>
+                            <TableHead className="w-24 shrink-0">Datum</TableHead>
+                            <TableHead className="w-28 shrink-0">Doklad</TableHead>
+                            <TableHead className="w-20 shrink-0">Zdroj</TableHead>
+                            <TableHead className="hidden lg:table-cell w-40 shrink-0">Účet</TableHead>
+                            <TableHead className="max-w-xs">Popis</TableHead>
+                            <TableHead className="text-right w-28 shrink-0">MD</TableHead>
+                            <TableHead className="text-right w-28 shrink-0">D</TableHead>
+                            <TableHead className="w-28 text-center shrink-0">Párování</TableHead>
+                            <TableHead className="w-16 text-center hidden xl:table-cell shrink-0">Import</TableHead>
                         </TableRow>
                     </TableHeader>
                     <TableBody>
@@ -150,10 +150,12 @@ function TransactionsTable({
                                             {SOURCE_LABELS[tx.sourceCode] ?? tx.sourceCode}
                                         </Badge>
                                     </TableCell>
-                                    <TableCell className="hidden md:table-cell text-gray-500 text-xs">
+                                    <TableCell className="hidden lg:table-cell text-gray-500 text-xs">
                                         {tx.accountCode} {tx.accountName}
                                     </TableCell>
-                                    <TableCell className="text-gray-800">{tx.description}</TableCell>
+                                    <TableCell className="text-gray-800 max-w-xs">
+                                        <span className="block truncate" title={tx.description}>{tx.description}</span>
+                                    </TableCell>
                                     <TableCell className={cn(
                                         "text-right font-mono text-sm tabular-nums",
                                         parseFloat(tx.debit) > 0 ? "text-red-700" : "text-gray-300"
@@ -188,7 +190,7 @@ function TransactionsTable({
                                             )
                                         ) : <span className="text-gray-300">—</span>}
                                     </TableCell>
-                                    <TableCell className="text-center hidden sm:table-cell">
+                                    <TableCell className="text-center hidden xl:table-cell">
                                         {imp && <ImportPopover imp={imp} />}
                                     </TableCell>
                                 </TableRow>
