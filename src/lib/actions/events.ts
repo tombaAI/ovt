@@ -2,7 +2,7 @@
 
 import { getDb } from "@/lib/db";
 import { events, members, auditLog } from "@/db/schema";
-import { eq, asc, desc } from "drizzle-orm";
+import { eq, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import type { EventType, EventStatus, EventSource } from "@/db/schema";
@@ -88,6 +88,59 @@ export async function getEvents(year: number): Promise<EventRow[]> {
         dateTo:      r.dateTo    as unknown as string | null,
         approxMonth: r.approxMonth ? Number(r.approxMonth) : null,
     }));
+}
+
+export async function getEventById(id: number): Promise<EventRow | null> {
+    const db = getDb();
+    const rows = await db
+        .select({
+            id:           events.id,
+            year:         events.year,
+            name:         events.name,
+            eventType:    events.eventType,
+            dateFrom:     events.dateFrom,
+            dateTo:       events.dateTo,
+            approxMonth:  events.approxMonth,
+            location:     events.location,
+            leaderId:     events.leaderId,
+            leaderName:   members.fullName,
+            status:       events.status,
+            description:  events.description,
+            externalUrl:  events.externalUrl,
+            source:       events.source,
+            gcalEventId:  events.gcalEventId,
+            gcalSync:     events.gcalSync,
+            gcalSyncedAt: events.gcalSyncedAt,
+            note:         events.note,
+            updatedAt:    events.updatedAt,
+        })
+        .from(events)
+        .leftJoin(members, eq(events.leaderId, members.id))
+        .where(eq(events.id, id))
+        .limit(1);
+
+    if (rows.length === 0) return null;
+    const r = rows[0]!;
+    return {
+        ...r,
+        year:        Number(r.year),
+        dateFrom:    r.dateFrom  as unknown as string | null,
+        dateTo:      r.dateTo    as unknown as string | null,
+        approxMonth: r.approxMonth ? Number(r.approxMonth) : null,
+    };
+}
+
+export async function getEventYears(): Promise<number[]> {
+    const db = getDb();
+    const rows = await db
+        .select({ year: sql<number>`distinct ${events.year}` })
+        .from(events)
+        .orderBy(desc(events.year));
+
+    const current = new Date().getFullYear();
+    const dbYears = rows.map(r => Number(r.year));
+    const all = new Set([...dbYears, current, current + 1]);
+    return Array.from(all).sort((a, b) => b - a);
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────────
