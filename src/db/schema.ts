@@ -10,6 +10,7 @@ import {
     smallint,
     text,
     timestamp,
+    uniqueIndex,
     uuid
 } from "drizzle-orm/pg-core";
 import { sql as drizzleSql } from "drizzle-orm";
@@ -393,8 +394,10 @@ export const eventRegistrations = appSchema.table(
         eventId:      integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
         formSlug:     text("form_slug").notNull(),
         email:        text("email").notNull(),
+        phone:        text("phone"),
         firstName:    text("first_name").notNull(),
         lastName:     text("last_name").notNull(),
+        publicToken:  text("public_token").notNull().unique(),
         personsCount: smallint("persons_count").notNull().default(1),
         personsNames: text("persons_names"),
         transportInfo: text("transport_info"),
@@ -404,6 +407,22 @@ export const eventRegistrations = appSchema.table(
         index("event_registrations_event_idx").on(t.eventId),
         index("event_registrations_slug_idx").on(t.formSlug),
         index("event_registrations_created_at_idx").on(t.createdAt.desc()),
+    ]
+);
+
+export const eventRegistrationParticipants = appSchema.table(
+    "event_registration_participants",
+    {
+        id:               serial("id").primaryKey(),
+        registrationId:   integer("registration_id").notNull().references(() => eventRegistrations.id, { onDelete: "cascade" }),
+        participantOrder: smallint("participant_order").notNull(),
+        fullName:         text("full_name").notNull(),
+        isPrimary:        boolean("is_primary").notNull().default(false),
+        createdAt:        timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("event_reg_participants_registration_idx").on(t.registrationId),
+        uniqueIndex("event_reg_participants_registration_order_uq").on(t.registrationId, t.participantOrder),
     ]
 );
 

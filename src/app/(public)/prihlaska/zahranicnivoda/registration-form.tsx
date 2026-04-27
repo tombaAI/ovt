@@ -54,6 +54,7 @@ function withSingleTrailingRow(values: string[]): string[] {
 
 export function ForeignWaterRegistrationForm({ context }: Props) {
     const [email, setEmail] = useState("");
+    const [phone, setPhone] = useState("");
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
     const [additionalPersonsRows, setAdditionalPersonsRows] = useState<string[]>([""]);
@@ -115,6 +116,7 @@ export function ForeignWaterRegistrationForm({ context }: Props) {
             const result = await submitForeignWaterRegistration({
                 registrationId: success?.registrationId,
                 email,
+                phone,
                 firstName,
                 lastName,
                 additionalPersons,
@@ -186,17 +188,29 @@ export function ForeignWaterRegistrationForm({ context }: Props) {
                             </label>
                         </div>
 
-                        <label className="space-y-1.5 block">
-                            <span className="text-sm font-medium text-[#2e3f25]">E-mail *</span>
-                            <input
-                                type="email"
-                                required
-                                value={email}
-                                onChange={(e) => setEmail(e.target.value)}
-                                className="w-full rounded-lg border border-[#cfddc4] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#82b965]"
-                                placeholder="jmeno@domena.cz"
-                            />
-                        </label>
+                        <div className="grid gap-4 sm:grid-cols-2">
+                            <label className="space-y-1.5 block">
+                                <span className="text-sm font-medium text-[#2e3f25]">E-mail *</span>
+                                <input
+                                    type="email"
+                                    required
+                                    value={email}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    className="w-full rounded-lg border border-[#cfddc4] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#82b965]"
+                                    placeholder="jmeno@domena.cz"
+                                />
+                            </label>
+                            <label className="space-y-1.5 block">
+                                <span className="text-sm font-medium text-[#2e3f25]">Telefon</span>
+                                <input
+                                    type="tel"
+                                    value={phone}
+                                    onChange={(e) => setPhone(e.target.value)}
+                                    className="w-full rounded-lg border border-[#cfddc4] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#82b965]"
+                                    placeholder="Např. +420 777 123 456"
+                                />
+                            </label>
+                        </div>
 
                         <div className="space-y-2.5">
                             <div className="flex items-center justify-between gap-3">
@@ -270,7 +284,8 @@ export function ForeignWaterRegistrationForm({ context }: Props) {
                         <div className="grid gap-2 text-sm text-[#2f4326] sm:grid-cols-2">
                             <p><span className="font-semibold">Jméno:</span> {firstName}</p>
                             <p><span className="font-semibold">Příjmení:</span> {lastName}</p>
-                            <p className="sm:col-span-2"><span className="font-semibold">E-mail:</span> {email}</p>
+                            <p><span className="font-semibold">E-mail:</span> {email}</p>
+                            <p><span className="font-semibold">Telefon:</span> {phone || "neuveden"}</p>
                             <p><span className="font-semibold">Počet osob:</span> {success?.payment.personsCount ?? participantNames.length}</p>
                             {transportInfo && (
                                 <p className="sm:col-span-2 break-words"><span className="font-semibold">Lodě / doprava:</span> {transportInfo}</p>
@@ -347,6 +362,16 @@ export function ForeignWaterRegistrationForm({ context }: Props) {
                         >
                             {copyLabel}
                         </button>
+
+                        <div className="rounded-md border border-[#dbe7d2] bg-[#f7fcf3] px-3 py-2 text-xs text-[#466133]">
+                            <p className="font-medium">Trvalý odkaz na detail přihlášky (jen pro čtení):</p>
+                            <a
+                                href={success.registrationDetailUrl}
+                                className="mt-1 block break-all text-[#2f6212] underline underline-offset-2"
+                            >
+                                {success.registrationDetailUrl}
+                            </a>
+                        </div>
                     </section>
                 )}
             </div>

@@ -498,7 +498,7 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                     <TableHeader>
                         <TableRow className="bg-gray-50/70">
                             <TableHead className="text-xs font-medium text-gray-400">Jméno</TableHead>
-                            <TableHead className="hidden sm:table-cell text-xs font-medium text-gray-400">Email</TableHead>
+                            <TableHead className="hidden sm:table-cell text-xs font-medium text-gray-400">Kontakt</TableHead>
                             <TableHead className="text-xs font-medium text-gray-400 w-16 text-center">Osob</TableHead>
                             <TableHead className="hidden md:table-cell text-xs font-medium text-gray-400">Účastníci</TableHead>
                             <TableHead className="text-xs font-medium text-gray-400 w-24">Platba</TableHead>
@@ -512,8 +512,14 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                                     <p className="text-xs text-gray-400 mt-0.5 tabular-nums">
                                         {new Intl.DateTimeFormat("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(r.createdAt))}
                                     </p>
+                                    <p className="text-xs text-gray-500 mt-0.5 sm:hidden">
+                                        {r.email}{r.phone ? ` · ${r.phone}` : ""}
+                                    </p>
                                 </TableCell>
-                                <TableCell className="hidden sm:table-cell text-gray-600 text-xs">{r.email}</TableCell>
+                                <TableCell className="hidden sm:table-cell text-gray-600 text-xs">
+                                    <p>{r.email}</p>
+                                    {r.phone && <p className="text-gray-400 mt-0.5">{r.phone}</p>}
+                                </TableCell>
                                 <TableCell className="text-center text-gray-700">{r.personsCount}</TableCell>
                                 <TableCell className="hidden md:table-cell text-xs text-gray-600">
                                     {r.participantNames.join(", ") || "—"}
