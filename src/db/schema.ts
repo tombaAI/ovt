@@ -386,6 +386,56 @@ export const events = appSchema.table(
     ]
 );
 
+export const eventRegistrations = appSchema.table(
+    "event_registrations",
+    {
+        id:           serial("id").primaryKey(),
+        eventId:      integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+        formSlug:     text("form_slug").notNull(),
+        email:        text("email").notNull(),
+        firstName:    text("first_name").notNull(),
+        lastName:     text("last_name").notNull(),
+        personsCount: smallint("persons_count").notNull().default(1),
+        personsNames: text("persons_names"),
+        transportInfo: text("transport_info"),
+        createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("event_registrations_event_idx").on(t.eventId),
+        index("event_registrations_slug_idx").on(t.formSlug),
+        index("event_registrations_created_at_idx").on(t.createdAt.desc()),
+    ]
+);
+
+export const eventPaymentPrescriptionStatusEnum = ["pending", "matched", "paid", "cancelled"] as const;
+export type EventPaymentPrescriptionStatus = typeof eventPaymentPrescriptionStatusEnum[number];
+
+export const eventPaymentPrescriptions = appSchema.table(
+    "event_payment_prescriptions",
+    {
+        id:                  serial("id").primaryKey(),
+        eventId:             integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+        registrationId:      integer("registration_id").notNull().unique().references(() => eventRegistrations.id, { onDelete: "cascade" }),
+        prescriptionCode:    integer("prescription_code").notNull().unique(),
+        bankAccount:         text("bank_account").notNull(),
+        variableSymbol:      text("variable_symbol").notNull(),
+        amount:              numeric("amount", { precision: 10, scale: 2 }).notNull(),
+        messageForRecipient: text("message_for_recipient").notNull(),
+        status:              text("status", { enum: eventPaymentPrescriptionStatusEnum }).notNull().default("pending"),
+        matchedLedgerId:     integer("matched_ledger_id").references(() => paymentLedger.id, { onDelete: "set null" }),
+        matchedAmount:       numeric("matched_amount", { precision: 10, scale: 2 }),
+        matchedAt:           timestamp("matched_at", { withTimezone: true }),
+        note:                text("note"),
+        createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("event_payment_prescriptions_event_idx").on(t.eventId),
+        index("event_payment_prescriptions_status_idx").on(t.status),
+        index("event_payment_prescriptions_ledger_idx").on(t.matchedLedgerId),
+    ]
+);
+
 // ── Brigade tables ───────────────────────────────────────────────────────────
 
 export const brigades = appSchema.table(

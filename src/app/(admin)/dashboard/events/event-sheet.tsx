@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useCallback, useState, useEffect, useTransition } from "react";
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +12,10 @@ import {
     updateEventField, getEventAuditLog, getEventGcalDiff,
     syncEventToGcal, acceptGcalField,
 } from "@/lib/actions/events";
+import {
+    getEventRegistrationsForAdmin,
+    type EventRegistrationAdminRow,
+} from "@/lib/actions/event-registrations";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type { EventRow, EventType, EventStatus, EventAuditEntry, GcalDiffResult, GcalDiffField } from "@/lib/actions/events";
 
@@ -71,6 +75,13 @@ const EVENT_FIELD_LABELS: Record<string, string> = {
     accept_from_gcal: "← přijato z GCal",
 };
 
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+    pending: "Čeká na úhradu",
+    matched: "Spárováno",
+    paid: "Uhrazeno",
+    cancelled: "Storno",
+};
+
 // ── GCal diff helpers ─────────────────────────────────────────────────────────
 
 /** Najde diff entry pro konkrétní pole. Vrátí null pokud diff není načtený nebo pole shodné. */
@@ -127,6 +138,100 @@ function EventAuditLog({ eventId }: { eventId: number }) {
                     ))}
                 </div>
             )}
+        </div>
+    );
+}
+
+function EventRegistrationsSection({ eventId }: { eventId: number }) {
+    const [rows, setRows] = useState<EventRegistrationAdminRow[]>([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
+
+    const load = useCallback(async () => {
+        setLoading(true);
+        setError(null);
+        try {
+            const data = await getEventRegistrationsForAdmin(eventId);
+            setRows(data);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Nepodařilo se načíst přihlášky");
+        } finally {
+            setLoading(false);
+        }
+    }, [eventId]);
+
+    useEffect(() => {
+        void load();
+    }, [load]);
+
+    return (
+        <div className="rounded-lg border bg-white p-4 space-y-3">
+            <div className="flex items-center justify-between gap-3">
+                <div>
+                    <p className="text-sm font-semibold text-gray-900">Přihlášky na akci</p>
+                    <p className="text-xs text-gray-500">{rows.length} přihlášek</p>
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    className="h-7 text-xs"
+                    onClick={load}
+                    disabled={loading}
+                >
+                    {loading ? "Načítám…" : "Obnovit"}
+                </Button>
+            </div>
+
+            {error && <p className="text-xs text-red-500">{error}</p>}
+
+            {!loading && rows.length === 0 && (
+                <p className="text-xs text-gray-400">Zatím žádné přihlášky.</p>
+            )}
+
+            {rows.map((row) => (
+                <div key={row.registrationId} className="rounded-lg border bg-gray-50 px-3 py-2.5 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                        <div>
+                            <p className="text-sm font-medium text-gray-900">{row.lastName} {row.firstName}</p>
+                            <p className="text-xs text-gray-500">{row.email}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-xs font-semibold text-gray-700">C{row.paymentCodeLabel}</p>
+                            <p className="text-[11px] text-gray-500">{formatDateTime(row.createdAt)}</p>
+                        </div>
+                    </div>
+
+                    <div className="grid sm:grid-cols-2 gap-x-4 gap-y-1 text-xs text-gray-600">
+                        <p><span className="font-medium text-gray-700">Počet osob:</span> {row.personsCount}</p>
+                        <p>
+                            <span className="font-medium text-gray-700">Stav předpisu:</span>{" "}
+                            {PAYMENT_STATUS_LABELS[row.paymentStatus] ?? row.paymentStatus}
+                        </p>
+                        <p><span className="font-medium text-gray-700">Číslo účtu:</span> {row.paymentAccount}</p>
+                        <p><span className="font-medium text-gray-700">VS:</span> {row.paymentVariableSymbol}</p>
+                        <p>
+                            <span className="font-medium text-gray-700">Částka:</span>{" "}
+                            {new Intl.NumberFormat("cs-CZ", { style: "currency", currency: "CZK" }).format(row.paymentAmount)}
+                        </p>
+                        {row.matchedLedgerId && (
+                            <p><span className="font-medium text-gray-700">Ledger ID:</span> {row.matchedLedgerId}</p>
+                        )}
+                        <p className="sm:col-span-2 break-words">
+                            <span className="font-medium text-gray-700">Zpráva:</span> {row.paymentMessageForRecipient}
+                        </p>
+                        {row.personsNames && (
+                            <p className="sm:col-span-2 break-words">
+                                <span className="font-medium text-gray-700">Další osoby:</span> {row.personsNames}
+                            </p>
+                        )}
+                        {row.transportInfo && (
+                            <p className="sm:col-span-2 break-words">
+                                <span className="font-medium text-gray-700">Lodě / doprava:</span> {row.transportInfo}
+                            </p>
+                        )}
+                    </div>
+                </div>
+            ))}
         </div>
     );
 }
@@ -631,6 +736,8 @@ export function EventSheet({ open, onOpenChange, event, allMembers, defaultYear,
                             <ImmediateTextarea label="Interní poznámka" value={event.note}
                                 eventId={event.id} field="note" onSaved={onSaved} placeholder="Interní poznámka…" />
                         </div>
+
+                        <EventRegistrationsSection eventId={event.id} />
 
                         {/* ── Google Kalendář ── */}
                         {event.gcalEventId ? (
