@@ -288,6 +288,9 @@ function buildForeignWaterConfirmationEmail(params: {
                 "- stav zaplacení",
                 "- možnost úpravy a zrušení",
                 params.detailUrl,
+                "",
+                "Web OVT Bohemians: https://www.ovtbohemians.cz",
+                "Tento e-mail byl odeslán ze systému OVT přihlašování na akce.",
         ].join("\n");
 
         const html = `<!DOCTYPE html>
@@ -301,7 +304,7 @@ function buildForeignWaterConfirmationEmail(params: {
     <tr>
         <td style="background:#327600;padding:24px 32px;">
             <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">OVT Bohemians</p>
-            <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Potvrzení přihlášky na zahraniční vodu</p>
+            <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Potvrzení přihlášky na akci</p>
         </td>
     </tr>
 
@@ -368,11 +371,18 @@ function buildForeignWaterConfirmationEmail(params: {
     </tr>
 
     <tr>
-        <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
-            <p style="margin:0;font-size:12px;color:#9ca3af;">
-                OVT Bohemians - vodní turistika Praha<br>
-                Tento e-mail byl odeslán ze systému správy OVT.
-            </p>
+        <td style="padding:18px 32px 26px;border-top:1px solid #eef3ea;background:#fbfdf8;">
+            <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e3ecdb;border-radius:10px;background:#f7fcf3;padding:12px 14px;">
+                <tr>
+                    <td style="font-size:12px;color:#5f7350;line-height:1.65;">
+                        <p style="margin:0 0 6px;font-weight:700;color:#3f5533;">OVT Bohemians</p>
+                        <p style="margin:0 0 6px;">
+                            Web: <a href="https://www.ovtbohemians.cz" style="color:#2f6212;text-decoration:underline;">www.ovtbohemians.cz</a>
+                        </p>
+                        <p style="margin:0;">Tento e-mail byl odeslán ze systému OVT přihlašování na akce.</p>
+                    </td>
+                </tr>
+            </table>
         </td>
     </tr>
 
