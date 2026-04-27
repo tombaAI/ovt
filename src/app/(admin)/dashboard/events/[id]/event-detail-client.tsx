@@ -325,38 +325,92 @@ function ImmediateLeader({ value, valueId, eventId, allMembers, onSaved }: {
     );
 }
 
-// ── Immediate-save textarea ───────────────────────────────────────────────────
+// ── Immediate-save textarea (click-to-edit) ───────────────────────────────────
 
-function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder }: {
+function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder, gcalValue, onGcalAccept, onGcalPush }: {
     label: string;
     value: string | null;
     eventId: number;
     field: string;
     onSaved: () => void;
     placeholder?: string;
+    gcalValue?: string | null;
+    onGcalAccept?: () => Promise<void>;
+    onGcalPush?: () => Promise<void>;
 }) {
-    const [draft, setDraft]   = useState(value ?? "");
-    const [saving, setSaving] = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft]     = useState(value ?? "");
+    const [saving, setSaving]   = useState(false);
+    const [acceptingGcal, setAcceptingGcal] = useState(false);
+    const [pushingGcal, setPushingGcal]     = useState(false);
 
-    useEffect(() => setDraft(value ?? ""), [value]);
+    useEffect(() => { if (!editing) setDraft(value ?? ""); }, [value, editing]);
 
-    async function handleBlur() {
+    async function handleSave() {
         const newVal = draft.trim() || null;
-        if (newVal === (value ?? null)) return;
+        if (newVal === (value ?? null)) { setEditing(false); return; }
         setSaving(true);
-        try { await updateEventField(eventId, field, newVal); onSaved(); }
+        try { await updateEventField(eventId, field, newVal); onSaved(); setEditing(false); }
         finally { setSaving(false); }
     }
 
+    function handleKeyDown(e: React.KeyboardEvent) {
+        if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); }
+    }
+
+    const hasGcalDiff = gcalValue !== undefined && gcalValue !== (value?.trim() || null);
+
     return (
         <div className="border-b last:border-0 py-3">
-            <div className="flex items-center justify-between mb-1.5">
-                <p className="text-sm font-medium text-gray-500">{label}</p>
-                {saving && <p className="text-xs text-gray-400">ukládám…</p>}
-            </div>
-            <Textarea value={draft} onChange={e => setDraft(e.target.value)}
-                onBlur={handleBlur} placeholder={placeholder} rows={3}
-                className="text-sm resize-none" />
+            <p className="text-sm font-medium text-gray-500 mb-1.5">{label}</p>
+            {editing ? (
+                <div className="space-y-2">
+                    <Textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)}
+                        onKeyDown={handleKeyDown} placeholder={placeholder} rows={4}
+                        className="text-sm resize-none" />
+                    <div className="flex items-center gap-2">
+                        <button onClick={handleSave} disabled={saving}
+                            className="w-8 h-8 flex items-center justify-center rounded-md bg-[#327600] text-white hover:bg-[#2a6400] disabled:opacity-50 text-sm"
+                            title="Uložit (Enter)">✓</button>
+                        <button onClick={() => { setDraft(value ?? ""); setEditing(false); }}
+                            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 text-gray-500 hover:bg-gray-100 text-sm"
+                            title="Zrušit (Esc)">✕</button>
+                        {saving && <span className="text-xs text-gray-400">ukládám…</span>}
+                    </div>
+                </div>
+            ) : (
+                <div>
+                    <button onClick={() => setEditing(true)}
+                        className="w-full text-left text-sm rounded-md px-1 -mx-1 py-1 hover:bg-blue-50 transition-colors group">
+                        {value
+                            ? <span className="text-gray-900 whitespace-pre-wrap group-hover:text-blue-700">{value}</span>
+                            : <span className="text-gray-400 italic group-hover:text-blue-500">{placeholder ?? "(nezadáno)"}</span>
+                        }
+                    </button>
+                    {hasGcalDiff && (
+                        <div className="mt-2 rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 space-y-1.5">
+                            <p className="text-xs font-medium text-violet-600">GCal:</p>
+                            <p className="text-xs text-violet-800 whitespace-pre-wrap">{gcalValue ?? "(prázdné)"}</p>
+                            <div className="flex gap-2 pt-0.5">
+                                {onGcalAccept && (
+                                    <button onClick={async () => { setAcceptingGcal(true); await onGcalAccept(); setAcceptingGcal(false); }}
+                                        disabled={acceptingGcal}
+                                        className="text-xs text-violet-600 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 disabled:opacity-50">
+                                        {acceptingGcal ? "…" : "← z GCal"}
+                                    </button>
+                                )}
+                                {onGcalPush && (
+                                    <button onClick={async () => { setPushingGcal(true); await onGcalPush(); setPushingGcal(false); }}
+                                        disabled={pushingGcal}
+                                        className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 disabled:opacity-50">
+                                        {pushingGcal ? "…" : "→ do GCal"}
+                                    </button>
+                                )}
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -599,7 +653,12 @@ export function EventDetailClient({ event: initialEvent, allMembers }: Props) {
                 <div className="rounded-xl border px-4 mb-4">
                     <ImmediateTextarea label="Popis" value={event.description}
                         eventId={event.id} field="description" onSaved={onSaved}
-                        placeholder="Volitelný popis akce…" />
+                        placeholder="Volitelný popis akce…"
+                        gcalValue={gcalFieldValue("description")}
+                        onGcalAccept={gcalFieldValue("description") !== undefined
+                            ? makeGcalAccept("description", gcalFieldValue("description") ?? null) : undefined}
+                        onGcalPush={gcalFieldValue("description") !== undefined ? pushToGcal : undefined}
+                    />
                     <ImmediateTextarea label="Interní poznámka" value={event.note}
                         eventId={event.id} field="note" onSaved={onSaved}
                         placeholder="Interní poznámka…" />

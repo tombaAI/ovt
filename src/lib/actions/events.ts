@@ -498,6 +498,22 @@ export async function getEventGcalDiff(id: number): Promise<GcalDiffResult> {
             gcalValue: gcal.location,
             match:     (event.location ?? null) === (gcal.location ?? null),
         },
+        (() => {
+            // GCal description = appDescription + "\n\nOdkaz: url" — stripujeme URL suffix
+            const gcalRaw = gcal.description?.trim() ?? null;
+            const url = event.externalUrl;
+            const gcalDesc = gcalRaw && url && gcalRaw.includes(`\n\nOdkaz: ${url}`)
+                ? (gcalRaw.replace(`\n\nOdkaz: ${url}`, "").trim() || null)
+                : gcalRaw;
+            const appDesc = event.description?.trim() || null;
+            return {
+                field:     "description",
+                label:     "Popis",
+                appValue:  appDesc,
+                gcalValue: gcalDesc,
+                match:     appDesc === gcalDesc,
+            };
+        })(),
     ];
 
     return { gcalExists: true, fields, gcalUpdatedAt: gcal.updatedAt };
