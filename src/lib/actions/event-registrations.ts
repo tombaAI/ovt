@@ -301,7 +301,8 @@ function buildForeignWaterConfirmationEmail(params: {
                 "- možnost úpravy a zrušení",
                 params.detailUrl,
                 "",
-                "Tento e-mail byl odeslán ze systému OVT přihlašování na akce.Oddíl vodní turistiky. www.ovtbohemians.cz",
+                "Oddíl vodní turistiky TJ Bohemians, www.ovtbohemians.cz",
+                "Tento e-mail byl odeslán ze systému OVT přihlašování na akce.",
         ].join("\n");
 
         const html = `<!DOCTYPE html>
@@ -383,9 +384,12 @@ function buildForeignWaterConfirmationEmail(params: {
 
     <tr>
         <td style="padding:20px 32px 24px;border-top:1px solid #2a6400;background:#327600;">
-            <p style="margin:0;font-size:12px;line-height:1.7;color:#e3f2d6;">
-                Tento e-mail byl odeslán ze systému OVT přihlašování na akce.Oddíl vodní turistiky.
-                <a href="https://www.ovtbohemians.cz" style="color:#ffffff;text-decoration:underline;">www.ovtbohemians.cz</a>
+            <p style="margin:0 0 4px;font-size:12px;line-height:1.7;color:#e3f2d6;font-weight:400;">
+                <strong style="font-weight:700;color:#ffffff;">Oddíl vodní turistiky TJ Bohemians</strong>,
+                <a href="https://www.ovtbohemians.cz" style="color:#ffffff;text-decoration:underline;font-weight:400;">www.ovtbohemians.cz</a>
+            </p>
+            <p style="margin:0;font-size:12px;line-height:1.7;color:#e3f2d6;font-weight:400;">
+                Tento e-mail byl odeslán ze systému OVT přihlašování na akce.
             </p>
         </td>
     </tr>
