@@ -24,6 +24,50 @@ function formatAmount(n: number | string): string {
     return v.toLocaleString("cs-CZ", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) + " Kč";
 }
 
+// ── Automatické párování ───────────────────────────────────────────────────────
+
+function normalize(s: string): string {
+    return s.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
+}
+
+interface SuggestionMatch {
+    contrib:  ContribOption;
+    reasons:  string[];   // ["VS 044", "jméno"]
+}
+
+function findSuggestions(tx: FinanceTjTransaction, contribs: ContribOption[]): SuggestionMatch[] {
+    const desc    = normalize(tx.description);
+    const txYear  = parseInt(tx.docDate.substring(0, 4));
+    const txAmt   = parseFloat(tx.credit);
+    const results: SuggestionMatch[] = [];
+
+    for (const c of contribs) {
+        if (c.year !== txYear) continue;
+        if (c.amountTotal === null || Math.abs(c.amountTotal - txAmt) > 0.01) continue;
+
+        const reasons: string[] = [];
+
+        // Shoda VS: hledáme číslo (i s nulami vlevo) v popisu
+        if (c.variableSymbol !== null) {
+            const vs       = String(c.variableSymbol);
+            const vsPadded = vs.padStart(3, "0");
+            if (desc.includes(vs) || desc.includes(vsPadded)) {
+                reasons.push(`VS ${vsPadded}`);
+            }
+        }
+
+        // Shoda jménem: obě části jména musí být v popisu (bez diakritiky)
+        const nameParts = normalize(c.memberName).split(" ").filter(Boolean);
+        if (nameParts.length >= 2 && nameParts.every(p => desc.includes(p))) {
+            if (!reasons.some(r => r === "jméno")) reasons.push("jméno");
+        }
+
+        if (reasons.length > 0) results.push({ contrib: c, reasons });
+    }
+
+    return results;
+}
+
 export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     const credit = parseFloat(tx.credit);
 
@@ -47,6 +91,23 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
 
     const allocatedTotal = allocations?.reduce((s, a) => s + parseFloat(a.amount), 0) ?? 0;
     const remaining      = credit - allocatedTotal;
+
+    // ── Automatické návrhy ────────────────────────────────────────────────────
+    const suggestions = useMemo(() => findSuggestions(tx, contribs), [tx, contribs]);
+
+    function handleQuickAlloc(contrib: ContribOption) {
+        setError(null);
+        startSave(async () => {
+            const res = await createTjAllocation({
+                tjTransactionId: tx.id,
+                contribId:       contrib.contribId,
+                memberId:        contrib.memberId,
+                amount:          parseFloat(tx.credit),
+            });
+            if ("error" in res) { setError(res.error); return; }
+            try { setAllocations(await getTjAllocations(tx.id)); } catch { setAllocations([]); }
+        });
+    }
 
     // ── Formulář nové alokace ─────────────────────────────────────────────────
     const [memberFilter, setMemberFilter] = useState("");
@@ -156,6 +217,38 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                         </div>
                     )}
                 </div>
+
+                {/* Automatické návrhy — zobrazit pokud ještě nic není napárováno */}
+                {suggestions.length > 0 && remaining > 0.005 && !loadPending && (
+                    <div className="space-y-1.5">
+                        <p className="text-xs font-medium text-[#327600] uppercase tracking-wide">Automatický návrh</p>
+                        {suggestions.map(s => (
+                            <div key={s.contrib.contribId}
+                                className="flex items-center justify-between gap-3 rounded-md border border-[#327600]/30 bg-green-50/60 px-3 py-2">
+                                <div className="text-sm min-w-0">
+                                    <span className="font-medium text-gray-900">{s.contrib.memberName}</span>
+                                    <span className="text-gray-400 mx-1.5">·</span>
+                                    <span className="text-gray-600">{s.contrib.year}</span>
+                                    {s.contrib.amountTotal && (
+                                        <>
+                                            <span className="text-gray-400 mx-1.5">·</span>
+                                            <span className="text-green-700 font-medium">{formatAmount(s.contrib.amountTotal)}</span>
+                                        </>
+                                    )}
+                                    <div className="text-xs text-gray-400 mt-0.5">
+                                        Shoda: {s.reasons.join(", ")}
+                                    </div>
+                                </div>
+                                <Button size="sm" className="shrink-0 h-7 text-xs gap-1 bg-[#327600] hover:bg-[#265c00]"
+                                    disabled={savePending}
+                                    onClick={() => handleQuickAlloc(s.contrib)}>
+                                    {savePending ? <Loader2 className="h-3 w-3 animate-spin" /> : <Link2 className="h-3 w-3" />}
+                                    Napárovat
+                                </Button>
+                            </div>
+                        ))}
+                    </div>
+                )}
 
                 {/* Existující alokace */}
                 {loadPending && <p className="text-sm text-gray-400 text-center py-2">Načítám…</p>}

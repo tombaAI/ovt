@@ -5,6 +5,7 @@ import {
     importFinTjImports, importFinTjTransactions, importFinTjImportLines,
     importFinTjHospodareniImports, importFinTjHospodareniRows,
     importFinTjAllocations, memberContributions, contributionPeriods, members,
+    paymentLedger, paymentAllocations,
 } from "@/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -661,11 +662,12 @@ export type TjAllocation = {
 };
 
 export type ContribOption = {
-    contribId:   number;
-    memberId:    number;
-    memberName:  string;
-    year:        number;
-    amountTotal: number | null;
+    contribId:      number;
+    memberId:       number;
+    memberName:     string;
+    year:           number;
+    amountTotal:    number | null;
+    variableSymbol: number | null;
 };
 
 export type AllocResult = { error: string } | { success: true };
@@ -712,17 +714,18 @@ export async function getContribsForAllocation(): Promise<ContribOption[]> {
     const db = getDb();
     const rows = await db
         .select({
-            contribId:   memberContributions.id,
-            memberId:    memberContributions.memberId,
-            memberName:  members.fullName,
-            year:        contributionPeriods.year,
-            amountTotal: memberContributions.amountTotal,
+            contribId:      memberContributions.id,
+            memberId:       memberContributions.memberId,
+            memberName:     members.fullName,
+            year:           contributionPeriods.year,
+            amountTotal:    memberContributions.amountTotal,
+            variableSymbol: members.variableSymbol,
         })
         .from(memberContributions)
         .innerJoin(members, eq(members.id, memberContributions.memberId))
         .innerJoin(contributionPeriods, eq(contributionPeriods.id, memberContributions.periodId))
         .orderBy(members.lastName, members.firstName, desc(contributionPeriods.year));
-    return rows.map(r => ({ ...r, year: Number(r.year) }));
+    return rows.map(r => ({ ...r, year: Number(r.year), variableSymbol: r.variableSymbol ?? null }));
 }
 
 export async function createTjAllocation(params: {
@@ -736,15 +739,53 @@ export async function createTjAllocation(params: {
     if (!session?.user?.email) return { error: "Nepřihlášen" };
     try {
         const db = getDb();
+
+        // Načteme TJ transakci pro datum a popis
+        const [tjTx] = await db
+            .select({ docDate: importFinTjTransactions.docDate, description: importFinTjTransactions.description, docNumber: importFinTjTransactions.docNumber })
+            .from(importFinTjTransactions)
+            .where(eq(importFinTjTransactions.id, params.tjTransactionId));
+        if (!tjTx) return { error: "TJ transakce nenalezena" };
+
+        // 1. Zapsat do payment_ledger → viditelné v přehledu příspěvků
+        const [ledgerRow] = await db
+            .insert(paymentLedger)
+            .values({
+                sourceType:           "tj_finance",
+                paidAt:               tjTx.docDate,
+                amount:               params.amount.toFixed(2),
+                message:              tjTx.description,
+                note:                 params.note || `TJ doklad: ${tjTx.docNumber}`,
+                reconciliationStatus: "confirmed",
+                createdBy:            session.user.email,
+            })
+            .returning({ id: paymentLedger.id });
+
+        // 2. Zapsat alokaci do payment_allocations
+        await db.insert(paymentAllocations).values({
+            ledgerId:    ledgerRow.id,
+            contribId:   params.contribId,
+            memberId:    params.memberId,
+            amount:      params.amount.toFixed(2),
+            isSuggested: false,
+            confirmedBy: session.user.email,
+            confirmedAt: new Date(),
+            createdBy:   session.user.email,
+        });
+
+        // 3. Zapsat do TJ alokační tabulky s vazbou na ledger
         await db.insert(importFinTjAllocations).values({
             tjTransactionId: params.tjTransactionId,
             contribId:       params.contribId,
             memberId:        params.memberId,
+            ledgerId:        ledgerRow.id,
             amount:          params.amount.toFixed(2),
             note:            params.note || null,
             createdBy:       session.user.email,
         });
+
         revalidatePath("/dashboard/finance");
+        revalidatePath("/dashboard/contributions");
         return { success: true };
     } catch (e) {
         console.error("createTjAllocation error:", e);
@@ -757,8 +798,22 @@ export async function deleteTjAllocation(allocationId: number): Promise<AllocRes
     if (!session?.user?.email) return { error: "Nepřihlášen" };
     try {
         const db = getDb();
+
+        // Najdeme ledger_id
+        const [alloc] = await db
+            .select({ ledgerId: importFinTjAllocations.ledgerId })
+            .from(importFinTjAllocations)
+            .where(eq(importFinTjAllocations.id, allocationId));
+
         await db.delete(importFinTjAllocations).where(eq(importFinTjAllocations.id, allocationId));
+
+        // Smažeme i payment_ledger záznam (cascade smaže payment_allocations)
+        if (alloc?.ledgerId) {
+            await db.delete(paymentLedger).where(eq(paymentLedger.id, alloc.ledgerId));
+        }
+
         revalidatePath("/dashboard/finance");
+        revalidatePath("/dashboard/contributions");
         return { success: true };
     } catch (e) {
         console.error("deleteTjAllocation error:", e);

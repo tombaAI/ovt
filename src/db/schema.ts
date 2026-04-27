@@ -260,7 +260,7 @@ export const paymentLedger = appSchema.table(
     "payment_ledger",
     {
         id:                   serial("id").primaryKey(),
-        sourceType:           text("source_type", { enum: ["fio_bank", "file_import", "cash"] }).notNull(),
+        sourceType:           text("source_type", { enum: ["fio_bank", "file_import", "cash", "tj_finance"] }).notNull(),
         fioBankTxId:          integer("fio_bank_tx_id").unique().references(() => fioBankTransactions.id),
         bankImportTxId:       integer("bank_import_tx_id").unique().references(() => bankImportTransactions.id),
         importRunId:          integer("import_run_id").references(() => importHistory.id, { onDelete: "set null" }),
@@ -570,6 +570,7 @@ export const importFinTjAllocations = appSchema.table(
         tjTransactionId: integer("tj_transaction_id").notNull().references(() => importFinTjTransactions.id, { onDelete: "cascade" }),
         contribId:       integer("contrib_id").notNull().references(() => memberContributions.id),
         memberId:        integer("member_id").notNull().references(() => members.id),
+        ledgerId:        integer("ledger_id").references(() => paymentLedger.id, { onDelete: "set null" }),
         amount:          numeric("amount", { precision: 12, scale: 2 }).notNull(),
         note:            text("note"),
         createdBy:       text("created_by").notNull(),
