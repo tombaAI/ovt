@@ -1,5 +1,4 @@
 import Image from "next/image";
-import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getForeignWaterRegistrationByToken } from "@/lib/actions/event-registrations";
 
@@ -125,18 +124,6 @@ export default async function ForeignWaterRegistrationDetailPage({
                                 </div>
                             </div>
                         </section>
-                    </div>
-                </div>
-
-                <div className="text-center text-sm text-[#4a5a42]">
-                    Úpravy provedeš přes veřejný formulář.
-                    <div className="mt-2">
-                        <Link
-                            href="/prihlaska/zahranicnivoda"
-                            className="inline-flex items-center justify-center rounded-md border border-[#98bf7c] bg-white px-4 py-2 text-sm font-medium text-[#2f4f1e] hover:bg-[#f0f7e8]"
-                        >
-                            Otevřít formulář přihlášky
-                        </Link>
                     </div>
                 </div>
             </div>

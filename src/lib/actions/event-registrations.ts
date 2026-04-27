@@ -355,9 +355,6 @@ function buildForeignWaterConfirmationEmail(params: {
                 </td></tr>
             </table>
 
-            <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;line-height:1.6;">
-                Pokud bude potřeba údaje upravit, otevři přihlášku znovu přes původní formulář a ulož změny.
-            </p>
         </td>
     </tr>
 
