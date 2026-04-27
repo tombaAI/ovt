@@ -213,9 +213,10 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
                                 />
                             </label>
                             <label className="space-y-1.5 block">
-                                <span className="text-sm font-medium text-[#2e3f25]">Telefon</span>
+                                <span className="text-sm font-medium text-[#2e3f25]">Telefon *</span>
                                 <input
                                     type="tel"
+                                    required
                                     value={phone}
                                     onChange={(e) => setPhone(e.target.value)}
                                     className="w-full rounded-lg border border-[#cfddc4] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#82b965]"
@@ -251,8 +252,9 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
                         </div>
 
                         <label className="space-y-1.5 block">
-                            <span className="text-sm font-medium text-[#2e3f25]">Typy lodí a jiné dopravní prostředky které přihlašuji</span>
+                            <span className="text-sm font-medium text-[#2e3f25]">Typy lodí a jiné dopravní prostředky které přihlašuji *</span>
                             <textarea
+                                required
                                 rows={3}
                                 value={transportInfo}
                                 onChange={(e) => setTransportInfo(e.target.value)}

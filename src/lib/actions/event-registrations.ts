@@ -534,8 +534,8 @@ export async function submitForeignWaterRegistration(
     const transportInfo = normalizeText(input.transportInfo);
     const amount = personsCount * FOREIGN_WATER_AMOUNT_PER_PERSON;
 
-    if (!email || !firstName || !lastName) {
-        return { error: "Vyplň prosím e-mail, jméno a příjmení." };
+    if (!email || !phone || !firstName || !lastName || !transportInfo) {
+        return { error: "Vyplň prosím e-mail, telefon, jméno, příjmení a typy lodí/dopravy." };
     }
 
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
