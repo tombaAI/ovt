@@ -805,12 +805,12 @@ export async function deleteTjAllocation(allocationId: number): Promise<AllocRes
             .from(importFinTjAllocations)
             .where(eq(importFinTjAllocations.id, allocationId));
 
-        await db.delete(importFinTjAllocations).where(eq(importFinTjAllocations.id, allocationId));
-
-        // Smažeme i payment_ledger záznam (cascade smaže payment_allocations)
+        // Pořadí: nejdřív payment_allocations, pak payment_ledger, pak tj_alloc
         if (alloc?.ledgerId) {
+            await db.delete(paymentAllocations).where(eq(paymentAllocations.ledgerId, alloc.ledgerId));
             await db.delete(paymentLedger).where(eq(paymentLedger.id, alloc.ledgerId));
         }
+        await db.delete(importFinTjAllocations).where(eq(importFinTjAllocations.id, allocationId));
 
         revalidatePath("/dashboard/finance");
         revalidatePath("/dashboard/contributions");

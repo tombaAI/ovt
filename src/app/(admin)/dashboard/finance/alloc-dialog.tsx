@@ -173,9 +173,11 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     }
 
     function handleDelete(allocationId: number) {
+        setError(null);
         startSave(async () => {
-            await deleteTjAllocation(allocationId);
-            setAllocations(await getTjAllocations(tx.id));
+            const res = await deleteTjAllocation(allocationId);
+            if ("error" in res) { setError(res.error); return; }
+            try { setAllocations(await getTjAllocations(tx.id)); } catch { setAllocations([]); }
         });
     }
 
