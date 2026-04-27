@@ -9,25 +9,24 @@ import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { InlineField } from "@/app/(admin)/dashboard/members/inline-field";
 import {
     updateEventField, deleteEvent, getEventAuditLog,
     getEventGcalDiff, syncEventToGcal, acceptGcalField,
+    getMembersForAutocomplete,
 } from "@/lib/actions/events";
+import { getEventRegistrationsForAdmin } from "@/lib/actions/event-registrations";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
-import type { EventRow, EventType, EventStatus, EventAuditEntry, GcalDiffResult, GcalDiffField } from "@/lib/actions/events";
-
-interface MemberOption {
-    id: number;
-    firstName: string;
-    lastName: string;
-    fullName: string;
-    nickname: string | null;
-}
+import type {
+    EventRow, EventType, EventStatus, EventAuditEntry,
+    GcalDiffResult, GcalDiffField, MemberOption,
+} from "@/lib/actions/events";
+import type { EventRegistrationAdminRow } from "@/lib/actions/event-registrations";
 
 interface Props {
     event: EventRow;
-    allMembers: MemberOption[];
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -64,8 +63,8 @@ function getFieldDiff(diff: GcalDiffResult | null, field: string): GcalDiffField
     return entry && !entry.match ? entry : null;
 }
 
-const EVENT_TYPES    = Object.entries(EVENT_TYPE_LABELS)    as [EventType, string][];
-const EVENT_STATUSES = Object.entries(EVENT_STATUS_LABELS)  as [EventStatus, string][];
+const EVENT_TYPES    = Object.entries(EVENT_TYPE_LABELS)   as [EventType, string][];
+const EVENT_STATUSES = Object.entries(EVENT_STATUS_LABELS) as [EventStatus, string][];
 
 const EVENT_FIELD_LABELS: Record<string, string> = {
     name: "Název", eventType: "Typ", dateFrom: "Datum od", dateTo: "Datum do",
@@ -75,20 +74,34 @@ const EVENT_FIELD_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-    planned:   "bg-blue-100 text-blue-700",
-    confirmed: "bg-green-100 text-green-700",
-    cancelled: "bg-red-100 text-red-600",
-    completed: "bg-gray-100 text-gray-600",
+    planned:   "bg-blue-50 text-blue-700",
+    confirmed: "bg-green-50 text-green-700",
+    cancelled: "bg-red-50 text-red-600",
+    completed: "bg-gray-100 text-gray-500",
 };
 
 const TYPE_COLORS: Record<string, string> = {
-    cpv:          "bg-amber-100 text-amber-700",
-    foreign:      "bg-purple-100 text-purple-700",
-    recreational: "bg-sky-100 text-sky-700",
-    club:         "bg-teal-100 text-teal-700",
-    race:         "bg-orange-100 text-orange-700",
-    brigada:      "bg-lime-100 text-lime-700",
-    other:        "bg-gray-100 text-gray-500",
+    cpv:          "bg-amber-50 text-amber-700",
+    foreign:      "bg-purple-50 text-purple-700",
+    recreational: "bg-sky-50 text-sky-700",
+    club:         "bg-teal-50 text-teal-700",
+    race:         "bg-orange-50 text-orange-700",
+    brigada:      "bg-lime-50 text-lime-700",
+    other:        "bg-gray-50 text-gray-500",
+};
+
+const PAYMENT_STATUS_COLORS: Record<string, string> = {
+    pending:   "bg-amber-50 text-amber-700",
+    matched:   "bg-blue-50 text-blue-700",
+    paid:      "bg-green-50 text-green-700",
+    cancelled: "bg-red-50 text-red-600",
+};
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+    pending:   "čeká",
+    matched:   "spárováno",
+    paid:      "zaplaceno",
+    cancelled: "zrušeno",
 };
 
 // ── Audit log dialog ──────────────────────────────────────────────────────────
@@ -159,12 +172,8 @@ function ImmediateSelect({ label, value, options, eventId, field, onSaved }: {
 
     async function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
         setSaving(true);
-        try {
-            await updateEventField(eventId, field, e.target.value || null);
-            onSaved();
-        } finally {
-            setSaving(false);
-        }
+        try { await updateEventField(eventId, field, e.target.value || null); onSaved(); }
+        finally { setSaving(false); }
     }
 
     return (
@@ -247,11 +256,12 @@ function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, 
 
 // ── Immediate-save leader autocomplete ────────────────────────────────────────
 
-function ImmediateLeader({ value, valueId, eventId, allMembers, onSaved }: {
+function ImmediateLeader({ value, valueId, eventId, allMembers, membersLoaded, onSaved }: {
     value: string | null;
     valueId: number | null;
     eventId: number;
     allMembers: MemberOption[];
+    membersLoaded: boolean;
     onSaved: () => void;
 }) {
     const [text, setText]           = useState(value ?? "");
@@ -261,7 +271,7 @@ function ImmediateLeader({ value, valueId, eventId, allMembers, onSaved }: {
 
     useEffect(() => { setText(value ?? ""); setCurrentId(valueId); }, [value, valueId]);
 
-    const suggestions = focused && text.trim()
+    const suggestions = focused && text.trim() && membersLoaded
         ? allMembers.filter(m => matchesMember(m, text)).slice(0, 6)
         : [];
 
@@ -293,16 +303,18 @@ function ImmediateLeader({ value, valueId, eventId, allMembers, onSaved }: {
         <div className="border-b last:border-0 py-3 flex flex-col sm:flex-row sm:items-center sm:gap-4">
             <p className="text-sm font-medium text-gray-500 sm:w-28 shrink-0 mb-0.5 sm:mb-0">Vedoucí</p>
             <div className="relative flex-1">
-                <input type="text" value={text} placeholder="Příjmení nebo přezdívka…" autoComplete="off"
+                <input type="text" value={text}
+                    placeholder={membersLoaded ? "Příjmení nebo přezdívka…" : "Načítám seznam členů…"}
+                    autoComplete="off" disabled={saving || !membersLoaded}
                     onChange={e => { setText(e.target.value); if (!e.target.value.trim()) clear(); }}
-                    onFocus={() => setFocused(true)} onBlur={onBlur} disabled={saving}
+                    onFocus={() => setFocused(true)} onBlur={onBlur}
                     onKeyDown={e => {
                         if (e.key === "Enter" && suggestions.length > 0) { e.preventDefault(); select(suggestions[0]); }
                         if (e.key === "Escape") onBlur();
                     }}
                     className="w-full h-8 rounded-md border border-input bg-background px-2 pr-7 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
                 />
-                {currentId && (
+                {currentId && membersLoaded && (
                     <button onClick={clear} type="button"
                         className="absolute right-1.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 text-base leading-none px-0.5">
                         ×
@@ -338,9 +350,9 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
     onGcalAccept?: () => Promise<void>;
     onGcalPush?: () => Promise<void>;
 }) {
-    const [editing, setEditing] = useState(false);
-    const [draft, setDraft]     = useState(value ?? "");
-    const [saving, setSaving]   = useState(false);
+    const [editing, setEditing]             = useState(false);
+    const [draft, setDraft]                 = useState(value ?? "");
+    const [saving, setSaving]               = useState(false);
     const [acceptingGcal, setAcceptingGcal] = useState(false);
     const [pushingGcal, setPushingGcal]     = useState(false);
 
@@ -354,10 +366,6 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
         finally { setSaving(false); }
     }
 
-    function handleKeyDown(e: React.KeyboardEvent) {
-        if (e.key === "Escape") { setDraft(value ?? ""); setEditing(false); }
-    }
-
     const hasGcalDiff = gcalValue !== undefined && gcalValue !== (value?.trim() || null);
 
     return (
@@ -366,15 +374,13 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
             {editing ? (
                 <div className="space-y-2">
                     <Textarea autoFocus value={draft} onChange={e => setDraft(e.target.value)}
-                        onKeyDown={handleKeyDown} placeholder={placeholder} rows={4}
-                        className="text-sm resize-none" />
+                        onKeyDown={e => e.key === "Escape" && (setDraft(value ?? ""), setEditing(false))}
+                        placeholder={placeholder} rows={4} className="text-sm resize-none" />
                     <div className="flex items-center gap-2">
                         <button onClick={handleSave} disabled={saving}
-                            className="w-8 h-8 flex items-center justify-center rounded-md bg-[#327600] text-white hover:bg-[#2a6400] disabled:opacity-50 text-sm"
-                            title="Uložit (Enter)">✓</button>
+                            className="w-8 h-8 flex items-center justify-center rounded-md bg-[#327600] text-white hover:bg-[#2a6400] disabled:opacity-50 text-sm">✓</button>
                         <button onClick={() => { setDraft(value ?? ""); setEditing(false); }}
-                            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 text-gray-500 hover:bg-gray-100 text-sm"
-                            title="Zrušit (Esc)">✕</button>
+                            className="w-8 h-8 flex items-center justify-center rounded-md border border-gray-300 text-gray-500 hover:bg-gray-100 text-sm">✕</button>
                         {saving && <span className="text-xs text-gray-400">ukládám…</span>}
                     </div>
                 </div>
@@ -448,22 +454,15 @@ function GcalSyncStarter({ event, onSaved }: { event: EventRow; onSaved: () => v
     async function handleSync() {
         if (!event.dateFrom) { setMsg("Nejprve nastav termín akce"); return; }
         setSyncing(true);
-        try {
-            await syncEventToGcal(event.id);
-            onSaved();
-            setMsg("Přidáno do Google Kalendáře");
-        } catch (e) {
-            setMsg(e instanceof Error ? e.message : "Chyba synchronizace");
-        } finally {
-            setSyncing(false);
-        }
+        try { await syncEventToGcal(event.id); onSaved(); setMsg("Přidáno do Google Kalendáře"); }
+        catch (e) { setMsg(e instanceof Error ? e.message : "Chyba synchronizace"); }
+        finally { setSyncing(false); }
     }
 
     return (
         <div className="flex items-center gap-3 rounded-xl border bg-gray-50 px-4 py-3">
             <Button variant="outline" size="sm" disabled={syncing || !event.dateFrom} onClick={handleSync}
-                title={!event.dateFrom ? "Nejprve nastav termín" : undefined}
-                className="text-xs h-7">
+                title={!event.dateFrom ? "Nejprve nastav termín" : undefined} className="text-xs h-7">
                 {syncing ? "Přidávám…" : "+ Přidat do Google Kalendáře"}
             </Button>
             {msg && <p className={`text-xs ${msg.startsWith("Přidáno") ? "text-green-600" : "text-red-500"}`}>{msg}</p>}
@@ -472,18 +471,89 @@ function GcalSyncStarter({ event, onSaved }: { event: EventRow; onSaved: () => v
     );
 }
 
+// ── Registrations tab ─────────────────────────────────────────────────────────
+
+function RegistrationsTab({ eventId }: { eventId: number }) {
+    const [rows, setRows]       = useState<EventRegistrationAdminRow[] | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError]     = useState<string | null>(null);
+
+    useEffect(() => {
+        getEventRegistrationsForAdmin(eventId)
+            .then(r => { setRows(r); setLoading(false); })
+            .catch(e => { setError(e instanceof Error ? e.message : "Chyba"); setLoading(false); });
+    }, [eventId]);
+
+    if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Načítám přihlášky…</p>;
+    if (error)   return <p className="text-sm text-red-500 py-4">{error}</p>;
+    if (!rows || rows.length === 0) return (
+        <p className="text-sm text-gray-400 py-8 text-center">Žádné přihlášky</p>
+    );
+
+    return (
+        <div className="space-y-3">
+            <p className="text-xs text-gray-400">{rows.length} přihlášek · celkem {rows.reduce((s, r) => s + r.personsCount, 0)} osob</p>
+            <div className="rounded-xl border bg-white overflow-hidden">
+                <Table>
+                    <TableHeader>
+                        <TableRow className="bg-gray-50/70">
+                            <TableHead className="text-xs font-medium text-gray-400">Jméno</TableHead>
+                            <TableHead className="hidden sm:table-cell text-xs font-medium text-gray-400">Email</TableHead>
+                            <TableHead className="text-xs font-medium text-gray-400 w-16 text-center">Osob</TableHead>
+                            <TableHead className="hidden md:table-cell text-xs font-medium text-gray-400">Účastníci</TableHead>
+                            <TableHead className="text-xs font-medium text-gray-400 w-24">Platba</TableHead>
+                        </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                        {rows.map(r => (
+                            <TableRow key={r.registrationId} className="text-sm">
+                                <TableCell>
+                                    <p className="font-medium text-gray-900">{r.firstName} {r.lastName}</p>
+                                    <p className="text-xs text-gray-400 mt-0.5 tabular-nums">
+                                        {new Intl.DateTimeFormat("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(r.createdAt))}
+                                    </p>
+                                </TableCell>
+                                <TableCell className="hidden sm:table-cell text-gray-600 text-xs">{r.email}</TableCell>
+                                <TableCell className="text-center text-gray-700">{r.personsCount}</TableCell>
+                                <TableCell className="hidden md:table-cell text-xs text-gray-600">
+                                    {r.participantNames.join(", ") || "—"}
+                                </TableCell>
+                                <TableCell>
+                                    <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-normal`}>
+                                        {PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus}
+                                    </Badge>
+                                    <p className="text-[11px] text-gray-400 mt-0.5 tabular-nums">
+                                        {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
+                                    </p>
+                                </TableCell>
+                            </TableRow>
+                        ))}
+                    </TableBody>
+                </Table>
+            </div>
+        </div>
+    );
+}
+
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function EventDetailClient({ event: initialEvent, allMembers }: Props) {
+export function EventDetailClient({ event }: Props) {
     const router = useRouter();
-    const [event] = useState(initialEvent);
     const [activeField, setActiveField] = useState<string | null>(null);
-    const [diff, setDiff]             = useState<GcalDiffResult | null>(null);
-    const [syncing, setSyncing]       = useState(false);
-    const [auditOpen, setAuditOpen]   = useState(false);
-    const [deleting, startDeleteT]    = useTransition();
+    const [diff, setDiff]               = useState<GcalDiffResult | null>(null);
+    const [syncing, setSyncing]         = useState(false);
+    const [auditOpen, setAuditOpen]     = useState(false);
+    const [deleting, startDeleteT]      = useTransition();
 
-    // Načti GCal diff při mountu (pokud je akce v GCal)
+    // Members loaded lazily — not needed for initial render
+    const [allMembers, setAllMembers]     = useState<MemberOption[]>([]);
+    const [membersLoaded, setMembersLoaded] = useState(false);
+
+    useEffect(() => {
+        getMembersForAutocomplete().then(m => { setAllMembers(m); setMembersLoaded(true); });
+    }, []);
+
+    // GCal diff — loaded after mount if event is in GCal
     useEffect(() => {
         if (!event.gcalEventId) return;
         getEventGcalDiff(event.id).then(setDiff).catch(() => setDiff(null));
@@ -496,9 +566,7 @@ export function EventDetailClient({ event: initialEvent, allMembers }: Props) {
             try {
                 await updateEventField(event.id, field, value || null);
                 refresh();
-                if (event.gcalEventId) {
-                    getEventGcalDiff(event.id).then(setDiff).catch(() => {});
-                }
+                if (event.gcalEventId) getEventGcalDiff(event.id).then(setDiff).catch(() => {});
                 return { success: true };
             } catch (e) {
                 return { error: e instanceof Error ? e.message : "Chyba" };
@@ -510,21 +578,14 @@ export function EventDetailClient({ event: initialEvent, allMembers }: Props) {
         return async () => {
             await acceptGcalField(event.id, field, gcalValue);
             refresh();
-            const updated = await getEventGcalDiff(event.id);
-            setDiff(updated);
+            setDiff(await getEventGcalDiff(event.id));
         };
     }
 
     async function pushToGcal() {
         setSyncing(true);
-        try {
-            await syncEventToGcal(event.id);
-            refresh();
-            const updated = await getEventGcalDiff(event.id);
-            setDiff(updated);
-        } finally {
-            setSyncing(false);
-        }
+        try { await syncEventToGcal(event.id); refresh(); setDiff(await getEventGcalDiff(event.id)); }
+        finally { setSyncing(false); }
     }
 
     function gcalFieldValue(field: string) {
@@ -539,43 +600,35 @@ export function EventDetailClient({ event: initialEvent, allMembers }: Props) {
         });
     }
 
-    function onSaved() {
-        refresh();
-    }
-
     return (
         <>
-            <div className="max-w-2xl mx-auto space-y-0">
+            <div className="max-w-2xl mx-auto">
 
                 {/* ── Page header ── */}
                 <div className="flex items-center gap-3 mb-5">
                     <Link href={`/dashboard/events?year=${event.year}`}
                         className="flex items-center gap-0.5 text-sm text-gray-500 hover:text-gray-900 transition-colors shrink-0">
-                        <ChevronLeft size={16} className="shrink-0" />
+                        <ChevronLeft size={16} />
                         <span>Kalendář {event.year}</span>
                     </Link>
-
-                    <div className="flex-1 min-w-0" />
-
-                    <div className="flex items-center gap-2 shrink-0">
-                        <Popover>
-                            <PopoverTrigger asChild>
-                                <Button size="sm" variant="outline" className="h-8 w-8 p-0">
-                                    <MoreHorizontal size={15} />
-                                </Button>
-                            </PopoverTrigger>
-                            <PopoverContent align="end" className="w-44 p-1.5 space-y-0.5">
-                                <button onClick={() => setAuditOpen(true)}
-                                    className="w-full text-left px-2.5 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors">
-                                    Audit log
-                                </button>
-                                <button onClick={handleDelete} disabled={deleting}
-                                    className="w-full text-left px-2.5 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
-                                    {deleting ? "Mažu…" : "Smazat akci"}
-                                </button>
-                            </PopoverContent>
-                        </Popover>
-                    </div>
+                    <div className="flex-1" />
+                    <Popover>
+                        <PopoverTrigger asChild>
+                            <Button size="sm" variant="outline" className="h-8 w-8 p-0">
+                                <MoreHorizontal size={15} />
+                            </Button>
+                        </PopoverTrigger>
+                        <PopoverContent align="end" className="w-44 p-1.5 space-y-0.5">
+                            <button onClick={() => setAuditOpen(true)}
+                                className="w-full text-left px-2.5 py-1.5 rounded text-sm hover:bg-gray-50 transition-colors">
+                                Audit log
+                            </button>
+                            <button onClick={handleDelete} disabled={deleting}
+                                className="w-full text-left px-2.5 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
+                                {deleting ? "Mažu…" : "Smazat akci"}
+                            </button>
+                        </PopoverContent>
+                    </Popover>
                 </div>
 
                 {/* ── Title + badges ── */}
@@ -589,87 +642,93 @@ export function EventDetailClient({ event: initialEvent, allMembers }: Props) {
                             {EVENT_STATUS_LABELS[event.status]}
                         </Badge>
                         {event.gcalSync && event.gcalEventId && (
-                            <Badge className="bg-violet-50 text-violet-600 border border-violet-200 text-xs font-normal">
-                                GCal
-                            </Badge>
+                            <Badge className="bg-violet-50 text-violet-600 border border-violet-200 text-xs font-normal">GCal</Badge>
                         )}
                     </div>
                 </div>
 
-                {/* ── Základní informace ── */}
-                <div className="rounded-xl border px-4 mb-4">
-                    <InlineField label="Název" fieldId="name" type="text"
-                        value={event.name} placeholder="Název akce"
-                        activeField={activeField} onActiveFieldChange={setActiveField}
-                        onSave={save("name")}
-                        gcalValue={gcalFieldValue("name")}
-                        onGcalAccept={gcalFieldValue("name") !== undefined
-                            ? makeGcalAccept("name", gcalFieldValue("name") ?? null) : undefined}
-                        onGcalPush={gcalFieldValue("name") !== undefined ? pushToGcal : undefined}
-                    />
-                    <ImmediateSelect label="Typ" value={event.eventType}
-                        options={EVENT_TYPES} eventId={event.id} field="eventType" onSaved={onSaved} />
-                    <ImmediateSelect label="Stav" value={event.status}
-                        options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={onSaved} />
-                    <ImmediateDate label="Datum od" value={event.dateFrom}
-                        eventId={event.id} field="dateFrom" onSaved={onSaved}
-                        gcalValue={gcalFieldValue("dateFrom")}
-                        onGcalAccept={gcalFieldValue("dateFrom") !== undefined
-                            ? makeGcalAccept("dateFrom", gcalFieldValue("dateFrom") ?? null) : undefined}
-                        onGcalPush={gcalFieldValue("dateFrom") !== undefined ? pushToGcal : undefined}
-                    />
-                    <ImmediateDate label="Datum do" value={event.dateTo}
-                        eventId={event.id} field="dateTo" onSaved={onSaved}
-                        min={event.dateFrom ?? undefined}
-                        gcalValue={gcalFieldValue("dateTo")}
-                        onGcalAccept={gcalFieldValue("dateTo") !== undefined
-                            ? makeGcalAccept("dateTo", gcalFieldValue("dateTo") ?? null) : undefined}
-                        onGcalPush={gcalFieldValue("dateTo") !== undefined ? pushToGcal : undefined}
-                    />
-                    {!event.dateFrom && (
-                        <ImmediateSelect label="Orien. měsíc"
-                            value={event.approxMonth ? String(event.approxMonth) : null}
-                            options={[["", "— neznámý —"], ...MONTH_NAMES.slice(1).map((m, i) => [String(i + 1), m] as [string, string])]}
-                            eventId={event.id} field="approxMonth" onSaved={onSaved} />
-                    )}
-                    <InlineField label="Místo" fieldId="location" type="text"
-                        value={event.location} placeholder="Řeka, místo…"
-                        activeField={activeField} onActiveFieldChange={setActiveField}
-                        onSave={save("location")}
-                        gcalValue={gcalFieldValue("location")}
-                        onGcalAccept={gcalFieldValue("location") !== undefined
-                            ? makeGcalAccept("location", gcalFieldValue("location") ?? null) : undefined}
-                        onGcalPush={gcalFieldValue("location") !== undefined ? pushToGcal : undefined}
-                    />
-                    <ImmediateLeader value={event.leaderName} valueId={event.leaderId}
-                        eventId={event.id} allMembers={allMembers} onSaved={onSaved} />
-                    <InlineField label="Odkaz" fieldId="externalUrl" type="text"
-                        value={event.externalUrl} placeholder="https://…"
-                        activeField={activeField} onActiveFieldChange={setActiveField}
-                        onSave={save("externalUrl")} />
-                </div>
+                {/* ── Tabs ── */}
+                <Tabs defaultValue="detail">
+                    <TabsList className="mb-4">
+                        <TabsTrigger value="detail">Detail</TabsTrigger>
+                        <TabsTrigger value="registrations">Přihlášky</TabsTrigger>
+                    </TabsList>
 
-                {/* ── Popis & Poznámky ── */}
-                <div className="rounded-xl border px-4 mb-4">
-                    <ImmediateTextarea label="Popis" value={event.description}
-                        eventId={event.id} field="description" onSaved={onSaved}
-                        placeholder="Volitelný popis akce…"
-                        gcalValue={gcalFieldValue("description")}
-                        onGcalAccept={gcalFieldValue("description") !== undefined
-                            ? makeGcalAccept("description", gcalFieldValue("description") ?? null) : undefined}
-                        onGcalPush={gcalFieldValue("description") !== undefined ? pushToGcal : undefined}
-                    />
-                    <ImmediateTextarea label="Interní poznámka" value={event.note}
-                        eventId={event.id} field="note" onSaved={onSaved}
-                        placeholder="Interní poznámka…" />
-                </div>
+                    {/* ── Tab: Detail ── */}
+                    <TabsContent value="detail" className="space-y-4 mt-0">
+                        <div className="rounded-xl border px-4">
+                            <InlineField label="Název" fieldId="name" type="text"
+                                value={event.name} placeholder="Název akce"
+                                activeField={activeField} onActiveFieldChange={setActiveField}
+                                onSave={save("name")}
+                                gcalValue={gcalFieldValue("name")}
+                                onGcalAccept={gcalFieldValue("name") !== undefined ? makeGcalAccept("name", gcalFieldValue("name") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("name") !== undefined ? pushToGcal : undefined}
+                            />
+                            <ImmediateSelect label="Typ" value={event.eventType}
+                                options={EVENT_TYPES} eventId={event.id} field="eventType" onSaved={refresh} />
+                            <ImmediateSelect label="Stav" value={event.status}
+                                options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={refresh} />
+                            <ImmediateDate label="Datum od" value={event.dateFrom}
+                                eventId={event.id} field="dateFrom" onSaved={refresh}
+                                gcalValue={gcalFieldValue("dateFrom")}
+                                onGcalAccept={gcalFieldValue("dateFrom") !== undefined ? makeGcalAccept("dateFrom", gcalFieldValue("dateFrom") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("dateFrom") !== undefined ? pushToGcal : undefined}
+                            />
+                            <ImmediateDate label="Datum do" value={event.dateTo}
+                                eventId={event.id} field="dateTo" onSaved={refresh}
+                                min={event.dateFrom ?? undefined}
+                                gcalValue={gcalFieldValue("dateTo")}
+                                onGcalAccept={gcalFieldValue("dateTo") !== undefined ? makeGcalAccept("dateTo", gcalFieldValue("dateTo") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("dateTo") !== undefined ? pushToGcal : undefined}
+                            />
+                            {!event.dateFrom && (
+                                <ImmediateSelect label="Orien. měsíc"
+                                    value={event.approxMonth ? String(event.approxMonth) : null}
+                                    options={[["", "— neznámý —"], ...MONTH_NAMES.slice(1).map((m, i) => [String(i + 1), m] as [string, string])]}
+                                    eventId={event.id} field="approxMonth" onSaved={refresh} />
+                            )}
+                            <InlineField label="Místo" fieldId="location" type="text"
+                                value={event.location} placeholder="Řeka, místo…"
+                                activeField={activeField} onActiveFieldChange={setActiveField}
+                                onSave={save("location")}
+                                gcalValue={gcalFieldValue("location")}
+                                onGcalAccept={gcalFieldValue("location") !== undefined ? makeGcalAccept("location", gcalFieldValue("location") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("location") !== undefined ? pushToGcal : undefined}
+                            />
+                            <ImmediateLeader value={event.leaderName} valueId={event.leaderId}
+                                eventId={event.id} allMembers={allMembers} membersLoaded={membersLoaded} onSaved={refresh} />
+                            <InlineField label="Odkaz" fieldId="externalUrl" type="text"
+                                value={event.externalUrl} placeholder="https://…"
+                                activeField={activeField} onActiveFieldChange={setActiveField}
+                                onSave={save("externalUrl")} />
+                        </div>
 
-                {/* ── Google Kalendář ── */}
-                {event.gcalEventId ? (
-                    <GcalStatusBar diff={diff} syncing={syncing} onPush={pushToGcal} />
-                ) : (
-                    <GcalSyncStarter event={event} onSaved={onSaved} />
-                )}
+                        <div className="rounded-xl border px-4">
+                            <ImmediateTextarea label="Popis" value={event.description}
+                                eventId={event.id} field="description" onSaved={refresh}
+                                placeholder="Volitelný popis akce…"
+                                gcalValue={gcalFieldValue("description")}
+                                onGcalAccept={gcalFieldValue("description") !== undefined ? makeGcalAccept("description", gcalFieldValue("description") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("description") !== undefined ? pushToGcal : undefined}
+                            />
+                            <ImmediateTextarea label="Interní poznámka" value={event.note}
+                                eventId={event.id} field="note" onSaved={refresh}
+                                placeholder="Interní poznámka…" />
+                        </div>
+
+                        {event.gcalEventId ? (
+                            <GcalStatusBar diff={diff} syncing={syncing} onPush={pushToGcal} />
+                        ) : (
+                            <GcalSyncStarter event={event} onSaved={refresh} />
+                        )}
+                    </TabsContent>
+
+                    {/* ── Tab: Přihlášky ── */}
+                    <TabsContent value="registrations" className="mt-0">
+                        <RegistrationsTab eventId={event.id} />
+                    </TabsContent>
+                </Tabs>
 
             </div>
 

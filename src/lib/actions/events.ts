@@ -90,6 +90,28 @@ export async function getEvents(year: number): Promise<EventRow[]> {
     }));
 }
 
+export type MemberOption = {
+    id: number;
+    firstName: string;
+    lastName: string;
+    fullName: string;
+    nickname: string | null;
+};
+
+export async function getMembersForAutocomplete(): Promise<MemberOption[]> {
+    const db = getDb();
+    return db
+        .select({
+            id:        members.id,
+            firstName: members.firstName,
+            lastName:  members.lastName,
+            fullName:  members.fullName,
+            nickname:  members.nickname,
+        })
+        .from(members)
+        .orderBy(asc(members.lastName), asc(members.firstName));
+}
+
 export async function getEventById(id: number): Promise<EventRow | null> {
     const db = getDb();
     const rows = await db
