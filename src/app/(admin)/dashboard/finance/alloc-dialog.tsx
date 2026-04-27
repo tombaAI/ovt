@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle,
@@ -33,10 +33,17 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     const [savePending, startSave]      = useTransition();
     const [error, setError]             = useState<string | null>(null);
 
-    // Lazy load alokací při prvním otevření
-    if (open && allocations === null && !loadPending) {
-        startLoad(async () => setAllocations(await getTjAllocations(tx.id)));
-    }
+    // Lazy load alokací při otevření — useEffect, ne render (jinak spustí page transition)
+    useEffect(() => {
+        if (!open || allocations !== null) return;
+        startLoad(async () => {
+            try {
+                setAllocations(await getTjAllocations(tx.id));
+            } catch {
+                setAllocations([]);
+            }
+        });
+    }, [open, tx.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
     const allocatedTotal = allocations?.reduce((s, a) => s + parseFloat(a.amount), 0) ?? 0;
     const remaining      = credit - allocatedTotal;
