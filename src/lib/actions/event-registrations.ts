@@ -111,6 +111,17 @@ function formatDateRangeCz(dateFrom: string | null, dateTo: string | null): stri
     return "termin bude doplnen";
 }
 
+function vocative(name: string): string {
+    if (/něk$/.test(name))      return name.replace(/něk$/, "ňku");
+    if (/ch$/.test(name))       return name + "u";
+    if (/[aá]$/.test(name))     return name.slice(0, -1) + "o";
+    if (/[eí]$/.test(name))     return name;
+    if (/o$/.test(name))        return name;
+    if (/[šžčřj]$/.test(name))  return name + "i";
+    if (/k$/.test(name))        return name + "u";
+    return name + "e";
+}
+
 function createPublicToken(): string {
     return randomBytes(FOREIGN_WATER_PUBLIC_TOKEN_BYTES).toString("hex");
 }
@@ -252,13 +263,14 @@ function buildForeignWaterConfirmationEmail(params: {
         const htmlMessage = escapeHtml(params.messageForRecipient);
         const htmlTransport = params.transportInfo ? escapeHtml(params.transportInfo) : "neuvedeno";
         const htmlDetailUrl = escapeHtml(params.detailUrl);
+        const addressedFirstName = vocative(params.firstName);
         const htmlParticipantItems = params.participantNames
                 .map((name) => `<li style=\"margin:0 0 4px;\">${escapeHtml(name)}</li>`)
                 .join("");
 
         const subject = `Potvrzení přihlášky - ${params.eventName}`;
         const text = [
-                `Ahoj ${params.firstName},`,
+                `Ahoj ${addressedFirstName},`,
                 "",
                 `potvrzujeme přihlášku na akci ${params.eventName}.`,
                 "",
@@ -310,7 +322,7 @@ function buildForeignWaterConfirmationEmail(params: {
 
     <tr>
         <td style="padding:28px 32px 8px;">
-            <p style="margin:0 0 16px;font-size:15px;color:#374151;">Ahoj <strong>${escapeHtml(params.firstName)}</strong>,</p>
+            <p style="margin:0 0 16px;font-size:15px;color:#374151;">Ahoj <strong>${escapeHtml(addressedFirstName)}</strong>,</p>
             <p style="margin:0 0 22px;font-size:14px;color:#6b7280;line-height:1.6;">
                 přihláška na akci <strong>${htmlEventName}</strong> byla úspěšně uložena.
             </p>
