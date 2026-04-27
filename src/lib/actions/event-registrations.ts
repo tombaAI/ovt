@@ -283,7 +283,11 @@ function buildForeignWaterConfirmationEmail(params: {
                 `Zpráva pro příjemce: ${params.messageForRecipient}`,
                 `QR platba: ${params.qrCodeUrl}`,
                 "",
-                `Detail přihlášky (jen pro čtení): ${params.detailUrl}`,
+                "Detail přihlášky:",
+                "- stav přihlášky",
+                "- stav zaplacení",
+                "- možnost úpravy a zrušení",
+                params.detailUrl,
         ].join("\n");
 
         const html = `<!DOCTYPE html>
@@ -350,8 +354,13 @@ function buildForeignWaterConfirmationEmail(params: {
 
             <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #dbe7d2;border-radius:8px;padding:14px;margin-bottom:20px;background:#f7fcf3;">
                 <tr><td style="font-size:13px;color:#466133;line-height:1.6;">
-                    Trvalý odkaz na detail přihlášky (jen pro čtení):<br>
-                    <a href="${htmlDetailUrl}" style="color:#327600;word-break:break-all;">${htmlDetailUrl}</a>
+                    <p style="margin:0 0 10px;font-size:13px;font-weight:700;color:#466133;">Detail přihlášky</p>
+                    <p style="margin:0 0 12px;font-size:13px;color:#466133;line-height:1.6;">
+                        V detailu přihlášky najdeš stav přihlášky, stav zaplacení i možnost úpravy a zrušení.
+                    </p>
+                    <a href="${htmlDetailUrl}" style="display:inline-block;background:#327600;color:#ffffff;text-decoration:none;font-weight:700;font-size:13px;line-height:1;padding:11px 16px;border-radius:8px;">
+                        Otevřít detail přihlášky
+                    </a>
                 </td></tr>
             </table>
 
@@ -546,6 +555,7 @@ export async function submitForeignWaterRegistration(
                 .select({
                     code: eventPaymentPrescriptions.prescriptionCode,
                     publicToken: eventRegistrations.publicToken,
+                    paymentStatus: eventPaymentPrescriptions.status,
                 })
                 .from(eventRegistrations)
                 .innerJoin(
@@ -575,6 +585,7 @@ export async function submitForeignWaterRegistration(
                     personsCount,
                     personsNames: participantNames.join("\n"),
                     transportInfo: transportInfo || null,
+                    cancelledAt: null,
                 })
                 .where(and(
                     eq(eventRegistrations.id, input.registrationId),
@@ -599,15 +610,28 @@ export async function submitForeignWaterRegistration(
 
             const messageForRecipient = buildForeignWaterPaymentMessage(existing.code, fullName);
 
+            const paymentUpdate: {
+                bankAccount: string;
+                variableSymbol: string;
+                amount: string;
+                messageForRecipient: string;
+                updatedAt: Date;
+                status?: EventPaymentPrescriptionStatus;
+            } = {
+                bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
+                variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
+                amount: dec(amount),
+                messageForRecipient,
+                updatedAt: new Date(),
+            };
+
+            if (existing.paymentStatus === "cancelled") {
+                paymentUpdate.status = "pending";
+            }
+
             await tx
                 .update(eventPaymentPrescriptions)
-                .set({
-                    bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
-                    variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
-                    amount: dec(amount),
-                    messageForRecipient,
-                    updatedAt: new Date(),
-                })
+                .set(paymentUpdate)
                 .where(and(
                     eq(eventPaymentPrescriptions.registrationId, registration.id),
                     eq(eventPaymentPrescriptions.eventId, event.id),
@@ -774,6 +798,8 @@ export type ForeignWaterRegistrationDetail = {
     registrationToken: string;
     registrationDetailUrl: string;
     submittedAt: string;
+    cancelledAt: string | null;
+    registrationStatus: "active" | "cancelled";
     event: ForeignWaterEventContext;
     registrant: {
         firstName: string;
@@ -793,8 +819,99 @@ export type ForeignWaterRegistrationDetail = {
         personsCount: number;
         messageForRecipient: string;
         qrCodeUrl: string;
+        status: EventPaymentPrescriptionStatus;
     };
 };
+
+export type CancelForeignWaterRegistrationResult =
+    | { error: string }
+    | { success: true; cancelledAt: string };
+
+export async function cancelForeignWaterRegistrationByToken(token: string): Promise<CancelForeignWaterRegistrationResult> {
+    const publicToken = normalizePublicToken(token);
+    if (!/^[a-f0-9]{32,64}$/.test(publicToken)) {
+        return { error: "Neplatný odkaz přihlášky." };
+    }
+
+    const db = getDb();
+    const now = new Date();
+    const result = await db.transaction(async (tx) => {
+        const [existing] = await tx
+            .select({
+                registrationId: eventRegistrations.id,
+                cancelledAt: eventRegistrations.cancelledAt,
+                paymentStatus: eventPaymentPrescriptions.status,
+            })
+            .from(eventRegistrations)
+            .innerJoin(
+                eventPaymentPrescriptions,
+                and(
+                    eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
+                    eq(eventPaymentPrescriptions.eventId, eventRegistrations.eventId),
+                ),
+            )
+            .where(and(
+                eq(eventRegistrations.publicToken, publicToken),
+                eq(eventRegistrations.formSlug, FOREIGN_WATER_FORM_SLUG),
+                eq(eventRegistrations.eventId, FOREIGN_WATER_EVENT_ID),
+            ))
+            .limit(1);
+
+        if (!existing) return null;
+
+        if (existing.paymentStatus === "paid") {
+            return { blocked: true as const };
+        }
+
+        if (existing.cancelledAt) {
+            return {
+                cancelledAt: (existing.cancelledAt as unknown as Date).toISOString(),
+            };
+        }
+
+        const [updated] = await tx
+            .update(eventRegistrations)
+            .set({
+                cancelledAt: now,
+            })
+            .where(eq(eventRegistrations.id, existing.registrationId))
+            .returning({
+                cancelledAt: eventRegistrations.cancelledAt,
+            });
+
+        await tx
+            .update(eventPaymentPrescriptions)
+            .set({
+                status: "cancelled",
+                updatedAt: now,
+            })
+            .where(and(
+                eq(eventPaymentPrescriptions.registrationId, existing.registrationId),
+                eq(eventPaymentPrescriptions.eventId, FOREIGN_WATER_EVENT_ID),
+            ));
+
+        return {
+            cancelledAt: (updated.cancelledAt as unknown as Date).toISOString(),
+        };
+    });
+
+    if (!result) {
+        return { error: "Přihláška nebyla nalezena." };
+    }
+
+    if ("blocked" in result) {
+        return { error: "Přihlášku s uhrazenou platbou nelze automaticky zrušit. Kontaktuj prosím organizátora." };
+    }
+
+    revalidatePath(`/prihlaska/${FOREIGN_WATER_FORM_SLUG}/potvrzeni/${publicToken}`);
+    revalidatePath(`/prihlaska/${FOREIGN_WATER_FORM_SLUG}`);
+    revalidatePath("/dashboard/events");
+
+    return {
+        success: true,
+        cancelledAt: result.cancelledAt,
+    };
+}
 
 export async function getForeignWaterRegistrationByToken(token: string): Promise<ForeignWaterRegistrationDetail | null> {
     const publicToken = normalizePublicToken(token);
@@ -812,6 +929,7 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             lastName: eventRegistrations.lastName,
             personsNames: eventRegistrations.personsNames,
             transportInfo: eventRegistrations.transportInfo,
+            cancelledAt: eventRegistrations.cancelledAt,
             eventId: events.id,
             eventYear: events.year,
             eventName: events.name,
@@ -823,6 +941,7 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             paymentVariableSymbol: eventPaymentPrescriptions.variableSymbol,
             paymentAmount: eventPaymentPrescriptions.amount,
             paymentMessageForRecipient: eventPaymentPrescriptions.messageForRecipient,
+            paymentStatus: eventPaymentPrescriptions.status,
         })
         .from(eventRegistrations)
         .innerJoin(events, eq(events.id, eventRegistrations.eventId))
@@ -879,6 +998,8 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
         registrationToken: publicToken,
         registrationDetailUrl: buildForeignWaterRegistrationDetailUrl(publicToken, publicAppBaseUrl),
         submittedAt: (row.createdAt as unknown as Date).toISOString(),
+        cancelledAt: row.cancelledAt ? (row.cancelledAt as unknown as Date).toISOString() : null,
+        registrationStatus: row.cancelledAt ? "cancelled" : "active",
         event: {
             id: row.eventId,
             year: Number(row.eventYear),
@@ -905,6 +1026,7 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             personsCount: participants.length,
             messageForRecipient: row.paymentMessageForRecipient,
             qrCodeUrl,
+            status: row.paymentStatus,
         },
     };
 }

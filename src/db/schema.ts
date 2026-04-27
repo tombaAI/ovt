@@ -401,11 +401,13 @@ export const eventRegistrations = appSchema.table(
         personsCount: smallint("persons_count").notNull().default(1),
         personsNames: text("persons_names"),
         transportInfo: text("transport_info"),
+        cancelledAt:  timestamp("cancelled_at", { withTimezone: true }),
         createdAt:    timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
         index("event_registrations_event_idx").on(t.eventId),
         index("event_registrations_slug_idx").on(t.formSlug),
+        index("event_registrations_cancelled_at_idx").on(t.cancelledAt),
         index("event_registrations_created_at_idx").on(t.createdAt.desc()),
     ]
 );

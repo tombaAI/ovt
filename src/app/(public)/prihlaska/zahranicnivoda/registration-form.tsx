@@ -10,8 +10,20 @@ import {
 
 type SuccessResult = Extract<SubmitForeignWaterRegistrationResult, { success: true }>;
 
+export type ForeignWaterRegistrationFormPrefill = {
+    registrationId: number;
+    registrationToken: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    additionalPersons: string[];
+    transportInfo: string;
+};
+
 interface Props {
     context: ForeignWaterFormContext;
+    prefill?: ForeignWaterRegistrationFormPrefill | null;
 }
 
 const MAX_PERSONS = 50;
@@ -52,13 +64,13 @@ function withSingleTrailingRow(values: string[]): string[] {
     return next;
 }
 
-export function ForeignWaterRegistrationForm({ context }: Props) {
-    const [email, setEmail] = useState("");
-    const [phone, setPhone] = useState("");
-    const [firstName, setFirstName] = useState("");
-    const [lastName, setLastName] = useState("");
-    const [additionalPersonsRows, setAdditionalPersonsRows] = useState<string[]>([""]);
-    const [transportInfo, setTransportInfo] = useState("");
+export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
+    const [email, setEmail] = useState(prefill?.email ?? "");
+    const [phone, setPhone] = useState(prefill?.phone ?? "");
+    const [firstName, setFirstName] = useState(prefill?.firstName ?? "");
+    const [lastName, setLastName] = useState(prefill?.lastName ?? "");
+    const [additionalPersonsRows, setAdditionalPersonsRows] = useState<string[]>(() => withSingleTrailingRow(prefill?.additionalPersons ?? []));
+    const [transportInfo, setTransportInfo] = useState(prefill?.transportInfo ?? "");
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<SuccessResult | null>(null);
     const [isEditMode, setIsEditMode] = useState(true);
@@ -114,7 +126,7 @@ export function ForeignWaterRegistrationForm({ context }: Props) {
 
         startTransition(async () => {
             const result = await submitForeignWaterRegistration({
-                registrationId: success?.registrationId,
+                registrationId: success?.registrationId ?? prefill?.registrationId,
                 email,
                 phone,
                 firstName,
@@ -265,7 +277,7 @@ export function ForeignWaterRegistrationForm({ context }: Props) {
                             disabled={!context.event || isPending || participantNames.length < 1 || participantNames.length > MAX_PERSONS}
                             className="w-full sm:w-auto rounded-lg bg-[#327600] px-6 py-2.5 text-sm font-semibold text-white hover:bg-[#2a6400] disabled:cursor-not-allowed disabled:opacity-60"
                         >
-                            {isPending ? "Ukládám..." : success ? "Uložit změny" : "Přihlásit"}
+                            {isPending ? "Ukládám..." : (success || prefill ? "Uložit změny" : "Přihlásit")}
                         </button>
                     </form>
                 ) : (

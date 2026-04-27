@@ -1,6 +1,7 @@
 import Image from "next/image";
 import { notFound } from "next/navigation";
 import { getForeignWaterRegistrationByToken } from "@/lib/actions/event-registrations";
+import { ForeignWaterRegistrationActions } from "./registration-actions";
 
 export const metadata = {
     title: "Detail přihlášky - Zahraniční voda",
@@ -8,6 +9,18 @@ export const metadata = {
 };
 
 export const dynamic = "force-dynamic";
+
+const REGISTRATION_STATUS_LABELS: Record<"active" | "cancelled", string> = {
+    active: "aktivní",
+    cancelled: "zrušená",
+};
+
+const PAYMENT_STATUS_LABELS: Record<string, string> = {
+    pending: "čeká",
+    matched: "spárováno",
+    paid: "zaplaceno",
+    cancelled: "zrušeno",
+};
 
 function fmtAmount(amount: number): string {
     return `${new Intl.NumberFormat("cs-CZ").format(amount)} Kč`;
@@ -24,6 +37,16 @@ function fmtDateRange(dateFrom: string | null, dateTo: string | null): string {
         return `${fmtDate(dateFrom)} - ${fmtDate(dateTo)}`;
     }
     return fmtDate(dateFrom);
+}
+
+function fmtDateTime(isoDate: string): string {
+    return new Intl.DateTimeFormat("cs-CZ", {
+        day: "2-digit",
+        month: "2-digit",
+        year: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+    }).format(new Date(isoDate));
 }
 
 export default async function ForeignWaterRegistrationDetailPage({
@@ -65,6 +88,11 @@ export default async function ForeignWaterRegistrationDetailPage({
                                 <p><span className="font-semibold">Příjmení:</span> {detail.registrant.lastName}</p>
                                 <p><span className="font-semibold">E-mail:</span> {detail.registrant.email}</p>
                                 <p><span className="font-semibold">Telefon:</span> {detail.registrant.phone || "neuveden"}</p>
+                                <p>
+                                    <span className="font-semibold">Stav přihlášky:</span> {REGISTRATION_STATUS_LABELS[detail.registrationStatus]}
+                                    {detail.cancelledAt ? ` (${fmtDateTime(detail.cancelledAt)})` : ""}
+                                </p>
+                                <p><span className="font-semibold">Stav platby:</span> {PAYMENT_STATUS_LABELS[detail.payment.status] ?? detail.payment.status}</p>
                                 <p><span className="font-semibold">Počet osob:</span> {detail.payment.personsCount}</p>
                                 {detail.transportInfo && (
                                     <p className="sm:col-span-2 break-words"><span className="font-semibold">Lodě / doprava:</span> {detail.transportInfo}</p>
@@ -110,6 +138,10 @@ export default async function ForeignWaterRegistrationDetailPage({
                                         <p className="font-mono font-semibold text-gray-800">{detail.payment.variableSymbol}</p>
                                     </div>
                                     <div>
+                                        <p className="text-xs text-gray-400">Stav platby</p>
+                                        <p className="font-semibold text-gray-800">{PAYMENT_STATUS_LABELS[detail.payment.status] ?? detail.payment.status}</p>
+                                    </div>
+                                    <div>
                                         <p className="text-xs text-gray-400">Cena za osobu</p>
                                         <p className="font-semibold text-gray-800">{fmtAmount(detail.payment.amountPerPerson)}</p>
                                     </div>
@@ -124,6 +156,12 @@ export default async function ForeignWaterRegistrationDetailPage({
                                 </div>
                             </div>
                         </section>
+
+                        <ForeignWaterRegistrationActions
+                            token={detail.registrationToken}
+                            registrationStatus={detail.registrationStatus}
+                            editHref={`/prihlaska/zahranicnivoda?token=${encodeURIComponent(detail.registrationToken)}`}
+                        />
                     </div>
                 </div>
             </div>
