@@ -12,6 +12,7 @@ import {
     type EventPaymentPrescriptionStatus,
 } from "@/db/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
 const FOREIGN_WATER_FORM_SLUG = "zahranicnivoda";
@@ -125,7 +126,30 @@ function isUniqueViolationError(error: unknown): boolean {
         && (error as { code?: string }).code === "23505";
 }
 
-function resolvePublicAppBaseUrl(): string {
+function sanitizeHost(rawHost: string): string | null {
+    const candidate = rawHost.split(",")[0]?.trim() ?? "";
+    if (!candidate) return null;
+    if (!/^[a-z0-9.-]+(?::\d+)?$/i.test(candidate)) return null;
+    return candidate;
+}
+
+async function resolvePublicAppBaseUrl(): Promise<string> {
+    try {
+        const hdr = await headers();
+        const host = sanitizeHost(hdr.get("x-forwarded-host") ?? hdr.get("host") ?? "");
+        if (host) {
+            const forwardedProto = normalizeText(hdr.get("x-forwarded-proto") ?? "").toLowerCase();
+            const protocol = forwardedProto === "http" || forwardedProto === "https"
+                ? forwardedProto
+                : (host.startsWith("localhost") || host.startsWith("127.0.0.1"))
+                    ? "http"
+                    : "https";
+            return `${protocol}://${host}`;
+        }
+    } catch {
+        // No request context (e.g. some background/server-only invocations). Fall through to env fallback.
+    }
+
     const configured = normalizeText(process.env.APP_BASE_URL ?? "");
     if (configured) {
         const normalized = configured.replace(/\/+$/, "");
@@ -141,8 +165,8 @@ function resolvePublicAppBaseUrl(): string {
     return "http://localhost:3000";
 }
 
-function buildForeignWaterRegistrationDetailUrl(publicToken: string): string {
-    return `${resolvePublicAppBaseUrl()}/prihlaska/${FOREIGN_WATER_FORM_SLUG}/potvrzeni/${encodeURIComponent(publicToken)}`;
+function buildForeignWaterRegistrationDetailUrl(publicToken: string, baseUrl: string): string {
+    return `${baseUrl}/prihlaska/${FOREIGN_WATER_FORM_SLUG}/potvrzeni/${encodeURIComponent(publicToken)}`;
 }
 
 export type ForeignWaterEventContext = {
@@ -682,7 +706,8 @@ export async function submitForeignWaterRegistration(
         };
     });
 
-    const registrationDetailUrl = buildForeignWaterRegistrationDetailUrl(created.publicToken);
+    const publicAppBaseUrl = await resolvePublicAppBaseUrl();
+    const registrationDetailUrl = buildForeignWaterRegistrationDetailUrl(created.publicToken, publicAppBaseUrl);
     const codeLabel = formatForeignWaterCode(created.code);
 
     const qrCodeUrl = buildForeignWaterPayliboQrUrl({
@@ -777,6 +802,7 @@ export type ForeignWaterRegistrationDetail = {
 export async function getForeignWaterRegistrationByToken(token: string): Promise<ForeignWaterRegistrationDetail | null> {
     const publicToken = normalizePublicToken(token);
     if (!/^[a-f0-9]{32,64}$/.test(publicToken)) return null;
+    const publicAppBaseUrl = await resolvePublicAppBaseUrl();
 
     const db = getDb();
     const [row] = await db
@@ -854,7 +880,7 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
     return {
         registrationId: row.registrationId,
         registrationToken: publicToken,
-        registrationDetailUrl: buildForeignWaterRegistrationDetailUrl(publicToken),
+        registrationDetailUrl: buildForeignWaterRegistrationDetailUrl(publicToken, publicAppBaseUrl),
         submittedAt: (row.createdAt as unknown as Date).toISOString(),
         event: {
             id: row.eventId,

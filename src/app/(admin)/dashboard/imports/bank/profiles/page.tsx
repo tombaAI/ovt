@@ -1,6 +1,8 @@
 import { getImportProfiles } from "@/lib/actions/import";
 import { BankProfilesClient } from "./bank-profiles-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function BankProfilesPage() {
     const profiles = await getImportProfiles("bank");
     return (

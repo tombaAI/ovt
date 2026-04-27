@@ -1,6 +1,8 @@
 import { getImportProfiles } from "@/lib/actions/import";
 import { ProfilesClient } from "./profiles-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function ProfilesPage() {
     const profiles = await getImportProfiles("member");
     return (

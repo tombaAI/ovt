@@ -1,6 +1,8 @@
 import { getImportHistory } from "@/lib/actions/import";
 import { Badge } from "@/components/ui/badge";
 
+export const dynamic = "force-dynamic";
+
 type AppliedChange = { memberId: number; memberName: string; field: string; oldValue: string | null; newValue: string };
 
 function fmtDate(d: Date) {

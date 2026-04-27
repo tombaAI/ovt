@@ -5,6 +5,8 @@ import {
 } from "@/lib/actions/finance-tj";
 import { FinanceClient } from "./finance-client";
 
+export const dynamic = "force-dynamic";
+
 export default async function FinancePage() {
     const [imports, transactions, hospodareni, stavUctu] = await Promise.all([
         getFinanceTjImports(),
