@@ -11,7 +11,6 @@ import {
 } from "@/db/schema";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
-import QRCode from "qrcode";
 
 const FOREIGN_WATER_FORM_SLUG = "zahranicnivoda";
 const FOREIGN_WATER_EVENT_ID = 4;
@@ -19,12 +18,18 @@ const FOREIGN_WATER_EVENT_NAME = "Zahraniční zájezd - Isel";
 
 const FOREIGN_WATER_BANK_ACCOUNT = "351416278/0300";
 const FOREIGN_WATER_VARIABLE_SYMBOL = "20702";
-const FOREIGN_WATER_AMOUNT = 2500;
+const FOREIGN_WATER_AMOUNT_PER_PERSON = 2500;
 
 const dec = (value: number): string => value.toFixed(2);
 
 function normalizeText(value: string): string {
     return value.replace(/\s+/g, " ").trim();
+}
+
+function normalizeNameList(values: string[]): string[] {
+    return values
+        .map((value) => normalizeText(value))
+        .filter(Boolean);
 }
 
 function formatForeignWaterCode(code: number): string {
@@ -42,6 +47,44 @@ function formatCurrencyCzk(amount: number): string {
     }).format(amount);
 }
 
+function splitBankAccount(bankAccount: string): { accountNumber: string; bankCode: string } {
+    const [accountNumber, bankCode] = bankAccount.split("/");
+    if (!accountNumber || !bankCode) {
+        throw new Error("Neplatný formát bankovního účtu pro QR.");
+    }
+    return { accountNumber, bankCode };
+}
+
+function buildForeignWaterPayliboQrUrl(params: {
+    amount: number;
+    variableSymbol: string;
+    bankAccount: string;
+    messageForRecipient: string;
+}): string {
+    const { accountNumber, bankCode } = splitBankAccount(params.bankAccount);
+    const message = encodeURIComponent(params.messageForRecipient);
+    return (
+        `https://api.paylibo.com/paylibo/generator/czech/image` +
+        `?accountNumber=${accountNumber}` +
+        `&bankCode=${bankCode}` +
+        `&amount=${params.amount}` +
+        `&currency=CZK` +
+        `&vs=${params.variableSymbol}` +
+        `&message=${message}` +
+        `&size=260`
+    );
+}
+
+function parseParticipantNames(rawValue: string | null, fallbackName: string): string[] {
+    const parsed = (rawValue ?? "")
+        .split(/[\n;,]+/)
+        .map((name) => normalizeText(name))
+        .filter(Boolean);
+
+    if (parsed.length > 0) return parsed;
+    return fallbackName ? [fallbackName] : [];
+}
+
 function escapeHtml(value: string): string {
     return value
         .replace(/&/g, "&amp;")
@@ -49,26 +92,6 @@ function escapeHtml(value: string): string {
         .replace(/>/g, "&gt;")
         .replace(/\"/g, "&quot;")
         .replace(/'/g, "&#39;");
-}
-
-function buildForeignWaterPaymentQrPayload(messageForRecipient: string): string {
-    return [
-        "SPD*1.0",
-        `ACC:${FOREIGN_WATER_BANK_ACCOUNT}`,
-        `AM:${dec(FOREIGN_WATER_AMOUNT)}`,
-        "CC:CZK",
-        `X-VS:${FOREIGN_WATER_VARIABLE_SYMBOL}`,
-        `MSG:${messageForRecipient}`,
-    ].join("*");
-}
-
-async function buildForeignWaterPaymentQrDataUrl(messageForRecipient: string): Promise<string> {
-    const payload = buildForeignWaterPaymentQrPayload(messageForRecipient);
-    return QRCode.toDataURL(payload, {
-        errorCorrectionLevel: "M",
-        width: 360,
-        margin: 1,
-    });
 }
 
 export type ForeignWaterEventContext = {
@@ -85,7 +108,7 @@ export type ForeignWaterFormContext = {
     payment: {
         bankAccount: string;
         variableSymbol: string;
-        amount: number;
+        amountPerPerson: number;
     };
 };
 
@@ -124,9 +147,10 @@ async function sendForeignWaterConfirmationEmail(params: {
     recipientEmail: string;
     fullName: string;
     eventName: string;
-    paymentCodeLabel: string;
+    personsCount: number;
+    amount: number;
     messageForRecipient: string;
-    qrCodeDataUrl: string;
+    qrCodeUrl: string;
 }): Promise<{ sent: boolean; error: string | null }> {
     const settings = getEmailSettings();
     if (!settings.configured) {
@@ -137,8 +161,7 @@ async function sendForeignWaterConfirmationEmail(params: {
     const htmlMessage = escapeHtml(params.messageForRecipient);
     const htmlEventName = escapeHtml(params.eventName);
     const htmlName = escapeHtml(params.fullName);
-    const htmlPaymentCode = escapeHtml(params.paymentCodeLabel);
-    const amountCzk = formatCurrencyCzk(FOREIGN_WATER_AMOUNT);
+    const amountCzk = formatCurrencyCzk(params.amount);
 
     try {
         await resend.emails.send({
@@ -151,36 +174,30 @@ async function sendForeignWaterConfirmationEmail(params: {
                 "",
                 `potvrzujeme přihlášku na akci ${params.eventName}.`,
                 "",
-                `Evidenční číslo předpisu: C${params.paymentCodeLabel}`,
+                `Počet osob: ${params.personsCount}`,
                 `Číslo účtu: ${FOREIGN_WATER_BANK_ACCOUNT}`,
                 `VS: ${FOREIGN_WATER_VARIABLE_SYMBOL}`,
                 `Částka: ${amountCzk} Kč`,
                 `Zpráva pro příjemce: ${params.messageForRecipient}`,
+                `QR kód: ${params.qrCodeUrl}`,
                 "",
-                "V příloze je QR kód platby.",
+                "Po přihlášení v aplikaci vidíš stejné platební údaje i QR kód.",
             ].join("\n"),
             html: `
                 <div style="font-family: Arial, sans-serif; color: #1f2937; line-height: 1.5;">
                     <p>Ahoj ${htmlName},</p>
                     <p>potvrzujeme přihlášku na akci <strong>${htmlEventName}</strong>.</p>
                     <p>
-                        <strong>Evidenční číslo předpisu:</strong> C${htmlPaymentCode}<br>
+                        <strong>Počet osob:</strong> ${params.personsCount}<br>
                         <strong>Číslo účtu:</strong> ${FOREIGN_WATER_BANK_ACCOUNT}<br>
                         <strong>VS:</strong> ${FOREIGN_WATER_VARIABLE_SYMBOL}<br>
                         <strong>Částka:</strong> ${amountCzk} Kč<br>
                         <strong>Zpráva pro příjemce:</strong> ${htmlMessage}
                     </p>
                     <p><strong>QR kód pro platbu:</strong></p>
-                    <p><img src="${params.qrCodeDataUrl}" alt="QR kód platby" width="240" height="240" /></p>
-                    <p style="color: #6b7280; font-size: 12px;">V příloze najdeš stejný QR kód jako obrázek PNG.</p>
+                    <p><img src="${params.qrCodeUrl}" alt="QR kód platby" width="240" height="240" /></p>
                 </div>
             `,
-            attachments: [
-                {
-                    filename: `qr-platba-C${params.paymentCodeLabel}.png`,
-                    content: params.qrCodeDataUrl.replace(/^data:image\/png;base64,/, ""),
-                },
-            ],
         });
         return { sent: true, error: null };
     } catch {
@@ -194,17 +211,17 @@ export async function getForeignWaterFormContext(): Promise<ForeignWaterFormCont
         payment: {
             bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
             variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
-            amount: FOREIGN_WATER_AMOUNT,
+            amountPerPerson: FOREIGN_WATER_AMOUNT_PER_PERSON,
         },
     };
 }
 
 export type SubmitForeignWaterRegistrationInput = {
+    registrationId?: number;
     email: string;
     firstName: string;
     lastName: string;
-    personsCount: number;
-    personsNames: string;
+    additionalPersons: string[];
     transportInfo: string;
 };
 
@@ -223,8 +240,10 @@ export type SubmitForeignWaterRegistrationResult =
             bankAccount: string;
             variableSymbol: string;
             amount: number;
+            amountPerPerson: number;
+            personsCount: number;
             messageForRecipient: string;
-            qrCodeDataUrl: string;
+            qrCodeUrl: string;
         };
     };
 
@@ -234,11 +253,12 @@ export async function submitForeignWaterRegistration(
     const email = normalizeText(input.email).toLowerCase();
     const firstName = normalizeText(input.firstName);
     const lastName = normalizeText(input.lastName);
-    const personsNames = normalizeText(input.personsNames);
+    const fullName = normalizeText(`${firstName} ${lastName}`);
+    const additionalPersons = normalizeNameList(input.additionalPersons ?? []);
+    const participantNames = [fullName, ...additionalPersons];
+    const personsCount = participantNames.length;
     const transportInfo = normalizeText(input.transportInfo);
-
-    const personsCountRaw = Number(input.personsCount);
-    const personsCount = Number.isFinite(personsCountRaw) ? Math.trunc(personsCountRaw) : 0;
+    const amount = personsCount * FOREIGN_WATER_AMOUNT_PER_PERSON;
 
     if (!email || !firstName || !lastName) {
         return { error: "Vyplň prosím e-mail, jméno a příjmení." };
@@ -252,10 +272,6 @@ export async function submitForeignWaterRegistration(
         return { error: "Počet osob musí být mezi 1 a 50." };
     }
 
-    if (personsCount > 1 && !personsNames) {
-        return { error: "Vyplň prosím jména dalších osob." };
-    }
-
     const event = await resolveForeignWaterEvent();
     if (!event) {
         return {
@@ -266,6 +282,68 @@ export async function submitForeignWaterRegistration(
     const db = getDb();
 
     const created = await db.transaction(async (tx) => {
+        if (input.registrationId) {
+            const [existingPrescription] = await tx
+                .select({
+                    code: eventPaymentPrescriptions.prescriptionCode,
+                })
+                .from(eventPaymentPrescriptions)
+                .where(and(
+                    eq(eventPaymentPrescriptions.registrationId, input.registrationId),
+                    eq(eventPaymentPrescriptions.eventId, event.id),
+                ))
+                .limit(1);
+
+            if (!existingPrescription) {
+                throw new Error("Původní přihláška už nebyla nalezena. Obnov stránku a zkus to prosím znovu.");
+            }
+
+            const [registration] = await tx
+                .update(eventRegistrations)
+                .set({
+                    email,
+                    firstName,
+                    lastName,
+                    personsCount,
+                    personsNames: participantNames.join("\n"),
+                    transportInfo: transportInfo || null,
+                })
+                .where(and(
+                    eq(eventRegistrations.id, input.registrationId),
+                    eq(eventRegistrations.eventId, event.id),
+                ))
+                .returning({
+                    id: eventRegistrations.id,
+                });
+
+            if (!registration) {
+                throw new Error("Původní přihláška už nebyla nalezena. Obnov stránku a zkus to prosím znovu.");
+            }
+
+            const messageForRecipient = buildForeignWaterPaymentMessage(existingPrescription.code, fullName);
+
+            await tx
+                .update(eventPaymentPrescriptions)
+                .set({
+                    bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
+                    variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
+                    amount: dec(amount),
+                    messageForRecipient,
+                    updatedAt: new Date(),
+                })
+                .where(and(
+                    eq(eventPaymentPrescriptions.registrationId, registration.id),
+                    eq(eventPaymentPrescriptions.eventId, event.id),
+                ));
+
+            return {
+                registrationId: registration.id,
+                submittedAt: new Date().toISOString(),
+                code: existingPrescription.code,
+                messageForRecipient,
+            };
+        }
+
         const [registration] = await tx
             .insert(eventRegistrations)
             .values({
@@ -275,7 +353,7 @@ export async function submitForeignWaterRegistration(
                 firstName,
                 lastName,
                 personsCount,
-                personsNames: personsNames || null,
+                personsNames: participantNames.join("\n"),
                 transportInfo: transportInfo || null,
             })
             .returning({
@@ -293,7 +371,6 @@ export async function submitForeignWaterRegistration(
             throw new Error("Nepodařilo se vygenerovat číslo předpisu.");
         }
 
-        const fullName = normalizeText(`${firstName} ${lastName}`);
         const messageForRecipient = buildForeignWaterPaymentMessage(code, fullName);
 
         await tx.insert(eventPaymentPrescriptions).values({
@@ -302,7 +379,7 @@ export async function submitForeignWaterRegistration(
             prescriptionCode: code,
             bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
             variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
-            amount: dec(FOREIGN_WATER_AMOUNT),
+            amount: dec(amount),
             messageForRecipient,
             status: "pending",
         });
@@ -315,14 +392,21 @@ export async function submitForeignWaterRegistration(
         };
     });
 
-    const qrCodeDataUrl = await buildForeignWaterPaymentQrDataUrl(created.messageForRecipient);
+    const qrCodeUrl = buildForeignWaterPayliboQrUrl({
+        amount,
+        variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
+        bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
+        messageForRecipient: created.messageForRecipient,
+    });
+
     const emailResult = await sendForeignWaterConfirmationEmail({
         recipientEmail: email,
-        fullName: normalizeText(`${firstName} ${lastName}`),
+        fullName,
         eventName: event.name,
-        paymentCodeLabel: formatForeignWaterCode(created.code),
+        personsCount,
+        amount,
         messageForRecipient: created.messageForRecipient,
-        qrCodeDataUrl,
+        qrCodeUrl,
     });
 
     revalidatePath("/dashboard/events");
@@ -340,9 +424,11 @@ export async function submitForeignWaterRegistration(
             codeLabel: formatForeignWaterCode(created.code),
             bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
             variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
-            amount: FOREIGN_WATER_AMOUNT,
+            amount,
+            amountPerPerson: FOREIGN_WATER_AMOUNT_PER_PERSON,
+            personsCount,
             messageForRecipient: created.messageForRecipient,
-            qrCodeDataUrl,
+            qrCodeUrl,
         },
     };
 }
@@ -354,7 +440,7 @@ export type EventRegistrationAdminRow = {
     firstName: string;
     lastName: string;
     personsCount: number;
-    personsNames: string | null;
+    participantNames: string[];
     transportInfo: string | null;
     paymentId: number;
     paymentCode: number;
@@ -406,7 +492,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         firstName: row.firstName,
         lastName: row.lastName,
         personsCount: Number(row.personsCount),
-        personsNames: row.personsNames,
+        participantNames: parseParticipantNames(row.personsNames, normalizeText(`${row.firstName} ${row.lastName}`)),
         transportInfo: row.transportInfo,
         paymentId: row.paymentId,
         paymentCode: row.paymentCode,

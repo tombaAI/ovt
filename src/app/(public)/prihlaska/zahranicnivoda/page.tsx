@@ -6,6 +6,8 @@ export const metadata = {
     description: "Přihláška na zahraniční vodáckou akci OVT Bohemians.",
 };
 
+export const dynamic = "force-dynamic";
+
 export default async function ForeignWaterRegistrationPage() {
     const context = await getForeignWaterFormContext();
 
