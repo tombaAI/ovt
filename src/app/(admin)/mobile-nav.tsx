@@ -8,19 +8,19 @@ import { useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 const PRIMARY_ITEMS = [
-    { href: "/dashboard/members",       label: "Členové",    icon: Users },
-    { href: "/dashboard/contributions", label: "Příspěvky",  icon: CreditCard },
-    { href: "/dashboard/payments",      label: "Platby",     icon: Wallet },
+    { href: "/dashboard/members", label: "Členové", icon: Users },
+    { href: "/dashboard/contributions", label: "Příspěvky", icon: CreditCard },
+    { href: "/dashboard/payments", label: "Platby", icon: Wallet },
 ] as const;
 
 const MORE_ITEMS = [
     { href: "/dashboard/vyuctovani", label: "Vyúčtování" },
-    { href: "/dashboard/boats",    label: "Lodě" },
+    { href: "/dashboard/boats", label: "Lodě" },
     { href: "/dashboard/brigades", label: "Brigády" },
-    { href: "/dashboard/events",   label: "Kalendář" },
-    { href: "/dashboard/finance",  label: "Finance z TJ" },
-    { href: "/dashboard/imports",  label: "Import dat" },
-    { href: "/dashboard/informace",label: "Informace" },
+    { href: "/dashboard/events", label: "Kalendář" },
+    { href: "/dashboard/finance", label: "Finance z TJ" },
+    { href: "/dashboard/imports", label: "Import dat" },
+    { href: "/dashboard/informace", label: "Informace" },
 ] as const;
 
 export function MobileNav() {

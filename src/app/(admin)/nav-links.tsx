@@ -5,17 +5,17 @@ import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 
 const NAV_ITEMS: { href: string; label: string; exact?: boolean }[] = [
-    { href: "/dashboard",              label: "Přehled",    exact: true },
-    { href: "/dashboard/members",      label: "Členové" },
-    { href: "/dashboard/contributions",label: "Příspěvky" },
-    { href: "/dashboard/payments",     label: "Platby" },
-    { href: "/dashboard/vyuctovani",   label: "Vyúčtování" },
-    { href: "/dashboard/events",       label: "Kalendář" },
-    { href: "/dashboard/brigades",     label: "Brigády" },
-    { href: "/dashboard/boats",        label: "Lodě" },
-    { href: "/dashboard/finance",      label: "Finance z TJ" },
-    { href: "/dashboard/imports",      label: "Import dat" },
-    { href: "/dashboard/informace",    label: "Informace" },
+    { href: "/dashboard", label: "Přehled", exact: true },
+    { href: "/dashboard/members", label: "Členové" },
+    { href: "/dashboard/contributions", label: "Příspěvky" },
+    { href: "/dashboard/payments", label: "Platby" },
+    { href: "/dashboard/vyuctovani", label: "Vyúčtování" },
+    { href: "/dashboard/events", label: "Kalendář" },
+    { href: "/dashboard/brigades", label: "Brigády" },
+    { href: "/dashboard/boats", label: "Lodě" },
+    { href: "/dashboard/finance", label: "Finance z TJ" },
+    { href: "/dashboard/imports", label: "Import dat" },
+    { href: "/dashboard/informace", label: "Informace" },
 ];
 
 export function NavLinks() {
