@@ -7,6 +7,12 @@ export default auth((req) => {
     const hostname = req.headers.get("host") ?? "";
     const isIsDomain = hostname.startsWith("is.");
 
+    if (pathname === "/dashboard/vyuctovani") {
+        const url = req.nextUrl.clone();
+        url.pathname = "/dashboard/forms";
+        return NextResponse.redirect(url);
+    }
+
     // Na subdoméně is. přesměrovat kořen rovnou na dashboard
     if (isIsDomain && pathname === "/") {
         return NextResponse.redirect(new URL("/dashboard", req.url));

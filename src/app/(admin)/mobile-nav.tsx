@@ -14,7 +14,7 @@ const PRIMARY_ITEMS = [
 ] as const;
 
 const MORE_ITEMS = [
-    { href: "/dashboard/vyuctovani", label: "Vyúčtování" },
+    { href: "/dashboard/forms", label: "Vyúčtování" },
     { href: "/dashboard/boats", label: "Lodě" },
     { href: "/dashboard/brigades", label: "Brigády" },
     { href: "/dashboard/events", label: "Kalendář" },
