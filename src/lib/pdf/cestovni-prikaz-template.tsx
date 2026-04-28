@@ -44,6 +44,13 @@ const s = StyleSheet.create({
     color: "#000",
   },
 
+  // Vnější rámeček celého formuláře
+  formBorder: {
+    borderWidth: 1.5,
+    borderColor: "#000",
+    padding: 16,
+  },
+
   // Nadpis
   title: {
     fontSize: 22,
@@ -182,6 +189,8 @@ export function CestovniPrikazDocument({ data }: { data: CestovniPrikazData }) {
     <Document>
       <Page size="A4" style={s.page}>
 
+        <View style={s.formBorder}>
+
         <Text style={s.title}>Cestovní příkaz</Text>
 
         {/* Název akce + ID */}
@@ -272,6 +281,8 @@ export function CestovniPrikazDocument({ data }: { data: CestovniPrikazData }) {
         {/* Podpis pořadatele */}
         <View style={s.signatureBlock}>
           <SignatureBox />
+        </View>
+
         </View>
 
       </Page>
