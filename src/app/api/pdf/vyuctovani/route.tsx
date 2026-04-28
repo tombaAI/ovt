@@ -1,4 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
+import { buildPdfAttachmentDisposition } from "@/lib/content-disposition";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -19,11 +20,12 @@ export async function POST(request: Request) {
   }
 
   const buffer = await renderToBuffer(<VyuctovaniDocument data={data} />);
+  const disposition = buildPdfAttachmentDisposition("vyuctovani", data.oddi);
 
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="vyuctovani-${data.oddi.replace(/\s+/g, "-")}.pdf"`,
+      "Content-Disposition": disposition,
     },
   });
 }

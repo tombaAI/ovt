@@ -1,4 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
+import { buildPdfAttachmentDisposition } from "@/lib/content-disposition";
 import {
   CestneProhlaseniDocument,
   type CestneProhlaseniData,
@@ -20,12 +21,15 @@ export async function POST(request: Request) {
 
   const buffer = await renderToBuffer(<CestneProhlaseniDocument data={data} />);
 
-  const filename = `cestne-prohlaseni-${data.id}-${data.jmenoPrijemce.replace(/\s+/g, "-")}.pdf`;
+  const disposition = buildPdfAttachmentDisposition(
+    "cestne-prohlaseni",
+    `${data.id}-${data.jmenoPrijemce}`,
+  );
 
   return new Response(new Uint8Array(buffer), {
     headers: {
       "Content-Type": "application/pdf",
-      "Content-Disposition": `attachment; filename="${filename}"`,
+      "Content-Disposition": disposition,
     },
   });
 }
