@@ -2,11 +2,15 @@ import React from "react";
 import path from "path";
 import { Document, Page, Text, View, StyleSheet, Font } from "@react-pdf/renderer";
 
+const fontsDir = path.join(process.cwd(), "public/fonts");
+const robotoRegularTtf = path.join(fontsDir, "Roboto-Regular.ttf");
+const robotoBoldTtf = path.join(fontsDir, "Roboto-Bold.ttf");
+
 Font.register({
   family: "Roboto",
   fonts: [
-    { src: path.join(process.cwd(), "public/fonts/Roboto-Regular.ttf"), fontWeight: "normal" },
-    { src: path.join(process.cwd(), "public/fonts/Roboto-Regular.ttf"), fontWeight: "bold" },
+    { src: robotoRegularTtf, fontWeight: "normal" },
+    { src: robotoBoldTtf, fontWeight: "bold" },
   ],
 });
 
@@ -159,7 +163,7 @@ export function CestneProhlaseniDocument({ data }: { data: CestneProhlaseniData 
       <Page size="A4" style={s.page}>
         <View style={s.formBorder}>
 
-          <Text style={s.title}>Čestné prohlášení nákladu akce</Text>
+          <Text style={s.title}>{"\u010Cestné prohlášení nákladu akce"}</Text>
 
           {/* Název akce + ID */}
           <View style={s.row}>
