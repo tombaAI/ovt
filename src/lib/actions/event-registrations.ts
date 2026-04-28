@@ -9,6 +9,7 @@ import {
     eventRegistrations,
     eventRegistrationParticipants,
     eventPaymentPrescriptions,
+    auditLog,
     type EventPaymentPrescriptionStatus,
 } from "@/db/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -571,9 +572,17 @@ export async function submitForeignWaterRegistration(
         if (input.registrationId) {
             const [existing] = await tx
                 .select({
-                    code: eventPaymentPrescriptions.prescriptionCode,
-                    publicToken: eventRegistrations.publicToken,
-                    paymentStatus: eventPaymentPrescriptions.status,
+                    code:            eventPaymentPrescriptions.prescriptionCode,
+                    publicToken:     eventRegistrations.publicToken,
+                    paymentStatus:   eventPaymentPrescriptions.status,
+                    oldEmail:        eventRegistrations.email,
+                    oldPhone:        eventRegistrations.phone,
+                    oldFirstName:    eventRegistrations.firstName,
+                    oldLastName:     eventRegistrations.lastName,
+                    oldPersonsCount: eventRegistrations.personsCount,
+                    oldPersonsNames: eventRegistrations.personsNames,
+                    oldTransportInfo: eventRegistrations.transportInfo,
+                    oldCancelledAt:  eventRegistrations.cancelledAt,
                 })
                 .from(eventRegistrations)
                 .innerJoin(
@@ -654,6 +663,38 @@ export async function submitForeignWaterRegistration(
                     eq(eventPaymentPrescriptions.registrationId, registration.id),
                     eq(eventPaymentPrescriptions.eventId, event.id),
                 ));
+
+            // ── Audit log ─────────────────────────────────────────────────
+            const auditChanges: Record<string, { old: string | null; new: string | null }> = {};
+            const cmp = (a: string | null | undefined, b: string | null | undefined) =>
+                (a ?? null) === (b ?? null);
+
+            if (!cmp(existing.oldEmail, email))
+                auditChanges.email = { old: existing.oldEmail, new: email };
+            if (!cmp(existing.oldPhone, phone || null))
+                auditChanges.phone = { old: existing.oldPhone ?? null, new: phone || null };
+            if (!cmp(existing.oldFirstName, firstName))
+                auditChanges.firstName = { old: existing.oldFirstName, new: firstName };
+            if (!cmp(existing.oldLastName, lastName))
+                auditChanges.lastName = { old: existing.oldLastName, new: lastName };
+            if (Number(existing.oldPersonsCount) !== personsCount)
+                auditChanges.personsCount = { old: String(existing.oldPersonsCount), new: String(personsCount) };
+            if (!cmp(existing.oldPersonsNames, participantNames.join("\n")))
+                auditChanges.personsNames = { old: existing.oldPersonsNames ?? null, new: participantNames.join(", ") };
+            if (!cmp(existing.oldTransportInfo, transportInfo || null))
+                auditChanges.transportInfo = { old: existing.oldTransportInfo ?? null, new: transportInfo || null };
+            if (existing.oldCancelledAt !== null)
+                auditChanges.cancelledAt = { old: "zrušeno", new: null };
+
+            if (Object.keys(auditChanges).length > 0) {
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId:   registration.id,
+                    action:     "update",
+                    changes:    auditChanges,
+                    changedBy:  email,
+                });
+            }
 
             return {
                 registrationId: registration.id,
@@ -857,8 +898,9 @@ export async function cancelForeignWaterRegistrationByToken(token: string): Prom
         const [existing] = await tx
             .select({
                 registrationId: eventRegistrations.id,
-                cancelledAt: eventRegistrations.cancelledAt,
-                paymentStatus: eventPaymentPrescriptions.status,
+                cancelledAt:    eventRegistrations.cancelledAt,
+                paymentStatus:  eventPaymentPrescriptions.status,
+                email:          eventRegistrations.email,
             })
             .from(eventRegistrations)
             .innerJoin(
@@ -907,6 +949,14 @@ export async function cancelForeignWaterRegistrationByToken(token: string): Prom
                 eq(eventPaymentPrescriptions.registrationId, existing.registrationId),
                 eq(eventPaymentPrescriptions.eventId, FOREIGN_WATER_EVENT_ID),
             ));
+
+        await tx.insert(auditLog).values({
+            entityType: "event_registration",
+            entityId:   existing.registrationId,
+            action:     "cancel",
+            changes:    { cancelledAt: { old: null, new: now.toISOString() } },
+            changedBy:  existing.email,
+        });
 
         return {
             cancelledAt: (updated.cancelledAt as unknown as Date).toISOString(),
@@ -1167,4 +1217,32 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         matchedLedgerId: row.matchedLedgerId,
         };
     });
+}
+
+// ── Audit log ─────────────────────────────────────────────────────────────────
+
+export type RegistrationAuditEntry = {
+    id: number;
+    action: string;
+    changes: Record<string, { old: string | null; new: string | null }>;
+    changedBy: string;
+    changedAt: Date;
+};
+
+export async function getRegistrationAuditLog(registrationId: number): Promise<RegistrationAuditEntry[]> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    const db = getDb();
+    const rows = await db
+        .select()
+        .from(auditLog)
+        .where(and(
+            eq(auditLog.entityType, "event_registration"),
+            eq(auditLog.entityId, registrationId),
+        ))
+        .orderBy(desc(auditLog.changedAt))
+        .limit(50);
+
+    return rows as unknown as RegistrationAuditEntry[];
 }

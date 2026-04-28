@@ -16,13 +16,13 @@ import {
     getEventGcalDiff, syncEventToGcal, acceptGcalField,
     getMembersForAutocomplete,
 } from "@/lib/actions/events";
-import { getEventRegistrationsForAdmin } from "@/lib/actions/event-registrations";
+import { getEventRegistrationsForAdmin, getRegistrationAuditLog } from "@/lib/actions/event-registrations";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type {
     EventRow, EventType, EventStatus, EventAuditEntry,
     GcalDiffResult, GcalDiffField, MemberOption,
 } from "@/lib/actions/events";
-import type { EventRegistrationAdminRow } from "@/lib/actions/event-registrations";
+import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
 
 interface Props {
     event: EventRow;
@@ -475,6 +475,79 @@ function GcalSyncStarter({ event, onSaved }: { event: EventRow; onSaved: () => v
 const fmtShortDate = (d: Date) =>
     new Intl.DateTimeFormat("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
 
+const REGISTRATION_FIELD_LABELS: Record<string, string> = {
+    email:        "E-mail",
+    phone:        "Telefon",
+    firstName:    "Jméno",
+    lastName:     "Příjmení",
+    personsCount: "Počet osob",
+    personsNames: "Účastníci",
+    transportInfo: "Doprava / lodě",
+    cancelledAt:  "Zrušení přihlášky",
+};
+
+function RegistrationHistory({ registrationId }: { registrationId: number }) {
+    const [open, setOpen]       = useState(false);
+    const [log, setLog]         = useState<RegistrationAuditEntry[] | null>(null);
+    const [loading, setLoading] = useState(false);
+
+    function toggle() {
+        if (!open && log === null) {
+            setLoading(true);
+            getRegistrationAuditLog(registrationId)
+                .then(e => { setLog(e); setLoading(false); })
+                .catch(() => { setLog([]); setLoading(false); });
+        }
+        setOpen(v => !v);
+    }
+
+    if (log !== null && log.length === 0 && !open) return null;
+
+    return (
+        <div className="px-4 pb-2.5">
+            <button onClick={toggle}
+                className="text-xs text-gray-400 hover:text-gray-600 flex items-center gap-1 transition-colors">
+                {open ? "▲" : "▼"}
+                {loading ? " Načítám historii…"
+                    : log === null ? " Historie změn"
+                    : log.length === 0 ? " Žádné změny"
+                    : ` Historie změn (${log.length})`}
+            </button>
+            {open && log && log.length > 0 && (
+                <div className="mt-2 space-y-1.5">
+                    {log.map(entry => (
+                        <div key={entry.id} className="text-xs rounded-lg border border-gray-100 bg-white px-3 py-2 space-y-1">
+                            <div className="flex items-center justify-between gap-2 text-gray-400 flex-wrap">
+                                <div className="flex items-center gap-1.5">
+                                    <span className="font-medium text-gray-600">{entry.changedBy}</span>
+                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${
+                                        entry.action === "cancel"
+                                            ? "bg-red-50 text-red-600 border-red-200"
+                                            : "bg-amber-50 text-amber-600 border-amber-200"
+                                    }`}>
+                                        {entry.action === "cancel" ? "zrušení" : "úprava"}
+                                    </span>
+                                </div>
+                                <span>{fmtDateTime(entry.changedAt)}</span>
+                            </div>
+                            {Object.entries(entry.changes).map(([field, diff]) => (
+                                <div key={field} className="flex gap-1 flex-wrap text-gray-500">
+                                    <span className="text-gray-400">{REGISTRATION_FIELD_LABELS[field] ?? field}:</span>
+                                    {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
+                                    {diff.old !== null && diff.new !== null && <span className="text-gray-300">→</span>}
+                                    {diff.new !== null
+                                        ? <span className="text-green-600">{diff.new}</span>
+                                        : <span className="text-gray-400">(odstraněno)</span>}
+                                </div>
+                            ))}
+                        </div>
+                    ))}
+                </div>
+            )}
+        </div>
+    );
+}
+
 function RegistrationsTab({ eventId }: { eventId: number }) {
     const [rows, setRows]       = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
@@ -539,6 +612,9 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                                     )}
                                 </div>
                             ))}
+
+                            {/* ── Historie změn ── */}
+                            <RegistrationHistory registrationId={r.registrationId} />
                         </div>
                     );
                 })}
