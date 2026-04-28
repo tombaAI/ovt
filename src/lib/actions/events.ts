@@ -18,7 +18,11 @@ export type EventRow = {
     eventType: EventType;
     dateFrom: string | null;
     dateTo: string | null;
+    timeFrom: string | null;
+    timeTo: string | null;
     approxMonth: number | null;
+    registrationFrom: string | null;
+    registrationTo: string | null;
     location: string | null;
     leaderId: number | null;
     leaderName: string | null;
@@ -60,10 +64,14 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             year:         events.year,
             name:         events.name,
             eventType:    events.eventType,
-            dateFrom:     events.dateFrom,
-            dateTo:       events.dateTo,
-            approxMonth:  events.approxMonth,
-            location:     events.location,
+            dateFrom:         events.dateFrom,
+            dateTo:           events.dateTo,
+            timeFrom:         events.timeFrom,
+            timeTo:           events.timeTo,
+            approxMonth:      events.approxMonth,
+            registrationFrom: events.registrationFrom,
+            registrationTo:   events.registrationTo,
+            location:         events.location,
             leaderId:     events.leaderId,
             leaderName:   members.fullName,
             status:       events.status,
@@ -83,10 +91,12 @@ export async function getEvents(year: number): Promise<EventRow[]> {
 
     return rows.map(r => ({
         ...r,
-        year:        Number(r.year),
-        dateFrom:    r.dateFrom  as unknown as string | null,
-        dateTo:      r.dateTo    as unknown as string | null,
-        approxMonth: r.approxMonth ? Number(r.approxMonth) : null,
+        year:             Number(r.year),
+        dateFrom:         r.dateFrom         as unknown as string | null,
+        dateTo:           r.dateTo           as unknown as string | null,
+        registrationFrom: r.registrationFrom as unknown as string | null,
+        registrationTo:   r.registrationTo   as unknown as string | null,
+        approxMonth:      r.approxMonth ? Number(r.approxMonth) : null,
     }));
 }
 
@@ -120,10 +130,14 @@ export async function getEventById(id: number): Promise<EventRow | null> {
             year:         events.year,
             name:         events.name,
             eventType:    events.eventType,
-            dateFrom:     events.dateFrom,
-            dateTo:       events.dateTo,
-            approxMonth:  events.approxMonth,
-            location:     events.location,
+            dateFrom:         events.dateFrom,
+            dateTo:           events.dateTo,
+            timeFrom:         events.timeFrom,
+            timeTo:           events.timeTo,
+            approxMonth:      events.approxMonth,
+            registrationFrom: events.registrationFrom,
+            registrationTo:   events.registrationTo,
+            location:         events.location,
             leaderId:     events.leaderId,
             leaderName:   members.fullName,
             status:       events.status,
@@ -145,10 +159,12 @@ export async function getEventById(id: number): Promise<EventRow | null> {
     const r = rows[0]!;
     return {
         ...r,
-        year:        Number(r.year),
-        dateFrom:    r.dateFrom  as unknown as string | null,
-        dateTo:      r.dateTo    as unknown as string | null,
-        approxMonth: r.approxMonth ? Number(r.approxMonth) : null,
+        year:             Number(r.year),
+        dateFrom:         r.dateFrom         as unknown as string | null,
+        dateTo:           r.dateTo           as unknown as string | null,
+        registrationFrom: r.registrationFrom as unknown as string | null,
+        registrationTo:   r.registrationTo   as unknown as string | null,
+        approxMonth:      r.approxMonth ? Number(r.approxMonth) : null,
     };
 }
 
@@ -295,6 +311,8 @@ export async function syncEventToGcal(id: number): Promise<{ gcalEventId: string
         location:    event.location,
         dateFrom:    event.dateFrom as unknown as string,
         dateTo:      event.dateTo   as unknown as string | null,
+        timeFrom:    event.timeFrom,
+        timeTo:      event.timeTo,
         externalUrl: event.externalUrl,
     });
 
@@ -399,7 +417,8 @@ export async function importGcalEvents(
 // ── Inline field update + audit ───────────────────────────────────────────────
 
 const ALLOWED_EVENT_FIELDS = new Set([
-    "name", "eventType", "dateFrom", "dateTo", "approxMonth",
+    "name", "eventType", "dateFrom", "dateTo", "timeFrom", "timeTo", "approxMonth",
+    "registrationFrom", "registrationTo",
     "location", "leaderId", "status", "description", "externalUrl",
     "gcalSync", "note",
 ]);
@@ -507,11 +526,25 @@ export async function getEventGcalDiff(id: number): Promise<GcalDiffResult> {
             match:     (event.dateFrom as unknown as string | null) === gcal.dateFrom,
         },
         {
+            field:     "timeFrom",
+            label:     "Čas od",
+            appValue:  event.timeFrom,
+            gcalValue: gcal.timeFrom,
+            match:     (event.timeFrom ?? null) === (gcal.timeFrom ?? null),
+        },
+        {
             field:     "dateTo",
             label:     "Datum do",
             appValue:  event.dateTo as unknown as string | null,
             gcalValue: gcal.dateTo,
             match:     (event.dateTo as unknown as string | null) === gcal.dateTo,
+        },
+        {
+            field:     "timeTo",
+            label:     "Čas do",
+            appValue:  event.timeTo,
+            gcalValue: gcal.timeTo,
+            match:     (event.timeTo ?? null) === (gcal.timeTo ?? null),
         },
         {
             field:     "location",

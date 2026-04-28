@@ -66,7 +66,10 @@ const EVENT_TYPES    = Object.entries(EVENT_TYPE_LABELS)   as [EventType, string
 const EVENT_STATUSES = Object.entries(EVENT_STATUS_LABELS) as [EventStatus, string][];
 
 const EVENT_FIELD_LABELS: Record<string, string> = {
-    name: "Název", eventType: "Typ", dateFrom: "Datum od", dateTo: "Datum do",
+    name: "Název", eventType: "Typ",
+    dateFrom: "Datum od", dateTo: "Datum do",
+    timeFrom: "Čas od", timeTo: "Čas do",
+    registrationFrom: "Přihlášky od", registrationTo: "Přihlášky do",
     approxMonth: "Orien. měsíc", location: "Místo", leaderId: "Vedoucí",
     status: "Stav", description: "Popis", externalUrl: "Odkaz",
     gcalSync: "GCal sync", note: "Poznámka", accept_from_gcal: "← přijato z GCal",
@@ -231,6 +234,84 @@ function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, 
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="text-xs text-violet-600">
                             GCal: <span className="font-medium">{gcalValue ? fmtDate(gcalValue) : "(prázdné)"}</span>
+                        </span>
+                        {onGcalAccept && (
+                            <button onClick={async () => { setAcceptingGcal(true); await onGcalAccept(); setAcceptingGcal(false); }}
+                                disabled={acceptingGcal}
+                                className="text-xs text-violet-600 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-50 disabled:opacity-50">
+                                {acceptingGcal ? "…" : "← z GCal"}
+                            </button>
+                        )}
+                        {onGcalPush && (
+                            <button onClick={async () => { setPushingGcal(true); await onGcalPush(); setPushingGcal(false); }}
+                                disabled={pushingGcal}
+                                className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50 disabled:opacity-50">
+                                {pushingGcal ? "…" : "→ do GCal"}
+                            </button>
+                        )}
+                    </div>
+                )}
+            </div>
+        </div>
+    );
+}
+
+// ── Immediate-save time (HH:MM) ──────────────────────────────────────────────
+
+function ImmediateTime({ label, value, eventId, field, onSaved, gcalValue, onGcalAccept, onGcalPush }: {
+    label: string;
+    value: string | null;
+    eventId: number;
+    field: string;
+    onSaved: () => void;
+    gcalValue?: string | null;
+    onGcalAccept?: () => Promise<void>;
+    onGcalPush?: () => Promise<void>;
+}) {
+    const [saving, setSaving]               = useState(false);
+    const [draft, setDraft]                 = useState(value ?? "");
+    const [acceptingGcal, setAcceptingGcal] = useState(false);
+    const [pushingGcal, setPushingGcal]     = useState(false);
+
+    useEffect(() => setDraft(value ?? ""), [value]);
+
+    async function handleBlur() {
+        if (draft === (value ?? "")) return;
+        setSaving(true);
+        try { await updateEventField(eventId, field, draft || null); onSaved(); }
+        finally { setSaving(false); }
+    }
+
+    async function handleClear() {
+        if (!value) return;
+        setSaving(true);
+        try { await updateEventField(eventId, field, null); onSaved(); setDraft(""); }
+        finally { setSaving(false); }
+    }
+
+    const hasGcalDiff = gcalValue !== undefined && gcalValue !== value;
+
+    return (
+        <div className="border-b last:border-0 py-3 flex flex-col sm:flex-row sm:items-start sm:gap-4">
+            <p className="text-sm font-medium text-gray-500 sm:w-28 sm:pt-1 shrink-0 mb-0.5 sm:mb-0">{label}</p>
+            <div className="flex-1">
+                <div className="flex items-center gap-2">
+                    <input type="time" value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onBlur={handleBlur} disabled={saving}
+                        className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                    />
+                    {value && (
+                        <button onClick={handleClear} disabled={saving}
+                            className="text-gray-400 hover:text-gray-600 text-base leading-none px-1 disabled:opacity-40"
+                            title="Odebrat čas">×</button>
+                    )}
+                    {saving && <span className="text-xs text-gray-400">ukládám…</span>}
+                </div>
+                {hasGcalDiff && (
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs text-violet-600">
+                            GCal: <span className="font-medium">{gcalValue ?? "(žádný čas)"}</span>
                         </span>
                         {onGcalAccept && (
                             <button onClick={async () => { setAcceptingGcal(true); await onGcalAccept(); setAcceptingGcal(false); }}
@@ -649,12 +730,17 @@ export function EventDetailClient({ event }: Props) {
 
     function refresh() { router.refresh(); }
 
+    // Po každém uložení pole, které může být v GCal, obnovíme diff
+    function refreshWithDiff() {
+        router.refresh();
+        if (event.gcalEventId) getEventGcalDiff(event.id).then(setDiff).catch(() => {});
+    }
+
     function save(field: string) {
         return async (value: string): Promise<{ success: true } | { error: string }> => {
             try {
                 await updateEventField(event.id, field, value || null);
-                refresh();
-                if (event.gcalEventId) getEventGcalDiff(event.id).then(setDiff).catch(() => {});
+                refreshWithDiff();
                 return { success: true };
             } catch (e) {
                 return { error: e instanceof Error ? e.message : "Chyba" };
@@ -758,17 +844,29 @@ export function EventDetailClient({ event }: Props) {
                             <ImmediateSelect label="Stav" value={event.status}
                                 options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={refresh} />
                             <ImmediateDate label="Datum od" value={event.dateFrom}
-                                eventId={event.id} field="dateFrom" onSaved={refresh}
+                                eventId={event.id} field="dateFrom" onSaved={refreshWithDiff}
                                 gcalValue={gcalFieldValue("dateFrom")}
                                 onGcalAccept={gcalFieldValue("dateFrom") !== undefined ? makeGcalAccept("dateFrom", gcalFieldValue("dateFrom") ?? null) : undefined}
                                 onGcalPush={gcalFieldValue("dateFrom") !== undefined ? pushToGcal : undefined}
                             />
+                            <ImmediateTime label="Čas od" value={event.timeFrom}
+                                eventId={event.id} field="timeFrom" onSaved={refreshWithDiff}
+                                gcalValue={gcalFieldValue("timeFrom")}
+                                onGcalAccept={gcalFieldValue("timeFrom") !== undefined ? makeGcalAccept("timeFrom", gcalFieldValue("timeFrom") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("timeFrom") !== undefined ? pushToGcal : undefined}
+                            />
                             <ImmediateDate label="Datum do" value={event.dateTo}
-                                eventId={event.id} field="dateTo" onSaved={refresh}
+                                eventId={event.id} field="dateTo" onSaved={refreshWithDiff}
                                 min={event.dateFrom ?? undefined}
                                 gcalValue={gcalFieldValue("dateTo")}
                                 onGcalAccept={gcalFieldValue("dateTo") !== undefined ? makeGcalAccept("dateTo", gcalFieldValue("dateTo") ?? null) : undefined}
                                 onGcalPush={gcalFieldValue("dateTo") !== undefined ? pushToGcal : undefined}
+                            />
+                            <ImmediateTime label="Čas do" value={event.timeTo}
+                                eventId={event.id} field="timeTo" onSaved={refreshWithDiff}
+                                gcalValue={gcalFieldValue("timeTo")}
+                                onGcalAccept={gcalFieldValue("timeTo") !== undefined ? makeGcalAccept("timeTo", gcalFieldValue("timeTo") ?? null) : undefined}
+                                onGcalPush={gcalFieldValue("timeTo") !== undefined ? pushToGcal : undefined}
                             />
                             {!event.dateFrom && (
                                 <ImmediateSelect label="Orien. měsíc"
@@ -792,9 +890,18 @@ export function EventDetailClient({ event }: Props) {
                                 onSave={save("externalUrl")} />
                         </div>
 
+                        {/* ── Termín přihlášek ── */}
+                        <div className="rounded-xl border px-4">
+                            <ImmediateDate label="Přihlášky od" value={event.registrationFrom}
+                                eventId={event.id} field="registrationFrom" onSaved={refresh} />
+                            <ImmediateDate label="Přihlášky do" value={event.registrationTo}
+                                eventId={event.id} field="registrationTo"
+                                min={event.registrationFrom ?? undefined} onSaved={refresh} />
+                        </div>
+
                         <div className="rounded-xl border px-4">
                             <ImmediateTextarea label="Popis" value={event.description}
-                                eventId={event.id} field="description" onSaved={refresh}
+                                eventId={event.id} field="description" onSaved={refreshWithDiff}
                                 placeholder="Volitelný popis akce…"
                                 gcalValue={gcalFieldValue("description")}
                                 onGcalAccept={gcalFieldValue("description") !== undefined ? makeGcalAccept("description", gcalFieldValue("description") ?? null) : undefined}
