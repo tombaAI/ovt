@@ -414,9 +414,9 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
     field: string;
     onSaved: () => void;
     placeholder?: string;
-    gcalValue?: string | null;
+    gcalValue?: string | null;       // undefined = pole mimo GCal sync; null = GCal má prázdné
     onGcalAccept?: () => Promise<void>;
-    onGcalPush?: () => Promise<void>;
+    onGcalPush?: () => Promise<void>; // předávat vždy pokud je akce v GCal
 }) {
     const [editing, setEditing]             = useState(false);
     const [draft, setDraft]                 = useState(value ?? "");
@@ -434,7 +434,10 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
         finally { setSaving(false); }
     }
 
+    // diff existuje jen pokud byl gcalValue předán (pole je v GCal sync) a hodnoty se liší
     const hasGcalDiff = gcalValue !== undefined && gcalValue !== (value?.trim() || null);
+    // pole je v GCal sync pokud byl gcalValue předán NEBO onGcalPush předán
+    const isGcalField = gcalValue !== undefined || onGcalPush !== undefined;
 
     return (
         <div className="border-b last:border-0 py-3">
@@ -461,26 +464,51 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
                             : <span className="text-gray-400 italic group-hover:text-blue-500">{placeholder ?? "(nezadáno)"}</span>
                         }
                     </button>
+
+                    {/* ── GCal diff (obě hodnoty, prominentní) ── */}
                     {hasGcalDiff && (
-                        <div className="mt-2 rounded-lg bg-violet-50 border border-violet-200 px-3 py-2 space-y-1.5">
-                            <p className="text-xs font-medium text-violet-600">GCal:</p>
-                            <p className="text-xs text-violet-800 whitespace-pre-wrap">{gcalValue ?? "(prázdné)"}</p>
-                            <div className="flex gap-2 pt-0.5">
+                        <div className="mt-2 rounded-lg border border-violet-200 overflow-hidden">
+                            <div className="px-3 py-1.5 bg-violet-50 border-b border-violet-200">
+                                <p className="text-xs font-medium text-violet-700">⚠ Liší se od Google Kalendáře</p>
+                            </div>
+                            <div className="grid grid-cols-2 divide-x divide-violet-100 bg-white">
+                                <div className="px-3 py-2">
+                                    <p className="text-[11px] text-gray-400 uppercase tracking-wide mb-1">Aplikace</p>
+                                    <p className="text-xs text-gray-900 whitespace-pre-wrap">{value ?? "(prázdné)"}</p>
+                                </div>
+                                <div className="px-3 py-2 bg-violet-50/50">
+                                    <p className="text-[11px] text-violet-500 uppercase tracking-wide mb-1">Google Kalendář</p>
+                                    <p className="text-xs text-violet-800 whitespace-pre-wrap">{gcalValue ?? "(prázdné)"}</p>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 px-3 py-2 bg-gray-50 border-t border-violet-100">
                                 {onGcalAccept && (
                                     <button onClick={async () => { setAcceptingGcal(true); await onGcalAccept(); setAcceptingGcal(false); }}
                                         disabled={acceptingGcal}
-                                        className="text-xs text-violet-600 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-100 disabled:opacity-50">
-                                        {acceptingGcal ? "…" : "← z GCal"}
+                                        className="text-xs text-violet-600 border border-violet-300 rounded px-2 py-1 hover:bg-violet-50 disabled:opacity-50">
+                                        {acceptingGcal ? "…" : "← přijmout z GCal"}
                                     </button>
                                 )}
                                 {onGcalPush && (
                                     <button onClick={async () => { setPushingGcal(true); await onGcalPush(); setPushingGcal(false); }}
                                         disabled={pushingGcal}
-                                        className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-100 disabled:opacity-50">
-                                        {pushingGcal ? "…" : "→ do GCal"}
+                                        className="text-xs text-gray-600 border border-gray-300 rounded px-2 py-1 hover:bg-gray-50 disabled:opacity-50">
+                                        {pushingGcal ? "…" : "→ zapsat do GCal"}
                                     </button>
                                 )}
                             </div>
+                        </div>
+                    )}
+
+                    {/* ── V GCal sync, bez difu — subtilní řádek s možností pushnutí ── */}
+                    {!hasGcalDiff && isGcalField && onGcalPush && (
+                        <div className="flex items-center gap-2 mt-1.5">
+                            <span className="text-xs text-gray-400">✓ v GCal</span>
+                            <button onClick={async () => { setPushingGcal(true); await onGcalPush(); setPushingGcal(false); }}
+                                disabled={pushingGcal}
+                                className="text-xs text-gray-400 hover:text-gray-600 border border-gray-200 rounded px-1.5 py-0.5 hover:bg-gray-50 disabled:opacity-50 transition-colors">
+                                {pushingGcal ? "…" : "→ zapsat do GCal"}
+                            </button>
                         </div>
                     )}
                 </div>
@@ -889,7 +917,7 @@ export function EventDetailClient({ event }: Props) {
                                 placeholder="Volitelný popis akce…"
                                 gcalValue={gcalFieldValue("description")}
                                 onGcalAccept={gcalFieldValue("description") !== undefined ? makeGcalAccept("description", gcalFieldValue("description") ?? null) : undefined}
-                                onGcalPush={gcalFieldValue("description") !== undefined ? pushToGcal : undefined}
+                                onGcalPush={event.gcalEventId ? pushToGcal : undefined}
                             />
                             <ImmediateTextarea label="Interní poznámka" value={event.note}
                                 eventId={event.id} field="note" onSaved={refresh}
