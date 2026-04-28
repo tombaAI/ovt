@@ -189,9 +189,10 @@ function ImmediateSelect({ label, value, options, eventId, field, onSaved }: {
     );
 }
 
-// ── Immediate-save date ───────────────────────────────────────────────────────
+// ── Immediate-save date (+ optional time on same row) ────────────────────────
 
-function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, onGcalAccept, onGcalPush }: {
+function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, onGcalAccept, onGcalPush,
+    timeValue, timeField, timeGcalValue, onTimeGcalAccept, onTimeGcalPush }: {
     label: string;
     value: string | null;
     eventId: number;
@@ -201,39 +202,81 @@ function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, 
     gcalValue?: string | null;
     onGcalAccept?: () => Promise<void>;
     onGcalPush?: () => Promise<void>;
+    // optional inline time
+    timeValue?: string | null;
+    timeField?: string;
+    timeGcalValue?: string | null;
+    onTimeGcalAccept?: () => Promise<void>;
+    onTimeGcalPush?: () => Promise<void>;
 }) {
-    const [saving, setSaving]               = useState(false);
-    const [draft, setDraft]                 = useState(value ?? "");
-    const [acceptingGcal, setAcceptingGcal] = useState(false);
-    const [pushingGcal, setPushingGcal]     = useState(false);
+    const [savingDate, setSavingDate]         = useState(false);
+    const [savingTime, setSavingTime]         = useState(false);
+    const [draftDate, setDraftDate]           = useState(value ?? "");
+    const [draftTime, setDraftTime]           = useState(timeValue ?? "");
+    const [acceptingGcal, setAcceptingGcal]   = useState(false);
+    const [pushingGcal, setPushingGcal]       = useState(false);
+    const [acceptingTimeGcal, setAcceptingTimeGcal] = useState(false);
+    const [pushingTimeGcal, setPushingTimeGcal]     = useState(false);
 
-    useEffect(() => setDraft(value ?? ""), [value]);
+    useEffect(() => setDraftDate(value ?? ""), [value]);
+    useEffect(() => setDraftTime(timeValue ?? ""), [timeValue]);
 
-    async function handleBlur() {
-        if (draft === (value ?? "")) return;
-        setSaving(true);
-        try { await updateEventField(eventId, field, draft || null); onSaved(); }
-        finally { setSaving(false); }
+    async function handleDateBlur() {
+        if (draftDate === (value ?? "")) return;
+        setSavingDate(true);
+        try { await updateEventField(eventId, field, draftDate || null); onSaved(); }
+        finally { setSavingDate(false); }
     }
 
-    const hasGcalDiff = gcalValue !== undefined && gcalValue !== value;
+    async function handleTimeBlur() {
+        if (!timeField || draftTime === (timeValue ?? "")) return;
+        setSavingTime(true);
+        try { await updateEventField(eventId, timeField, draftTime || null); onSaved(); }
+        finally { setSavingTime(false); }
+    }
+
+    async function clearTime() {
+        if (!timeField || !timeValue) return;
+        setSavingTime(true);
+        try { await updateEventField(eventId, timeField, null); onSaved(); setDraftTime(""); }
+        finally { setSavingTime(false); }
+    }
+
+    const hasDateGcalDiff = gcalValue !== undefined && gcalValue !== value;
+    const hasTimeGcalDiff = timeGcalValue !== undefined && timeGcalValue !== timeValue;
 
     return (
         <div className="border-b last:border-0 py-3 flex flex-col sm:flex-row sm:items-start sm:gap-4">
             <p className="text-sm font-medium text-gray-500 sm:w-28 sm:pt-1 shrink-0 mb-0.5 sm:mb-0">{label}</p>
             <div className="flex-1">
-                <div className="flex items-center gap-2">
-                    <input type="date" value={draft} min={min}
-                        onChange={e => setDraft(e.target.value)}
-                        onBlur={handleBlur} disabled={saving}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <input type="date" value={draftDate} min={min}
+                        onChange={e => setDraftDate(e.target.value)}
+                        onBlur={handleDateBlur} disabled={savingDate}
                         className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
                     />
-                    {saving && <span className="text-xs text-gray-400">ukládám…</span>}
+                    {timeField !== undefined && (
+                        <div className="flex items-center gap-1">
+                            <input type="time" value={draftTime}
+                                onChange={e => setDraftTime(e.target.value)}
+                                onBlur={handleTimeBlur} disabled={savingTime}
+                                className="h-8 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-50"
+                            />
+                            {timeValue && (
+                                <button onClick={clearTime} disabled={savingTime}
+                                    className="text-gray-400 hover:text-gray-600 text-base leading-none px-0.5 disabled:opacity-40"
+                                    title="Odebrat čas">×</button>
+                            )}
+                        </div>
+                    )}
+                    {(savingDate || savingTime) && <span className="text-xs text-gray-400">ukládám…</span>}
                 </div>
-                {hasGcalDiff && (
+
+                {/* GCal diff pro datum */}
+                {hasDateGcalDiff && (
                     <div className="flex items-center gap-2 mt-1 flex-wrap">
                         <span className="text-xs text-violet-600">
-                            GCal: <span className="font-medium">{gcalValue ? fmtDate(gcalValue) : "(prázdné)"}</span>
+                            GCal datum: <span className="font-medium">{gcalValue ? fmtDate(gcalValue) : "(prázdné)"}</span>
                         </span>
                         {onGcalAccept && (
                             <button onClick={async () => { setAcceptingGcal(true); await onGcalAccept(); setAcceptingGcal(false); }}
@@ -247,6 +290,29 @@ function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, 
                                 disabled={pushingGcal}
                                 className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50 disabled:opacity-50">
                                 {pushingGcal ? "…" : "→ do GCal"}
+                            </button>
+                        )}
+                    </div>
+                )}
+
+                {/* GCal diff pro čas */}
+                {hasTimeGcalDiff && (
+                    <div className="flex items-center gap-2 mt-1 flex-wrap">
+                        <span className="text-xs text-violet-600">
+                            GCal čas: <span className="font-medium">{timeGcalValue ?? "(žádný)"}</span>
+                        </span>
+                        {onTimeGcalAccept && (
+                            <button onClick={async () => { setAcceptingTimeGcal(true); await onTimeGcalAccept(); setAcceptingTimeGcal(false); }}
+                                disabled={acceptingTimeGcal}
+                                className="text-xs text-violet-600 border border-violet-300 rounded px-1.5 py-0.5 hover:bg-violet-50 disabled:opacity-50">
+                                {acceptingTimeGcal ? "…" : "← z GCal"}
+                            </button>
+                        )}
+                        {onTimeGcalPush && (
+                            <button onClick={async () => { setPushingTimeGcal(true); await onTimeGcalPush(); setPushingTimeGcal(false); }}
+                                disabled={pushingTimeGcal}
+                                className="text-xs text-gray-500 border border-gray-300 rounded px-1.5 py-0.5 hover:bg-gray-50 disabled:opacity-50">
+                                {pushingTimeGcal ? "…" : "→ do GCal"}
                             </button>
                         )}
                     </div>
@@ -848,12 +914,10 @@ export function EventDetailClient({ event }: Props) {
                                 gcalValue={gcalFieldValue("dateFrom")}
                                 onGcalAccept={gcalFieldValue("dateFrom") !== undefined ? makeGcalAccept("dateFrom", gcalFieldValue("dateFrom") ?? null) : undefined}
                                 onGcalPush={gcalFieldValue("dateFrom") !== undefined ? pushToGcal : undefined}
-                            />
-                            <ImmediateTime label="Čas od" value={event.timeFrom}
-                                eventId={event.id} field="timeFrom" onSaved={refreshWithDiff}
-                                gcalValue={gcalFieldValue("timeFrom")}
-                                onGcalAccept={gcalFieldValue("timeFrom") !== undefined ? makeGcalAccept("timeFrom", gcalFieldValue("timeFrom") ?? null) : undefined}
-                                onGcalPush={gcalFieldValue("timeFrom") !== undefined ? pushToGcal : undefined}
+                                timeValue={event.timeFrom} timeField="timeFrom"
+                                timeGcalValue={gcalFieldValue("timeFrom")}
+                                onTimeGcalAccept={gcalFieldValue("timeFrom") !== undefined ? makeGcalAccept("timeFrom", gcalFieldValue("timeFrom") ?? null) : undefined}
+                                onTimeGcalPush={gcalFieldValue("timeFrom") !== undefined ? pushToGcal : undefined}
                             />
                             <ImmediateDate label="Datum do" value={event.dateTo}
                                 eventId={event.id} field="dateTo" onSaved={refreshWithDiff}
@@ -861,12 +925,10 @@ export function EventDetailClient({ event }: Props) {
                                 gcalValue={gcalFieldValue("dateTo")}
                                 onGcalAccept={gcalFieldValue("dateTo") !== undefined ? makeGcalAccept("dateTo", gcalFieldValue("dateTo") ?? null) : undefined}
                                 onGcalPush={gcalFieldValue("dateTo") !== undefined ? pushToGcal : undefined}
-                            />
-                            <ImmediateTime label="Čas do" value={event.timeTo}
-                                eventId={event.id} field="timeTo" onSaved={refreshWithDiff}
-                                gcalValue={gcalFieldValue("timeTo")}
-                                onGcalAccept={gcalFieldValue("timeTo") !== undefined ? makeGcalAccept("timeTo", gcalFieldValue("timeTo") ?? null) : undefined}
-                                onGcalPush={gcalFieldValue("timeTo") !== undefined ? pushToGcal : undefined}
+                                timeValue={event.timeTo} timeField="timeTo"
+                                timeGcalValue={gcalFieldValue("timeTo")}
+                                onTimeGcalAccept={gcalFieldValue("timeTo") !== undefined ? makeGcalAccept("timeTo", gcalFieldValue("timeTo") ?? null) : undefined}
+                                onTimeGcalPush={gcalFieldValue("timeTo") !== undefined ? pushToGcal : undefined}
                             />
                             {!event.dateFrom && (
                                 <ImmediateSelect label="Orien. měsíc"
