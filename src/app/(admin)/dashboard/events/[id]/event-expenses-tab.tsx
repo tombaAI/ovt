@@ -191,11 +191,24 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel }: {
     async function apply(useCrop: boolean) {
         setProcessing(true);
         try {
-            const activeCrop = useCrop && pixelCrop?.width && pixelCrop?.height ? pixelCrop : null;
+            let activeCrop: PixelCrop | null = null;
+
+            if (useCrop && pixelCrop?.width && pixelCrop?.height && imgRef.current) {
+                // ReactCrop vrací koordináty v CSS pixelech zobrazené img.
+                // Canvas potřebuje souřadnice v přirozených pixelech originálu.
+                const img = imgRef.current;
+                const scaleX = img.naturalWidth  / img.width;
+                const scaleY = img.naturalHeight / img.height;
+                activeCrop = {
+                    unit: "px",
+                    x:      Math.round(pixelCrop.x      * scaleX),
+                    y:      Math.round(pixelCrop.y      * scaleY),
+                    width:  Math.round(pixelCrop.width  * scaleX),
+                    height: Math.round(pixelCrop.height * scaleY),
+                };
+            }
+
             const result = await compressImage(srcUrl, activeCrop, originalName);
-            const kb = Math.round(result.size / 1024);
-            // brief visual feedback — just pass through
-            void kb;
             onDone(result);
         } catch (err) {
             alert(err instanceof Error ? err.message : "Chyba zpracování");
