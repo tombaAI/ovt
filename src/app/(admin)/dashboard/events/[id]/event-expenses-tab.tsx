@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { Paperclip, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon } from "lucide-react";
+import { Paperclip, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
@@ -26,6 +26,109 @@ function fmtDate(d: Date) {
 
 function isImage(mime: string | null) {
     return mime?.startsWith("image/") ?? false;
+}
+
+// ── Gemini analysis result type ───────────────────────────────────────────────
+
+type ExpenseAnalysis = {
+    merchant:      string;
+    date:          string | null;
+    total_amount:  number | null;
+    currency:      string;
+    account_code:  ExpenseCategory | null;
+    category_name: string;
+    reasoning:     string;
+    confidence:    number;
+};
+
+// ── Analysis card ─────────────────────────────────────────────────────────────
+
+function ConfidenceBar({ value }: { value: number }) {
+    const pct   = Math.round(value * 100);
+    const color = pct >= 80 ? "bg-green-500" : pct >= 55 ? "bg-amber-400" : "bg-red-400";
+    return (
+        <div className="flex items-center gap-2">
+            <div className="flex-1 h-1.5 rounded-full bg-gray-200 overflow-hidden">
+                <div className={`h-full rounded-full ${color}`} style={{ width: `${pct}%` }} />
+            </div>
+            <span className="text-xs tabular-nums text-gray-500 w-8 text-right">{pct}%</span>
+        </div>
+    );
+}
+
+function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
+    const pct = Math.round(analysis.confidence * 100);
+    const confidenceColor = pct >= 80 ? "text-green-600" : pct >= 55 ? "text-amber-500" : "text-red-500";
+
+    function fmtDocDate(iso: string | null) {
+        if (!iso) return "—";
+        try {
+            const [y, m, d] = iso.split("-");
+            return `${Number(d)}. ${Number(m)}. ${y}`;
+        } catch { return iso; }
+    }
+
+    return (
+        <div className="rounded-xl border border-violet-200 bg-violet-50/60 overflow-hidden">
+            {/* Hlavička */}
+            <div className="flex items-center gap-2 px-4 py-2.5 border-b border-violet-200 bg-violet-100/60">
+                <Sparkles size={14} className="text-violet-600 shrink-0" />
+                <span className="text-xs font-medium text-violet-700">Analýza Gemini</span>
+            </div>
+
+            <div className="px-4 py-3 space-y-3">
+                {/* Obchodník + datum */}
+                <div className="flex flex-wrap gap-x-6 gap-y-1">
+                    <div>
+                        <p className="text-[10px] text-violet-500 uppercase tracking-wide mb-0.5">Obchodník</p>
+                        <p className="text-sm font-medium text-gray-900">{analysis.merchant}</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] text-violet-500 uppercase tracking-wide mb-0.5">Datum dokladu</p>
+                        <p className="text-sm text-gray-900">{fmtDocDate(analysis.date)}</p>
+                    </div>
+                    <div>
+                        <p className="text-[10px] text-violet-500 uppercase tracking-wide mb-0.5">Částka</p>
+                        <p className="text-sm font-semibold text-gray-900 tabular-nums">
+                            {analysis.total_amount !== null
+                                ? `${new Intl.NumberFormat("cs-CZ").format(analysis.total_amount)} ${analysis.currency}`
+                                : "—"}
+                        </p>
+                    </div>
+                </div>
+
+                {/* Účetní kód */}
+                <div className="flex items-start gap-3 rounded-lg border border-violet-200 bg-white px-3 py-2.5">
+                    <div className="flex-1">
+                        <p className="text-[10px] text-violet-500 uppercase tracking-wide mb-0.5">Účetní kód</p>
+                        <p className="text-sm font-mono font-semibold text-gray-900">
+                            {analysis.account_code ?? "—"}
+                            {analysis.account_code && (
+                                <span className="ml-2 font-sans font-normal text-gray-500">
+                                    {analysis.category_name}
+                                </span>
+                            )}
+                        </p>
+                    </div>
+                    <div className="shrink-0 text-right min-w-[80px]">
+                        <p className="text-[10px] text-violet-500 uppercase tracking-wide mb-0.5">Jistota</p>
+                        <p className={`text-sm font-semibold tabular-nums ${confidenceColor}`}>{pct}%</p>
+                    </div>
+                </div>
+
+                {/* Confidence bar */}
+                <ConfidenceBar value={analysis.confidence} />
+
+                {/* Zdůvodnění */}
+                {analysis.reasoning && (
+                    <div className="flex gap-2">
+                        <CircleAlert size={13} className="text-violet-400 shrink-0 mt-0.5" />
+                        <p className="text-xs text-gray-600 leading-relaxed">{analysis.reasoning}</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
 
 // ── Image compress + crop via canvas ──────────────────────────────────────────
@@ -177,37 +280,40 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel }: {
 function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => void }) {
     const [amount, setAmount]             = useState("");
     const [purposeText, setPurposeText]   = useState("");
-    const [category, setCategory]         = useState<ExpenseCategory>("doprava");
+    const [category, setCategory]         = useState<ExpenseCategory>("501/004");
     const [file, setFile]                 = useState<File | null>(null);
     const [uploading, setUploading]       = useState(false);
     const [error, setError]               = useState<string | null>(null);
     const [cropSource, setCropSource]     = useState<{ url: string; name: string } | null>(null);
     const [analyzing, setAnalyzing]       = useState(false);
     const [aiFields, setAiFields]         = useState<Set<string>>(new Set());
+    const [analysis, setAnalysis]         = useState<ExpenseAnalysis | null>(null);
     const fileInputRef                    = useRef<HTMLInputElement>(null);
     const cameraInputRef                  = useRef<HTMLInputElement>(null);
 
     async function analyzeFile(f: File) {
         setAnalyzing(true);
         setAiFields(new Set());
+        setAnalysis(null);
         try {
             const fd = new FormData();
             fd.append("file", f);
             const res = await fetch("/api/expenses/analyze", { method: "POST", body: fd });
             if (!res.ok) return;
-            const data: { amount: number | null; category: string | null } = await res.json();
+            const data: ExpenseAnalysis = await res.json();
+            setAnalysis(data);
             const filled = new Set<string>();
-            if (data.amount !== null && data.amount !== undefined) {
-                setAmount(String(data.amount).replace(".", ","));
+            if (data.total_amount !== null && data.total_amount !== undefined) {
+                setAmount(String(data.total_amount).replace(".", ","));
                 filled.add("amount");
             }
-            if (data.category) {
-                setCategory(data.category as ExpenseCategory);
+            if (data.account_code) {
+                setCategory(data.account_code);
                 filled.add("category");
             }
             setAiFields(filled);
         } catch {
-            // Gemini selhalo — uživatel vyplní ručně, nic se nezobrazí
+            // Gemini selhalo — uživatel vyplní ručně
         } finally {
             setAnalyzing(false);
         }
@@ -242,6 +348,7 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
     function clearFile() {
         setFile(null);
         setAiFields(new Set());
+        setAnalysis(null);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
@@ -271,8 +378,10 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
 
             setAmount("");
             setPurposeText("");
-            setCategory("doprava");
+            setCategory("501/004");
             setFile(null);
+            setAnalysis(null);
+            setAiFields(new Set());
             if (fileInputRef.current)   fileInputRef.current.value   = "";
             if (cameraInputRef.current) cameraInputRef.current.value = "";
             onAdded();
@@ -399,9 +508,11 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
                     </p>
                 </div>
 
+                {analysis && <AnalysisCard analysis={analysis} />}
+
                 {error && <p className="text-xs text-red-500">{error}</p>}
 
-                <Button type="submit" disabled={uploading} size="sm"
+                <Button type="submit" disabled={uploading || analyzing} size="sm"
                     className="bg-[#327600] hover:bg-[#2a6400] text-white">
                     {uploading ? "Ukládám…" : "Přidat doklad"}
                 </Button>

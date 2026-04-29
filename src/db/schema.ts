@@ -463,19 +463,11 @@ export const eventPaymentPrescriptions = appSchema.table(
 
 // ── Event expenses ───────────────────────────────────────────────────────────
 
+// Hodnoty musí být shodné s src/lib/expense-categories.ts
 export const expenseCategoryEnum = [
-    "doprava",
-    "jidlo",
-    "ubytovani",
-    "pronajem",
-    "kancelarske",
-    "sportovni_material",
-    "postovni",
-    "startovne",
-    "priprava",
-    "sluzby_mezinarodni",
-    "odmeny_rozhodcim",
-    "ostatni",
+    "501/004", "501/006", "511/002", "518/001", "518/003",
+    "518/004", "518/008", "518/009", "518/010", "518/011",
+    "518/012", "518/014", "549/004",
 ] as const;
 export type ExpenseCategory = typeof expenseCategoryEnum[number];
 

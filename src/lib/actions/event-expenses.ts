@@ -26,5 +26,5 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
         .select()
         .from(eventExpenses)
         .where(eq(eventExpenses.eventId, eventId))
-        .orderBy(asc(eventExpenses.createdAt)) as Promise<EventExpenseRow[]>;
+        .orderBy(asc(eventExpenses.createdAt)) as unknown as Promise<EventExpenseRow[]>;
 }
