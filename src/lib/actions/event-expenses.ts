@@ -3,24 +3,14 @@
 import { getDb } from "@/lib/db";
 import { eventExpenses } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
-import type { ExpenseCategory } from "@/db/schema";
+import {
+    expenseCategoryEnum,
+    EXPENSE_CATEGORY_LABELS,
+    type ExpenseCategory,
+} from "@/lib/expense-categories";
 
+export { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS };
 export type { ExpenseCategory };
-
-export const EXPENSE_CATEGORY_LABELS: Record<ExpenseCategory, string> = {
-    doprava:            "Doprava",
-    jidlo:              "Jídlo",
-    ubytovani:          "Ubytování",
-    pronajem:           "Pronájem",
-    kancelarske:        "Kancelářské potřeby a ostatní materiál",
-    sportovni_material: "Spotřeba sportovního materiálu",
-    postovni:           "Poštovní služby",
-    startovne:          "Startovné a registrace",
-    priprava:           "Náklady na přípravu",
-    sluzby_mezinarodni: "Služby – mezinárodní činnost",
-    odmeny_rozhodcim:   "Odměny rozhodčím",
-    ostatni:            "Ostatní",
-};
 
 export type EventExpenseRow = {
     id:              number;

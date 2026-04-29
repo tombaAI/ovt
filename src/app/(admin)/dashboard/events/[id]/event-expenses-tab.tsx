@@ -3,9 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Paperclip, Trash2, Upload, FileText, ImageIcon } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { getEventExpenses, EXPENSE_CATEGORY_LABELS } from "@/lib/actions/event-expenses";
-import type { EventExpenseRow, ExpenseCategory } from "@/lib/actions/event-expenses";
-import { expenseCategoryEnum } from "@/db/schema";
+import { getEventExpenses } from "@/lib/actions/event-expenses";
+import type { EventExpenseRow } from "@/lib/actions/event-expenses";
+import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 
 const CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
 
