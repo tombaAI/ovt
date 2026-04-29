@@ -275,249 +275,257 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel }: {
     );
 }
 
-// ── Add expense form ──────────────────────────────────────────────────────────
+// ── Automatic upload flow (state machine) ────────────────────────────────────
+
+type FlowState =
+    | { tag: "idle" }
+    | { tag: "cropping"; file: File; previewUrl: string }
+    | { tag: "analyzing"; file: File }
+    | { tag: "analyzed"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory }
+    | { tag: "uploading"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory; purposeText: string };
 
 function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => void }) {
-    const [amount, setAmount]             = useState("");
-    const [purposeText, setPurposeText]   = useState("");
-    const [category, setCategory]         = useState<ExpenseCategory>("501/004");
-    const [file, setFile]                 = useState<File | null>(null);
-    const [uploading, setUploading]       = useState(false);
-    const [error, setError]               = useState<string | null>(null);
-    const [cropSource, setCropSource]     = useState<{ url: string; name: string } | null>(null);
-    const [analyzing, setAnalyzing]       = useState(false);
-    const [aiFields, setAiFields]         = useState<Set<string>>(new Set());
-    const [analysis, setAnalysis]         = useState<ExpenseAnalysis | null>(null);
-    const fileInputRef                    = useRef<HTMLInputElement>(null);
-    const cameraInputRef                  = useRef<HTMLInputElement>(null);
+    const [state, setState]       = useState<FlowState>({ tag: "idle" });
+    const [purposeText, setPurposeText] = useState("");
+    const [error, setError]       = useState<string | null>(null);
+    const fileInputRef            = useRef<HTMLInputElement>(null);
+    const cameraInputRef          = useRef<HTMLInputElement>(null);
+    const purposeRef              = useRef<HTMLInputElement>(null);
 
-    async function analyzeFile(f: File) {
-        setAnalyzing(true);
-        setAiFields(new Set());
-        setAnalysis(null);
+    // Override fields after analysis
+    const [amount, setAmount]     = useState("");
+    const [category, setCategory] = useState<ExpenseCategory>("501/004");
+
+    function resetToIdle() {
+        setState({ tag: "idle" });
+        setPurposeText("");
+        setAmount("");
+        setCategory("501/004");
+        setError(null);
+        if (fileInputRef.current)   fileInputRef.current.value   = "";
+        if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
+
+    async function runAnalysis(file: File) {
+        setState({ tag: "analyzing", file });
+        setError(null);
         try {
             const fd = new FormData();
-            fd.append("file", f);
+            fd.append("file", file);
             const res = await fetch("/api/expenses/analyze", { method: "POST", body: fd });
-            if (!res.ok) return;
-            const data: ExpenseAnalysis = await res.json();
-            setAnalysis(data);
-            const filled = new Set<string>();
-            if (data.total_amount !== null && data.total_amount !== undefined) {
-                setAmount(String(data.total_amount).replace(".", ","));
-                filled.add("amount");
-            }
-            if (data.account_code) {
-                setCategory(data.account_code);
-                filled.add("category");
-            }
-            setAiFields(filled);
-        } catch {
-            // Gemini selhalo — uživatel vyplní ručně
-        } finally {
-            setAnalyzing(false);
+            const data: ExpenseAnalysis & { error?: string } = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Chyba analýzy");
+
+            const amt = data.total_amount !== null && data.total_amount !== undefined
+                ? String(data.total_amount).replace(".", ",")
+                : "";
+            const cat = data.account_code ?? "501/004";
+            setAmount(amt);
+            setCategory(cat);
+            setState({ tag: "analyzed", file, analysis: data, amount: amt, category: cat });
+            // Focus purpose input after analysis
+            setTimeout(() => purposeRef.current?.focus(), 50);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Analýza selhala");
+            setState({ tag: "idle" });
         }
     }
 
     function handleFileSelect(f: File | undefined) {
         if (!f) return;
         if (f.type.startsWith("image/")) {
-            setCropSource({ url: URL.createObjectURL(f), name: f.name });
+            setState({ tag: "cropping", file: f, previewUrl: URL.createObjectURL(f) });
         } else {
-            setFile(f);
-            analyzeFile(f);
+            runAnalysis(f);
         }
     }
 
     function handleCropDone(processed: File) {
-        if (cropSource) URL.revokeObjectURL(cropSource.url);
-        setCropSource(null);
-        setFile(processed);
+        if (state.tag === "cropping") URL.revokeObjectURL(state.previewUrl);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
-        analyzeFile(processed);
+        runAnalysis(processed);
     }
 
     function handleCropCancel() {
-        if (cropSource) URL.revokeObjectURL(cropSource.url);
-        setCropSource(null);
+        if (state.tag === "cropping") URL.revokeObjectURL(state.previewUrl);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
+        setState({ tag: "idle" });
     }
 
-    function clearFile() {
-        setFile(null);
-        setAiFields(new Set());
-        setAnalysis(null);
-        if (fileInputRef.current)   fileInputRef.current.value   = "";
-        if (cameraInputRef.current) cameraInputRef.current.value = "";
-    }
-
-    async function handleSubmit(e: React.FormEvent) {
-        e.preventDefault();
+    async function handleSave() {
+        if (state.tag !== "analyzed") return;
         setError(null);
 
         const amountNum = parseFloat(amount.replace(",", "."));
-        if (isNaN(amountNum) || amountNum <= 0) { setError("Zadejte platnou částku"); return; }
-        if (!purposeText.trim()) { setError("Zadejte účel dokladu"); return; }
+        if (isNaN(amountNum) || amountNum <= 0) { setError("Oprav částku"); return; }
+        if (!purposeText.trim()) { setError("Doplň účel dokladu"); purposeRef.current?.focus(); return; }
 
-        setUploading(true);
+        setState({ tag: "uploading", file: state.file, analysis: state.analysis, amount, category, purposeText });
         try {
             const fd = new FormData();
             fd.append("amount", String(amountNum));
             fd.append("purposeText", purposeText.trim());
             fd.append("purposeCategory", category);
-            if (file) fd.append("file", file);
+            fd.append("file", state.file);
 
-            const res = await fetch(`/api/events/${eventId}/expenses`, {
-                method: "POST",
-                body: fd,
-            });
+            const res = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: fd });
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error ?? "Chyba uploadu");
+            if (!res.ok) throw new Error(data.error ?? "Chyba uložení");
 
-            setAmount("");
-            setPurposeText("");
-            setCategory("501/004");
-            setFile(null);
-            setAnalysis(null);
-            setAiFields(new Set());
-            if (fileInputRef.current)   fileInputRef.current.value   = "";
-            if (cameraInputRef.current) cameraInputRef.current.value = "";
+            resetToIdle();
             onAdded();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Chyba");
-        } finally {
-            setUploading(false);
+            setState({ tag: "analyzed", file: state.file, analysis: state.analysis, amount, category });
         }
     }
 
-    const fileSizeKb = file ? Math.round(file.size / 1024) : null;
+    const isUploading = state.tag === "uploading";
+
+    // ── Render ──
+
+    // Crop modal
+    if (state.tag === "cropping") {
+        return (
+            <ImageCropModal
+                srcUrl={state.previewUrl}
+                originalName={state.file.name}
+                onDone={handleCropDone}
+                onCancel={handleCropCancel}
+            />
+        );
+    }
+
+    // Idle — upload area
+    if (state.tag === "idle") {
+        return (
+            <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-6 text-center space-y-3">
+                <div className="flex justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Upload size={18} className="text-gray-400" />
+                    </div>
+                </div>
+                <div>
+                    <p className="text-sm font-medium text-gray-700">Nahrát doklad</p>
+                    <p className="text-xs text-gray-400 mt-0.5">PDF nebo fotka — Gemini automaticky vyčte částku a kategorii</p>
+                </div>
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md bg-[#327600] text-white text-sm font-medium hover:bg-[#2a6400] transition-colors">
+                        <Upload size={14} />
+                        <span>Vybrat soubor</span>
+                        <input ref={fileInputRef} type="file" accept="image/*,application/pdf"
+                            className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors sm:hidden">
+                        <ImageIcon size={14} />
+                        <span>Vyfoť</span>
+                        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
+                            className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
+                    </label>
+                </div>
+                {error && <p className="text-xs text-red-500">{error}</p>}
+                <p className="text-xs text-gray-400">
+                    Fotky jsou automaticky komprimovány (max {MAX_PX}px, JPEG {Math.round(JPEG_QUALITY * 100)}%)
+                </p>
+            </div>
+        );
+    }
+
+    // Analyzing
+    if (state.tag === "analyzing") {
+        return (
+            <div className="rounded-xl border bg-white p-6">
+                <div className="flex items-center gap-3">
+                    <div className="w-8 h-8 rounded-full bg-violet-100 flex items-center justify-center shrink-0">
+                        <Sparkles size={15} className="text-violet-600 animate-pulse" />
+                    </div>
+                    <div>
+                        <p className="text-sm font-medium text-gray-800">Analyzuji doklad…</p>
+                        <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{state.file.name}</p>
+                    </div>
+                </div>
+                <div className="mt-4 h-1 rounded-full bg-gray-100 overflow-hidden">
+                    <div className="h-full bg-violet-400 rounded-full animate-pulse" style={{ width: "60%" }} />
+                </div>
+            </div>
+        );
+    }
+
+    // Analyzed + uploading
+    const analysis = state.tag === "analyzed" ? state.analysis
+                   : state.tag === "uploading" ? state.analysis
+                   : null;
 
     return (
-        <>
-            {cropSource && (
-                <ImageCropModal
-                    srcUrl={cropSource.url}
-                    originalName={cropSource.name}
-                    onDone={handleCropDone}
-                    onCancel={handleCropCancel}
-                />
-            )}
+        <div className="space-y-3">
+            {/* File info + cancel */}
+            <div className="flex items-center gap-2 text-xs text-gray-500">
+                {isImage(state.file.type) ? <ImageIcon size={13} /> : <FileText size={13} />}
+                <span className="truncate">{state.file.name}</span>
+                <span className="text-gray-300">·</span>
+                <span>{Math.round(state.file.size / 1024)} kB</span>
+                <button type="button" onClick={resetToIdle} disabled={isUploading}
+                    className="ml-auto text-gray-400 hover:text-gray-600 disabled:opacity-40 text-xs shrink-0">
+                    Zrušit
+                </button>
+            </div>
 
-            <form onSubmit={handleSubmit} className="rounded-xl border bg-gray-50 p-4 space-y-3">
-                <p className="text-sm font-medium text-gray-700">Přidat doklad</p>
+            {/* Gemini analysis card */}
+            {analysis && <AnalysisCard analysis={analysis} />}
+
+            {/* Editable fields */}
+            <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+                <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Zkontroluj a doplň</p>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
+                        <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
                             Částka (Kč)
-                            {analyzing && <span className="text-[10px] text-violet-500 animate-pulse">✦ analyzuji…</span>}
-                            {!analyzing && aiFields.has("amount") && <span className="text-[10px] text-violet-500">✦ Gemini</span>}
+                            <span className="text-violet-400">✦</span>
                         </label>
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            placeholder="0,00"
+                        <input type="text" inputMode="decimal"
                             value={amount}
-                            onChange={e => { setAmount(e.target.value); setAiFields(s => { const n = new Set(s); n.delete("amount"); return n; }); }}
-                            required
-                            className={`w-full h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring bg-white ${aiFields.has("amount") ? "border-violet-300 ring-1 ring-violet-200" : "border-input"}`}
+                            onChange={e => setAmount(e.target.value)}
+                            className="w-full h-9 rounded-md border border-violet-200 bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300"
                         />
                     </div>
-
                     <div>
-                        <label className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
-                            Kategorie nákladu
-                            {!analyzing && aiFields.has("category") && <span className="text-[10px] text-violet-500">✦ Gemini</span>}
+                        <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                            Účetní kód
+                            <span className="text-violet-400">✦</span>
                         </label>
-                        <select
-                            value={category}
-                            onChange={e => { setCategory(e.target.value as ExpenseCategory); setAiFields(s => { const n = new Set(s); n.delete("category"); return n; }); }}
-                            className={`w-full h-9 rounded-md border px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring bg-white ${aiFields.has("category") ? "border-violet-300 ring-1 ring-violet-200" : "border-input"}`}
-                        >
+                        <select value={category} onChange={e => setCategory(e.target.value as ExpenseCategory)}
+                            className="w-full h-9 rounded-md border border-violet-200 bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300">
                             {CATEGORIES.map(c => (
-                                <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>
+                                <option key={c} value={c}>{c} · {EXPENSE_CATEGORY_LABELS[c]}</option>
                             ))}
                         </select>
                     </div>
                 </div>
 
                 <div>
-                    <label className="text-xs text-gray-500 mb-1 block">Účel / popis</label>
-                    <input
-                        type="text"
-                        placeholder="Např. jízdenky Praha–Brno, oběd účastníci…"
+                    <label className="text-xs text-gray-500 mb-1 block">
+                        Účel / popis <span className="text-red-400">*</span>
+                    </label>
+                    <input ref={purposeRef} type="text"
+                        placeholder="Např. jízdenky Praha–Brno, oběd pro závodníky…"
                         value={purposeText}
                         onChange={e => setPurposeText(e.target.value)}
-                        required
+                        onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSave(); } }}
                         className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
                     />
                 </div>
 
-                <div>
-                    <label className="text-xs text-gray-500 mb-1 block">
-                        Doklad (volitelné — PDF nebo fotka)
-                    </label>
-                    <div className="flex items-center gap-2 flex-wrap">
-                        {/* Výběr souboru — desktop + mobil */}
-                        <label className="flex items-center gap-1.5 cursor-pointer h-9 px-3 rounded-md border border-input bg-white text-sm shadow-sm hover:bg-gray-50 transition-colors">
-                            <Upload size={14} className="text-gray-500" />
-                            <span className="text-gray-700">Vybrat soubor</span>
-                            <input
-                                ref={fileInputRef}
-                                type="file"
-                                accept="image/*,application/pdf"
-                                className="sr-only"
-                                onChange={e => handleFileSelect(e.target.files?.[0])}
-                            />
-                        </label>
-
-                        {/* Přímá kamera — jen mobil */}
-                        <label className="flex items-center gap-1.5 cursor-pointer h-9 px-3 rounded-md border border-input bg-white text-sm shadow-sm hover:bg-gray-50 transition-colors sm:hidden">
-                            <ImageIcon size={14} className="text-gray-500" />
-                            <span className="text-gray-700">Vyfoť</span>
-                            <input
-                                ref={cameraInputRef}
-                                type="file"
-                                accept="image/*"
-                                capture="environment"
-                                className="sr-only"
-                                onChange={e => handleFileSelect(e.target.files?.[0])}
-                            />
-                        </label>
-
-                        {file && (
-                            <span className="text-xs text-gray-600 flex items-center gap-1 flex-wrap">
-                                <Paperclip size={12} />
-                                {file.name}
-                                {fileSizeKb !== null && (
-                                    <span className="text-gray-400">({fileSizeKb} kB)</span>
-                                )}
-                                {analyzing
-                                    ? <span className="text-violet-500 animate-pulse">✦ analyzuji…</span>
-                                    : aiFields.size > 0 && <span className="text-violet-500">✦ Gemini</span>
-                                }
-                                <button type="button" onClick={clearFile}
-                                    className="text-gray-400 hover:text-gray-600 ml-0.5">×</button>
-                            </span>
-                        )}
-                    </div>
-                    <p className="text-xs text-gray-400 mt-1.5">
-                        Fotka bude automaticky komprimována a uložena jako JPEG (max {MAX_PX}px, {Math.round(JPEG_QUALITY * 100)}%).
-                    </p>
-                </div>
-
-                {analysis && <AnalysisCard analysis={analysis} />}
-
                 {error && <p className="text-xs text-red-500">{error}</p>}
 
-                <Button type="submit" disabled={uploading || analyzing} size="sm"
-                    className="bg-[#327600] hover:bg-[#2a6400] text-white">
-                    {uploading ? "Ukládám…" : "Přidat doklad"}
+                <Button onClick={handleSave} disabled={isUploading} size="sm"
+                    className="bg-[#327600] hover:bg-[#2a6400] text-white w-full sm:w-auto">
+                    {isUploading ? "Ukládám…" : "Přidat doklad"}
                 </Button>
-            </form>
-        </>
+            </div>
+        </div>
     );
 }
 
