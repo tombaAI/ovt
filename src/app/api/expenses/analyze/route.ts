@@ -75,7 +75,7 @@ export async function POST(request: NextRequest) {
 
         const google = createGoogleGenerativeAI({ apiKey });
 
-        const modelId = process.env.GEMINI_MODEL ?? "gemini-1.5-flash";
+        const modelId = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
 
         const { object, usage } = await generateObject({
             model: google(modelId),
