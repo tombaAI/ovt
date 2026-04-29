@@ -3,13 +3,8 @@
 import { getDb } from "@/lib/db";
 import { eventExpenses } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
-import {
-    expenseCategoryEnum,
-    EXPENSE_CATEGORY_LABELS,
-    type ExpenseCategory,
-} from "@/lib/expense-categories";
+import type { ExpenseCategory } from "@/lib/expense-categories";
 
-export { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS };
 export type { ExpenseCategory };
 
 export type EventExpenseRow = {
