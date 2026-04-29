@@ -23,6 +23,7 @@ import type {
     GcalDiffResult, GcalDiffField, MemberOption,
 } from "@/lib/actions/events";
 import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
+import { EventExpensesTab } from "./event-expenses-tab";
 
 interface Props {
     event: EventRow;
@@ -842,6 +843,7 @@ export function EventDetailClient({ event }: Props) {
                     <TabsList className="mb-4">
                         <TabsTrigger value="detail">Detail</TabsTrigger>
                         <TabsTrigger value="registrations">Přihlášky</TabsTrigger>
+                        <TabsTrigger value="expenses">Náklady</TabsTrigger>
                     </TabsList>
 
                     {/* ── Tab: Detail ── */}
@@ -934,6 +936,11 @@ export function EventDetailClient({ event }: Props) {
                     {/* ── Tab: Přihlášky ── */}
                     <TabsContent value="registrations" className="mt-0">
                         <RegistrationsTab eventId={event.id} />
+                    </TabsContent>
+
+                    {/* ── Tab: Náklady ── */}
+                    <TabsContent value="expenses" className="mt-0">
+                        <EventExpensesTab eventId={event.id} />
                     </TabsContent>
                 </Tabs>
 

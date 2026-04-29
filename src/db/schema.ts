@@ -461,6 +461,43 @@ export const eventPaymentPrescriptions = appSchema.table(
     ]
 );
 
+// ── Event expenses ───────────────────────────────────────────────────────────
+
+export const expenseCategoryEnum = [
+    "doprava",
+    "jidlo",
+    "ubytovani",
+    "pronajem",
+    "kancelarske",
+    "sportovni_material",
+    "postovni",
+    "startovne",
+    "priprava",
+    "sluzby_mezinarodni",
+    "odmeny_rozhodcim",
+    "ostatni",
+] as const;
+export type ExpenseCategory = typeof expenseCategoryEnum[number];
+
+export const eventExpenses = appSchema.table(
+    "event_expenses",
+    {
+        id:              serial("id").primaryKey(),
+        eventId:         integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+        amount:          numeric("amount", { precision: 10, scale: 2 }).notNull(),
+        purposeText:     text("purpose_text").notNull(),
+        purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }).notNull(),
+        fileUrl:         text("file_url"),
+        fileName:        text("file_name"),
+        fileMime:        text("file_mime"),
+        uploadedBy:      text("uploaded_by").notNull(),
+        createdAt:       timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        index("event_expenses_event_idx").on(t.eventId),
+    ]
+);
+
 // ── Brigade tables ───────────────────────────────────────────────────────────
 
 export const brigades = appSchema.table(
