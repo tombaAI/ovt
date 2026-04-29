@@ -231,7 +231,8 @@ function ExpenseItem({ expense, eventId, onDeleted }: {
                 </div>
                 <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
                 {expense.fileUrl && (
-                    <a href={expense.fileUrl} target="_blank" rel="noopener noreferrer"
+                    <a href={`/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`}
+                        target="_blank" rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:underline mt-0.5 block truncate">
                         {expense.fileName ?? "Příloha"}
                     </a>

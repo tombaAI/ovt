@@ -59,7 +59,7 @@ export async function POST(
             const ext = file.name.split(".").pop() ?? "bin";
             const safeName = `events/${eventId}/expenses/${Date.now()}.${ext}`;
             const blob = await put(safeName, file, {
-                access: "public",
+                access: "private",
                 contentType: file.type,
             });
             fileUrl = blob.url;
