@@ -182,17 +182,44 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
     const [uploading, setUploading]       = useState(false);
     const [error, setError]               = useState<string | null>(null);
     const [cropSource, setCropSource]     = useState<{ url: string; name: string } | null>(null);
+    const [analyzing, setAnalyzing]       = useState(false);
+    const [aiFields, setAiFields]         = useState<Set<string>>(new Set());
     const fileInputRef                    = useRef<HTMLInputElement>(null);
     const cameraInputRef                  = useRef<HTMLInputElement>(null);
+
+    async function analyzeFile(f: File) {
+        setAnalyzing(true);
+        setAiFields(new Set());
+        try {
+            const fd = new FormData();
+            fd.append("file", f);
+            const res = await fetch("/api/expenses/analyze", { method: "POST", body: fd });
+            if (!res.ok) return;
+            const data: { amount: number | null; category: string | null } = await res.json();
+            const filled = new Set<string>();
+            if (data.amount !== null && data.amount !== undefined) {
+                setAmount(String(data.amount).replace(".", ","));
+                filled.add("amount");
+            }
+            if (data.category) {
+                setCategory(data.category as ExpenseCategory);
+                filled.add("category");
+            }
+            setAiFields(filled);
+        } catch {
+            // Gemini selhalo — uživatel vyplní ručně, nic se nezobrazí
+        } finally {
+            setAnalyzing(false);
+        }
+    }
 
     function handleFileSelect(f: File | undefined) {
         if (!f) return;
         if (f.type.startsWith("image/")) {
-            // Show crop modal for images
             setCropSource({ url: URL.createObjectURL(f), name: f.name });
         } else {
-            // PDF → use directly
             setFile(f);
+            analyzeFile(f);
         }
     }
 
@@ -200,9 +227,9 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
         if (cropSource) URL.revokeObjectURL(cropSource.url);
         setCropSource(null);
         setFile(processed);
-        // Clear native inputs so same file can be re-selected
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
+        analyzeFile(processed);
     }
 
     function handleCropCancel() {
@@ -214,6 +241,7 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
 
     function clearFile() {
         setFile(null);
+        setAiFields(new Set());
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
@@ -273,24 +301,31 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Částka (Kč)</label>
+                        <label className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
+                            Částka (Kč)
+                            {analyzing && <span className="text-[10px] text-violet-500 animate-pulse">✦ analyzuji…</span>}
+                            {!analyzing && aiFields.has("amount") && <span className="text-[10px] text-violet-500">✦ Gemini</span>}
+                        </label>
                         <input
                             type="text"
                             inputMode="decimal"
                             placeholder="0,00"
                             value={amount}
-                            onChange={e => setAmount(e.target.value)}
+                            onChange={e => { setAmount(e.target.value); setAiFields(s => { const n = new Set(s); n.delete("amount"); return n; }); }}
                             required
-                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            className={`w-full h-9 rounded-md border px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring bg-white ${aiFields.has("amount") ? "border-violet-300 ring-1 ring-violet-200" : "border-input"}`}
                         />
                     </div>
 
                     <div>
-                        <label className="text-xs text-gray-500 mb-1 block">Kategorie nákladu</label>
+                        <label className="text-xs text-gray-500 mb-1 flex items-center gap-1.5">
+                            Kategorie nákladu
+                            {!analyzing && aiFields.has("category") && <span className="text-[10px] text-violet-500">✦ Gemini</span>}
+                        </label>
                         <select
                             value={category}
-                            onChange={e => setCategory(e.target.value as ExpenseCategory)}
-                            className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            onChange={e => { setCategory(e.target.value as ExpenseCategory); setAiFields(s => { const n = new Set(s); n.delete("category"); return n; }); }}
+                            className={`w-full h-9 rounded-md border px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring bg-white ${aiFields.has("category") ? "border-violet-300 ring-1 ring-violet-200" : "border-input"}`}
                         >
                             {CATEGORIES.map(c => (
                                 <option key={c} value={c}>{EXPENSE_CATEGORY_LABELS[c]}</option>
@@ -344,12 +379,16 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
                         </label>
 
                         {file && (
-                            <span className="text-xs text-gray-600 flex items-center gap-1">
+                            <span className="text-xs text-gray-600 flex items-center gap-1 flex-wrap">
                                 <Paperclip size={12} />
                                 {file.name}
                                 {fileSizeKb !== null && (
                                     <span className="text-gray-400">({fileSizeKb} kB)</span>
                                 )}
+                                {analyzing
+                                    ? <span className="text-violet-500 animate-pulse">✦ analyzuji…</span>
+                                    : aiFields.size > 0 && <span className="text-violet-500">✦ Gemini</span>
+                                }
                                 <button type="button" onClick={clearFile}
                                     className="text-gray-400 hover:text-gray-600 ml-0.5">×</button>
                             </span>

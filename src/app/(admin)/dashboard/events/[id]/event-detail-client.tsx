@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, MoreHorizontal } from "lucide-react";
+import { ChevronLeft, FileText, MoreHorizontal, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -105,6 +105,13 @@ const PAYMENT_STATUS_LABELS: Record<string, string> = {
     matched:   "spárováno",
     paid:      "zaplaceno",
     cancelled: "zrušeno",
+};
+
+const PAYMENT_STATUS_BAR_COLORS: Record<string, string> = {
+    pending: "from-amber-200 via-amber-300 to-amber-400",
+    matched: "from-blue-200 via-blue-300 to-blue-400",
+    paid: "from-green-200 via-green-300 to-green-400",
+    cancelled: "from-rose-200 via-rose-300 to-rose-400",
 };
 
 // ── Audit log dialog ──────────────────────────────────────────────────────────
@@ -664,54 +671,144 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
     );
 
     const totalPersons = rows.reduce((s, r) => s + r.personsCount, 0);
+    const totalAmount = rows.reduce((s, r) => s + r.paymentAmount, 0);
+    const paidCount = rows.filter(r => r.paymentStatus === "paid").length;
+    const unresolvedCount = rows.filter(r => r.paymentStatus === "pending" || r.paymentStatus === "matched").length;
+
+    const summaryCards = [
+        {
+            label: "Přihlášky",
+            value: rows.length,
+            suffix: rows.length === 1 ? "záznam" : rows.length < 5 ? "záznamy" : "záznamů",
+            tone: "text-slate-700 bg-white/80 border-slate-200",
+        },
+        {
+            label: "Účastníci",
+            value: totalPersons,
+            suffix: totalPersons === 1 ? "osoba" : totalPersons < 5 ? "osoby" : "osob",
+            tone: "text-blue-700 bg-blue-50/80 border-blue-100",
+        },
+        {
+            label: "Zaplaceno",
+            value: paidCount,
+            suffix: paidCount === 1 ? "platba" : paidCount < 5 ? "platby" : "plateb",
+            tone: "text-emerald-700 bg-emerald-50/90 border-emerald-100",
+        },
+        {
+            label: "Čeká řešení",
+            value: unresolvedCount,
+            suffix: unresolvedCount === 1 ? "položka" : unresolvedCount < 5 ? "položky" : "položek",
+            tone: "text-amber-700 bg-amber-50/90 border-amber-100",
+        },
+    ] as const;
 
     return (
-        <div className="space-y-3">
-            <p className="text-xs text-gray-400">
-                {rows.length} {rows.length === 1 ? "přihláška" : rows.length < 5 ? "přihlášky" : "přihlášek"}
-                {" · "}celkem {totalPersons} {totalPersons === 1 ? "osoba" : totalPersons < 5 ? "osoby" : "osob"}
-            </p>
+        <div className="space-y-4">
+            <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-4 sm:p-5">
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        <p className="text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-600">Přihlášení</p>
+                        <h3 className="text-base sm:text-lg font-semibold text-slate-900">Souhrn registrací na akci</h3>
+                    </div>
+                    <p className="text-sm text-slate-500">
+                        Předepsáno <span className="font-semibold text-slate-700 tabular-nums">{new Intl.NumberFormat("cs-CZ").format(totalAmount)} Kč</span>
+                    </p>
+                </div>
 
-            <div className="rounded-xl border bg-white overflow-hidden divide-y">
-                {rows.map((r, groupIdx) => {
-                    const participants = r.participants.length > 0 ? r.participants : r.participantNames.map((name, i) => ({ fullName: name, isPrimary: i === 0, participantOrder: i + 1 }));
-                    const rowBg = groupIdx % 2 === 1 ? "bg-gray-50/60" : "bg-white";
+                <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                    {summaryCards.map(card => (
+                        <div key={card.label} className={`rounded-xl border px-3 py-2.5 ${card.tone}`}>
+                            <p className="text-[11px] uppercase tracking-wide opacity-80">{card.label}</p>
+                            <p className="mt-1 text-lg font-semibold tabular-nums">
+                                {card.value} <span className="text-xs font-medium opacity-80">{card.suffix}</span>
+                            </p>
+                        </div>
+                    ))}
+                </div>
+            </div>
+
+            <div className="space-y-3">
+                {rows.map(r => {
+                    const participants = r.participants.length > 0
+                        ? r.participants
+                        : r.participantNames.map((name, i) => ({
+                            fullName: name,
+                            isPrimary: i === 0,
+                            participantOrder: i + 1,
+                        }));
 
                     return (
-                        <div key={r.registrationId} className={rowBg}>
-                            {/* ── Hlavička přihlášky ── */}
-                            <div className="flex items-center gap-3 px-4 py-2.5 border-b border-gray-100 flex-wrap">
-                                <span className="text-xs font-medium text-gray-700">
-                                    {r.firstName} {r.lastName}
-                                </span>
-                                <span className="text-xs text-gray-400">{r.email}</span>
-                                {r.phone && <span className="text-xs text-gray-400">{r.phone}</span>}
-                                <span className="text-xs text-gray-300">·</span>
-                                <span className="text-xs text-gray-400 tabular-nums">{fmtShortDate(r.createdAt)}</span>
-                                <span className="text-xs text-gray-300">·</span>
-                                <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-normal`}>
-                                    {PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus}
-                                </Badge>
-                                <span className="text-xs text-gray-500 tabular-nums ml-auto">
-                                    {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
-                                </span>
+                        <div key={r.registrationId} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                            <div className={`h-1 bg-gradient-to-r ${PAYMENT_STATUS_BAR_COLORS[r.paymentStatus] ?? "from-slate-200 via-slate-300 to-slate-400"}`} />
+
+                            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
+                                <div className="flex items-start justify-between gap-4 flex-wrap">
+                                    <div>
+                                        <p className="text-sm font-semibold text-slate-900">{r.firstName} {r.lastName}</p>
+                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                                            <span>{r.email}</span>
+                                            {r.phone && <span>{r.phone}</span>}
+                                            <span className="text-slate-300">•</span>
+                                            <span className="tabular-nums">{fmtShortDate(r.createdAt)}</span>
+                                        </div>
+                                    </div>
+
+                                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                                        {r.matchedLedgerId && (
+                                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700">
+                                                banka spárována
+                                            </span>
+                                        )}
+                                        <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                                            {PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus}
+                                        </Badge>
+                                        <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                                            {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
+                                        </span>
+                                    </div>
+                                </div>
+
+                                <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+                                        <p className="text-slate-400">Předpis</p>
+                                        <p className="font-medium text-slate-700">{r.paymentCodeLabel}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+                                        <p className="text-slate-400">Variabilní symbol</p>
+                                        <p className="font-medium text-slate-700 tabular-nums">{r.paymentVariableSymbol}</p>
+                                    </div>
+                                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+                                        <p className="text-slate-400">Počet osob</p>
+                                        <p className="font-medium text-slate-700 tabular-nums">{r.personsCount}</p>
+                                    </div>
+                                </div>
+
+                                {r.transportInfo && (
+                                    <div className="rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2">
+                                        <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700">Doprava a lodě</p>
+                                        <p className="mt-1 text-xs text-amber-900 whitespace-pre-wrap">{r.transportInfo}</p>
+                                    </div>
+                                )}
+
+                                <div className="space-y-2">
+                                    <p className="text-xs font-medium text-slate-500">Účastníci</p>
+                                    <div className="flex flex-wrap gap-1.5">
+                                        {participants.map(p => (
+                                            <div key={p.participantOrder}
+                                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 pl-2 pr-2.5 py-1">
+                                                <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
+                                                <span className="text-xs text-slate-700">{p.fullName}</span>
+                                                {p.isPrimary && (
+                                                    <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                                                        kontakt
+                                                    </span>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
                             </div>
 
-                            {/* ── Řádky účastníků ── */}
-                            {participants.map(p => (
-                                <div key={p.participantOrder}
-                                    className="flex items-center gap-2 px-4 py-2 text-sm border-b border-gray-100 last:border-0">
-                                    <span className="text-gray-400 text-xs w-4 shrink-0 text-right">{p.participantOrder}.</span>
-                                    <span className="text-gray-900">{p.fullName}</span>
-                                    {p.isPrimary && (
-                                        <span className="text-[11px] text-gray-400 border border-gray-200 rounded px-1 py-px shrink-0">
-                                            kontakt
-                                        </span>
-                                    )}
-                                </div>
-                            ))}
-
-                            {/* ── Historie změn ── */}
                             <RegistrationHistory registrationId={r.registrationId} />
                         </div>
                     );
@@ -839,12 +936,32 @@ export function EventDetailClient({ event }: Props) {
                 </div>
 
                 {/* ── Tabs ── */}
-                <Tabs defaultValue="detail">
-                    <TabsList className="mb-4">
-                        <TabsTrigger value="detail">Detail</TabsTrigger>
-                        <TabsTrigger value="registrations">Přihlášky</TabsTrigger>
-                        <TabsTrigger value="expenses">Náklady</TabsTrigger>
-                    </TabsList>
+                <Tabs defaultValue="detail" className="gap-3">
+                    <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
+                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-3 gap-1.5 bg-transparent p-0">
+                            <TabsTrigger value="detail"
+                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <FileText size={14} />
+                                    <span className="font-semibold">Detail</span>
+                                </span>
+                            </TabsTrigger>
+                            <TabsTrigger value="registrations"
+                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <Users size={14} />
+                                    <span className="font-semibold">Přihlášky</span>
+                                </span>
+                            </TabsTrigger>
+                            <TabsTrigger value="expenses"
+                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <Wallet size={14} />
+                                    <span className="font-semibold">Náklady</span>
+                                </span>
+                            </TabsTrigger>
+                        </TabsList>
+                    </div>
 
                     {/* ── Tab: Detail ── */}
                     <TabsContent value="detail" className="space-y-4 mt-0">
