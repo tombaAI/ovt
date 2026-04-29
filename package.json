@@ -7,6 +7,8 @@
     "build": "next build",
     "start": "next start",
     "lint": "next lint",
+    "test:pdf-smoke": "npm run build && node scripts/pdf-smoke-test.mjs",
+    "testgen": "npm run test:pdf-smoke",
     "db:push": "drizzle-kit push",
     "db:studio": "drizzle-kit studio",
     "prepare": "husky"
