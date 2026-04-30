@@ -3,14 +3,15 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { Paperclip, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert } from "lucide-react";
+import { Paperclip, Pencil, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
-import { createExternalPerson, getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
+import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 import { EventExpenseActions } from "./event-expense-actions";
+import { PersonAutocomplete } from "./person-autocomplete";
 
 const CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
 const MAX_PX = 1600;
@@ -28,124 +29,6 @@ function fmtDate(d: Date) {
 
 function isImage(mime: string | null) {
     return mime?.startsWith("image/") ?? false;
-}
-
-function personLabel(person: PersonOption) {
-    const name = person.nickname
-        ? `${person.fullName} (${person.nickname})`
-        : person.fullName;
-    return person.kind === "external" ? `${name} · nečlen` : name;
-}
-
-function PayeeSelect({
-    people,
-    value,
-    disabled,
-    onChange,
-    onPersonCreated,
-}: {
-    people: PersonOption[];
-    value: string;
-    disabled?: boolean;
-    onChange: (value: string) => void;
-    onPersonCreated: (person: PersonOption) => void;
-}) {
-    const [addingExternal, setAddingExternal] = useState(false);
-    const [externalName, setExternalName] = useState("");
-    const [externalAccount, setExternalAccount] = useState("");
-    const [externalBankCode, setExternalBankCode] = useState("");
-    const [creating, setCreating] = useState(false);
-    const [createError, setCreateError] = useState<string | null>(null);
-    const selected = people.find(p => String(p.id) === value) ?? null;
-    const account = selected?.bankAccountNumber && selected?.bankCode
-        ? `${selected.bankAccountNumber}/${selected.bankCode}`
-        : null;
-
-    async function handleCreateExternal() {
-        setCreating(true);
-        setCreateError(null);
-        try {
-            const result = await createExternalPerson({
-                fullName: externalName,
-                bankAccountNumber: externalAccount,
-                bankCode: externalBankCode,
-            });
-            if ("error" in result) {
-                setCreateError(result.error);
-                return;
-            }
-            onPersonCreated(result.person);
-            onChange(String(result.person.id));
-            setExternalName("");
-            setExternalAccount("");
-            setExternalBankCode("");
-            setAddingExternal(false);
-        } finally {
-            setCreating(false);
-        }
-    }
-
-    return (
-        <div className="space-y-2">
-            <label className="text-xs text-gray-500 mb-1 block">
-                Komu proplatit
-            </label>
-            <select
-                value={value}
-                disabled={disabled}
-                onChange={e => onChange(e.target.value)}
-                className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
-            >
-                <option value="">Zatím neurčeno</option>
-                {people.map(person => (
-                    <option key={person.id} value={person.id}>{personLabel(person)}</option>
-                ))}
-            </select>
-            {selected && (
-                <p className={`mt-1 text-[11px] ${account ? "text-gray-400" : "text-amber-600"}`}>
-                    {account ? `Účet: ${account}` : "Účet zatím není vyplněný. Do tabulky pro proplacení se propíše prázdný."}
-                </p>
-            )}
-            <button
-                type="button"
-                onClick={() => { setAddingExternal(v => !v); setCreateError(null); }}
-                className="text-xs text-blue-600 hover:underline"
-            >
-                {addingExternal ? "Zavřít přidání nečlena" : "Přidat příjemce mimo členy"}
-            </button>
-            {addingExternal && (
-                <div className="rounded-lg border bg-white p-3 space-y-2">
-                    <input
-                        type="text"
-                        value={externalName}
-                        onChange={e => setExternalName(e.target.value)}
-                        placeholder="Jméno a příjmení"
-                        className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                    />
-                    <div className="grid grid-cols-2 gap-2">
-                        <input
-                            type="text"
-                            value={externalAccount}
-                            onChange={e => setExternalAccount(e.target.value)}
-                            placeholder="Číslo účtu"
-                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                        <input
-                            type="text"
-                            value={externalBankCode}
-                            onChange={e => setExternalBankCode(e.target.value)}
-                            placeholder="Kód banky"
-                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                        />
-                    </div>
-                    {createError && <p className="text-xs text-red-500">{createError}</p>}
-                    <Button type="button" size="sm" variant="outline" onClick={handleCreateExternal} disabled={creating}>
-                        {creating ? "Ukládám…" : "Uložit nečlena"}
-                    </Button>
-                </div>
-            )}
-        </div>
-    );
 }
 
 // ── Gemini analysis result type ───────────────────────────────────────────────
@@ -774,11 +657,12 @@ function AddExpenseForm({
                     />
                 </div>
 
-                <PayeeSelect
+                <PersonAutocomplete
                     people={personOptions}
+                    peopleLoaded={peopleLoaded}
                     value={reimbursementPersonId}
                     disabled={isUploading || !peopleLoaded}
-                    onChange={setReimbursementPersonId}
+                    onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
                     onPersonCreated={onPersonCreated}
                 />
 
@@ -795,12 +679,170 @@ function AddExpenseForm({
 
 // ── Expense row ───────────────────────────────────────────────────────────────
 
-function ExpenseItem({ expense, eventId, onDeleted }: {
+function ExpenseEditDialog({
+    expense,
+    eventId,
+    open,
+    people,
+    peopleLoaded,
+    onOpenChange,
+    onPersonCreated,
+    onSaved,
+}: {
     expense: EventExpenseRow;
     eventId: number;
+    open: boolean;
+    people: PersonOption[];
+    peopleLoaded: boolean;
+    onOpenChange: (open: boolean) => void;
+    onPersonCreated: (person: PersonOption) => void;
+    onSaved: () => void | Promise<void>;
+}) {
+    const [amount, setAmount] = useState(expense.amount.replace(".", ","));
+    const [purposeText, setPurposeText] = useState(expense.purposeText);
+    const [purposeCategory, setPurposeCategory] = useState<ExpenseCategory>(expense.purposeCategory);
+    const [reimbursementPersonId, setReimbursementPersonId] = useState(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setAmount(expense.amount.replace(".", ","));
+        setPurposeText(expense.purposeText);
+        setPurposeCategory(expense.purposeCategory);
+        setReimbursementPersonId(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
+        setError(null);
+    }, [open, expense]);
+
+    async function handleSubmit(event: React.FormEvent<HTMLFormElement>) {
+        event.preventDefault();
+        setSaving(true);
+        setError(null);
+
+        try {
+            const amountNum = parseFloat(amount.replace(",", "."));
+            if (isNaN(amountNum) || amountNum <= 0) throw new Error("Oprav částku");
+            if (!purposeText.trim()) throw new Error("Doplň účel dokladu");
+
+            const response = await fetch(`/api/events/${eventId}/expenses`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    expenseId: expense.id,
+                    amount: amountNum,
+                    purposeText: purposeText.trim(),
+                    purposeCategory,
+                    reimbursementPersonId: reimbursementPersonId || null,
+                }),
+            });
+
+            const payload = await response.json() as { error?: string };
+            if (!response.ok) throw new Error(payload.error ?? "Chyba uložení");
+
+            await onSaved();
+            onOpenChange(false);
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : "Chyba uložení");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-xl max-h-[85vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-base">
+                        <Pencil size={16} className="text-gray-500" />
+                        Upravit náklad
+                    </DialogTitle>
+                </DialogHeader>
+
+                <form onSubmit={handleSubmit} className="space-y-4">
+                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Částka (Kč) *</label>
+                            <input
+                                type="text"
+                                inputMode="decimal"
+                                value={amount}
+                                onChange={event => setAmount(event.target.value)}
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Účetní kód *</label>
+                            <select
+                                value={purposeCategory}
+                                onChange={event => setPurposeCategory(event.target.value as ExpenseCategory)}
+                                className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            >
+                                {CATEGORIES.map(category => (
+                                    <option key={category} value={category}>{category} · {EXPENSE_CATEGORY_LABELS[category]}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div className="space-y-1.5">
+                        <label className="text-xs text-gray-500">Účel / popis *</label>
+                        <input
+                            type="text"
+                            value={purposeText}
+                            onChange={event => setPurposeText(event.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+
+                    <PersonAutocomplete
+                        people={people}
+                        peopleLoaded={peopleLoaded}
+                        value={reimbursementPersonId}
+                        disabled={saving}
+                        onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
+                        onPersonCreated={onPersonCreated}
+                    />
+
+                    {expense.fileUrl && (
+                        <p className="text-xs text-gray-400">
+                            Příloha zůstane beze změny: {expense.fileName ?? "přiložený doklad"}
+                        </p>
+                    )}
+                    {error && <p className="text-sm text-red-500">{error}</p>}
+
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                            Zrušit
+                        </Button>
+                        <Button type="submit" disabled={saving}>
+                            {saving ? "Ukládám…" : "Uložit změny"}
+                        </Button>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function ExpenseItem({
+    expense,
+    eventId,
+    personOptions,
+    peopleLoaded,
+    onPersonCreated,
+    onDeleted,
+    onUpdated,
+}: {
+    expense: EventExpenseRow;
+    eventId: number;
+    personOptions: PersonOption[];
+    peopleLoaded: boolean;
+    onPersonCreated: (person: PersonOption) => void;
     onDeleted: () => void;
+    onUpdated: () => void;
 }) {
     const [deleting, setDeleting] = useState(false);
+    const [editing, setEditing] = useState(false);
 
     async function handleDelete() {
         if (!confirm("Smazat tento doklad?")) return;
@@ -862,11 +904,29 @@ function ExpenseItem({ expense, eventId, onDeleted }: {
                 <p className="text-xs text-gray-400 mt-1">{fmtDate(expense.createdAt)}</p>
             </div>
 
-            <button onClick={handleDelete} disabled={deleting}
-                className="shrink-0 text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors mt-0.5"
-                title="Smazat doklad">
-                <Trash2 size={15} />
-            </button>
+            <div className="flex shrink-0 items-center gap-1 mt-0.5">
+                <button onClick={() => setEditing(true)}
+                    className="text-gray-300 hover:text-gray-600 transition-colors"
+                    title="Upravit náklad">
+                    <Pencil size={15} />
+                </button>
+                <button onClick={handleDelete} disabled={deleting}
+                    className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
+                    title="Smazat doklad">
+                    <Trash2 size={15} />
+                </button>
+            </div>
+
+            <ExpenseEditDialog
+                expense={expense}
+                eventId={eventId}
+                open={editing}
+                people={personOptions}
+                peopleLoaded={peopleLoaded}
+                onOpenChange={setEditing}
+                onPersonCreated={onPersonCreated}
+                onSaved={onUpdated}
+            />
         </div>
     );
 }
@@ -1203,10 +1263,12 @@ export function EventExpensesTab({
     eventId,
     eventName,
     leaderName,
+    leaderCskNumber,
 }: {
     eventId: number;
     eventName: string;
     leaderName: string | null;
+    leaderCskNumber: string | null;
 }) {
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
     const [loading, setLoading]   = useState(true);
@@ -1264,7 +1326,11 @@ export function EventExpensesTab({
                                     key={e.id}
                                     expense={e}
                                     eventId={eventId}
+                                    personOptions={personOptions}
+                                    peopleLoaded={peopleLoaded}
+                                    onPersonCreated={handlePersonCreated}
                                     onDeleted={load}
+                                    onUpdated={load}
                                 />
                             ))}
                         </div>
@@ -1287,6 +1353,7 @@ export function EventExpensesTab({
                 eventId={eventId}
                 eventName={eventName}
                 leaderName={leaderName}
+                leaderCskNumber={leaderCskNumber}
                 personOptions={personOptions}
                 peopleLoaded={peopleLoaded}
                 onPersonCreated={handlePersonCreated}

@@ -16,9 +16,10 @@ import {
   expenseCategoryEnum,
   type ExpenseCategory,
 } from "@/lib/expense-categories";
-import { createExternalPerson, type PersonOption } from "@/lib/actions/people";
+import type { PersonOption } from "@/lib/actions/people";
 import type { CestneProhlaseniData } from "@/lib/pdf/cestne-prohlaseni-template";
 import type { CestovniPrikazData } from "@/lib/pdf/cestovni-prikaz-template";
+import { PersonAutocomplete } from "./person-autocomplete";
 
 const EXPENSE_CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
 const DEFAULT_EXPENSE_CATEGORY: ExpenseCategory = "518/009";
@@ -27,6 +28,7 @@ type ExpenseActionPanelProps = {
   eventId: number;
   eventName: string;
   leaderName: string | null;
+  leaderCskNumber: string | null;
   personOptions: PersonOption[];
   peopleLoaded: boolean;
   onPersonCreated: (person: PersonOption) => void;
@@ -68,11 +70,6 @@ type HonorFormState = {
 
 function buildSuggestedVs(actionId: string, cskNumber: string): string {
   return `${normalizeText(actionId) ?? ""} ${cskNumber.replace(/\s+/g, " ").trim()}`.trim();
-}
-
-function personLabel(person: PersonOption): string {
-  const name = person.nickname ? `${person.fullName} (${person.nickname})` : person.fullName;
-  return person.kind === "external" ? `${name} · nečlen` : name;
 }
 
 function makePdfFileName(prefix: string, eventId: number, eventName: string): string {
@@ -133,7 +130,7 @@ async function createManualExpense(input: {
   }
 }
 
-function createInitialTravelForm(eventId: number, eventName: string, leaderName: string | null): TravelFormState {
+function createInitialTravelForm(eventId: number, eventName: string, leaderName: string | null, leaderCskNumber: string | null): TravelFormState {
   return {
     nazevAkce: eventName,
     id: String(eventId),
@@ -147,11 +144,11 @@ function createInitialTravelForm(eventId: number, eventName: string, leaderName:
     kodBanky: "",
     variabilniSymbol: "",
     poradatelAkce: leaderName ?? "",
-    cisloCskPoradatele: "",
+    cisloCskPoradatele: leaderCskNumber ?? "",
   };
 }
 
-function createInitialHonorForm(eventId: number, eventName: string, leaderName: string | null): HonorFormState {
+function createInitialHonorForm(eventId: number, eventName: string, leaderName: string | null, leaderCskNumber: string | null): HonorFormState {
   return {
     nazevAkce: eventName,
     id: String(eventId),
@@ -166,7 +163,7 @@ function createInitialHonorForm(eventId: number, eventName: string, leaderName: 
     kodBanky: "",
     variabilniSymbol: "",
     poradatelAkce: leaderName ?? "",
-    cisloCskPoradatele: "",
+    cisloCskPoradatele: leaderCskNumber ?? "",
   };
 }
 
@@ -195,106 +192,13 @@ function ExpenseCategoryField({
   );
 }
 
-function ReimbursementPersonField({
-  people,
-  peopleLoaded,
-  value,
-  onChange,
-  onPersonCreated,
-}: {
-  people: PersonOption[];
-  peopleLoaded: boolean;
-  value: string;
-  onChange: (person: PersonOption | null) => void;
-  onPersonCreated: (person: PersonOption) => void;
-}) {
-  const [addingExternal, setAddingExternal] = useState(false);
-  const [externalName, setExternalName] = useState("");
-  const [externalAccount, setExternalAccount] = useState("");
-  const [externalBankCode, setExternalBankCode] = useState("");
-  const [creating, setCreating] = useState(false);
-  const [createError, setCreateError] = useState<string | null>(null);
-  const selected = people.find((person) => String(person.id) === value) ?? null;
-  const account = selected?.bankAccountNumber && selected?.bankCode
-    ? `${selected.bankAccountNumber}/${selected.bankCode}`
-    : null;
-
-  async function handleCreateExternal() {
-    setCreating(true);
-    setCreateError(null);
-    try {
-      const result = await createExternalPerson({
-        fullName: externalName,
-        bankAccountNumber: externalAccount,
-        bankCode: externalBankCode,
-      });
-      if ("error" in result) {
-        setCreateError(result.error);
-        return;
-      }
-      onPersonCreated(result.person);
-      onChange(result.person);
-      setExternalName("");
-      setExternalAccount("");
-      setExternalBankCode("");
-      setAddingExternal(false);
-    } finally {
-      setCreating(false);
-    }
-  }
-
-  return (
-    <div className="space-y-1.5 md:col-span-2">
-      <Label>Komu proplatit</Label>
-      <select
-        value={value}
-        disabled={!peopleLoaded}
-        onChange={(event) => {
-          const person = people.find((item) => String(item.id) === event.target.value) ?? null;
-          onChange(person);
-        }}
-        className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
-      >
-        <option value="">{peopleLoaded ? "Zatím neurčeno" : "Načítám osoby..."}</option>
-        {people.map((person) => (
-          <option key={person.id} value={person.id}>{personLabel(person)}</option>
-        ))}
-      </select>
-      {selected && (
-        <p className={`text-[11px] ${account ? "text-gray-400" : "text-amber-600"}`}>
-          {account ? `Účet: ${account}` : "Účet zatím není vyplněný. Formulář lze vytvořit i bez něj."}
-        </p>
-      )}
-      <button
-        type="button"
-        onClick={() => { setAddingExternal(v => !v); setCreateError(null); }}
-        className="text-xs text-blue-600 hover:underline"
-      >
-        {addingExternal ? "Zavřít přidání nečlena" : "Přidat příjemce mimo členy"}
-      </button>
-      {addingExternal && (
-        <div className="rounded-lg border bg-white p-3 space-y-2">
-          <Input value={externalName} onChange={(event) => setExternalName(event.target.value)} placeholder="Jméno a příjmení" />
-          <div className="grid grid-cols-2 gap-2">
-            <Input value={externalAccount} onChange={(event) => setExternalAccount(event.target.value)} placeholder="Číslo účtu" />
-            <Input value={externalBankCode} onChange={(event) => setExternalBankCode(event.target.value)} placeholder="Kód banky" />
-          </div>
-          {createError && <p className="text-xs text-red-500">{createError}</p>}
-          <Button type="button" size="sm" variant="outline" onClick={handleCreateExternal} disabled={creating}>
-            {creating ? "Ukládám…" : "Uložit nečlena"}
-          </Button>
-        </div>
-      )}
-    </div>
-  );
-}
-
 function TravelExpenseDialog({
   open,
   onOpenChange,
   eventId,
   eventName,
   leaderName,
+  leaderCskNumber,
   personOptions,
   peopleLoaded,
   onPersonCreated,
@@ -305,23 +209,24 @@ function TravelExpenseDialog({
   eventId: number;
   eventName: string;
   leaderName: string | null;
+  leaderCskNumber: string | null;
   personOptions: PersonOption[];
   peopleLoaded: boolean;
   onPersonCreated: (person: PersonOption) => void;
   onExpenseCreated: () => void | Promise<void>;
 }) {
   const [form, setForm] = useState<TravelFormState>(() =>
-    createInitialTravelForm(eventId, eventName, leaderName),
+    createInitialTravelForm(eventId, eventName, leaderName, leaderCskNumber),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setForm(createInitialTravelForm(eventId, eventName, leaderName));
+      setForm(createInitialTravelForm(eventId, eventName, leaderName, leaderCskNumber));
       setError(null);
     }
-  }, [open, eventId, eventName, leaderName]);
+  }, [open, eventId, eventName, leaderName, leaderCskNumber]);
 
   const suggestedVs = buildSuggestedVs(form.id, form.cisloCskPrijemce);
 
@@ -445,12 +350,14 @@ function TravelExpenseDialog({
                 onChange={(event) => setField("purposeText", event.target.value)}
               />
             </div>
-            <ReimbursementPersonField
+            <PersonAutocomplete
               people={personOptions}
               peopleLoaded={peopleLoaded}
               value={form.reimbursementPersonId}
               onChange={setReimbursementPerson}
               onPersonCreated={onPersonCreated}
+              className="md:col-span-2"
+              accountMissingText="Účet zatím není vyplněný. Formulář lze vytvořit i bez něj."
             />
           </div>
 
@@ -522,6 +429,7 @@ function HonorExpenseDialog({
   eventId,
   eventName,
   leaderName,
+  leaderCskNumber,
   personOptions,
   peopleLoaded,
   onPersonCreated,
@@ -532,23 +440,24 @@ function HonorExpenseDialog({
   eventId: number;
   eventName: string;
   leaderName: string | null;
+  leaderCskNumber: string | null;
   personOptions: PersonOption[];
   peopleLoaded: boolean;
   onPersonCreated: (person: PersonOption) => void;
   onExpenseCreated: () => void | Promise<void>;
 }) {
   const [form, setForm] = useState<HonorFormState>(() =>
-    createInitialHonorForm(eventId, eventName, leaderName),
+    createInitialHonorForm(eventId, eventName, leaderName, leaderCskNumber),
   );
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (open) {
-      setForm(createInitialHonorForm(eventId, eventName, leaderName));
+      setForm(createInitialHonorForm(eventId, eventName, leaderName, leaderCskNumber));
       setError(null);
     }
-  }, [open, eventId, eventName, leaderName]);
+  }, [open, eventId, eventName, leaderName, leaderCskNumber]);
 
   const suggestedVs = buildSuggestedVs(form.id, form.cisloCskPrijemce);
 
@@ -677,12 +586,14 @@ function HonorExpenseDialog({
                 onChange={(event) => setField("purposeText", event.target.value)}
               />
             </div>
-            <ReimbursementPersonField
+            <PersonAutocomplete
               people={personOptions}
               peopleLoaded={peopleLoaded}
               value={form.reimbursementPersonId}
               onChange={setReimbursementPerson}
               onPersonCreated={onPersonCreated}
+              className="md:col-span-2"
+              accountMissingText="Účet zatím není vyplněný. Formulář lze vytvořit i bez něj."
             />
           </div>
 
@@ -752,6 +663,7 @@ export function EventExpenseActions({
   eventId,
   eventName,
   leaderName,
+  leaderCskNumber,
   personOptions,
   peopleLoaded,
   onPersonCreated,
@@ -847,6 +759,7 @@ export function EventExpenseActions({
         eventId={eventId}
         eventName={eventName}
         leaderName={leaderName}
+        leaderCskNumber={leaderCskNumber}
         personOptions={personOptions}
         peopleLoaded={peopleLoaded}
         onPersonCreated={onPersonCreated}
@@ -859,6 +772,7 @@ export function EventExpenseActions({
         eventId={eventId}
         eventName={eventName}
         leaderName={leaderName}
+        leaderCskNumber={leaderCskNumber}
         personOptions={personOptions}
         peopleLoaded={peopleLoaded}
         onPersonCreated={onPersonCreated}

@@ -1067,6 +1067,7 @@ export function EventDetailClient({ event }: Props) {
                             eventId={event.id}
                             eventName={event.name}
                             leaderName={event.leaderName}
+                            leaderCskNumber={event.leaderCskNumber}
                         />
                     </TabsContent>
                 </Tabs>

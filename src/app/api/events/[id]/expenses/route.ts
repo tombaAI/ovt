@@ -12,6 +12,85 @@ const ALLOWED_MIME = new Set([
 ]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
+async function resolveReimbursementTarget(
+    db: ReturnType<typeof getDb>,
+    reimbursementPersonIdRaw: string,
+    reimbursementMemberIdRaw: string,
+): Promise<
+    | { value: { reimbursementPersonId: number | null; reimbursementMemberId: number | null } }
+    | { error: NextResponse }
+> {
+    if (reimbursementPersonIdRaw) {
+        const candidateId = Number(reimbursementPersonIdRaw);
+        if (!Number.isInteger(candidateId) || candidateId <= 0) {
+            return { error: NextResponse.json({ error: "Neplatný příjemce proplacení" }, { status: 400 }) };
+        }
+
+        const [person] = await db
+            .select({ id: people.id, memberId: people.memberId })
+            .from(people)
+            .where(eq(people.id, candidateId));
+
+        if (!person) {
+            return { error: NextResponse.json({ error: "Vybraný příjemce nebyl nalezen" }, { status: 400 }) };
+        }
+
+        return { value: { reimbursementPersonId: person.id, reimbursementMemberId: person.memberId } };
+    }
+
+    if (reimbursementMemberIdRaw) {
+        const candidateId = Number(reimbursementMemberIdRaw);
+        if (!Number.isInteger(candidateId) || candidateId <= 0) {
+            return { error: NextResponse.json({ error: "Neplatný člen pro proplacení" }, { status: 400 }) };
+        }
+
+        const [member] = await db.select({
+            id: members.id,
+            firstName: members.firstName,
+            lastName: members.lastName,
+            fullName: members.fullName,
+            email: members.email,
+            phone: members.phone,
+            bankAccountNumber: members.bankAccountNumber,
+            bankCode: members.bankCode,
+        }).from(members).where(eq(members.id, candidateId));
+        if (!member) {
+            return { error: NextResponse.json({ error: "Vybraný člen nebyl nalezen" }, { status: 400 }) };
+        }
+
+        const [person] = await db
+            .insert(people)
+            .values({
+                memberId: member.id,
+                firstName: member.firstName,
+                lastName: member.lastName,
+                fullName: member.fullName,
+                email: member.email,
+                phone: member.phone,
+                bankAccountNumber: member.bankAccountNumber,
+                bankCode: member.bankCode,
+            })
+            .onConflictDoUpdate({
+                target: people.memberId,
+                set: {
+                    firstName: member.firstName,
+                    lastName: member.lastName,
+                    fullName: member.fullName,
+                    email: member.email,
+                    phone: member.phone,
+                    bankAccountNumber: member.bankAccountNumber,
+                    bankCode: member.bankCode,
+                    updatedAt: new Date(),
+                },
+            })
+            .returning({ id: people.id });
+
+        return { value: { reimbursementPersonId: person?.id ?? null, reimbursementMemberId: member.id } };
+    }
+
+    return { value: { reimbursementPersonId: null, reimbursementMemberId: null } };
+}
+
 export async function POST(
     request: NextRequest,
     { params }: { params: Promise<{ id: string }> }
@@ -48,76 +127,9 @@ export async function POST(
         }
 
         const db = getDb();
-        let reimbursementPersonId: number | null = null;
-        let reimbursementMemberId: number | null = null;
-
-        if (reimbursementPersonIdRaw) {
-            const candidateId = Number(reimbursementPersonIdRaw);
-            if (!Number.isInteger(candidateId) || candidateId <= 0) {
-                return NextResponse.json({ error: "Neplatný příjemce proplacení" }, { status: 400 });
-            }
-
-            const [person] = await db
-                .select({ id: people.id, memberId: people.memberId })
-                .from(people)
-                .where(eq(people.id, candidateId));
-
-            if (!person) {
-                return NextResponse.json({ error: "Vybraný příjemce nebyl nalezen" }, { status: 400 });
-            }
-
-            reimbursementPersonId = person.id;
-            reimbursementMemberId = person.memberId;
-        } else if (reimbursementMemberIdRaw) {
-            const candidateId = Number(reimbursementMemberIdRaw);
-            if (!Number.isInteger(candidateId) || candidateId <= 0) {
-                return NextResponse.json({ error: "Neplatný člen pro proplacení" }, { status: 400 });
-            }
-
-            const [member] = await db.select({
-                id: members.id,
-                firstName: members.firstName,
-                lastName: members.lastName,
-                fullName: members.fullName,
-                email: members.email,
-                phone: members.phone,
-                bankAccountNumber: members.bankAccountNumber,
-                bankCode: members.bankCode,
-            }).from(members).where(eq(members.id, candidateId));
-            if (!member) {
-                return NextResponse.json({ error: "Vybraný člen nebyl nalezen" }, { status: 400 });
-            }
-
-            const [person] = await db
-                .insert(people)
-                .values({
-                    memberId: member.id,
-                    firstName: member.firstName,
-                    lastName: member.lastName,
-                    fullName: member.fullName,
-                    email: member.email,
-                    phone: member.phone,
-                    bankAccountNumber: member.bankAccountNumber,
-                    bankCode: member.bankCode,
-                })
-                .onConflictDoUpdate({
-                    target: people.memberId,
-                    set: {
-                        firstName: member.firstName,
-                        lastName: member.lastName,
-                        fullName: member.fullName,
-                        email: member.email,
-                        phone: member.phone,
-                        bankAccountNumber: member.bankAccountNumber,
-                        bankCode: member.bankCode,
-                        updatedAt: new Date(),
-                    },
-                })
-                .returning({ id: people.id });
-
-            reimbursementPersonId = person?.id ?? null;
-            reimbursementMemberId = member.id;
-        }
+        const reimbursement = await resolveReimbursementTarget(db, reimbursementPersonIdRaw, reimbursementMemberIdRaw);
+        if ("error" in reimbursement) return reimbursement.error;
+        const { reimbursementPersonId, reimbursementMemberId } = reimbursement.value;
 
         let fileUrl: string | null = null;
         let fileName: string | null = null;
@@ -158,6 +170,87 @@ export async function POST(
     } catch (err) {
         const msg = err instanceof Error ? err.message : "Interní chyba";
         console.error("[POST /api/events/expenses]", msg);
+        return NextResponse.json({ error: msg }, { status: 500 });
+    }
+}
+
+export async function PATCH(
+    request: NextRequest,
+    { params }: { params: Promise<{ id: string }> }
+) {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) {
+            return NextResponse.json({ error: "Nepřihlášen" }, { status: 401 });
+        }
+
+        const { id } = await params;
+        const eventId = Number(id);
+        if (isNaN(eventId) || eventId <= 0) {
+            return NextResponse.json({ error: "Neplatné ID akce" }, { status: 400 });
+        }
+
+        const body = await request.json() as {
+            expenseId?: unknown;
+            amount?: unknown;
+            purposeText?: unknown;
+            purposeCategory?: unknown;
+            reimbursementPersonId?: unknown;
+            reimbursementMemberId?: unknown;
+        };
+
+        const expenseId = Number(body.expenseId);
+        if (!Number.isInteger(expenseId) || expenseId <= 0) {
+            return NextResponse.json({ error: "Chybí expenseId" }, { status: 400 });
+        }
+
+        const amountStr = String(body.amount ?? "").replace(",", ".");
+        const purposeText = String(body.purposeText ?? "").trim();
+        const purposeCategory = String(body.purposeCategory ?? "");
+        const reimbursementPersonIdRaw = body.reimbursementPersonId === null || body.reimbursementPersonId === undefined
+            ? ""
+            : String(body.reimbursementPersonId).trim();
+        const reimbursementMemberIdRaw = body.reimbursementMemberId === null || body.reimbursementMemberId === undefined
+            ? ""
+            : String(body.reimbursementMemberId).trim();
+
+        const amount = parseFloat(amountStr);
+        if (isNaN(amount) || amount <= 0) {
+            return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
+        }
+        if (!purposeText) {
+            return NextResponse.json({ error: "Chybí účel" }, { status: 400 });
+        }
+        if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory)) {
+            return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
+        }
+
+        const db = getDb();
+        const [row] = await db.select({ id: eventExpenses.id, eventId: eventExpenses.eventId })
+            .from(eventExpenses)
+            .where(eq(eventExpenses.id, expenseId));
+
+        if (!row || row.eventId !== eventId) {
+            return NextResponse.json({ error: "Doklad nenalezen" }, { status: 404 });
+        }
+
+        const reimbursement = await resolveReimbursementTarget(db, reimbursementPersonIdRaw, reimbursementMemberIdRaw);
+        if ("error" in reimbursement) return reimbursement.error;
+
+        await db.update(eventExpenses)
+            .set({
+                amount: String(amount),
+                purposeText,
+                purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],
+                reimbursementPersonId: reimbursement.value.reimbursementPersonId,
+                reimbursementMemberId: reimbursement.value.reimbursementMemberId,
+            })
+            .where(eq(eventExpenses.id, expenseId));
+
+        return NextResponse.json({ success: true });
+    } catch (err) {
+        const msg = err instanceof Error ? err.message : "Interní chyba";
+        console.error("[PATCH /api/events/expenses]", msg);
         return NextResponse.json({ error: msg }, { status: 500 });
     }
 }

@@ -26,6 +26,7 @@ export type EventRow = {
     location: string | null;
     leaderId: number | null;
     leaderName: string | null;
+    leaderCskNumber: string | null;
     status: EventStatus;
     description: string | null;
     externalUrl: string | null;
@@ -74,6 +75,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             location:         events.location,
             leaderId:     events.leaderId,
             leaderName:   members.fullName,
+            leaderCskNumber: members.cskNumber,
             status:       events.status,
             description:  events.description,
             externalUrl:  events.externalUrl,
@@ -146,6 +148,7 @@ export async function getEventById(id: number): Promise<EventRow | null> {
             location:         events.location,
             leaderId:     events.leaderId,
             leaderName:   members.fullName,
+            leaderCskNumber: members.cskNumber,
             status:       events.status,
             description:  events.description,
             externalUrl:  events.externalUrl,
