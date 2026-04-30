@@ -5,37 +5,44 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
 
 const fieldsCheckSchema = z.object({
-    company_name:  z.boolean().describe("Je název firmy/obchodníka CELÝ uvnitř ořezu? (nadpis i hodnota)"),
-    ico:           z.boolean().nullable().describe("Je IČ CELÉ uvnitř ořezu? null pokud IČ na dokladu není."),
-    dic:           z.boolean().nullable().describe("Je DIČ CELÉ uvnitř ořezu? null pokud DIČ na dokladu není."),
-    total_amount:  z.boolean().describe("Je celková částka CELÁ uvnitř ořezu? (nadpis 'Celkem'/'Total' i číselná hodnota)"),
+    company_name:  z.boolean().describe("Je název firmy/obchodníka CELÝ uvnitř ořezu?"),
+    ico:           z.boolean().nullable().describe("Je IČ CELÉ uvnitř ořezu? null pokud na dokladu není."),
+    dic:           z.boolean().nullable().describe("Je DIČ CELÉ uvnitř ořezu? null pokud na dokladu není."),
+    total_amount:  z.boolean().describe("Je celková částka CELÁ uvnitř ořezu? (nadpis i hodnota)"),
 });
 
 const cropSchema = z.object({
-    detected:     z.boolean().describe("Byl nalezen doklad na fotografii?"),
-    x_pct:        z.number().min(0).max(1).nullable().describe("Levý kraj dokladu, relativní 0–1"),
-    y_pct:        z.number().min(0).max(1).nullable().describe("Horní kraj dokladu, relativní 0–1"),
-    width_pct:    z.number().min(0).max(1).nullable().describe("Šířka dokladu, relativní 0–1"),
-    height_pct:   z.number().min(0).max(1).nullable().describe("Výška dokladu, relativní 0–1"),
-    confidence:   z.number().min(0).max(1).describe("Jistota detekce ořezu"),
-    fields_check: fieldsCheckSchema.describe("Ověření, že klíčové informace nejsou mimo navržený ořez"),
-    note:         z.string().optional().describe("Volitelná poznámka k detekci"),
+    detected:     z.boolean().describe("Byl nalezen doklad nebo papír na fotografii?"),
+    x_pct:        z.number().min(0).max(1).nullable().describe("Levý okraj papíru, relativní 0–1"),
+    y_pct:        z.number().min(0).max(1).nullable().describe("Horní okraj papíru, relativní 0–1"),
+    width_pct:    z.number().min(0).max(1).nullable().describe("Šířka papíru, relativní 0–1"),
+    height_pct:   z.number().min(0).max(1).nullable().describe("Výška papíru, relativní 0–1"),
+    confidence:   z.number().min(0).max(1).describe("Jistota detekce fyzických okrajů"),
+    fields_check: fieldsCheckSchema.describe("Doplňková kontrola: jsou klíčová pole uvnitř ořezu?"),
+    note:         z.string().optional(),
 });
 
 export type CropDetectionResult = z.infer<typeof cropSchema>;
 export type FieldsCheck         = z.infer<typeof fieldsCheckSchema>;
 
-const PROMPT = `Na fotografii najdi hlavní doklad, účtenku nebo fakturu.
+const PROMPT = `Najdi fyzické okraje dokladu, účtenky nebo papíru na fotografii.
 
-1. OŘEZ: Vrať ohraničující obdélník jako relativní hodnoty (0.0 = levý/horní kraj, 1.0 = pravý/dolní kraj).
+PRIMÁRNÍ ÚKOL — hledej hranici papíru pomocí kontrastu:
+Papír (typicky bílý nebo světlý) leží na podkladu jiné barvy nebo textury (stůl, ruka, peněženka, tmavší plocha).
+Hledej přesně tu linii, kde papír končí a začíná podklad.
+Ořez musí zahrnovat CELÝ papír — včetně prázdných okrajů bez textu nahoře, dole, vlevo, vpravo.
 
-2. OVĚŘENÍ POLÍ: Pro navržený ořez ověř, zda jsou CELÉ uvnitř (jak popisek/nadpis, tak hodnota):
-   - Název firmy / obchodníka
-   - IČ (identifikační číslo) — pokud na dokladu není, vrať null
-   - DIČ (daňové identifikační číslo) — pokud na dokladu není, vrať null
-   - Celková částka k úhradě (nadpis i číselná hodnota)
+PRAVIDLA PRO PŘESNOST:
+- Nikdy neořezávej jen oblast s textem. Zahrni fyzický okraj papíru.
+- Buď štědrý: je lepší zahrnout 2–3 % navíc než oříznout kousek papíru.
+- Pokud papír sahá až k okraji fotografie, nastav tu stranu na 0.0 nebo 1.0.
+- Pokud je papír přeložený nebo skrčený, hledej vnější ohraničující obdélník celé viditelné plochy.
+- Pokud je papír na uniformním pozadí bez zřetelného kontrastu, hledej stín nebo jemnou hranu.
 
-Pokud navržený ořez by některé z těchto polí oříznul nebo nechal mimo, uprav ořez tak, aby vše obsahoval.
+DOPLŇKOVÝ ÚKOL — po nalezení fyzických hranic ověř:
+Zkontroluj zda jsou klíčová pole (název firmy, IČ, DIČ, celková částka) uvnitř nalezeného ořezu.
+Pokud ne, rozšiř ořez — nikdy ho nezužuj pod fyzické hranice papíru.
+
 Pokud doklad není viditelný: detected=false, souřadnice null.`;
 
 export async function POST(request: NextRequest) {
