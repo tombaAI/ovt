@@ -9,6 +9,8 @@ export const FIELD_LABELS: Record<string, string> = {
     phone:                  "Telefon",
     gender:                 "Pohlaví",
     address:                "Adresa",
+    bankAccountNumber:      "Číslo účtu",
+    bankCode:               "Kód banky",
     variableSymbol:         "Variabilní symbol",
     cskNumber:              "Číslo ČSK",
     note:                   "Poznámka",

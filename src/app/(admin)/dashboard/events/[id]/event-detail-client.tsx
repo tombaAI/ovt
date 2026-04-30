@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, FileText, MoreHorizontal, Users, Wallet } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -900,6 +900,12 @@ export function EventDetailClient({ event }: Props) {
                         <span>Kalendář {event.year}</span>
                     </Link>
                     <div className="flex-1" />
+                    <Button asChild size="sm" variant="outline">
+                        <a href={`/api/events/${event.id}/vyuctovani`}>
+                            <Download size={14} />
+                            Vyúčtování oddílu
+                        </a>
+                    </Button>
                     <Popover>
                         <PopoverTrigger asChild>
                             <Button size="sm" variant="outline" className="h-8 w-8 p-0">
@@ -1057,7 +1063,11 @@ export function EventDetailClient({ event }: Props) {
 
                     {/* ── Tab: Náklady ── */}
                     <TabsContent value="expenses" className="mt-0">
-                        <EventExpensesTab eventId={event.id} />
+                        <EventExpensesTab
+                            eventId={event.id}
+                            eventName={event.name}
+                            leaderName={event.leaderName}
+                        />
                     </TabsContent>
                 </Tabs>
 

@@ -8,7 +8,9 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
+import { getMembersForAutocomplete, type MemberOption } from "@/lib/actions/events";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
+import { EventExpenseActions } from "./event-expense-actions";
 
 const CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
 const MAX_PX = 1600;
@@ -26,6 +28,53 @@ function fmtDate(d: Date) {
 
 function isImage(mime: string | null) {
     return mime?.startsWith("image/") ?? false;
+}
+
+function memberLabel(member: MemberOption) {
+    return member.nickname
+        ? `${member.fullName} (${member.nickname})`
+        : member.fullName;
+}
+
+function PayeeSelect({
+    members,
+    value,
+    disabled,
+    onChange,
+}: {
+    members: MemberOption[];
+    value: string;
+    disabled?: boolean;
+    onChange: (value: string) => void;
+}) {
+    const selected = members.find(m => String(m.id) === value) ?? null;
+    const account = selected?.bankAccountNumber && selected?.bankCode
+        ? `${selected.bankAccountNumber}/${selected.bankCode}`
+        : null;
+
+    return (
+        <div>
+            <label className="text-xs text-gray-500 mb-1 block">
+                Komu proplatit <span className="text-red-400">*</span>
+            </label>
+            <select
+                value={value}
+                disabled={disabled}
+                onChange={e => onChange(e.target.value)}
+                className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
+            >
+                <option value="">Vyber člena</option>
+                {members.map(member => (
+                    <option key={member.id} value={member.id}>{memberLabel(member)}</option>
+                ))}
+            </select>
+            {selected && (
+                <p className={`mt-1 text-[11px] ${account ? "text-gray-400" : "text-amber-600"}`}>
+                    {account ? `Účet: ${account}` : "Člen nemá vyplněný bankovní účet. Odeslání vyúčtování ho později zablokuje."}
+                </p>
+            )}
+        </div>
+    );
 }
 
 // ── Gemini analysis result type ───────────────────────────────────────────────
@@ -403,9 +452,19 @@ type FlowState =
     | { tag: "cropping"; file: File; previewUrl: string }
     | { tag: "analyzing"; file: File }
     | { tag: "analyzed"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory }
-    | { tag: "uploading"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory; purposeText: string };
+    | { tag: "uploading"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory; purposeText: string; reimbursementMemberId: string };
 
-function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => void }) {
+function AddExpenseForm({
+    eventId,
+    memberOptions,
+    membersLoaded,
+    onAdded,
+}: {
+    eventId: number;
+    memberOptions: MemberOption[];
+    membersLoaded: boolean;
+    onAdded: () => void;
+}) {
     const [state, setState]       = useState<FlowState>({ tag: "idle" });
     const [purposeText, setPurposeText] = useState("");
     const [error, setError]       = useState<string | null>(null);
@@ -416,12 +475,14 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
     // Override fields after analysis
     const [amount, setAmount]     = useState("");
     const [category, setCategory] = useState<ExpenseCategory>("501/004");
+    const [reimbursementMemberId, setReimbursementMemberId] = useState("");
 
     function resetToIdle() {
         setState({ tag: "idle" });
         setPurposeText("");
         setAmount("");
         setCategory("501/004");
+        setReimbursementMemberId("");
         setError(null);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -482,13 +543,15 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
         const amountNum = parseFloat(amount.replace(",", "."));
         if (isNaN(amountNum) || amountNum <= 0) { setError("Oprav částku"); return; }
         if (!purposeText.trim()) { setError("Doplň účel dokladu"); purposeRef.current?.focus(); return; }
+        if (!reimbursementMemberId) { setError("Vyber člena, kterému se má doklad proplatit"); return; }
 
-        setState({ tag: "uploading", file: state.file, analysis: state.analysis, amount, category, purposeText });
+        setState({ tag: "uploading", file: state.file, analysis: state.analysis, amount, category, purposeText, reimbursementMemberId });
         try {
             const fd = new FormData();
             fd.append("amount", String(amountNum));
             fd.append("purposeText", purposeText.trim());
             fd.append("purposeCategory", category);
+            fd.append("reimbursementMemberId", reimbursementMemberId);
             fd.append("file", state.file);
 
             const res = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: fd });
@@ -639,6 +702,13 @@ function AddExpenseForm({ eventId, onAdded }: { eventId: number; onAdded: () => 
                     />
                 </div>
 
+                <PayeeSelect
+                    members={memberOptions}
+                    value={reimbursementMemberId}
+                    disabled={isUploading || !membersLoaded}
+                    onChange={setReimbursementMemberId}
+                />
+
                 {error && <p className="text-xs text-red-500">{error}</p>}
 
                 <Button onClick={handleSave} disabled={isUploading} size="sm"
@@ -702,6 +772,12 @@ function ExpenseItem({ expense, eventId, onDeleted }: {
                     </span>
                 </div>
                 <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
+                <p className={`text-xs mt-0.5 ${expense.reimbursementMemberName ? "text-gray-500" : "text-amber-600"}`}>
+                    Proplatit: {expense.reimbursementMemberName ?? "není vybrán člen"}
+                    {expense.reimbursementMemberName && (!expense.reimbursementMemberBankAccountNumber || !expense.reimbursementMemberBankCode) && (
+                        <span className="text-amber-600"> · chybí účet</span>
+                    )}
+                </p>
                 {expense.fileUrl && (
                     <a href={`/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`}
                         target="_blank" rel="noopener noreferrer"
@@ -1049,10 +1125,20 @@ function AutoRotatePoc() {
 
 // ── Main tab ──────────────────────────────────────────────────────────────────
 
-export function EventExpensesTab({ eventId }: { eventId: number }) {
+export function EventExpensesTab({
+    eventId,
+    eventName,
+    leaderName,
+}: {
+    eventId: number;
+    eventName: string;
+    leaderName: string | null;
+}) {
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
     const [loading, setLoading]   = useState(true);
     const [error, setError]       = useState<string | null>(null);
+    const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
+    const [membersLoaded, setMembersLoaded] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1068,12 +1154,22 @@ export function EventExpensesTab({ eventId }: { eventId: number }) {
     }, [eventId]);
 
     useEffect(() => { load(); }, [load]);
+    useEffect(() => {
+        getMembersForAutocomplete()
+            .then(members => setMemberOptions(members))
+            .finally(() => setMembersLoaded(true));
+    }, []);
 
     const total = expenses?.reduce((s, e) => s + Number(e.amount), 0) ?? 0;
 
     return (
         <div className="space-y-4">
-            <AddExpenseForm eventId={eventId} onAdded={load} />
+            <AddExpenseForm
+                eventId={eventId}
+                memberOptions={memberOptions}
+                membersLoaded={membersLoaded}
+                onAdded={load}
+            />
 
             {loading && <p className="text-sm text-gray-400 py-4 text-center">Načítám doklady…</p>}
             {error   && <p className="text-sm text-red-500 py-4">{error}</p>}
@@ -1107,6 +1203,15 @@ export function EventExpensesTab({ eventId }: { eventId: number }) {
                     )}
                 </>
             )}
+
+            <EventExpenseActions
+                eventId={eventId}
+                eventName={eventName}
+                leaderName={leaderName}
+                memberOptions={memberOptions}
+                membersLoaded={membersLoaded}
+                onExpenseCreated={load}
+            />
 
             <AutoCropPoc />
             <AutoRotatePoc />

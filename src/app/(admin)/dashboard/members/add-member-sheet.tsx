@@ -67,6 +67,17 @@ export function AddMemberSheet({ open, onOpenChange, onAdded }: Props) {
 
                     <div className="grid grid-cols-2 gap-3">
                         <div className="space-y-1.5">
+                            <Label htmlFor="bank_account_number">Číslo účtu</Label>
+                            <Input id="bank_account_number" name="bank_account_number" inputMode="numeric" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label htmlFor="bank_code">Kód banky</Label>
+                            <Input id="bank_code" name="bank_code" inputMode="numeric" />
+                        </div>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-3">
+                        <div className="space-y-1.5">
                             <Label htmlFor="variable_symbol">Variabilní symbol</Label>
                             <Input id="variable_symbol" name="variable_symbol" inputMode="numeric" />
                         </div>

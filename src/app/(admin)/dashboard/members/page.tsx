@@ -25,6 +25,8 @@ export type MemberWithFlags = {
     address: string | null;
     birthDate: string | null;
     birthNumber: string | null;
+    bankAccountNumber: string | null;
+    bankCode: string | null;
     note: string | null;
     todoNote: string | null;
     membershipReviewed: boolean;
@@ -130,6 +132,8 @@ export default async function MembersPage({
             address:            members.address,
             birthDate:          members.birthDate,
             birthNumber:        members.birthNumber,
+            bankAccountNumber:  members.bankAccountNumber,
+            bankCode:           members.bankCode,
             note:               members.note,
             todoNote:           members.todoNote,
             membershipReviewed: members.membershipReviewed,
@@ -172,6 +176,8 @@ export default async function MembersPage({
             address:            r.address,
             birthDate:          r.birthDate as unknown as string | null,
             birthNumber:        r.birthNumber,
+            bankAccountNumber:  r.bankAccountNumber,
+            bankCode:           r.bankCode,
             note:               r.note,
             todoNote:           r.todoNote,
             membershipReviewed: r.membershipReviewed,

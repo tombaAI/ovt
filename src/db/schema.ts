@@ -50,6 +50,8 @@ export const members = appSchema.table("members", {
     birthNumber:         text("birth_number"),
     gender:              text("gender"),
     address:             text("address"),
+    bankAccountNumber:   text("bank_account_number"),
+    bankCode:            text("bank_code"),
     createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -479,6 +481,7 @@ export const eventExpenses = appSchema.table(
         amount:          numeric("amount", { precision: 10, scale: 2 }).notNull(),
         purposeText:     text("purpose_text").notNull(),
         purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }).notNull(),
+        reimbursementMemberId: integer("reimbursement_member_id").references(() => members.id, { onDelete: "set null" }),
         fileUrl:         text("file_url"),
         fileName:        text("file_name"),
         fileMime:        text("file_mime"),
@@ -487,6 +490,7 @@ export const eventExpenses = appSchema.table(
     },
     (t) => [
         index("event_expenses_event_idx").on(t.eventId),
+        index("event_expenses_reimbursement_member_idx").on(t.reimbursementMemberId),
     ]
 );
 

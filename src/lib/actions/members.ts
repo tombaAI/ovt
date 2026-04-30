@@ -71,6 +71,8 @@ export async function saveMember(
         phone:          (formData.get("phone") as string)?.trim()        || null,
         variableSymbol: Number(formData.get("variable_symbol")) || null,
         cskNumber:      (formData.get("csk_number") as string)?.trim() || null,
+        bankAccountNumber: (formData.get("bank_account_number") as string)?.trim() || null,
+        bankCode:          (formData.get("bank_code") as string)?.trim() || null,
         note:           (formData.get("note") as string)?.trim()         || null,
     };
 
@@ -100,6 +102,8 @@ export async function saveMember(
                     phone:          current.phone,
                     variableSymbol: current.variableSymbol,
                     cskNumber:      current.cskNumber,
+                    bankAccountNumber: current.bankAccountNumber,
+                    bankCode:       current.bankCode,
                     note:           current.note,
                 },
                 {
@@ -110,6 +114,8 @@ export async function saveMember(
                     phone:          memberData.phone,
                     variableSymbol: memberData.variableSymbol,
                     cskNumber:      memberData.cskNumber,
+                    bankAccountNumber: memberData.bankAccountNumber,
+                    bankCode:       memberData.bankCode,
                     note:           memberData.note,
                 }
             );
@@ -212,8 +218,8 @@ export async function saveMember(
 }
 
 // ── updateMemberField — inline edit jednoho pole ─────────────────────────────
-type EditableField = "firstName" | "lastName" | "nickname" | "userLogin" | "email" | "phone" | "gender" | "address" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
-const EDITABLE_FIELD_KEYS = new Set<EditableField>(["firstName","lastName","nickname","userLogin","email","phone","gender","address","variableSymbol","cskNumber","note","memberFrom"]);
+type EditableField = "firstName" | "lastName" | "nickname" | "userLogin" | "email" | "phone" | "gender" | "address" | "bankAccountNumber" | "bankCode" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
+const EDITABLE_FIELD_KEYS = new Set<EditableField>(["firstName","lastName","nickname","userLogin","email","phone","gender","address","bankAccountNumber","bankCode","variableSymbol","cskNumber","note","memberFrom"]);
 
 export async function updateMemberField(
     memberId: number,

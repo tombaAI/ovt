@@ -578,6 +578,8 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                 <InlineField label="Telefon"     value={member.phone}      type="tel"               fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")}       tjValue={tjDiffs["phone"]}       onTjAccept={tjAcceptor("phone")} />
                                 <InlineField label="Pohlaví"     value={member.gender}     placeholder="(nezadáno)" fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")}      tjValue={tjDiffs["gender"]}      onTjAccept={tjAcceptor("gender")} />
                                 <InlineField label="Adresa"      value={member.address}    placeholder="(nezadáno)" fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")}     tjValue={tjDiffs["address"]}     onTjAccept={tjAcceptor("address")} />
+                                <InlineField label="Číslo účtu"  value={member.bankAccountNumber} placeholder="(nezadáno)" fieldId="bankAccountNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankAccountNumber")} />
+                                <InlineField label="Kód banky"   value={member.bankCode} placeholder="(nezadáno)" fieldId="bankCode" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankCode")} />
                                 <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
                                 <InlineField label="Číslo ČSK"   value={member.cskNumber ?? null}                  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")}   tjValue={tjDiffs["cskNumber"]}   onTjAccept={tjAcceptor("cskNumber")} />
                                 <InlineField label="Poznámka"    value={member.note}       placeholder="(žádná)"    fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
@@ -746,6 +748,14 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                 </div>
                                 <div className="space-y-1.5"><Label htmlFor="email">E-mail</Label>
                                     <Input id="email" name="email" type="email" />
+                                </div>
+                                <div className="grid grid-cols-2 gap-3">
+                                    <div className="space-y-1.5"><Label htmlFor="bank_account_number">Číslo účtu</Label>
+                                        <Input id="bank_account_number" name="bank_account_number" inputMode="numeric" />
+                                    </div>
+                                    <div className="space-y-1.5"><Label htmlFor="bank_code">Kód banky</Label>
+                                        <Input id="bank_code" name="bank_code" inputMode="numeric" />
+                                    </div>
                                 </div>
                                 <div className="grid grid-cols-2 gap-3">
                                     <div className="space-y-1.5"><Label htmlFor="variable_symbol">Variabilní symbol</Label>

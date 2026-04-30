@@ -58,6 +58,7 @@ export type VyuctovaniData = {
   oddi: string;
   cisloZalohy?: string;
   zaMesic?: string;
+  zaMesicLabel?: string;
   veVysi?: number;
   naklady: VyuctovaniNaklady;
   prijmy: VyuctovaniPrijmy;
@@ -299,6 +300,7 @@ export function VyuctovaniDocument({ data }: { data: VyuctovaniData }) {
   const zalohaCelkem = data.veVysi ?? 0;
   const vracenyPrebytek = vysledek > 0 ? vysledek : 0;
   const pozadovanyNedoplatek = vysledek < 0 ? Math.abs(vysledek) : 0;
+  const zaMesicLabel = data.zaMesicLabel ?? "za měsíc";
 
   return (
     <Document>
@@ -317,7 +319,7 @@ export function VyuctovaniDocument({ data }: { data: VyuctovaniData }) {
             <Text>{data.cisloZalohy ?? ""}</Text>
           </View>
           <View style={[s.zalohaCell, s.zalohaCellBorder]}>
-            <Text style={s.zalohaLabel}>za měsíc:</Text>
+            <Text style={s.zalohaLabel}>{zaMesicLabel}:</Text>
             <Text>{data.zaMesic ?? ""}</Text>
           </View>
           <View style={[s.zalohaCell, s.zalohaCellBorder]}>

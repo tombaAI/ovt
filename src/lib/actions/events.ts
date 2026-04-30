@@ -106,6 +106,9 @@ export type MemberOption = {
     lastName: string;
     fullName: string;
     nickname: string | null;
+    cskNumber: string | null;
+    bankAccountNumber: string | null;
+    bankCode: string | null;
 };
 
 export async function getMembersForAutocomplete(): Promise<MemberOption[]> {
@@ -117,6 +120,9 @@ export async function getMembersForAutocomplete(): Promise<MemberOption[]> {
             lastName:  members.lastName,
             fullName:  members.fullName,
             nickname:  members.nickname,
+            cskNumber: members.cskNumber,
+            bankAccountNumber: members.bankAccountNumber,
+            bankCode: members.bankCode,
         })
         .from(members)
         .orderBy(asc(members.lastName), asc(members.firstName));

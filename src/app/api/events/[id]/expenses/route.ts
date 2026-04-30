@@ -2,7 +2,7 @@ import { put, del } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses } from "@/db/schema";
+import { eventExpenses, members } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import { eq } from "drizzle-orm";
 
@@ -32,6 +32,7 @@ export async function POST(
         const amountStr       = String(formData.get("amount") ?? "").replace(",", ".");
         const purposeText     = String(formData.get("purposeText") ?? "").trim();
         const purposeCategory = String(formData.get("purposeCategory") ?? "");
+        const reimbursementMemberIdRaw = String(formData.get("reimbursementMemberId") ?? "").trim();
         const file            = formData.get("file") as File | null;
 
         const amount = parseFloat(amountStr);
@@ -43,6 +44,17 @@ export async function POST(
         }
         if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory)) {
             return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
+        }
+
+        const reimbursementMemberId = Number(reimbursementMemberIdRaw);
+        if (!Number.isInteger(reimbursementMemberId) || reimbursementMemberId <= 0) {
+            return NextResponse.json({ error: "Vyber člena, kterému se má doklad proplatit" }, { status: 400 });
+        }
+
+        const db = getDb();
+        const [member] = await db.select({ id: members.id }).from(members).where(eq(members.id, reimbursementMemberId));
+        if (!member) {
+            return NextResponse.json({ error: "Vybraný člen nebyl nalezen" }, { status: 400 });
         }
 
         let fileUrl: string | null = null;
@@ -67,12 +79,12 @@ export async function POST(
             fileMime = file.type;
         }
 
-        const db = getDb();
         await db.insert(eventExpenses).values({
             eventId,
             amount: String(amount),
             purposeText,
             purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],
+            reimbursementMemberId,
             fileUrl,
             fileName,
             fileMime,
