@@ -870,11 +870,18 @@ function AutoCropPoc() {
 
 // ── PoC: Gemini auto-rotate ───────────────────────────────────────────────────
 
+type GeminiRotation = {
+    angle_degrees:  number;
+    text_direction: string;
+    text_samples:   string[];
+    confidence:     number;
+};
+
 type RotateState =
     | { tag: "idle" }
     | { tag: "detecting"; previewUrl: string; file: File }
-    | { tag: "rotating";  previewUrl: string; file: File; angleDeg: number }
-    | { tag: "done";      resultUrl: string; resultFile: File; angleDeg: number; confidence: number };
+    | { tag: "rotating";  previewUrl: string; file: File; gemini: GeminiRotation }
+    | { tag: "done";      resultUrl: string; resultFile: File; gemini: GeminiRotation };
 
 function AutoRotatePoc() {
     const [state, setState] = useState<RotateState>({ tag: "idle" });
@@ -900,23 +907,31 @@ function AutoRotatePoc() {
             const fd = new FormData();
             fd.append("file", f);
             const res  = await fetch("/api/expenses/detect-rotation", { method: "POST", body: fd });
-            const data: { rotation_needed: boolean; angle_degrees: number; confidence: number; note?: string; error?: string } = await res.json();
+            const data: {
+                rotation_needed: boolean; angle_degrees: number; confidence: number;
+                text_direction?: string; text_samples?: string[]; error?: string;
+            } = await res.json();
             if (!res.ok) throw new Error(data.error ?? "Chyba detekce");
 
-            const angle = data.angle_degrees ?? 0;
+            const angle   = data.angle_degrees ?? 0;
+            const gemini: GeminiRotation = {
+                angle_degrees:  angle,
+                text_direction: data.text_direction ?? "unknown",
+                text_samples:   data.text_samples  ?? [],
+                confidence:     data.confidence,
+            };
 
             if (!data.rotation_needed || Math.abs(angle) < 1) {
-                // Není potřeba otáčet
-                setState({ tag: "done", resultUrl: previewUrl, resultFile: f, angleDeg: 0, confidence: data.confidence });
+                setState({ tag: "done", resultUrl: previewUrl, resultFile: f, gemini });
                 return;
             }
 
             // 2. Canvas rotace
-            setState({ tag: "rotating", previewUrl, file: f, angleDeg: angle });
+            setState({ tag: "rotating", previewUrl, file: f, gemini });
             const rotated    = await rotateImage(previewUrl, angle, f.name);
             const rotatedUrl = URL.createObjectURL(rotated);
             URL.revokeObjectURL(previewUrl);
-            setState({ tag: "done", resultUrl: rotatedUrl, resultFile: rotated, angleDeg: angle, confidence: data.confidence });
+            setState({ tag: "done", resultUrl: rotatedUrl, resultFile: rotated, gemini });
         } catch (err) {
             URL.revokeObjectURL(previewUrl);
             setError(err instanceof Error ? err.message : "Chyba");
@@ -958,37 +973,76 @@ function AutoRotatePoc() {
                     <Sparkles size={13} className="text-amber-500 animate-pulse" />
                     <p className="text-xs text-amber-600">
                         {state.tag === "detecting"
-                            ? "Gemini analyzuje orientaci…"
-                            : `Otáčím o ${fmtAngle(state.angleDeg)}…`}
+                            ? "Gemini čte text a určuje orientaci…"
+                            : `Otáčím o ${fmtAngle(state.gemini.angle_degrees)}…`}
                     </p>
                 </div>
             )}
 
-            {state.tag === "done" && (
-                <div className="space-y-3">
-                    {/* Info o rotaci */}
-                    <div className="flex items-center gap-2 text-xs flex-wrap">
-                        <span className={state.angleDeg === 0 ? "text-green-600" : "text-amber-700"}>
-                            {state.angleDeg === 0 ? "✓ Obrázek je správně orientovaný" : `↻ Pootočeno: ${fmtAngle(state.angleDeg)}`}
-                        </span>
-                        <span className="text-gray-300">·</span>
-                        <span className="text-gray-400">jistota {Math.round(state.confidence * 100)}%</span>
-                        <span className="text-gray-300">·</span>
-                        <span className="text-gray-400">{Math.round(state.resultFile.size / 1024)} kB</span>
-                    </div>
+            {state.tag === "done" && (() => {
+                const { gemini } = state;
+                const pct = Math.round(gemini.confidence * 100);
+                const dirLabels: Record<string, string> = {
+                    correct:       "✓ správně",
+                    rotated_cw90:  "otočeno 90° doprava",
+                    rotated_ccw90: "otočeno 90° doleva",
+                    upside_down:   "vzhůru nohama (180°)",
+                    slight_tilt:   "mírně nakloněno",
+                };
+                return (
+                    <div className="space-y-3">
+                        {/* Gemini analýza */}
+                        <div className="rounded-lg border border-amber-200 bg-white px-3 py-2.5 space-y-2">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-amber-500 font-medium uppercase tracking-wide">Gemini detekce</span>
+                                <div className="flex-1 h-1 rounded-full bg-gray-200 overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full ${pct >= 80 ? "bg-green-500" : pct >= 55 ? "bg-amber-400" : "bg-red-400"}`}
+                                        style={{ width: `${pct}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] tabular-nums text-gray-500">{pct}%</span>
+                            </div>
 
-                    {/* Výsledný obrázek */}
-                    <div className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50 inline-block max-w-full">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={state.resultUrl} alt="Výsledek rotace"
-                            className="max-w-full max-h-64 object-contain" />
-                    </div>
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs">
+                                <span className="text-gray-500">
+                                    Směr textu: <span className="font-medium text-gray-800">{dirLabels[gemini.text_direction] ?? gemini.text_direction}</span>
+                                </span>
+                                <span className="text-gray-500">
+                                    Otočení: <span className={`font-medium ${gemini.angle_degrees === 0 ? "text-green-600" : "text-amber-700"}`}>
+                                        {gemini.angle_degrees === 0 ? "žádné" : fmtAngle(gemini.angle_degrees)}
+                                    </span>
+                                </span>
+                            </div>
 
-                    <button onClick={reset} className="text-xs text-amber-600 hover:underline block">
-                        Zkusit znovu
-                    </button>
-                </div>
-            )}
+                            {gemini.text_samples.length > 0 && (
+                                <div>
+                                    <p className="text-[10px] text-gray-400 mb-1">Nalezený text (ukázky):</p>
+                                    <div className="flex flex-wrap gap-1">
+                                        {gemini.text_samples.map((s, i) => (
+                                            <span key={i} className="text-[11px] font-mono bg-gray-100 rounded px-1.5 py-px text-gray-700">
+                                                {s}
+                                            </span>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Výsledný obrázek */}
+                        <div className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50 inline-block max-w-full">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={state.resultUrl} alt="Výsledek rotace"
+                                className="max-w-full max-h-64 object-contain" />
+                        </div>
+                        <p className="text-xs text-gray-400">{Math.round(state.resultFile.size / 1024)} kB</p>
+
+                        <button onClick={reset} className="text-xs text-amber-600 hover:underline block">
+                            Zkusit znovu
+                        </button>
+                    </div>
+                );
+            })()}
         </div>
     );
 }
