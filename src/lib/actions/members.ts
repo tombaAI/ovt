@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { members, memberContributions, contributionPeriods, auditLog, payments } from "@/db/schema";
+import { members, people, memberContributions, contributionPeriods, auditLog, payments } from "@/db/schema";
 import { eq, and, ne, sql, desc } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
@@ -44,6 +44,50 @@ async function checkVsUnique(db: ReturnType<typeof getDb>, vs: number, excludeId
             ? and(eq(members.variableSymbol, vs), ne(members.id, excludeId))
             : eq(members.variableSymbol, vs));
     return rows.length === 0;
+}
+
+async function syncPersonForMember(db: ReturnType<typeof getDb>, memberId: number) {
+    const [member] = await db
+        .select({
+            id: members.id,
+            firstName: members.firstName,
+            lastName: members.lastName,
+            fullName: members.fullName,
+            email: members.email,
+            phone: members.phone,
+            bankAccountNumber: members.bankAccountNumber,
+            bankCode: members.bankCode,
+        })
+        .from(members)
+        .where(eq(members.id, memberId));
+
+    if (!member) return;
+
+    await db
+        .insert(people)
+        .values({
+            memberId: member.id,
+            firstName: member.firstName,
+            lastName: member.lastName,
+            fullName: member.fullName,
+            email: member.email,
+            phone: member.phone,
+            bankAccountNumber: member.bankAccountNumber,
+            bankCode: member.bankCode,
+        })
+        .onConflictDoUpdate({
+            target: people.memberId,
+            set: {
+                firstName: member.firstName,
+                lastName: member.lastName,
+                fullName: member.fullName,
+                email: member.email,
+                phone: member.phone,
+                bankAccountNumber: member.bankAccountNumber,
+                bankCode: member.bankCode,
+                updatedAt: new Date(),
+            },
+        });
 }
 
 // ── saveMember ───────────────────────────────────────────────────────────────
@@ -92,6 +136,7 @@ export async function saveMember(
             await db.update(members)
                 .set({ ...memberData, updatedAt: new Date() })
                 .where(eq(members.id, id));
+            await syncPersonForMember(db, id);
 
             const memberChanges = diffObjects(
                 {
@@ -196,6 +241,7 @@ export async function saveMember(
                 ...memberData,
                 memberFrom: memberFromRaw,
             });
+            await syncPersonForMember(db, nextId);
 
             await db.insert(auditLog).values({
                 entityType: "member",
@@ -271,6 +317,8 @@ export async function updateMemberField(
         } else {
             await db.update(members).set({ [field]: newValue, updatedAt: new Date() } as Parameters<ReturnType<typeof db.update>["set"]>[0]).where(eq(members.id, memberId));
         }
+
+        await syncPersonForMember(db, memberId);
 
         const oldVal = str(current[field]);
         const newVal = str(newValue);

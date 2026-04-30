@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
-import { getMembersForAutocomplete, type MemberOption } from "@/lib/actions/events";
+import { createExternalPerson, getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 import { EventExpenseActions } from "./event-expense-actions";
 
@@ -30,32 +30,65 @@ function isImage(mime: string | null) {
     return mime?.startsWith("image/") ?? false;
 }
 
-function memberLabel(member: MemberOption) {
-    return member.nickname
-        ? `${member.fullName} (${member.nickname})`
-        : member.fullName;
+function personLabel(person: PersonOption) {
+    const name = person.nickname
+        ? `${person.fullName} (${person.nickname})`
+        : person.fullName;
+    return person.kind === "external" ? `${name} · nečlen` : name;
 }
 
 function PayeeSelect({
-    members,
+    people,
     value,
     disabled,
     onChange,
+    onPersonCreated,
 }: {
-    members: MemberOption[];
+    people: PersonOption[];
     value: string;
     disabled?: boolean;
     onChange: (value: string) => void;
+    onPersonCreated: (person: PersonOption) => void;
 }) {
-    const selected = members.find(m => String(m.id) === value) ?? null;
+    const [addingExternal, setAddingExternal] = useState(false);
+    const [externalName, setExternalName] = useState("");
+    const [externalAccount, setExternalAccount] = useState("");
+    const [externalBankCode, setExternalBankCode] = useState("");
+    const [creating, setCreating] = useState(false);
+    const [createError, setCreateError] = useState<string | null>(null);
+    const selected = people.find(p => String(p.id) === value) ?? null;
     const account = selected?.bankAccountNumber && selected?.bankCode
         ? `${selected.bankAccountNumber}/${selected.bankCode}`
         : null;
 
+    async function handleCreateExternal() {
+        setCreating(true);
+        setCreateError(null);
+        try {
+            const result = await createExternalPerson({
+                fullName: externalName,
+                bankAccountNumber: externalAccount,
+                bankCode: externalBankCode,
+            });
+            if ("error" in result) {
+                setCreateError(result.error);
+                return;
+            }
+            onPersonCreated(result.person);
+            onChange(String(result.person.id));
+            setExternalName("");
+            setExternalAccount("");
+            setExternalBankCode("");
+            setAddingExternal(false);
+        } finally {
+            setCreating(false);
+        }
+    }
+
     return (
-        <div>
+        <div className="space-y-2">
             <label className="text-xs text-gray-500 mb-1 block">
-                Komu proplatit <span className="text-red-400">*</span>
+                Komu proplatit
             </label>
             <select
                 value={value}
@@ -63,15 +96,53 @@ function PayeeSelect({
                 onChange={e => onChange(e.target.value)}
                 className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
             >
-                <option value="">Vyber člena</option>
-                {members.map(member => (
-                    <option key={member.id} value={member.id}>{memberLabel(member)}</option>
+                <option value="">Zatím neurčeno</option>
+                {people.map(person => (
+                    <option key={person.id} value={person.id}>{personLabel(person)}</option>
                 ))}
             </select>
             {selected && (
                 <p className={`mt-1 text-[11px] ${account ? "text-gray-400" : "text-amber-600"}`}>
-                    {account ? `Účet: ${account}` : "Člen nemá vyplněný bankovní účet. Odeslání vyúčtování ho později zablokuje."}
+                    {account ? `Účet: ${account}` : "Účet zatím není vyplněný. Do tabulky pro proplacení se propíše prázdný."}
                 </p>
+            )}
+            <button
+                type="button"
+                onClick={() => { setAddingExternal(v => !v); setCreateError(null); }}
+                className="text-xs text-blue-600 hover:underline"
+            >
+                {addingExternal ? "Zavřít přidání nečlena" : "Přidat příjemce mimo členy"}
+            </button>
+            {addingExternal && (
+                <div className="rounded-lg border bg-white p-3 space-y-2">
+                    <input
+                        type="text"
+                        value={externalName}
+                        onChange={e => setExternalName(e.target.value)}
+                        placeholder="Jméno a příjmení"
+                        className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                    />
+                    <div className="grid grid-cols-2 gap-2">
+                        <input
+                            type="text"
+                            value={externalAccount}
+                            onChange={e => setExternalAccount(e.target.value)}
+                            placeholder="Číslo účtu"
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                        <input
+                            type="text"
+                            value={externalBankCode}
+                            onChange={e => setExternalBankCode(e.target.value)}
+                            placeholder="Kód banky"
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+                    {createError && <p className="text-xs text-red-500">{createError}</p>}
+                    <Button type="button" size="sm" variant="outline" onClick={handleCreateExternal} disabled={creating}>
+                        {creating ? "Ukládám…" : "Uložit nečlena"}
+                    </Button>
+                </div>
             )}
         </div>
     );
@@ -452,17 +523,19 @@ type FlowState =
     | { tag: "cropping"; file: File; previewUrl: string }
     | { tag: "analyzing"; file: File }
     | { tag: "analyzed"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory }
-    | { tag: "uploading"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory; purposeText: string; reimbursementMemberId: string };
+    | { tag: "uploading"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory; purposeText: string; reimbursementPersonId: string };
 
 function AddExpenseForm({
     eventId,
-    memberOptions,
-    membersLoaded,
+    personOptions,
+    peopleLoaded,
+    onPersonCreated,
     onAdded,
 }: {
     eventId: number;
-    memberOptions: MemberOption[];
-    membersLoaded: boolean;
+    personOptions: PersonOption[];
+    peopleLoaded: boolean;
+    onPersonCreated: (person: PersonOption) => void;
     onAdded: () => void;
 }) {
     const [state, setState]       = useState<FlowState>({ tag: "idle" });
@@ -475,14 +548,14 @@ function AddExpenseForm({
     // Override fields after analysis
     const [amount, setAmount]     = useState("");
     const [category, setCategory] = useState<ExpenseCategory>("501/004");
-    const [reimbursementMemberId, setReimbursementMemberId] = useState("");
+    const [reimbursementPersonId, setReimbursementPersonId] = useState("");
 
     function resetToIdle() {
         setState({ tag: "idle" });
         setPurposeText("");
         setAmount("");
         setCategory("501/004");
-        setReimbursementMemberId("");
+        setReimbursementPersonId("");
         setError(null);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
@@ -543,15 +616,14 @@ function AddExpenseForm({
         const amountNum = parseFloat(amount.replace(",", "."));
         if (isNaN(amountNum) || amountNum <= 0) { setError("Oprav částku"); return; }
         if (!purposeText.trim()) { setError("Doplň účel dokladu"); purposeRef.current?.focus(); return; }
-        if (!reimbursementMemberId) { setError("Vyber člena, kterému se má doklad proplatit"); return; }
 
-        setState({ tag: "uploading", file: state.file, analysis: state.analysis, amount, category, purposeText, reimbursementMemberId });
+        setState({ tag: "uploading", file: state.file, analysis: state.analysis, amount, category, purposeText, reimbursementPersonId });
         try {
             const fd = new FormData();
             fd.append("amount", String(amountNum));
             fd.append("purposeText", purposeText.trim());
             fd.append("purposeCategory", category);
-            fd.append("reimbursementMemberId", reimbursementMemberId);
+            if (reimbursementPersonId) fd.append("reimbursementPersonId", reimbursementPersonId);
             fd.append("file", state.file);
 
             const res = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: fd });
@@ -703,10 +775,11 @@ function AddExpenseForm({
                 </div>
 
                 <PayeeSelect
-                    members={memberOptions}
-                    value={reimbursementMemberId}
-                    disabled={isUploading || !membersLoaded}
-                    onChange={setReimbursementMemberId}
+                    people={personOptions}
+                    value={reimbursementPersonId}
+                    disabled={isUploading || !peopleLoaded}
+                    onChange={setReimbursementPersonId}
+                    onPersonCreated={onPersonCreated}
                 />
 
                 {error && <p className="text-xs text-red-500">{error}</p>}
@@ -772,9 +845,10 @@ function ExpenseItem({ expense, eventId, onDeleted }: {
                     </span>
                 </div>
                 <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
-                <p className={`text-xs mt-0.5 ${expense.reimbursementMemberName ? "text-gray-500" : "text-amber-600"}`}>
-                    Proplatit: {expense.reimbursementMemberName ?? "není vybrán člen"}
-                    {expense.reimbursementMemberName && (!expense.reimbursementMemberBankAccountNumber || !expense.reimbursementMemberBankCode) && (
+                <p className={`text-xs mt-0.5 ${expense.reimbursementPayeeName ? "text-gray-500" : "text-amber-600"}`}>
+                    Proplatit: {expense.reimbursementPayeeName ?? "zatím neurčeno"}
+                    {expense.reimbursementPayeeKind === "external" && <span className="text-gray-400"> · nečlen</span>}
+                    {expense.reimbursementPayeeName && (!expense.reimbursementPayeeBankAccountNumber || !expense.reimbursementPayeeBankCode) && (
                         <span className="text-amber-600"> · chybí účet</span>
                     )}
                 </p>
@@ -1137,8 +1211,8 @@ export function EventExpensesTab({
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
     const [loading, setLoading]   = useState(true);
     const [error, setError]       = useState<string | null>(null);
-    const [memberOptions, setMemberOptions] = useState<MemberOption[]>([]);
-    const [membersLoaded, setMembersLoaded] = useState(false);
+    const [personOptions, setPersonOptions] = useState<PersonOption[]>([]);
+    const [peopleLoaded, setPeopleLoaded] = useState(false);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -1155,10 +1229,14 @@ export function EventExpensesTab({
 
     useEffect(() => { load(); }, [load]);
     useEffect(() => {
-        getMembersForAutocomplete()
-            .then(members => setMemberOptions(members))
-            .finally(() => setMembersLoaded(true));
+        getPeopleForAutocomplete()
+            .then(people => setPersonOptions(people))
+            .finally(() => setPeopleLoaded(true));
     }, []);
+
+    function handlePersonCreated(person: PersonOption) {
+        setPersonOptions(prev => [...prev, person].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs")));
+    }
 
     const total = expenses?.reduce((s, e) => s + Number(e.amount), 0) ?? 0;
 
@@ -1166,8 +1244,9 @@ export function EventExpensesTab({
         <div className="space-y-4">
             <AddExpenseForm
                 eventId={eventId}
-                memberOptions={memberOptions}
-                membersLoaded={membersLoaded}
+                personOptions={personOptions}
+                peopleLoaded={peopleLoaded}
+                onPersonCreated={handlePersonCreated}
                 onAdded={load}
             />
 
@@ -1208,8 +1287,9 @@ export function EventExpensesTab({
                 eventId={eventId}
                 eventName={eventName}
                 leaderName={leaderName}
-                memberOptions={memberOptions}
-                membersLoaded={membersLoaded}
+                personOptions={personOptions}
+                peopleLoaded={peopleLoaded}
+                onPersonCreated={handlePersonCreated}
                 onExpenseCreated={load}
             />
 

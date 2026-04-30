@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { eventExpenses, members } from "@/db/schema";
+import { eventExpenses, people } from "@/db/schema";
 import { eq, asc } from "drizzle-orm";
 import type { ExpenseCategory } from "@/lib/expense-categories";
 
@@ -13,10 +13,12 @@ export type EventExpenseRow = {
     amount:          string;
     purposeText:     string;
     purposeCategory: ExpenseCategory;
+    reimbursementPersonId: number | null;
     reimbursementMemberId: number | null;
-    reimbursementMemberName: string | null;
-    reimbursementMemberBankAccountNumber: string | null;
-    reimbursementMemberBankCode: string | null;
+    reimbursementPayeeName: string | null;
+    reimbursementPayeeKind: "member" | "external" | null;
+    reimbursementPayeeBankAccountNumber: string | null;
+    reimbursementPayeeBankCode: string | null;
     fileUrl:         string | null;
     fileName:        string | null;
     fileMime:        string | null;
@@ -33,10 +35,12 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             amount: eventExpenses.amount,
             purposeText: eventExpenses.purposeText,
             purposeCategory: eventExpenses.purposeCategory,
+            reimbursementPersonId: eventExpenses.reimbursementPersonId,
             reimbursementMemberId: eventExpenses.reimbursementMemberId,
-            reimbursementMemberName: members.fullName,
-            reimbursementMemberBankAccountNumber: members.bankAccountNumber,
-            reimbursementMemberBankCode: members.bankCode,
+            reimbursementPayeeName: people.fullName,
+            reimbursementPayeeMemberId: people.memberId,
+            reimbursementPayeeBankAccountNumber: people.bankAccountNumber,
+            reimbursementPayeeBankCode: people.bankCode,
             fileUrl: eventExpenses.fileUrl,
             fileName: eventExpenses.fileName,
             fileMime: eventExpenses.fileMime,
@@ -44,9 +48,14 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             createdAt: eventExpenses.createdAt,
         })
         .from(eventExpenses)
-        .leftJoin(members, eq(eventExpenses.reimbursementMemberId, members.id))
+        .leftJoin(people, eq(eventExpenses.reimbursementPersonId, people.id))
         .where(eq(eventExpenses.eventId, eventId))
         .orderBy(asc(eventExpenses.createdAt));
 
-    return rows as EventExpenseRow[];
+    return rows.map(row => ({
+        ...row,
+        reimbursementPayeeKind: row.reimbursementPayeeName
+            ? row.reimbursementPayeeMemberId === null ? "external" : "member"
+            : null,
+    })) as EventExpenseRow[];
 }

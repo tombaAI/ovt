@@ -2,7 +2,7 @@ import { put, del } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, members } from "@/db/schema";
+import { eventExpenses, members, people } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import { eq } from "drizzle-orm";
 
@@ -32,6 +32,7 @@ export async function POST(
         const amountStr       = String(formData.get("amount") ?? "").replace(",", ".");
         const purposeText     = String(formData.get("purposeText") ?? "").trim();
         const purposeCategory = String(formData.get("purposeCategory") ?? "");
+        const reimbursementPersonIdRaw = String(formData.get("reimbursementPersonId") ?? "").trim();
         const reimbursementMemberIdRaw = String(formData.get("reimbursementMemberId") ?? "").trim();
         const file            = formData.get("file") as File | null;
 
@@ -46,15 +47,76 @@ export async function POST(
             return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
         }
 
-        const reimbursementMemberId = Number(reimbursementMemberIdRaw);
-        if (!Number.isInteger(reimbursementMemberId) || reimbursementMemberId <= 0) {
-            return NextResponse.json({ error: "Vyber člena, kterému se má doklad proplatit" }, { status: 400 });
-        }
-
         const db = getDb();
-        const [member] = await db.select({ id: members.id }).from(members).where(eq(members.id, reimbursementMemberId));
-        if (!member) {
-            return NextResponse.json({ error: "Vybraný člen nebyl nalezen" }, { status: 400 });
+        let reimbursementPersonId: number | null = null;
+        let reimbursementMemberId: number | null = null;
+
+        if (reimbursementPersonIdRaw) {
+            const candidateId = Number(reimbursementPersonIdRaw);
+            if (!Number.isInteger(candidateId) || candidateId <= 0) {
+                return NextResponse.json({ error: "Neplatný příjemce proplacení" }, { status: 400 });
+            }
+
+            const [person] = await db
+                .select({ id: people.id, memberId: people.memberId })
+                .from(people)
+                .where(eq(people.id, candidateId));
+
+            if (!person) {
+                return NextResponse.json({ error: "Vybraný příjemce nebyl nalezen" }, { status: 400 });
+            }
+
+            reimbursementPersonId = person.id;
+            reimbursementMemberId = person.memberId;
+        } else if (reimbursementMemberIdRaw) {
+            const candidateId = Number(reimbursementMemberIdRaw);
+            if (!Number.isInteger(candidateId) || candidateId <= 0) {
+                return NextResponse.json({ error: "Neplatný člen pro proplacení" }, { status: 400 });
+            }
+
+            const [member] = await db.select({
+                id: members.id,
+                firstName: members.firstName,
+                lastName: members.lastName,
+                fullName: members.fullName,
+                email: members.email,
+                phone: members.phone,
+                bankAccountNumber: members.bankAccountNumber,
+                bankCode: members.bankCode,
+            }).from(members).where(eq(members.id, candidateId));
+            if (!member) {
+                return NextResponse.json({ error: "Vybraný člen nebyl nalezen" }, { status: 400 });
+            }
+
+            const [person] = await db
+                .insert(people)
+                .values({
+                    memberId: member.id,
+                    firstName: member.firstName,
+                    lastName: member.lastName,
+                    fullName: member.fullName,
+                    email: member.email,
+                    phone: member.phone,
+                    bankAccountNumber: member.bankAccountNumber,
+                    bankCode: member.bankCode,
+                })
+                .onConflictDoUpdate({
+                    target: people.memberId,
+                    set: {
+                        firstName: member.firstName,
+                        lastName: member.lastName,
+                        fullName: member.fullName,
+                        email: member.email,
+                        phone: member.phone,
+                        bankAccountNumber: member.bankAccountNumber,
+                        bankCode: member.bankCode,
+                        updatedAt: new Date(),
+                    },
+                })
+                .returning({ id: people.id });
+
+            reimbursementPersonId = person?.id ?? null;
+            reimbursementMemberId = member.id;
         }
 
         let fileUrl: string | null = null;
@@ -84,6 +146,7 @@ export async function POST(
             amount: String(amount),
             purposeText,
             purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],
+            reimbursementPersonId,
             reimbursementMemberId,
             fileUrl,
             fileName,

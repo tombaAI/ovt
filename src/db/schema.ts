@@ -56,6 +56,29 @@ export const members = appSchema.table("members", {
     updatedAt:           timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const people = appSchema.table(
+    "people",
+    {
+        id:                serial("id").primaryKey(),
+        memberId:          integer("member_id").references(() => members.id, { onDelete: "set null" }),
+        firstName:         text("first_name"),
+        lastName:          text("last_name"),
+        fullName:          text("full_name").notNull(),
+        email:             text("email"),
+        phone:             text("phone"),
+        bankAccountNumber: text("bank_account_number"),
+        bankCode:          text("bank_code"),
+        note:              text("note"),
+        createdAt:         timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        updatedAt:         timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        uniqueIndex("people_member_id_uq").on(t.memberId),
+        index("people_full_name_idx").on(t.fullName),
+        index("people_email_idx").on(t.email),
+    ]
+);
+
 export const importMembersTjBohemians = appSchema.table("import_members_tj_bohemians", {
     id:           serial("id").primaryKey(),
     cskNumber:    text("csk_number").unique(),
@@ -481,6 +504,7 @@ export const eventExpenses = appSchema.table(
         amount:          numeric("amount", { precision: 10, scale: 2 }).notNull(),
         purposeText:     text("purpose_text").notNull(),
         purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }).notNull(),
+        reimbursementPersonId: integer("reimbursement_person_id").references(() => people.id, { onDelete: "set null" }),
         reimbursementMemberId: integer("reimbursement_member_id").references(() => members.id, { onDelete: "set null" }),
         fileUrl:         text("file_url"),
         fileName:        text("file_name"),
@@ -490,6 +514,7 @@ export const eventExpenses = appSchema.table(
     },
     (t) => [
         index("event_expenses_event_idx").on(t.eventId),
+        index("event_expenses_reimbursement_person_idx").on(t.reimbursementPersonId),
         index("event_expenses_reimbursement_member_idx").on(t.reimbursementMemberId),
     ]
 );

@@ -16,7 +16,7 @@ import {
   expenseCategoryEnum,
   type ExpenseCategory,
 } from "@/lib/expense-categories";
-import type { MemberOption } from "@/lib/actions/events";
+import { createExternalPerson, type PersonOption } from "@/lib/actions/people";
 import type { CestneProhlaseniData } from "@/lib/pdf/cestne-prohlaseni-template";
 import type { CestovniPrikazData } from "@/lib/pdf/cestovni-prikaz-template";
 
@@ -27,8 +27,9 @@ type ExpenseActionPanelProps = {
   eventId: number;
   eventName: string;
   leaderName: string | null;
-  memberOptions: MemberOption[];
-  membersLoaded: boolean;
+  personOptions: PersonOption[];
+  peopleLoaded: boolean;
+  onPersonCreated: (person: PersonOption) => void;
   onExpenseCreated: () => void | Promise<void>;
 };
 
@@ -38,7 +39,7 @@ type TravelFormState = {
   nakladyNaDopravu: string;
   purposeText: string;
   purposeCategory: ExpenseCategory;
-  reimbursementMemberId: string;
+  reimbursementPersonId: string;
   jmenoPrijemce: string;
   cisloCskPrijemce: string;
   cisloUctuPrijemce: string;
@@ -55,7 +56,7 @@ type HonorFormState = {
   castka: string;
   purposeText: string;
   purposeCategory: ExpenseCategory;
-  reimbursementMemberId: string;
+  reimbursementPersonId: string;
   jmenoPrijemce: string;
   cisloCskPrijemce: string;
   cisloUctuPrijemce: string;
@@ -69,8 +70,9 @@ function buildSuggestedVs(actionId: string, cskNumber: string): string {
   return `${normalizeText(actionId) ?? ""} ${cskNumber.replace(/\s+/g, " ").trim()}`.trim();
 }
 
-function memberLabel(member: MemberOption): string {
-  return member.nickname ? `${member.fullName} (${member.nickname})` : member.fullName;
+function personLabel(person: PersonOption): string {
+  const name = person.nickname ? `${person.fullName} (${person.nickname})` : person.fullName;
+  return person.kind === "external" ? `${name} · nečlen` : name;
 }
 
 function makePdfFileName(prefix: string, eventId: number, eventName: string): string {
@@ -103,7 +105,7 @@ async function createManualExpense(input: {
   amount: number;
   purposeText: string;
   purposeCategory: ExpenseCategory;
-  reimbursementMemberId: string;
+  reimbursementPersonId: string;
   file: Blob;
   fileName: string;
 }) {
@@ -111,7 +113,7 @@ async function createManualExpense(input: {
   formData.append("amount", String(input.amount));
   formData.append("purposeText", input.purposeText);
   formData.append("purposeCategory", input.purposeCategory);
-  formData.append("reimbursementMemberId", input.reimbursementMemberId);
+  if (input.reimbursementPersonId) formData.append("reimbursementPersonId", input.reimbursementPersonId);
   formData.append("file", input.file, input.fileName);
 
   const response = await fetch(`/api/events/${input.eventId}/expenses`, {
@@ -138,7 +140,7 @@ function createInitialTravelForm(eventId: number, eventName: string, leaderName:
     nakladyNaDopravu: "",
     purposeText: `Náklady na dopravu - ${eventName}`,
     purposeCategory: DEFAULT_EXPENSE_CATEGORY,
-    reimbursementMemberId: "",
+    reimbursementPersonId: "",
     jmenoPrijemce: "",
     cisloCskPrijemce: "",
     cisloUctuPrijemce: "",
@@ -157,7 +159,7 @@ function createInitialHonorForm(eventId: number, eventName: string, leaderName: 
     castka: "",
     purposeText: `Čestné prohlášení - ${eventName}`,
     purposeCategory: DEFAULT_EXPENSE_CATEGORY,
-    reimbursementMemberId: "",
+    reimbursementPersonId: "",
     jmenoPrijemce: "",
     cisloCskPrijemce: "",
     cisloUctuPrijemce: "",
@@ -193,44 +195,95 @@ function ExpenseCategoryField({
   );
 }
 
-function ReimbursementMemberField({
-  members,
-  membersLoaded,
+function ReimbursementPersonField({
+  people,
+  peopleLoaded,
   value,
   onChange,
+  onPersonCreated,
 }: {
-  members: MemberOption[];
-  membersLoaded: boolean;
+  people: PersonOption[];
+  peopleLoaded: boolean;
   value: string;
-  onChange: (member: MemberOption | null) => void;
+  onChange: (person: PersonOption | null) => void;
+  onPersonCreated: (person: PersonOption) => void;
 }) {
-  const selected = members.find((member) => String(member.id) === value) ?? null;
+  const [addingExternal, setAddingExternal] = useState(false);
+  const [externalName, setExternalName] = useState("");
+  const [externalAccount, setExternalAccount] = useState("");
+  const [externalBankCode, setExternalBankCode] = useState("");
+  const [creating, setCreating] = useState(false);
+  const [createError, setCreateError] = useState<string | null>(null);
+  const selected = people.find((person) => String(person.id) === value) ?? null;
   const account = selected?.bankAccountNumber && selected?.bankCode
     ? `${selected.bankAccountNumber}/${selected.bankCode}`
     : null;
 
+  async function handleCreateExternal() {
+    setCreating(true);
+    setCreateError(null);
+    try {
+      const result = await createExternalPerson({
+        fullName: externalName,
+        bankAccountNumber: externalAccount,
+        bankCode: externalBankCode,
+      });
+      if ("error" in result) {
+        setCreateError(result.error);
+        return;
+      }
+      onPersonCreated(result.person);
+      onChange(result.person);
+      setExternalName("");
+      setExternalAccount("");
+      setExternalBankCode("");
+      setAddingExternal(false);
+    } finally {
+      setCreating(false);
+    }
+  }
+
   return (
     <div className="space-y-1.5 md:col-span-2">
-      <Label>Komu proplatit *</Label>
+      <Label>Komu proplatit</Label>
       <select
-        required
         value={value}
-        disabled={!membersLoaded}
+        disabled={!peopleLoaded}
         onChange={(event) => {
-          const member = members.find((item) => String(item.id) === event.target.value) ?? null;
-          onChange(member);
+          const person = people.find((item) => String(item.id) === event.target.value) ?? null;
+          onChange(person);
         }}
         className="flex h-9 w-full rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring disabled:opacity-60"
       >
-        <option value="">{membersLoaded ? "Vyber člena" : "Načítám členy..."}</option>
-        {members.map((member) => (
-          <option key={member.id} value={member.id}>{memberLabel(member)}</option>
+        <option value="">{peopleLoaded ? "Zatím neurčeno" : "Načítám osoby..."}</option>
+        {people.map((person) => (
+          <option key={person.id} value={person.id}>{personLabel(person)}</option>
         ))}
       </select>
       {selected && (
         <p className={`text-[11px] ${account ? "text-gray-400" : "text-amber-600"}`}>
-          {account ? `Účet: ${account}` : "Člen nemá vyplněný bankovní účet. Doplň ho v detailu člena."}
+          {account ? `Účet: ${account}` : "Účet zatím není vyplněný. Formulář lze vytvořit i bez něj."}
         </p>
+      )}
+      <button
+        type="button"
+        onClick={() => { setAddingExternal(v => !v); setCreateError(null); }}
+        className="text-xs text-blue-600 hover:underline"
+      >
+        {addingExternal ? "Zavřít přidání nečlena" : "Přidat příjemce mimo členy"}
+      </button>
+      {addingExternal && (
+        <div className="rounded-lg border bg-white p-3 space-y-2">
+          <Input value={externalName} onChange={(event) => setExternalName(event.target.value)} placeholder="Jméno a příjmení" />
+          <div className="grid grid-cols-2 gap-2">
+            <Input value={externalAccount} onChange={(event) => setExternalAccount(event.target.value)} placeholder="Číslo účtu" />
+            <Input value={externalBankCode} onChange={(event) => setExternalBankCode(event.target.value)} placeholder="Kód banky" />
+          </div>
+          {createError && <p className="text-xs text-red-500">{createError}</p>}
+          <Button type="button" size="sm" variant="outline" onClick={handleCreateExternal} disabled={creating}>
+            {creating ? "Ukládám…" : "Uložit nečlena"}
+          </Button>
+        </div>
       )}
     </div>
   );
@@ -242,8 +295,9 @@ function TravelExpenseDialog({
   eventId,
   eventName,
   leaderName,
-  memberOptions,
-  membersLoaded,
+  personOptions,
+  peopleLoaded,
+  onPersonCreated,
   onExpenseCreated,
 }: {
   open: boolean;
@@ -251,8 +305,9 @@ function TravelExpenseDialog({
   eventId: number;
   eventName: string;
   leaderName: string | null;
-  memberOptions: MemberOption[];
-  membersLoaded: boolean;
+  personOptions: PersonOption[];
+  peopleLoaded: boolean;
+  onPersonCreated: (person: PersonOption) => void;
   onExpenseCreated: () => void | Promise<void>;
 }) {
   const [form, setForm] = useState<TravelFormState>(() =>
@@ -274,12 +329,12 @@ function TravelExpenseDialog({
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  function setReimbursementMember(member: MemberOption | null) {
+  function setReimbursementPerson(person: PersonOption | null) {
     setForm((prev) => {
-      if (!member) {
+      if (!person) {
         return {
           ...prev,
-          reimbursementMemberId: "",
+          reimbursementPersonId: "",
           jmenoPrijemce: "",
           cisloCskPrijemce: "",
           cisloUctuPrijemce: "",
@@ -288,14 +343,14 @@ function TravelExpenseDialog({
         };
       }
 
-      const cskNumber = member.cskNumber ?? "";
+      const cskNumber = person.cskNumber ?? "";
       return {
         ...prev,
-        reimbursementMemberId: String(member.id),
-        jmenoPrijemce: member.fullName,
+        reimbursementPersonId: String(person.id),
+        jmenoPrijemce: person.fullName,
         cisloCskPrijemce: cskNumber,
-        cisloUctuPrijemce: member.bankAccountNumber ?? "",
-        kodBanky: member.bankCode ?? "",
+        cisloUctuPrijemce: person.bankAccountNumber ?? "",
+        kodBanky: person.bankCode ?? "",
         variabilniSymbol: buildSuggestedVs(prev.id, cskNumber),
       };
     });
@@ -309,10 +364,6 @@ function TravelExpenseDialog({
     try {
       const amount = parseNumberInput(form.nakladyNaDopravu);
       if (!amount || amount <= 0) throw new Error("Doplň platné náklady na dopravu");
-      if (!form.reimbursementMemberId) throw new Error("Vyber člena, kterému se má doklad proplatit");
-      if (!normalizeText(form.cisloUctuPrijemce) || !normalizeText(form.kodBanky)) {
-        throw new Error("Vybraný člen nemá vyplněný bankovní účet. Doplň ho v detailu člena a formulář vytvoř znovu.");
-      }
 
       const purposeText = normalizeText(form.purposeText);
       if (!purposeText) throw new Error("Doplň popis pro náklady");
@@ -336,7 +387,7 @@ function TravelExpenseDialog({
         amount,
         purposeText,
         purposeCategory: form.purposeCategory,
-        reimbursementMemberId: form.reimbursementMemberId,
+        reimbursementPersonId: form.reimbursementPersonId,
         file: pdfBlob,
         fileName: makePdfFileName("cestovni-prikaz", eventId, eventName),
       });
@@ -394,11 +445,12 @@ function TravelExpenseDialog({
                 onChange={(event) => setField("purposeText", event.target.value)}
               />
             </div>
-            <ReimbursementMemberField
-              members={memberOptions}
-              membersLoaded={membersLoaded}
-              value={form.reimbursementMemberId}
-              onChange={setReimbursementMember}
+            <ReimbursementPersonField
+              people={personOptions}
+              peopleLoaded={peopleLoaded}
+              value={form.reimbursementPersonId}
+              onChange={setReimbursementPerson}
+              onPersonCreated={onPersonCreated}
             />
           </div>
 
@@ -470,8 +522,9 @@ function HonorExpenseDialog({
   eventId,
   eventName,
   leaderName,
-  memberOptions,
-  membersLoaded,
+  personOptions,
+  peopleLoaded,
+  onPersonCreated,
   onExpenseCreated,
 }: {
   open: boolean;
@@ -479,8 +532,9 @@ function HonorExpenseDialog({
   eventId: number;
   eventName: string;
   leaderName: string | null;
-  memberOptions: MemberOption[];
-  membersLoaded: boolean;
+  personOptions: PersonOption[];
+  peopleLoaded: boolean;
+  onPersonCreated: (person: PersonOption) => void;
   onExpenseCreated: () => void | Promise<void>;
 }) {
   const [form, setForm] = useState<HonorFormState>(() =>
@@ -502,12 +556,12 @@ function HonorExpenseDialog({
     setForm((prev) => ({ ...prev, [field]: value }));
   };
 
-  function setReimbursementMember(member: MemberOption | null) {
+  function setReimbursementPerson(person: PersonOption | null) {
     setForm((prev) => {
-      if (!member) {
+      if (!person) {
         return {
           ...prev,
-          reimbursementMemberId: "",
+          reimbursementPersonId: "",
           jmenoPrijemce: "",
           cisloCskPrijemce: "",
           cisloUctuPrijemce: "",
@@ -516,14 +570,14 @@ function HonorExpenseDialog({
         };
       }
 
-      const cskNumber = member.cskNumber ?? "";
+      const cskNumber = person.cskNumber ?? "";
       return {
         ...prev,
-        reimbursementMemberId: String(member.id),
-        jmenoPrijemce: member.fullName,
+        reimbursementPersonId: String(person.id),
+        jmenoPrijemce: person.fullName,
         cisloCskPrijemce: cskNumber,
-        cisloUctuPrijemce: member.bankAccountNumber ?? "",
-        kodBanky: member.bankCode ?? "",
+        cisloUctuPrijemce: person.bankAccountNumber ?? "",
+        kodBanky: person.bankCode ?? "",
         variabilniSymbol: buildSuggestedVs(prev.id, cskNumber),
       };
     });
@@ -537,10 +591,6 @@ function HonorExpenseDialog({
     try {
       const amount = parseNumberInput(form.castka);
       if (!amount || amount <= 0) throw new Error("Doplň platnou částku");
-      if (!form.reimbursementMemberId) throw new Error("Vyber člena, kterému se má doklad proplatit");
-      if (!normalizeText(form.cisloUctuPrijemce) || !normalizeText(form.kodBanky)) {
-        throw new Error("Vybraný člen nemá vyplněný bankovní účet. Doplň ho v detailu člena a formulář vytvoř znovu.");
-      }
 
       const purposeText = normalizeText(form.purposeText);
       if (!purposeText) throw new Error("Doplň popis pro náklady");
@@ -565,7 +615,7 @@ function HonorExpenseDialog({
         amount,
         purposeText,
         purposeCategory: form.purposeCategory,
-        reimbursementMemberId: form.reimbursementMemberId,
+        reimbursementPersonId: form.reimbursementPersonId,
         file: pdfBlob,
         fileName: makePdfFileName("cestne-prohlaseni", eventId, eventName),
       });
@@ -627,11 +677,12 @@ function HonorExpenseDialog({
                 onChange={(event) => setField("purposeText", event.target.value)}
               />
             </div>
-            <ReimbursementMemberField
-              members={memberOptions}
-              membersLoaded={membersLoaded}
-              value={form.reimbursementMemberId}
-              onChange={setReimbursementMember}
+            <ReimbursementPersonField
+              people={personOptions}
+              peopleLoaded={peopleLoaded}
+              value={form.reimbursementPersonId}
+              onChange={setReimbursementPerson}
+              onPersonCreated={onPersonCreated}
             />
           </div>
 
@@ -701,8 +752,9 @@ export function EventExpenseActions({
   eventId,
   eventName,
   leaderName,
-  memberOptions,
-  membersLoaded,
+  personOptions,
+  peopleLoaded,
+  onPersonCreated,
   onExpenseCreated,
 }: ExpenseActionPanelProps) {
   const [travelOpen, setTravelOpen] = useState(false);
@@ -723,6 +775,7 @@ export function EventExpenseActions({
         error?: string;
         recipient?: string;
         attachmentCount?: number;
+        warnings?: string[];
         missingExpensePayees?: Array<{ id: number; purposeText: string }>;
         missingBankAccounts?: Array<{ id: number; name: string }>;
       };
@@ -737,7 +790,8 @@ export function EventExpenseActions({
         throw new Error(`${payload.error ?? "Odeslání selhalo."}${missingExpenseText}${missingAccountText}`);
       }
 
-      setSendMessage(`Vyúčtování bylo odesláno na ${payload.recipient} (${payload.attachmentCount ?? 0} příloh).`);
+      const warningText = payload.warnings?.length ? ` Upozornění: ${payload.warnings.join("; ")}.` : "";
+      setSendMessage(`Vyúčtování bylo odesláno na ${payload.recipient} (${payload.attachmentCount ?? 0} příloh).${warningText}`);
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Odeslání selhalo.");
     } finally {
@@ -793,8 +847,9 @@ export function EventExpenseActions({
         eventId={eventId}
         eventName={eventName}
         leaderName={leaderName}
-        memberOptions={memberOptions}
-        membersLoaded={membersLoaded}
+        personOptions={personOptions}
+        peopleLoaded={peopleLoaded}
+        onPersonCreated={onPersonCreated}
         onExpenseCreated={onExpenseCreated}
       />
 
@@ -804,8 +859,9 @@ export function EventExpenseActions({
         eventId={eventId}
         eventName={eventName}
         leaderName={leaderName}
-        memberOptions={memberOptions}
-        membersLoaded={membersLoaded}
+        personOptions={personOptions}
+        peopleLoaded={peopleLoaded}
+        onPersonCreated={onPersonCreated}
         onExpenseCreated={onExpenseCreated}
       />
     </>

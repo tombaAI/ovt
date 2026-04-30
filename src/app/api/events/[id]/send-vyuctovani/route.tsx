@@ -2,7 +2,7 @@ import { renderToBuffer } from "@react-pdf/renderer";
 import { asc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { eventExpenses, events, members } from "@/db/schema";
+import { eventExpenses, events, members, people } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import {
@@ -122,15 +122,17 @@ export async function POST(
         amount: eventExpenses.amount,
         purposeText: eventExpenses.purposeText,
         purposeCategory: eventExpenses.purposeCategory,
+        reimbursementPersonId: eventExpenses.reimbursementPersonId,
         reimbursementMemberId: eventExpenses.reimbursementMemberId,
-        reimbursementMemberName: members.fullName,
-        bankAccountNumber: members.bankAccountNumber,
-        bankCode: members.bankCode,
+        reimbursementPayeeName: people.fullName,
+        reimbursementPayeeMemberId: people.memberId,
+        bankAccountNumber: people.bankAccountNumber,
+        bankCode: people.bankCode,
         fileUrl: eventExpenses.fileUrl,
         fileName: eventExpenses.fileName,
       })
       .from(eventExpenses)
-      .leftJoin(members, eq(eventExpenses.reimbursementMemberId, members.id))
+      .leftJoin(people, eq(eventExpenses.reimbursementPersonId, people.id))
       .where(eq(eventExpenses.eventId, eventId))
       .orderBy(asc(eventExpenses.createdAt));
 
@@ -139,29 +141,18 @@ export async function POST(
     }
 
     const missingExpensePayees = expenses
-      .filter((expense) => !expense.reimbursementMemberId || !expense.reimbursementMemberName)
+      .filter((expense) => !expense.reimbursementPersonId || !expense.reimbursementPayeeName)
       .map((expense) => ({ id: expense.id, purposeText: expense.purposeText }));
 
     const missingBankAccounts = new Map<number, { id: number; name: string }>();
     for (const expense of expenses) {
-      if (!expense.reimbursementMemberId || !expense.reimbursementMemberName) continue;
+      if (!expense.reimbursementPersonId || !expense.reimbursementPayeeName) continue;
       if (!expense.bankAccountNumber || !expense.bankCode) {
-        missingBankAccounts.set(expense.reimbursementMemberId, {
-          id: expense.reimbursementMemberId,
-          name: expense.reimbursementMemberName,
+        missingBankAccounts.set(expense.reimbursementPersonId, {
+          id: expense.reimbursementPersonId,
+          name: expense.reimbursementPayeeName,
         });
       }
-    }
-
-    if (missingExpensePayees.length > 0 || missingBankAccounts.size > 0) {
-      return NextResponse.json(
-        {
-          error: "Před odesláním doplň u všech nákladů příjemce a u příjemců bankovní účet.",
-          missingExpensePayees,
-          missingBankAccounts: [...missingBankAccounts.values()],
-        },
-        { status: 422 },
-      );
     }
 
     const naklady: VyuctovaniNaklady = {};
@@ -187,10 +178,10 @@ export async function POST(
     const payoutRows = expenses.map((expense) => {
       const amount = Number(expense.amount);
       return {
-        memberId: expense.reimbursementMemberId!,
-        memberName: expense.reimbursementMemberName!,
-        bankAccountNumber: expense.bankAccountNumber!,
-        bankCode: expense.bankCode!,
+        personId: expense.reimbursementPersonId,
+        payeeName: expense.reimbursementPayeeName ?? "Nedoplněno",
+        bankAccountNumber: expense.bankAccountNumber ?? "",
+        bankCode: expense.bankCode ?? "",
         amount,
         purposeText: expense.purposeText,
         purposeCategory: expense.purposeCategory,
@@ -199,9 +190,9 @@ export async function POST(
     });
 
     const csv = "\ufeff" + [
-      ["Člen", "Číslo účtu", "Kód banky", "Částka Kč", "Účel", "Účetní kód", "Doklad"],
+      ["Příjemce", "Číslo účtu", "Kód banky", "Částka Kč", "Účel", "Účetní kód", "Doklad"],
       ...payoutRows.map((row) => [
-        row.memberName,
+        row.payeeName,
         row.bankAccountNumber,
         row.bankCode,
         row.amount,
@@ -232,10 +223,17 @@ export async function POST(
     ];
 
     const total = payoutRows.reduce((sum, row) => sum + row.amount, 0);
+    const warningItems = [
+      ...missingExpensePayees.map((item) => `Náklad bez příjemce: ${item.purposeText}`),
+      ...[...missingBankAccounts.values()].map((item) => `Příjemce bez účtu: ${item.name}`),
+    ];
+    const warningHtml = warningItems.length > 0
+      ? `<div style="margin:12px 0;padding:10px 12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px"><strong>Upozornění:</strong><ul style="margin:6px 0 0 18px;padding:0">${warningItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`
+      : "";
     const payoutTableRows = payoutRows.map((row) => `
       <tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.memberName)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${escapeHtml(row.bankAccountNumber)}/${escapeHtml(row.bankCode)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.payeeName)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${row.bankAccountNumber || row.bankCode ? `${escapeHtml(row.bankAccountNumber)}/${escapeHtml(row.bankCode)}` : "Nedoplněno"}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap">${formatAmount(row.amount)} Kč</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.purposeText)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${escapeHtml(row.purposeCategory)}</td>
@@ -246,6 +244,7 @@ export async function POST(
       <div style="font-family:Segoe UI, Arial, sans-serif; line-height:1.5; color:#111827">
         <p>Dobrý den,</p>
         <p>v příloze posílám vyúčtování akce <strong>${escapeHtml(event.name)}</strong>, všechny uložené doklady nákladů a CSV tabulku komu co odeslat za peníze.</p>
+        ${warningHtml}
         <table style="border-collapse:collapse; width:100%; max-width:900px; font-size:13px">
           <thead>
             <tr style="background:#f3f4f6">
@@ -270,8 +269,9 @@ export async function POST(
     `;
 
     const textRows = payoutRows.map((row) => (
-      `${row.memberName}; ${row.bankAccountNumber}/${row.bankCode}; ${formatAmount(row.amount)} Kč; ${row.purposeText}; ${row.purposeCategory}`
+      `${row.payeeName}; ${row.bankAccountNumber || row.bankCode ? `${row.bankAccountNumber}/${row.bankCode}` : "Nedoplněno"}; ${formatAmount(row.amount)} Kč; ${row.purposeText}; ${row.purposeCategory}`
     )).join("\n");
+    const warningText = warningItems.length > 0 ? `\n\nUpozornění:\n${warningItems.map((item) => `- ${item}`).join("\n")}` : "";
 
     const resend = getResendClient();
     const { data, error } = await resend.emails.send({
@@ -279,7 +279,7 @@ export async function POST(
       to: [SETTLEMENT_RECIPIENT],
       subject: `OVT vyúčtování akce: ${event.name}`,
       html,
-      text: `Vyúčtování akce: ${event.name}\n\nKomu co odeslat:\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
+      text: `Vyúčtování akce: ${event.name}${warningText}\n\nKomu co odeslat:\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
       replyTo: settings.replyTo,
       attachments,
     });
@@ -293,6 +293,7 @@ export async function POST(
       emailId: data?.id ?? null,
       recipient: SETTLEMENT_RECIPIENT,
       attachmentCount: attachments.length,
+      warnings: warningItems,
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Interní chyba";
