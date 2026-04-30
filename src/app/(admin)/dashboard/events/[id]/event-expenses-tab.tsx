@@ -170,13 +170,14 @@ function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: str
 
 // ── Crop modal ────────────────────────────────────────────────────────────────
 
-function ImageCropModal({ srcUrl, originalName, onDone, onCancel }: {
+function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop }: {
     srcUrl: string;
     originalName: string;
     onDone: (file: File) => void;
     onCancel: () => void;
+    suggestedCrop?: Crop; // procentuální crop z Gemini detekce
 }) {
-    const [crop, setCrop]               = useState<Crop>();
+    const [crop, setCrop]               = useState<Crop | undefined>(suggestedCrop);
     const [pixelCrop, setPixelCrop]     = useState<PixelCrop>();
     const [processing, setProcessing]   = useState(false);
     const [sizeInfo, setSizeInfo]       = useState<string | null>(null);
@@ -226,6 +227,11 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel }: {
                     <DialogTitle className="flex items-center gap-2 text-base">
                         <CropIcon size={16} className="text-gray-500" />
                         Oříznout obrázek
+                        {suggestedCrop && (
+                            <span className="ml-1 text-[11px] font-normal text-violet-600 border border-violet-200 bg-violet-50 rounded px-1.5 py-px">
+                                ✦ Gemini návrh
+                            </span>
+                        )}
                     </DialogTitle>
                 </DialogHeader>
 
@@ -613,6 +619,140 @@ function ExpenseItem({ expense, eventId, onDeleted }: {
     );
 }
 
+// ── PoC: Gemini auto-crop ────────────────────────────────────────────────────
+
+type AutoCropState =
+    | { tag: "idle" }
+    | { tag: "detecting"; previewUrl: string; file: File }
+    | { tag: "cropping";  previewUrl: string; file: File; suggestedCrop?: Crop; confidence?: number; note?: string }
+    | { tag: "done";      result: File; sizeKb: number };
+
+function AutoCropPoc() {
+    const [state, setState] = useState<AutoCropState>({ tag: "idle" });
+    const [error, setError] = useState<string | null>(null);
+    const inputRef          = useRef<HTMLInputElement>(null);
+
+    function reset() {
+        if (state.tag === "detecting" || state.tag === "cropping") {
+            URL.revokeObjectURL(state.previewUrl);
+        }
+        setState({ tag: "idle" });
+        setError(null);
+        if (inputRef.current) inputRef.current.value = "";
+    }
+
+    async function handleFile(f: File | undefined) {
+        if (!f) return;
+        setError(null);
+        const previewUrl = URL.createObjectURL(f);
+        setState({ tag: "detecting", previewUrl, file: f });
+
+        try {
+            const fd = new FormData();
+            fd.append("file", f);
+            const res  = await fetch("/api/expenses/detect-crop", { method: "POST", body: fd });
+            const data: { detected: boolean; x_pct: number | null; y_pct: number | null; width_pct: number | null; height_pct: number | null; confidence: number; note?: string; error?: string } = await res.json();
+
+            if (!res.ok) throw new Error(data.error ?? "Chyba detekce");
+
+            let suggested: Crop | undefined;
+            if (data.detected && data.x_pct !== null && data.y_pct !== null && data.width_pct !== null && data.height_pct !== null) {
+                // Gemini vrátí relativní 0–1, ReactCrop chce procenta 0–100
+                suggested = {
+                    unit:   "%",
+                    x:      Math.max(0, data.x_pct      * 100),
+                    y:      Math.max(0, data.y_pct      * 100),
+                    width:  Math.min(100 - data.x_pct * 100, data.width_pct  * 100),
+                    height: Math.min(100 - data.y_pct * 100, data.height_pct * 100),
+                };
+            }
+
+            setState({ tag: "cropping", previewUrl, file: f, suggestedCrop: suggested, confidence: data.confidence, note: data.note });
+        } catch (err) {
+            URL.revokeObjectURL(previewUrl);
+            setError(err instanceof Error ? err.message : "Chyba");
+            setState({ tag: "idle" });
+        }
+    }
+
+    function handleCropDone(result: File) {
+        if (state.tag === "cropping") URL.revokeObjectURL(state.previewUrl);
+        setState({ tag: "done", result, sizeKb: Math.round(result.size / 1024) });
+        if (inputRef.current) inputRef.current.value = "";
+    }
+
+    function handleCropCancel() {
+        if (state.tag === "cropping") URL.revokeObjectURL(state.previewUrl);
+        setState({ tag: "idle" });
+        if (inputRef.current) inputRef.current.value = "";
+    }
+
+    // Crop modal
+    if (state.tag === "cropping") {
+        return (
+            <ImageCropModal
+                srcUrl={state.previewUrl}
+                originalName={state.file.name}
+                suggestedCrop={state.suggestedCrop}
+                onDone={handleCropDone}
+                onCancel={handleCropCancel}
+            />
+        );
+    }
+
+    return (
+        <div className="rounded-xl border border-dashed border-violet-200 bg-violet-50/30 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-violet-500" />
+                <p className="text-xs font-medium text-violet-700">PoC — Gemini auto-ořez</p>
+                <span className="text-[10px] text-violet-400 border border-violet-200 rounded px-1">experiment</span>
+            </div>
+
+            {state.tag === "idle" && (
+                <div className="space-y-2">
+                    <p className="text-xs text-gray-500">
+                        Nahraj fotku — Gemini detekuje ořez a předvybere oblast v crop modalu.
+                    </p>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer h-8 px-3 rounded-md border border-violet-300 bg-white text-violet-700 text-xs font-medium hover:bg-violet-50 transition-colors">
+                        <Upload size={12} />
+                        Vybrat fotku
+                        <input ref={inputRef} type="file" accept="image/*" className="sr-only"
+                            onChange={e => handleFile(e.target.files?.[0])} />
+                    </label>
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+                </div>
+            )}
+
+            {state.tag === "detecting" && (
+                <div className="flex items-center gap-2">
+                    <Sparkles size={13} className="text-violet-500 animate-pulse" />
+                    <p className="text-xs text-violet-600">Gemini detekuje polohu dokladu…</p>
+                </div>
+            )}
+
+            {state.tag === "done" && (
+                <div className="space-y-2">
+                    <div className="flex items-center gap-2 text-xs text-green-600">
+                        <span>✓ Hotovo</span>
+                        <span className="text-gray-400">·</span>
+                        <span className="text-gray-500">{state.sizeKb} kB výsledný soubor</span>
+                    </div>
+                    <div className="rounded-lg overflow-hidden border border-gray-200 inline-block">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={URL.createObjectURL(state.result)} alt="Výsledek ořezu"
+                            className="max-w-full max-h-48 object-contain" />
+                    </div>
+                    <div>
+                        <button onClick={reset} className="text-xs text-violet-600 hover:underline">
+                            Zkusit znovu
+                        </button>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Main tab ──────────────────────────────────────────────────────────────────
 
 export function EventExpensesTab({ eventId }: { eventId: number }) {
@@ -673,6 +813,8 @@ export function EventExpensesTab({ eventId }: { eventId: number }) {
                     )}
                 </>
             )}
+
+            <AutoCropPoc />
         </div>
     );
 }
