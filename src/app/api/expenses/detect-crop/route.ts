@@ -4,25 +4,39 @@ import { generateObject } from "ai";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
 
+const fieldsCheckSchema = z.object({
+    company_name:  z.boolean().describe("Je název firmy/obchodníka CELÝ uvnitř ořezu? (nadpis i hodnota)"),
+    ico:           z.boolean().nullable().describe("Je IČ CELÉ uvnitř ořezu? null pokud IČ na dokladu není."),
+    dic:           z.boolean().nullable().describe("Je DIČ CELÉ uvnitř ořezu? null pokud DIČ na dokladu není."),
+    total_amount:  z.boolean().describe("Je celková částka CELÁ uvnitř ořezu? (nadpis 'Celkem'/'Total' i číselná hodnota)"),
+});
+
 const cropSchema = z.object({
-    detected: z.boolean().describe("Byl nalezen doklad na fotografii?"),
-    x_pct:      z.number().min(0).max(1).nullable().describe("Levý kraj dokladu, relativní 0–1"),
-    y_pct:      z.number().min(0).max(1).nullable().describe("Horní kraj dokladu, relativní 0–1"),
-    width_pct:  z.number().min(0).max(1).nullable().describe("Šířka dokladu, relativní 0–1"),
-    height_pct: z.number().min(0).max(1).nullable().describe("Výška dokladu, relativní 0–1"),
-    confidence: z.number().min(0).max(1).describe("Jistota detekce"),
-    note:       z.string().optional().describe("Volitelná poznámka k detekci"),
+    detected:     z.boolean().describe("Byl nalezen doklad na fotografii?"),
+    x_pct:        z.number().min(0).max(1).nullable().describe("Levý kraj dokladu, relativní 0–1"),
+    y_pct:        z.number().min(0).max(1).nullable().describe("Horní kraj dokladu, relativní 0–1"),
+    width_pct:    z.number().min(0).max(1).nullable().describe("Šířka dokladu, relativní 0–1"),
+    height_pct:   z.number().min(0).max(1).nullable().describe("Výška dokladu, relativní 0–1"),
+    confidence:   z.number().min(0).max(1).describe("Jistota detekce ořezu"),
+    fields_check: fieldsCheckSchema.describe("Ověření, že klíčové informace nejsou mimo navržený ořez"),
+    note:         z.string().optional().describe("Volitelná poznámka k detekci"),
 });
 
 export type CropDetectionResult = z.infer<typeof cropSchema>;
+export type FieldsCheck         = z.infer<typeof fieldsCheckSchema>;
 
 const PROMPT = `Na fotografii najdi hlavní doklad, účtenku nebo fakturu.
-Vrať souřadnice ohraničujícího obdélníku jako relativní hodnoty:
-  0.0 = levý/horní kraj celé fotografie
-  1.0 = pravý/dolní kraj celé fotografie
-Pokud je doklad jasně viditelný: detected=true, vyplň souřadnice.
-Pokud doklad není viditelný nebo jsi nejistý: detected=false, souřadnice null.
-Snaž se být co nejpřesnější — ořez bude použit pro OCR čtení.`;
+
+1. OŘEZ: Vrať ohraničující obdélník jako relativní hodnoty (0.0 = levý/horní kraj, 1.0 = pravý/dolní kraj).
+
+2. OVĚŘENÍ POLÍ: Pro navržený ořez ověř, zda jsou CELÉ uvnitř (jak popisek/nadpis, tak hodnota):
+   - Název firmy / obchodníka
+   - IČ (identifikační číslo) — pokud na dokladu není, vrať null
+   - DIČ (daňové identifikační číslo) — pokud na dokladu není, vrať null
+   - Celková částka k úhradě (nadpis i číselná hodnota)
+
+Pokud navržený ořez by některé z těchto polí oříznul nebo nechal mimo, uprav ořez tak, aby vše obsahoval.
+Pokud doklad není viditelný: detected=false, souřadnice null.`;
 
 export async function POST(request: NextRequest) {
     try {
@@ -62,7 +76,7 @@ export async function POST(request: NextRequest) {
 
         console.info(
             `[Gemini crop] model:${modelId} in:${usage.inputTokens} out:${usage.outputTokens}`,
-            { user: session.user.email, detected: object.detected, confidence: object.confidence }
+            { user: session.user.email, detected: object.detected, confidence: object.confidence, fields: object.fields_check }
         );
 
         return NextResponse.json(object);

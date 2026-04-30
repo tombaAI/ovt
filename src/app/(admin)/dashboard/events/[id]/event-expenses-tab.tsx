@@ -131,6 +131,20 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
     );
 }
 
+// ── Snap crop edges to image boundary when within threshold ───────────────────
+
+function snapToEdge(crop: Crop, thresholdPct = 10): Crop {
+    if (crop.unit !== "%") return crop;
+    let { x, y, width, height } = crop;
+    if (x < thresholdPct)                   { width  += x;              x = 0; }
+    if (y < thresholdPct)                   { height += y;              y = 0; }
+    if (x + width  > 100 - thresholdPct)    { width  = 100 - x; }
+    if (y + height > 100 - thresholdPct)    { height = 100 - y; }
+    width  = Math.min(width,  100 - x);
+    height = Math.min(height, 100 - y);
+    return { unit: "%", x, y, width, height };
+}
+
 // ── Image rotate via canvas ───────────────────────────────────────────────────
 
 function rotateImage(srcUrl: string, angleDeg: number, originalName: string): Promise<File> {
@@ -213,12 +227,23 @@ function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: str
 
 // ── Crop modal ────────────────────────────────────────────────────────────────
 
-function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop }: {
-    srcUrl: string;
-    originalName: string;
-    onDone: (file: File) => void;
-    onCancel: () => void;
-    suggestedCrop?: Crop; // procentuální crop z Gemini detekce
+type GeminiCropInfo = {
+    confidence:   number;
+    fields_check: {
+        company_name: boolean;
+        ico:          boolean | null;
+        dic:          boolean | null;
+        total_amount: boolean;
+    };
+};
+
+function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop, geminiInfo }: {
+    srcUrl:        string;
+    originalName:  string;
+    onDone:        (file: File) => void;
+    onCancel:      () => void;
+    suggestedCrop?: Crop;
+    geminiInfo?:   GeminiCropInfo;
 }) {
     const [crop, setCrop]               = useState<Crop | undefined>(suggestedCrop);
     const [pixelCrop, setPixelCrop]     = useState<PixelCrop>();
@@ -302,6 +327,40 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop 
                     {sizeInfo && (
                         <p className="text-xs text-gray-500">{sizeInfo} · JPEG {Math.round(JPEG_QUALITY * 100)}%</p>
                     )}
+
+                    {/* Gemini info panel */}
+                    {geminiInfo && (
+                        <div className="rounded-lg border border-violet-200 bg-white px-3 py-2 space-y-1.5">
+                            <div className="flex items-center gap-2">
+                                <span className="text-[10px] text-violet-500 font-medium uppercase tracking-wide">Gemini</span>
+                                <div className="flex-1 h-1 rounded-full bg-gray-200 overflow-hidden">
+                                    <div
+                                        className={`h-full rounded-full ${geminiInfo.confidence >= 0.8 ? "bg-green-500" : geminiInfo.confidence >= 0.55 ? "bg-amber-400" : "bg-red-400"}`}
+                                        style={{ width: `${Math.round(geminiInfo.confidence * 100)}%` }}
+                                    />
+                                </div>
+                                <span className="text-[10px] tabular-nums text-gray-500">
+                                    {Math.round(geminiInfo.confidence * 100)}%
+                                </span>
+                            </div>
+                            <div className="flex flex-wrap gap-x-3 gap-y-0.5">
+                                {([
+                                    ["Firma",   geminiInfo.fields_check.company_name],
+                                    ["Částka",  geminiInfo.fields_check.total_amount],
+                                    ["IČ",      geminiInfo.fields_check.ico],
+                                    ["DIČ",     geminiInfo.fields_check.dic],
+                                ] as [string, boolean | null][]).map(([label, ok]) => (
+                                    <span key={label} className={`text-[10px] ${ok === null ? "text-gray-300" : ok ? "text-green-600" : "text-red-500 font-semibold"}`}>
+                                        {ok === null ? `— ${label}` : ok ? `✓ ${label}` : `⚠ ${label}`}
+                                    </span>
+                                ))}
+                            </div>
+                            {Object.entries(geminiInfo.fields_check).some(([, v]) => v === false) && (
+                                <p className="text-[10px] text-red-500">Uprav ořez tak, aby označená pole zůstala uvnitř.</p>
+                            )}
+                        </div>
+                    )}
+
                     <p className="text-xs text-gray-400">
                         {hasCrop
                             ? "Oblast vybrána — klikni Oříznout a použít."
@@ -667,7 +726,7 @@ function ExpenseItem({ expense, eventId, onDeleted }: {
 type AutoCropState =
     | { tag: "idle" }
     | { tag: "detecting"; previewUrl: string; file: File }
-    | { tag: "cropping";  previewUrl: string; file: File; suggestedCrop?: Crop; confidence?: number; note?: string }
+    | { tag: "cropping";  previewUrl: string; file: File; suggestedCrop?: Crop; geminiInfo?: GeminiCropInfo }
     | { tag: "done";      result: File; sizeKb: number };
 
 function AutoCropPoc() {
@@ -694,23 +753,35 @@ function AutoCropPoc() {
             const fd = new FormData();
             fd.append("file", f);
             const res  = await fetch("/api/expenses/detect-crop", { method: "POST", body: fd });
-            const data: { detected: boolean; x_pct: number | null; y_pct: number | null; width_pct: number | null; height_pct: number | null; confidence: number; note?: string; error?: string } = await res.json();
+            const data: {
+                detected: boolean;
+                x_pct: number | null; y_pct: number | null;
+                width_pct: number | null; height_pct: number | null;
+                confidence: number;
+                fields_check?: GeminiCropInfo["fields_check"];
+                error?: string;
+            } = await res.json();
 
             if (!res.ok) throw new Error(data.error ?? "Chyba detekce");
 
             let suggested: Crop | undefined;
             if (data.detected && data.x_pct !== null && data.y_pct !== null && data.width_pct !== null && data.height_pct !== null) {
-                // Gemini vrátí relativní 0–1, ReactCrop chce procenta 0–100
-                suggested = {
+                const raw: Crop = {
                     unit:   "%",
-                    x:      Math.max(0, data.x_pct      * 100),
-                    y:      Math.max(0, data.y_pct      * 100),
-                    width:  Math.min(100 - data.x_pct * 100, data.width_pct  * 100),
-                    height: Math.min(100 - data.y_pct * 100, data.height_pct * 100),
+                    x:      data.x_pct      * 100,
+                    y:      data.y_pct      * 100,
+                    width:  data.width_pct  * 100,
+                    height: data.height_pct * 100,
                 };
+                // Přichytit okraje bližší než 10 % k hranici obrázku
+                suggested = snapToEdge(raw, 10);
             }
 
-            setState({ tag: "cropping", previewUrl, file: f, suggestedCrop: suggested, confidence: data.confidence, note: data.note });
+            const geminiInfo: GeminiCropInfo | undefined = data.fields_check
+                ? { confidence: data.confidence, fields_check: data.fields_check }
+                : undefined;
+
+            setState({ tag: "cropping", previewUrl, file: f, suggestedCrop: suggested, geminiInfo });
         } catch (err) {
             URL.revokeObjectURL(previewUrl);
             setError(err instanceof Error ? err.message : "Chyba");
@@ -737,6 +808,7 @@ function AutoCropPoc() {
                 srcUrl={state.previewUrl}
                 originalName={state.file.name}
                 suggestedCrop={state.suggestedCrop}
+                geminiInfo={state.geminiInfo}
                 onDone={handleCropDone}
                 onCancel={handleCropCancel}
             />
