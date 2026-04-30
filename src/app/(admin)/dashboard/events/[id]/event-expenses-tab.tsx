@@ -131,6 +131,49 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
     );
 }
 
+// ── Image rotate via canvas ───────────────────────────────────────────────────
+
+function rotateImage(srcUrl: string, angleDeg: number, originalName: string): Promise<File> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const rad = (angleDeg * Math.PI) / 180;
+            const sin = Math.abs(Math.sin(rad));
+            const cos = Math.abs(Math.cos(rad));
+            const w   = img.naturalWidth;
+            const h   = img.naturalHeight;
+
+            // Canvas musí být dost velký aby pojal otočený obrázek
+            const canvasW = Math.round(w * cos + h * sin);
+            const canvasH = Math.round(w * sin + h * cos);
+
+            const canvas = document.createElement("canvas");
+            canvas.width  = canvasW;
+            canvas.height = canvasH;
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { reject(new Error("Canvas context unavailable")); return; }
+
+            ctx.fillStyle = "white";
+            ctx.fillRect(0, 0, canvasW, canvasH);
+            ctx.translate(canvasW / 2, canvasH / 2);
+            ctx.rotate(rad);
+            ctx.drawImage(img, -w / 2, -h / 2);
+
+            canvas.toBlob(
+                blob => {
+                    if (!blob) { reject(new Error("Canvas toBlob failed")); return; }
+                    const base = originalName.replace(/\.[^.]+$/, "");
+                    resolve(new File([blob], `${base}_rotated.jpg`, { type: "image/jpeg" }));
+                },
+                "image/jpeg",
+                0.92,
+            );
+        };
+        img.onerror = () => reject(new Error("Obrázek se nepodařilo načíst"));
+        img.src = srcUrl;
+    });
+}
+
 // ── Image compress + crop via canvas ──────────────────────────────────────────
 
 function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: string): Promise<File> {
@@ -753,6 +796,131 @@ function AutoCropPoc() {
     );
 }
 
+// ── PoC: Gemini auto-rotate ───────────────────────────────────────────────────
+
+type RotateState =
+    | { tag: "idle" }
+    | { tag: "detecting"; previewUrl: string; file: File }
+    | { tag: "rotating";  previewUrl: string; file: File; angleDeg: number }
+    | { tag: "done";      resultUrl: string; resultFile: File; angleDeg: number; confidence: number };
+
+function AutoRotatePoc() {
+    const [state, setState] = useState<RotateState>({ tag: "idle" });
+    const [error, setError] = useState<string | null>(null);
+    const inputRef          = useRef<HTMLInputElement>(null);
+
+    function reset() {
+        if (state.tag === "detecting" || state.tag === "rotating") URL.revokeObjectURL(state.previewUrl);
+        if (state.tag === "done") URL.revokeObjectURL(state.resultUrl);
+        setState({ tag: "idle" });
+        setError(null);
+        if (inputRef.current) inputRef.current.value = "";
+    }
+
+    async function handleFile(f: File | undefined) {
+        if (!f) return;
+        setError(null);
+        const previewUrl = URL.createObjectURL(f);
+        setState({ tag: "detecting", previewUrl, file: f });
+
+        try {
+            // 1. Gemini detekuje rotaci
+            const fd = new FormData();
+            fd.append("file", f);
+            const res  = await fetch("/api/expenses/detect-rotation", { method: "POST", body: fd });
+            const data: { rotation_needed: boolean; angle_degrees: number; confidence: number; note?: string; error?: string } = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Chyba detekce");
+
+            const angle = data.angle_degrees ?? 0;
+
+            if (!data.rotation_needed || Math.abs(angle) < 1) {
+                // Není potřeba otáčet
+                setState({ tag: "done", resultUrl: previewUrl, resultFile: f, angleDeg: 0, confidence: data.confidence });
+                return;
+            }
+
+            // 2. Canvas rotace
+            setState({ tag: "rotating", previewUrl, file: f, angleDeg: angle });
+            const rotated    = await rotateImage(previewUrl, angle, f.name);
+            const rotatedUrl = URL.createObjectURL(rotated);
+            URL.revokeObjectURL(previewUrl);
+            setState({ tag: "done", resultUrl: rotatedUrl, resultFile: rotated, angleDeg: angle, confidence: data.confidence });
+        } catch (err) {
+            URL.revokeObjectURL(previewUrl);
+            setError(err instanceof Error ? err.message : "Chyba");
+            setState({ tag: "idle" });
+        }
+    }
+
+    const fmtAngle = (deg: number) => {
+        if (deg === 0) return "bez rotace";
+        const dir = deg > 0 ? "po směru" : "proti směru";
+        return `${Math.abs(deg)}° ${dir} hodinových ručiček`;
+    };
+
+    return (
+        <div className="rounded-xl border border-dashed border-amber-200 bg-amber-50/30 p-4 space-y-3">
+            <div className="flex items-center gap-2">
+                <Sparkles size={14} className="text-amber-500" />
+                <p className="text-xs font-medium text-amber-700">PoC — Gemini auto-rotace</p>
+                <span className="text-[10px] text-amber-400 border border-amber-200 rounded px-1">experiment</span>
+            </div>
+
+            {state.tag === "idle" && (
+                <div className="space-y-2">
+                    <p className="text-xs text-gray-500">
+                        Nahraj fotku — Gemini určí natočení, aplikace obrázek pootočí.
+                    </p>
+                    <label className="inline-flex items-center gap-1.5 cursor-pointer h-8 px-3 rounded-md border border-amber-300 bg-white text-amber-700 text-xs font-medium hover:bg-amber-50 transition-colors">
+                        <Upload size={12} />
+                        Vybrat fotku
+                        <input ref={inputRef} type="file" accept="image/*" className="sr-only"
+                            onChange={e => handleFile(e.target.files?.[0])} />
+                    </label>
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+                </div>
+            )}
+
+            {(state.tag === "detecting" || state.tag === "rotating") && (
+                <div className="flex items-center gap-2">
+                    <Sparkles size={13} className="text-amber-500 animate-pulse" />
+                    <p className="text-xs text-amber-600">
+                        {state.tag === "detecting"
+                            ? "Gemini analyzuje orientaci…"
+                            : `Otáčím o ${fmtAngle(state.angleDeg)}…`}
+                    </p>
+                </div>
+            )}
+
+            {state.tag === "done" && (
+                <div className="space-y-3">
+                    {/* Info o rotaci */}
+                    <div className="flex items-center gap-2 text-xs flex-wrap">
+                        <span className={state.angleDeg === 0 ? "text-green-600" : "text-amber-700"}>
+                            {state.angleDeg === 0 ? "✓ Obrázek je správně orientovaný" : `↻ Pootočeno: ${fmtAngle(state.angleDeg)}`}
+                        </span>
+                        <span className="text-gray-300">·</span>
+                        <span className="text-gray-400">jistota {Math.round(state.confidence * 100)}%</span>
+                        <span className="text-gray-300">·</span>
+                        <span className="text-gray-400">{Math.round(state.resultFile.size / 1024)} kB</span>
+                    </div>
+
+                    {/* Výsledný obrázek */}
+                    <div className="rounded-lg overflow-hidden border border-gray-200 bg-gray-50 inline-block max-w-full">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={state.resultUrl} alt="Výsledek rotace"
+                            className="max-w-full max-h-64 object-contain" />
+                    </div>
+
+                    <button onClick={reset} className="text-xs text-amber-600 hover:underline block">
+                        Zkusit znovu
+                    </button>
+                </div>
+            )}
+        </div>
+    );
+}
+
 // ── Main tab ──────────────────────────────────────────────────────────────────
 
 export function EventExpensesTab({ eventId }: { eventId: number }) {
@@ -815,6 +983,7 @@ export function EventExpensesTab({ eventId }: { eventId: number }) {
             )}
 
             <AutoCropPoc />
+            <AutoRotatePoc />
         </div>
     );
 }
