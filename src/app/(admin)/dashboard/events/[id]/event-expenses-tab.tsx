@@ -134,6 +134,17 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
     );
 }
 
+// ── Expand crop outward as safety margin ─────────────────────────────────────
+
+function expandCrop(crop: Crop, paddingPct: number): Crop {
+    if (crop.unit !== "%") return crop;
+    const x      = Math.max(0,   crop.x - paddingPct);
+    const y      = Math.max(0,   crop.y - paddingPct);
+    const right  = Math.min(100, crop.x + crop.width  + paddingPct);
+    const bottom = Math.min(100, crop.y + crop.height + paddingPct);
+    return { unit: "%", x, y, width: right - x, height: bottom - y };
+}
+
 // ── Image rotate via canvas ───────────────────────────────────────────────────
 
 function rotateImage(srcUrl: string, angleDeg: number, originalName: string): Promise<File> {
@@ -962,13 +973,16 @@ function AutoCropPoc() {
 
             let suggested: Crop | undefined;
             if (data.detected && data.x_pct !== null && data.y_pct !== null && data.width_pct !== null && data.height_pct !== null) {
-                suggested = {
+                const raw: Crop = {
                     unit:   "%",
                     x:      data.x_pct      * 100,
                     y:      data.y_pct      * 100,
                     width:  data.width_pct  * 100,
                     height: data.height_pct * 100,
                 };
+                // Klientský safety margin: expand 3 % na každou stranu
+                // Prompt Gemini už instruuje přidat 2-3 % sám, toto je pojistka
+                suggested = expandCrop(raw, 3);
             }
 
             const geminiInfo: GeminiCropInfo | undefined = data.fields_check

@@ -25,23 +25,29 @@ const cropSchema = z.object({
 export type CropDetectionResult = z.infer<typeof cropSchema>;
 export type FieldsCheck         = z.infer<typeof fieldsCheckSchema>;
 
-const PROMPT = `Najdi fyzické okraje dokladu, účtenky nebo papíru na fotografii.
+const PROMPT = `Tvým úkolem je nalézt doklad, účtenku nebo papír na fotografii a určit ořez, který zaručeně obsahuje CELÝ doklad.
 
-PRIMÁRNÍ ÚKOL — hledej hranici papíru pomocí kontrastu:
-Papír (typicky bílý nebo světlý) leží na podkladu jiné barvy nebo textury (stůl, ruka, peněženka, tmavší plocha).
-Hledej přesně tu linii, kde papír končí a začíná podklad.
-Ořez musí zahrnovat CELÝ papír — včetně prázdných okrajů bez textu nahoře, dole, vlevo, vpravo.
+HLAVNÍ PRAVIDLO — ořez musí být VNĚ dokumentu:
+Vrať souřadnice, které jsou o kousek větší než skutečný okraj papíru.
+Klidně zahrň trochu pozadí (stůl, ruka, tma) — to nevadí.
+NESMÍ se stát, že ořez ukrojí byť jen milimetr z papíru.
 
-PRAVIDLA PRO PŘESNOST:
-- Nikdy neořezávej jen oblast s textem. Zahrni fyzický okraj papíru.
-- Buď štědrý: je lepší zahrnout 2–3 % navíc než oříznout kousek papíru.
-- Pokud papír sahá až k okraji fotografie, nastav tu stranu na 0.0 nebo 1.0.
-- Pokud je papír přeložený nebo skrčený, hledej vnější ohraničující obdélník celé viditelné plochy.
-- Pokud je papír na uniformním pozadí bez zřetelného kontrastu, hledej stín nebo jemnou hranu.
+JAK NAJÍT DOKLAD:
+Hledej přechod barvy a textury — světlý papír kontrastuje s tmavším podkladem.
+Zahrni celý papír včetně prázdných okrajů bez tisku (nahoře, dole, vlevo, vpravo).
 
-DOPLŇKOVÝ ÚKOL — po nalezení fyzických hranic ověř:
-Zkontroluj zda jsou klíčová pole (název firmy, IČ, DIČ, celková částka) uvnitř nalezeného ořezu.
-Pokud ne, rozšiř ořez — nikdy ho nezužuj pod fyzické hranice papíru.
+KONKRÉTNÍ POSTUP:
+1. Najdi čtyři fyzické hrany papíru (ne hrany textu).
+2. Každou hranu posuň o 2–3 % NADE, resp. za okraj (tj. do pozadí).
+3. Výsledek jsou souřadnice, které vrátíš.
+
+SPECIÁLNÍ PŘÍPADY:
+- Papír sahá k okraji fotky → nastav tu stranu na 0.0 nebo 1.0.
+- Uniformní pozadí bez kontrastu → hledej stín nebo lehkou hranu, pak buď velkorysý.
+- Pokrčený nebo přeložený papír → vezmi vnější ohraničující obdélník celé viditelné plochy.
+
+DOPLŇKOVÁ KONTROLA (po určení ořezu):
+Ověř zda jsou název firmy, IČ, DIČ a celková částka celé uvnitř. Pokud ne, rozšiř ořez.
 
 Pokud doklad není viditelný: detected=false, souřadnice null.`;
 
