@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { Paperclip, Pencil, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert } from "lucide-react";
+import { Paperclip, Pencil, RotateCw, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
@@ -373,37 +373,33 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     </DialogTitle>
                 </DialogHeader>
 
-                {/* Rotation controls — 1 button + horizontal slider (desktop) */}
-                <div className="flex items-center gap-2 px-4 py-2 border-b bg-white">
+                {/* Rotation controls — desktop only */}
+                <div className="hidden sm:flex items-center gap-2 px-4 py-2 border-b bg-white">
                     <span className="text-xs text-gray-500 shrink-0">Otočit:</span>
                     <button
                         type="button" disabled={busyNow}
                         onClick={() => applyRotation(90)}
-                        className="h-8 px-3 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors shrink-0">
-                        ↻ 90°
+                        className="h-8 w-8 flex items-center justify-center rounded border border-gray-300 hover:bg-gray-50 disabled:opacity-40 transition-colors shrink-0"
+                        title="Otočit 90° doprava">
+                        <RotateCw size={15} />
                     </button>
-
-                    {/* Horizontal slider — desktop only */}
-                    <div className="hidden sm:flex items-center gap-2 flex-1">
-                        <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">
-                            {sliderVal > 0 ? `+${sliderVal}°` : sliderVal === 0 ? "0°" : `${sliderVal}°`}
-                        </span>
-                        <input
-                            type="range" min={-30} max={30} step={1}
-                            value={sliderVal}
-                            onChange={e => handleSliderMove(Number(e.target.value))}
-                            onMouseUp={handleSliderCommit}
-                            onTouchEnd={handleSliderCommit}
-                            disabled={busyNow}
-                            className="flex-1 accent-gray-600 disabled:opacity-40"
-                        />
-                        <span className="text-xs text-gray-400 shrink-0 w-28">
-                            {rotating ? "otáčím…"
-                                : sliderVal !== 0 ? "↑ pusť pro aplikovat"
-                                : rotLabel ? `celkem ${rotLabel}`
-                                : "jemné doladění"}
-                        </span>
-                    </div>
+                    <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">
+                        {sliderVal > 0 ? `+${sliderVal}°` : sliderVal === 0 ? "0°" : `${sliderVal}°`}
+                    </span>
+                    <input
+                        type="range" min={-30} max={30} step={1}
+                        value={sliderVal}
+                        onChange={e => handleSliderMove(Number(e.target.value))}
+                        onPointerUp={handleSliderCommit}
+                        disabled={busyNow}
+                        className="flex-1 accent-gray-600 disabled:opacity-40"
+                    />
+                    <span className="text-xs text-gray-400 shrink-0 w-24 text-right">
+                        {rotating ? "otáčím…"
+                            : sliderVal !== 0 ? "pusť pro aplikovat"
+                            : rotLabel ? `celkem ${rotLabel}`
+                            : ""}
+                    </span>
                 </div>
 
                 {/* Image area — s vertikálním sliderem vpravo na mobilu */}
@@ -443,32 +439,45 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     </div>
 
                     {/* Vertikální slider — mobil only, vpravo */}
-                    <div className="sm:hidden flex flex-col items-center justify-center gap-1 bg-gray-200/60 px-1 py-3 w-10 shrink-0">
-                        <span className="text-[10px] text-gray-500 tabular-nums">
+                    <div className="sm:hidden flex flex-col items-center gap-2 bg-gray-200/60 px-1 py-3 w-10 shrink-0">
+                        {/* Úhel */}
+                        <span className="text-[10px] text-gray-500 tabular-nums shrink-0">
                             {sliderVal > 0 ? `+${sliderVal}°` : `${sliderVal}°`}
                         </span>
-                        <input
-                            type="range" min={-30} max={30} step={1}
-                            value={sliderVal}
-                            onChange={e => handleSliderMove(Number(e.target.value))}
-                            onMouseUp={handleSliderCommit}
-                            onTouchEnd={handleSliderCommit}
-                            disabled={busyNow}
-                            style={{
-                                writingMode: "vertical-lr",
-                                direction: "rtl",
-                                height: "160px",
-                                width: "20px",
-                                cursor: "ns-resize",
-                                accentColor: "#555",
-                            }}
-                        />
-                        {sliderVal !== 0 && (
-                            <span className="text-[9px] text-blue-500 text-center leading-tight">pusť</span>
+
+                        {/* Slider otočený přes CSS transform — spolehlivý na mobilu */}
+                        <div className="flex-1 flex items-center justify-center" style={{ minHeight: 140 }}>
+                            <input
+                                type="range" min={-30} max={30} step={1}
+                                value={sliderVal}
+                                onChange={e => handleSliderMove(Number(e.target.value))}
+                                onPointerUp={handleSliderCommit}
+                                disabled={busyNow}
+                                style={{
+                                    width: 140,
+                                    transform: "rotate(-90deg)",
+                                    accentColor: "#555",
+                                    touchAction: "none",
+                                }}
+                            />
+                        </div>
+
+                        {/* Stav */}
+                        {sliderVal !== 0 && !rotating && (
+                            <span className="text-[9px] text-blue-500 text-center leading-tight shrink-0">pusť</span>
                         )}
                         {rotating && (
-                            <span className="text-[9px] text-gray-400 animate-pulse">…</span>
+                            <span className="text-[9px] text-gray-400 animate-pulse shrink-0">…</span>
                         )}
+
+                        {/* 90° tlačítko — ikona bez textu */}
+                        <button
+                            type="button" disabled={busyNow}
+                            onClick={() => applyRotation(90)}
+                            className="w-8 h-8 flex items-center justify-center rounded border border-gray-400 bg-white hover:bg-gray-50 disabled:opacity-40 shrink-0"
+                            title="Otočit 90° doprava">
+                            <RotateCw size={14} className="text-gray-600" />
+                        </button>
                     </div>
                 </div>
 
