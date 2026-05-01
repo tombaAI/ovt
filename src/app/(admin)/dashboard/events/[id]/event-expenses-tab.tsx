@@ -134,20 +134,6 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
     );
 }
 
-// ── Snap crop edges to image boundary when within threshold ───────────────────
-
-function snapToEdge(crop: Crop, thresholdPct = 10): Crop {
-    if (crop.unit !== "%") return crop;
-    let { x, y, width, height } = crop;
-    if (x < thresholdPct)                   { width  += x;              x = 0; }
-    if (y < thresholdPct)                   { height += y;              y = 0; }
-    if (x + width  > 100 - thresholdPct)    { width  = 100 - x; }
-    if (y + height > 100 - thresholdPct)    { height = 100 - y; }
-    width  = Math.min(width,  100 - x);
-    height = Math.min(height, 100 - y);
-    return { unit: "%", x, y, width, height };
-}
-
 // ── Image rotate via canvas ───────────────────────────────────────────────────
 
 function rotateImage(srcUrl: string, angleDeg: number, originalName: string): Promise<File> {
@@ -976,15 +962,13 @@ function AutoCropPoc() {
 
             let suggested: Crop | undefined;
             if (data.detected && data.x_pct !== null && data.y_pct !== null && data.width_pct !== null && data.height_pct !== null) {
-                const raw: Crop = {
+                suggested = {
                     unit:   "%",
                     x:      data.x_pct      * 100,
                     y:      data.y_pct      * 100,
                     width:  data.width_pct  * 100,
                     height: data.height_pct * 100,
                 };
-                // Přichytit okraje bližší než 10 % k hranici obrázku
-                suggested = snapToEdge(raw, 10);
             }
 
             const geminiInfo: GeminiCropInfo | undefined = data.fields_check
