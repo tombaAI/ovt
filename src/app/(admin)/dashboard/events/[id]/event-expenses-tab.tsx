@@ -317,6 +317,11 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
         }
     }
 
+    function handleSliderMove(val: number) {
+        setSliderVal(val);
+        if (val !== 0) { setCrop(undefined); setPixelCrop(undefined); }
+    }
+
     function handleSliderCommit() {
         if (sliderVal === 0) return;
         const deg = sliderVal;
@@ -390,7 +395,7 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                         <input
                             type="range" min={-30} max={30} step={1}
                             value={sliderVal}
-                            onChange={e => setSliderVal(Number(e.target.value))}
+                            onChange={e => handleSliderMove(Number(e.target.value))}
                             onMouseUp={handleSliderCommit}
                             onTouchEnd={handleSliderCommit}
                             disabled={busyNow}
@@ -399,15 +404,17 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     </div>
 
                     {rotating && <span className="text-xs text-gray-400 animate-pulse shrink-0">otáčím…</span>}
-                    {!rotating && rotLabel && <span className="text-xs text-gray-400 shrink-0">celkem {rotLabel}</span>}
+                    {!rotating && sliderVal !== 0 && <span className="text-xs text-blue-500 shrink-0">↑ pusť pro aplikovat</span>}
+                    {!rotating && sliderVal === 0 && rotLabel && <span className="text-xs text-gray-400 shrink-0">celkem {rotLabel}</span>}
                 </div>
 
                 {/* Scrollable image area */}
                 <div className="overflow-auto max-h-[55vh] bg-gray-100 flex items-center justify-center p-3">
                     <ReactCrop
-                        crop={crop}
+                        crop={sliderVal !== 0 ? undefined : crop}
                         onChange={(_, pct) => setCrop(pct)}
                         onComplete={c => setPixelCrop(c)}
+                        disabled={sliderVal !== 0}
                         className="max-w-full"
                     >
                         {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -416,7 +423,11 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                             src={currentUrl}
                             alt="Náhled dokladu"
                             onLoad={onImageLoad}
-                            style={{ maxWidth: "100%", maxHeight: "50vh", objectFit: "contain" }}
+                            style={{
+                                maxWidth: "100%", maxHeight: "50vh", objectFit: "contain",
+                                transform: `rotate(${sliderVal}deg)`,
+                                transition: "none",
+                            }}
                         />
                     </ReactCrop>
                 </div>
