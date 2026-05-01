@@ -256,6 +256,77 @@ function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: str
 
 // ── Crop modal ────────────────────────────────────────────────────────────────
 
+// ── Custom vertical slider (pointer events — CSS rotate nefunguje správně) ────
+
+function VerticalSlider({ value, min, max, onChange, onCommit, disabled, height = 150 }: {
+    value:    number;
+    min:      number;
+    max:      number;
+    onChange: (v: number) => void;
+    onCommit: () => void;
+    disabled?: boolean;
+    height?:  number;
+}) {
+    const trackRef  = useRef<HTMLDivElement>(null);
+    const dragging  = useRef(false);
+
+    function valueFromY(clientY: number): number {
+        const rect = trackRef.current!.getBoundingClientRect();
+        // Nahoře = max, dole = min
+        const pct = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height));
+        return Math.round(min + pct * (max - min));
+    }
+
+    function onPointerDown(e: React.PointerEvent<HTMLDivElement>) {
+        if (disabled) return;
+        dragging.current = true;
+        e.currentTarget.setPointerCapture(e.pointerId);
+        onChange(valueFromY(e.clientY));
+    }
+
+    function onPointerMove(e: React.PointerEvent<HTMLDivElement>) {
+        if (!dragging.current) return;
+        onChange(valueFromY(e.clientY));
+    }
+
+    function onPointerUp() {
+        if (!dragging.current) return;
+        dragging.current = false;
+        onCommit();
+    }
+
+    const thumbPct = 1 - (value - min) / (max - min); // 0 = nahoře (max), 1 = dole (min)
+
+    return (
+        <div
+            ref={trackRef}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
+            style={{ width: 28, height, position: "relative", touchAction: "none",
+                cursor: disabled ? "default" : "ns-resize", userSelect: "none" }}
+        >
+            {/* Track */}
+            <div style={{ position: "absolute", left: "50%", top: 6, bottom: 6,
+                width: 4, background: "#d1d5db", transform: "translateX(-50%)", borderRadius: 2 }} />
+            {/* Střed — 0° indikátor */}
+            <div style={{ position: "absolute", left: "50%", top: "50%",
+                width: 10, height: 2, background: "#9ca3af", transform: "translate(-50%, -50%)", borderRadius: 1 }} />
+            {/* Thumb */}
+            <div style={{
+                position: "absolute", left: "50%",
+                top: `${thumbPct * 100}%`,
+                width: 20, height: 20,
+                background: disabled ? "#d1d5db" : value !== 0 ? "#3b82f6" : "#6b7280",
+                borderRadius: "50%",
+                transform: "translate(-50%, -50%)",
+                boxShadow: "0 1px 3px rgba(0,0,0,0.25)",
+                transition: "background 0.15s",
+            }} />
+        </div>
+    );
+}
+
 type GeminiCropInfo = {
     confidence:   number;
     fields_check: {
@@ -445,20 +516,14 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                             {sliderVal > 0 ? `+${sliderVal}°` : `${sliderVal}°`}
                         </span>
 
-                        {/* Slider otočený přes CSS transform — spolehlivý na mobilu */}
+                        {/* Custom vertikální slider — drag nahoru = +°, dolu = -° */}
                         <div className="flex-1 flex items-center justify-center" style={{ minHeight: 140 }}>
-                            <input
-                                type="range" min={-30} max={30} step={1}
-                                value={sliderVal}
-                                onChange={e => handleSliderMove(Number(e.target.value))}
-                                onPointerUp={handleSliderCommit}
+                            <VerticalSlider
+                                value={sliderVal} min={-30} max={30}
+                                onChange={handleSliderMove}
+                                onCommit={handleSliderCommit}
                                 disabled={busyNow}
-                                style={{
-                                    width: 140,
-                                    transform: "rotate(-90deg)",
-                                    accentColor: "#555",
-                                    touchAction: "none",
-                                }}
+                                height={150}
                             />
                         </div>
 
