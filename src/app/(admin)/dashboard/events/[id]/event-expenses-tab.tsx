@@ -373,22 +373,18 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     </DialogTitle>
                 </DialogHeader>
 
-                {/* Rotation controls */}
-                <div className="flex items-center gap-2 px-4 py-2 border-b bg-white flex-wrap">
+                {/* Rotation controls — 1 button + horizontal slider (desktop) */}
+                <div className="flex items-center gap-2 px-4 py-2 border-b bg-white">
                     <span className="text-xs text-gray-500 shrink-0">Otočit:</span>
                     <button
                         type="button" disabled={busyNow}
-                        onClick={() => applyRotation(-90)}
-                        className="h-8 px-3 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
-                        title="90° doleva">↺ 90°</button>
-                    <button
-                        type="button" disabled={busyNow}
                         onClick={() => applyRotation(90)}
-                        className="h-8 px-3 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
-                        title="90° doprava">↻ 90°</button>
+                        className="h-8 px-3 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors shrink-0">
+                        ↻ 90°
+                    </button>
 
-                    {/* Fine rotation slider */}
-                    <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+                    {/* Horizontal slider — desktop only */}
+                    <div className="hidden sm:flex items-center gap-2 flex-1">
                         <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">
                             {sliderVal > 0 ? `+${sliderVal}°` : sliderVal === 0 ? "0°" : `${sliderVal}°`}
                         </span>
@@ -399,37 +395,81 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                             onMouseUp={handleSliderCommit}
                             onTouchEnd={handleSliderCommit}
                             disabled={busyNow}
-                            className="flex-1 h-1.5 accent-gray-600 disabled:opacity-40"
+                            className="flex-1 accent-gray-600 disabled:opacity-40"
                         />
+                        <span className="text-xs text-gray-400 shrink-0 w-28">
+                            {rotating ? "otáčím…"
+                                : sliderVal !== 0 ? "↑ pusť pro aplikovat"
+                                : rotLabel ? `celkem ${rotLabel}`
+                                : "jemné doladění"}
+                        </span>
                     </div>
-
-                    {rotating && <span className="text-xs text-gray-400 animate-pulse shrink-0">otáčím…</span>}
-                    {!rotating && sliderVal !== 0 && <span className="text-xs text-blue-500 shrink-0">↑ pusť pro aplikovat</span>}
-                    {!rotating && sliderVal === 0 && rotLabel && <span className="text-xs text-gray-400 shrink-0">celkem {rotLabel}</span>}
                 </div>
 
-                {/* Scrollable image area */}
-                <div className="overflow-auto max-h-[55vh] bg-gray-100 flex items-center justify-center p-3">
-                    <ReactCrop
-                        crop={sliderVal !== 0 ? undefined : crop}
-                        onChange={(_, pct) => setCrop(pct)}
-                        onComplete={c => setPixelCrop(c)}
-                        disabled={sliderVal !== 0}
-                        className="max-w-full"
-                    >
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img
-                            ref={imgRef}
-                            src={currentUrl}
-                            alt="Náhled dokladu"
-                            onLoad={onImageLoad}
+                {/* Image area — s vertikálním sliderem vpravo na mobilu */}
+                <div className="flex bg-gray-100 overflow-hidden" style={{ maxHeight: "55vh" }}>
+                    {/* Obrázek */}
+                    <div className="flex-1 overflow-auto flex items-center justify-center p-3">
+                        <div className="relative">
+                            <ReactCrop
+                                crop={sliderVal !== 0 ? undefined : crop}
+                                onChange={(_, pct) => setCrop(pct)}
+                                onComplete={c => setPixelCrop(c)}
+                                disabled={sliderVal !== 0}
+                                className="max-w-full"
+                            >
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img
+                                    ref={imgRef}
+                                    src={currentUrl}
+                                    alt="Náhled dokladu"
+                                    onLoad={onImageLoad}
+                                    style={{
+                                        maxWidth: "100%", maxHeight: "48vh", objectFit: "contain",
+                                        transform: `rotate(${sliderVal}deg)`,
+                                        transition: "none",
+                                    }}
+                                />
+                            </ReactCrop>
+
+                            {/* Crosshair — jedna vodorovná + jedna svislá čára uprostřed */}
+                            <div className="absolute inset-0 pointer-events-none">
+                                <div className="absolute top-1/2 left-0 right-0 h-px -translate-y-px"
+                                    style={{ background: "rgba(255,255,255,0.55)", boxShadow: "0 0 2px rgba(0,0,0,0.4)" }} />
+                                <div className="absolute left-1/2 top-0 bottom-0 w-px -translate-x-px"
+                                    style={{ background: "rgba(255,255,255,0.55)", boxShadow: "0 0 2px rgba(0,0,0,0.4)" }} />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Vertikální slider — mobil only, vpravo */}
+                    <div className="sm:hidden flex flex-col items-center justify-center gap-1 bg-gray-200/60 px-1 py-3 w-10 shrink-0">
+                        <span className="text-[10px] text-gray-500 tabular-nums">
+                            {sliderVal > 0 ? `+${sliderVal}°` : `${sliderVal}°`}
+                        </span>
+                        <input
+                            type="range" min={-30} max={30} step={1}
+                            value={sliderVal}
+                            onChange={e => handleSliderMove(Number(e.target.value))}
+                            onMouseUp={handleSliderCommit}
+                            onTouchEnd={handleSliderCommit}
+                            disabled={busyNow}
                             style={{
-                                maxWidth: "100%", maxHeight: "50vh", objectFit: "contain",
-                                transform: `rotate(${sliderVal}deg)`,
-                                transition: "none",
+                                writingMode: "vertical-lr",
+                                direction: "rtl",
+                                height: "160px",
+                                width: "20px",
+                                cursor: "ns-resize",
+                                accentColor: "#555",
                             }}
                         />
-                    </ReactCrop>
+                        {sliderVal !== 0 && (
+                            <span className="text-[9px] text-blue-500 text-center leading-tight">pusť</span>
+                        )}
+                        {rotating && (
+                            <span className="text-[9px] text-gray-400 animate-pulse">…</span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Info + actions */}
