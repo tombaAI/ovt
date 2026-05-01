@@ -274,11 +274,22 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
     suggestedCrop?: Crop;
     geminiInfo?:   GeminiCropInfo;
 }) {
+    const [currentUrl, setCurrentUrl]   = useState(srcUrl);
     const [crop, setCrop]               = useState<Crop | undefined>(suggestedCrop);
     const [pixelCrop, setPixelCrop]     = useState<PixelCrop>();
     const [processing, setProcessing]   = useState(false);
+    const [rotating, setRotating]       = useState(false);
     const [sizeInfo, setSizeInfo]       = useState<string | null>(null);
+    const [sliderVal, setSliderVal]     = useState(0);
+    const [totalRot, setTotalRot]       = useState(0);
     const imgRef                        = useRef<HTMLImageElement>(null);
+    const ownedUrls                     = useRef<string[]>([]);
+
+    // Revoke any URLs we created during rotation when modal closes
+    useEffect(() => {
+        const urls = ownedUrls.current;
+        return () => { urls.forEach(u => URL.revokeObjectURL(u)); };
+    }, []);
 
     function onImageLoad(e: React.SyntheticEvent<HTMLImageElement>) {
         const { naturalWidth: w, naturalHeight: h } = e.currentTarget;
@@ -286,27 +297,50 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
         setSizeInfo(`${w}×${h}px → výstup max ${Math.round(w * scale)}×${Math.round(h * scale)}px`);
     }
 
+    async function applyRotation(deg: number) {
+        if (rotating || deg === 0) return;
+        setRotating(true);
+        try {
+            const rotated = await rotateImage(currentUrl, deg, originalName);
+            const newUrl  = URL.createObjectURL(rotated);
+            ownedUrls.current.push(newUrl);
+            // Revoke previous intermediate URL (but never the original srcUrl)
+            if (currentUrl !== srcUrl) URL.revokeObjectURL(currentUrl);
+            setCurrentUrl(newUrl);
+            setCrop(undefined);
+            setPixelCrop(undefined);
+            setTotalRot(r => ((r + deg) % 360 + 360) % 360);
+        } catch (err) {
+            alert(err instanceof Error ? err.message : "Chyba rotace");
+        } finally {
+            setRotating(false);
+        }
+    }
+
+    function handleSliderCommit() {
+        if (sliderVal === 0) return;
+        const deg = sliderVal;
+        setSliderVal(0);
+        applyRotation(deg);
+    }
+
     async function apply(useCrop: boolean) {
         setProcessing(true);
         try {
             let activeCrop: PixelCrop | null = null;
-
             if (useCrop && pixelCrop?.width && pixelCrop?.height && imgRef.current) {
-                // ReactCrop vrací koordináty v CSS pixelech zobrazené img.
-                // Canvas potřebuje souřadnice v přirozených pixelech originálu.
-                const img = imgRef.current;
+                const img    = imgRef.current;
                 const scaleX = img.naturalWidth  / img.width;
                 const scaleY = img.naturalHeight / img.height;
                 activeCrop = {
-                    unit: "px",
+                    unit:   "px",
                     x:      Math.round(pixelCrop.x      * scaleX),
                     y:      Math.round(pixelCrop.y      * scaleY),
                     width:  Math.round(pixelCrop.width  * scaleX),
                     height: Math.round(pixelCrop.height * scaleY),
                 };
             }
-
-            const result = await compressImage(srcUrl, activeCrop, originalName);
+            const result = await compressImage(currentUrl, activeCrop, originalName);
             onDone(result);
         } catch (err) {
             alert(err instanceof Error ? err.message : "Chyba zpracování");
@@ -315,7 +349,9 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
         }
     }
 
-    const hasCrop = !!pixelCrop?.width && !!pixelCrop?.height;
+    const hasCrop    = !!pixelCrop?.width && !!pixelCrop?.height;
+    const busyNow    = processing || rotating;
+    const rotLabel   = totalRot === 0 ? "" : `${totalRot}°`;
 
     return (
         <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
@@ -332,8 +368,42 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     </DialogTitle>
                 </DialogHeader>
 
+                {/* Rotation controls */}
+                <div className="flex items-center gap-2 px-4 py-2 border-b bg-white flex-wrap">
+                    <span className="text-xs text-gray-500 shrink-0">Otočit:</span>
+                    <button
+                        type="button" disabled={busyNow}
+                        onClick={() => applyRotation(-90)}
+                        className="h-8 px-3 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                        title="90° doleva">↺ 90°</button>
+                    <button
+                        type="button" disabled={busyNow}
+                        onClick={() => applyRotation(90)}
+                        className="h-8 px-3 rounded border border-gray-300 text-sm hover:bg-gray-50 disabled:opacity-40 transition-colors"
+                        title="90° doprava">↻ 90°</button>
+
+                    {/* Fine rotation slider */}
+                    <div className="flex items-center gap-2 flex-1 min-w-[180px]">
+                        <span className="text-xs text-gray-400 tabular-nums w-8 text-right shrink-0">
+                            {sliderVal > 0 ? `+${sliderVal}°` : sliderVal === 0 ? "0°" : `${sliderVal}°`}
+                        </span>
+                        <input
+                            type="range" min={-30} max={30} step={1}
+                            value={sliderVal}
+                            onChange={e => setSliderVal(Number(e.target.value))}
+                            onMouseUp={handleSliderCommit}
+                            onTouchEnd={handleSliderCommit}
+                            disabled={busyNow}
+                            className="flex-1 h-1.5 accent-gray-600 disabled:opacity-40"
+                        />
+                    </div>
+
+                    {rotating && <span className="text-xs text-gray-400 animate-pulse shrink-0">otáčím…</span>}
+                    {!rotating && rotLabel && <span className="text-xs text-gray-400 shrink-0">celkem {rotLabel}</span>}
+                </div>
+
                 {/* Scrollable image area */}
-                <div className="overflow-auto max-h-[60vh] bg-gray-100 flex items-center justify-center p-3">
+                <div className="overflow-auto max-h-[55vh] bg-gray-100 flex items-center justify-center p-3">
                     <ReactCrop
                         crop={crop}
                         onChange={(_, pct) => setCrop(pct)}
@@ -343,10 +413,10 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                         {/* eslint-disable-next-line @next/next/no-img-element */}
                         <img
                             ref={imgRef}
-                            src={srcUrl}
+                            src={currentUrl}
                             alt="Náhled dokladu"
                             onLoad={onImageLoad}
-                            style={{ maxWidth: "100%", maxHeight: "55vh", objectFit: "contain" }}
+                            style={{ maxWidth: "100%", maxHeight: "50vh", objectFit: "contain" }}
                         />
                     </ReactCrop>
                 </div>
@@ -398,7 +468,7 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     <div className="flex flex-wrap items-center gap-2">
                         <Button
                             size="sm"
-                            disabled={processing || !hasCrop}
+                            disabled={busyNow || !hasCrop}
                             onClick={() => apply(true)}
                             className="bg-[#327600] hover:bg-[#2a6400] text-white">
                             {processing ? "Zpracovávám…" : "Oříznout a použít"}
@@ -406,7 +476,7 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                         <Button
                             size="sm"
                             variant="outline"
-                            disabled={processing}
+                            disabled={busyNow}
                             onClick={() => apply(false)}>
                             Použít bez ořezu
                         </Button>
