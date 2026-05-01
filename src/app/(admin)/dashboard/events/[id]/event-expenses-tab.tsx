@@ -134,6 +134,35 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
     );
 }
 
+// ── Resize image for Gemini (client-side, before API call) ───────────────────
+
+function resizeForGemini(file: File, maxPx = 1024): Promise<File> {
+    return new Promise((resolve, reject) => {
+        const img = new Image();
+        img.onload = () => {
+            const scale = Math.min(1, maxPx / Math.max(img.naturalWidth, img.naturalHeight));
+            if (scale === 1) { resolve(file); return; } // už je dost malý
+
+            const canvas = document.createElement("canvas");
+            canvas.width  = Math.round(img.naturalWidth  * scale);
+            canvas.height = Math.round(img.naturalHeight * scale);
+            const ctx = canvas.getContext("2d");
+            if (!ctx) { resolve(file); return; }
+            ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+            canvas.toBlob(
+                blob => {
+                    if (!blob) { resolve(file); return; }
+                    resolve(new File([blob], file.name, { type: "image/jpeg" }));
+                },
+                "image/jpeg",
+                0.92,
+            );
+        };
+        img.onerror = () => reject(new Error("Resize failed"));
+        img.src = URL.createObjectURL(file);
+    });
+}
+
 // ── Expand crop outward as safety margin ─────────────────────────────────────
 
 function expandCrop(crop: Crop, paddingPct: number): Crop {
@@ -957,8 +986,9 @@ function AutoCropPoc() {
         setState({ tag: "detecting", previewUrl, file: f });
 
         try {
+            const small = await resizeForGemini(f, 1024);
             const fd = new FormData();
-            fd.append("file", f);
+            fd.append("file", small);
             const res  = await fetch("/api/expenses/detect-crop", { method: "POST", body: fd });
             const data: {
                 detected: boolean;
@@ -1111,9 +1141,10 @@ function AutoRotatePoc() {
         setState({ tag: "detecting", previewUrl, file: f });
 
         try {
-            // 1. Gemini detekuje rotaci
+            // 1. Gemini detekuje rotaci — zmenšit před odesláním
+            const small = await resizeForGemini(f, 1024);
             const fd = new FormData();
-            fd.append("file", f);
+            fd.append("file", small);
             const res  = await fetch("/api/expenses/detect-rotation", { method: "POST", body: fd });
             const data: {
                 rotation_needed: boolean; angle_degrees: number; confidence: number;
