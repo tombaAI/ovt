@@ -139,19 +139,29 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
 
 function resizeForGemini(file: File, maxPx = 1024): Promise<File> {
     return new Promise((resolve, reject) => {
+        const srcUrl = URL.createObjectURL(file);
         const img = new Image();
         img.onload = () => {
             const scale = Math.min(1, maxPx / Math.max(img.naturalWidth, img.naturalHeight));
-            if (scale === 1) { resolve(file); return; } // už je dost malý
+            if (scale === 1) {
+                URL.revokeObjectURL(srcUrl);
+                resolve(file);
+                return;
+            } // už je dost malý
 
             const canvas = document.createElement("canvas");
             canvas.width  = Math.round(img.naturalWidth  * scale);
             canvas.height = Math.round(img.naturalHeight * scale);
             const ctx = canvas.getContext("2d");
-            if (!ctx) { resolve(file); return; }
+            if (!ctx) {
+                URL.revokeObjectURL(srcUrl);
+                resolve(file);
+                return;
+            }
             ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
             canvas.toBlob(
                 blob => {
+                    URL.revokeObjectURL(srcUrl);
                     if (!blob) { resolve(file); return; }
                     resolve(new File([blob], file.name, { type: "image/jpeg" }));
                 },
@@ -159,9 +169,25 @@ function resizeForGemini(file: File, maxPx = 1024): Promise<File> {
                 0.92,
             );
         };
-        img.onerror = () => reject(new Error("Resize failed"));
-        img.src = URL.createObjectURL(file);
+        img.onerror = () => {
+            URL.revokeObjectURL(srcUrl);
+            reject(new Error("Resize failed"));
+        };
+        img.src = srcUrl;
     });
+}
+
+async function prepareFileForGemini(file: File): Promise<File> {
+    if (!file.type.startsWith("image/")) {
+        return file;
+    }
+
+    try {
+        return await resizeForGemini(file, 1024);
+    } catch {
+        // Fallback: keep full-size original when resize fails.
+        return file;
+    }
 }
 
 // ── Expand crop outward as safety margin ─────────────────────────────────────
@@ -653,7 +679,7 @@ function AddExpenseForm({
         setState({ tag: "analyzing", file });
         setError(null);
         try {
-            const small = await resizeForGemini(file, 1024);
+            const small = await prepareFileForGemini(file);
             const fd = new FormData();
             fd.append("file", small);
             const analysisRes = await fetch("/api/expenses/analyze", { method: "POST", body: fd });
@@ -836,7 +862,7 @@ function DraftProcessDialog({
             if (!blobRes.ok) throw new Error("Nepodařilo se načíst soubor");
             const blob = await blobRes.blob();
             const file = new File([blob], expense.fileName ?? "document", { type: expense.fileMime ?? blob.type });
-            const small = await resizeForGemini(file, 1024);
+            const small = await prepareFileForGemini(file);
 
             const fd = new FormData();
             fd.append("file", small);
