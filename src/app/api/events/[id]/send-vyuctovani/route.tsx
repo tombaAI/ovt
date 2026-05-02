@@ -351,7 +351,7 @@ export async function POST(
         </tfoot>
       </table>
 
-      <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;">Děkuji,<br/>hezký den,<br/>Tomáš Bauer<br/>Hospodář oddílu OVT</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;">Děkuji,<br/>Tomáš Bauer<br/>Hospodář oddílu OVT</p>
     </td>
   </tr>
 
@@ -359,7 +359,7 @@ export async function POST(
     <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
         Oddíl Vodní Turistiky TJ Bohemians Praha<br>
-        Tento email byl odeslán ze systému správa OVT uživatelem ${escapeHtml(senderDisplay)}..
+        Tento email byl odeslán ze systému správa OVT uživatelem ${escapeHtml(senderDisplay)}.
       </p>
     </td>
   </tr>
