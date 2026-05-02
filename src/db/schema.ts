@@ -496,14 +496,18 @@ export const expenseCategoryEnum = [
 ] as const;
 export type ExpenseCategory = typeof expenseCategoryEnum[number];
 
+export const eventExpenseStatusEnum = ["draft", "final"] as const;
+export type EventExpenseStatus = typeof eventExpenseStatusEnum[number];
+
 export const eventExpenses = appSchema.table(
     "event_expenses",
     {
         id:              serial("id").primaryKey(),
         eventId:         integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-        amount:          numeric("amount", { precision: 10, scale: 2 }).notNull(),
-        purposeText:     text("purpose_text").notNull(),
-        purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }).notNull(),
+        status:          text("status", { enum: eventExpenseStatusEnum }).notNull().default("final"),
+        amount:          numeric("amount", { precision: 10, scale: 2 }),        // null u draftů
+        purposeText:     text("purpose_text"),
+        purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }),
         reimbursementPersonId: integer("reimbursement_person_id").references(() => people.id, { onDelete: "set null" }),
         reimbursementMemberId: integer("reimbursement_member_id").references(() => members.id, { onDelete: "set null" }),
         fileUrl:         text("file_url"),

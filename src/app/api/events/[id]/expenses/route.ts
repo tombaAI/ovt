@@ -108,6 +108,7 @@ export async function POST(
         }
 
         const formData = await request.formData();
+        const isDraft         = String(formData.get("draft") ?? "") === "true";
         const amountStr       = String(formData.get("amount") ?? "").replace(",", ".");
         const purposeText     = String(formData.get("purposeText") ?? "").trim();
         const purposeCategory = String(formData.get("purposeCategory") ?? "");
@@ -115,15 +116,15 @@ export async function POST(
         const reimbursementMemberIdRaw = String(formData.get("reimbursementMemberId") ?? "").trim();
         const file            = formData.get("file") as File | null;
 
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount <= 0) {
-            return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
-        }
-        if (!purposeText) {
-            return NextResponse.json({ error: "Chybí účel" }, { status: 400 });
-        }
-        if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory)) {
-            return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
+        let amount: number | null = null;
+        if (!isDraft) {
+            amount = parseFloat(amountStr);
+            if (isNaN(amount) || amount <= 0)
+                return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
+            if (!purposeText)
+                return NextResponse.json({ error: "Chybí účel" }, { status: 400 });
+            if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory))
+                return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
         }
 
         const db = getDb();
@@ -155,9 +156,10 @@ export async function POST(
 
         await db.insert(eventExpenses).values({
             eventId,
-            amount: String(amount),
-            purposeText,
-            purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],
+            status: isDraft ? "draft" : "final",
+            amount: amount !== null ? String(amount) : null,
+            purposeText: isDraft ? null : purposeText,
+            purposeCategory: isDraft ? null : purposeCategory as typeof expenseCategoryEnum[number],
             reimbursementPersonId,
             reimbursementMemberId,
             fileUrl,
@@ -239,6 +241,7 @@ export async function PATCH(
 
         await db.update(eventExpenses)
             .set({
+                status: "final",
                 amount: String(amount),
                 purposeText,
                 purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],

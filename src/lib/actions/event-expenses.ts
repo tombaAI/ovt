@@ -10,9 +10,10 @@ export type { ExpenseCategory };
 export type EventExpenseRow = {
     id:              number;
     eventId:         number;
-    amount:          string;
-    purposeText:     string;
-    purposeCategory: ExpenseCategory;
+    status:          "draft" | "final";
+    amount:          string | null;
+    purposeText:     string | null;
+    purposeCategory: ExpenseCategory | null;
     reimbursementPersonId: number | null;
     reimbursementMemberId: number | null;
     reimbursementPayeeName: string | null;
@@ -32,6 +33,7 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
         .select({
             id: eventExpenses.id,
             eventId: eventExpenses.eventId,
+            status: eventExpenses.status,
             amount: eventExpenses.amount,
             purposeText: eventExpenses.purposeText,
             purposeCategory: eventExpenses.purposeCategory,

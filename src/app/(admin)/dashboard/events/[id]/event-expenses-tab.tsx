@@ -17,7 +17,8 @@ const CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
 const MAX_PX = 1600;
 const JPEG_QUALITY = 0.85;
 
-function fmtAmount(amount: string) {
+function fmtAmount(amount: string | null) {
+    if (!amount) return "–";
     return new Intl.NumberFormat("cs-CZ").format(Number(amount)) + " Kč";
 }
 
@@ -625,6 +626,8 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
 type FlowState =
     | { tag: "idle" }
     | { tag: "cropping"; file: File; previewUrl: string }
+    | { tag: "ready"; file: File; previewUrl: string | null }
+    | { tag: "saving_draft"; file: File }
     | { tag: "analyzing"; file: File }
     | { tag: "analyzed"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory }
     | { tag: "uploading"; file: File; analysis: ExpenseAnalysis; amount: string; category: ExpenseCategory; purposeText: string; reimbursementPersonId: string };
@@ -695,7 +698,7 @@ function AddExpenseForm({
         if (f.type.startsWith("image/")) {
             setState({ tag: "cropping", file: f, previewUrl: URL.createObjectURL(f) });
         } else {
-            runAnalysis(f);
+            setState({ tag: "ready", file: f, previewUrl: null });
         }
     }
 
@@ -703,7 +706,8 @@ function AddExpenseForm({
         if (state.tag === "cropping") URL.revokeObjectURL(state.previewUrl);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
-        runAnalysis(processed);
+        const previewUrl = URL.createObjectURL(processed);
+        setState({ tag: "ready", file: processed, previewUrl });
     }
 
     function handleCropCancel() {
@@ -711,6 +715,39 @@ function AddExpenseForm({
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
         setState({ tag: "idle" });
+    }
+
+    function handleReadyCancel() {
+        if (state.tag === "ready" && state.previewUrl) URL.revokeObjectURL(state.previewUrl);
+        if (fileInputRef.current)   fileInputRef.current.value   = "";
+        if (cameraInputRef.current) cameraInputRef.current.value = "";
+        setState({ tag: "idle" });
+    }
+
+    function handleReadyAnalyze() {
+        if (state.tag !== "ready") return;
+        const { file, previewUrl } = state;
+        if (previewUrl) URL.revokeObjectURL(previewUrl);
+        runAnalysis(file);
+    }
+
+    async function saveDraft() {
+        if (state.tag !== "ready") return;
+        const { file, previewUrl } = state;
+        setState({ tag: "saving_draft", file });
+        try {
+            const fd = new FormData();
+            fd.append("draft", "true");
+            fd.append("file", file);
+            const res = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Chyba uložení");
+            resetToIdle();
+            onAdded();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Chyba");
+            setState({ tag: "ready", file, previewUrl });
+        }
     }
 
     async function handleSave() {
@@ -789,6 +826,62 @@ function AddExpenseForm({
                 <p className="text-xs text-gray-400">
                     Fotky jsou automaticky komprimovány (max {MAX_PX}px, JPEG {Math.round(JPEG_QUALITY * 100)}%)
                 </p>
+            </div>
+        );
+    }
+
+    // Ready — choose action
+    if (state.tag === "ready") {
+        return (
+            <div className="rounded-xl border bg-white p-4 space-y-3">
+                <div className="flex items-start gap-3">
+                    {state.previewUrl && (
+                        <img src={state.previewUrl} alt="náhled"
+                            className="w-16 h-20 object-cover rounded border border-gray-200 shrink-0" />
+                    )}
+                    <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2">
+                            {isImage(state.file.type) ? <ImageIcon size={14} className="text-blue-400 shrink-0" /> : <FileText size={14} className="text-red-400 shrink-0" />}
+                            <span className="text-sm font-medium text-gray-800 truncate">{state.file.name}</span>
+                        </div>
+                        <p className="text-xs text-gray-400 mt-0.5">{Math.round(state.file.size / 1024)} kB</p>
+                        <p className="text-xs text-gray-500 mt-2">
+                            Co chceš udělat s tímto souborem?
+                        </p>
+                    </div>
+                </div>
+                {error && <p className="text-xs text-red-500">{error}</p>}
+                <div className="flex items-center gap-2 flex-wrap">
+                    <Button type="button" size="sm" onClick={handleReadyAnalyze}
+                        className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5">
+                        <Sparkles size={13} />
+                        Analyzovat Gemini
+                    </Button>
+                    <Button type="button" size="sm" variant="outline" onClick={saveDraft}
+                        className="gap-1.5">
+                        <Paperclip size={13} />
+                        Uložit jako návrh
+                    </Button>
+                    <button type="button" onClick={handleReadyCancel}
+                        className="ml-auto text-xs text-gray-400 hover:text-gray-600">
+                        Zrušit
+                    </button>
+                </div>
+            </div>
+        );
+    }
+
+    // Saving draft
+    if (state.tag === "saving_draft") {
+        return (
+            <div className="rounded-xl border bg-white p-6 flex items-center gap-3">
+                <div className="w-8 h-8 rounded-full bg-gray-100 flex items-center justify-center shrink-0">
+                    <Upload size={15} className="text-gray-500 animate-pulse" />
+                </div>
+                <div>
+                    <p className="text-sm font-medium text-gray-800">Ukládám návrh…</p>
+                    <p className="text-xs text-gray-400 mt-0.5 truncate max-w-xs">{state.file.name}</p>
+                </div>
             </div>
         );
     }
@@ -898,6 +991,194 @@ function AddExpenseForm({
     );
 }
 
+// ── Draft processing dialog ───────────────────────────────────────────────────
+
+function DraftProcessDialog({
+    expense,
+    eventId,
+    open,
+    people,
+    peopleLoaded,
+    onOpenChange,
+    onPersonCreated,
+    onSaved,
+}: {
+    expense: EventExpenseRow;
+    eventId: number;
+    open: boolean;
+    people: PersonOption[];
+    peopleLoaded: boolean;
+    onOpenChange: (open: boolean) => void;
+    onPersonCreated: (person: PersonOption) => void;
+    onSaved: () => void | Promise<void>;
+}) {
+    const [amount, setAmount] = useState("");
+    const [purposeText, setPurposeText] = useState("");
+    const [purposeCategory, setPurposeCategory] = useState<ExpenseCategory>("501/004");
+    const [reimbursementPersonId, setReimbursementPersonId] = useState("");
+    const [analyzing, setAnalyzing] = useState(false);
+    const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setAmount(""); setPurposeText(""); setPurposeCategory("501/004");
+        setReimbursementPersonId(""); setAnalysis(null); setError(null);
+    }, [open]);
+
+    async function runGeminiAnalysis() {
+        if (!expense.fileUrl) return;
+        setAnalyzing(true); setError(null);
+        try {
+            const blobRes = await fetch(`/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`);
+            if (!blobRes.ok) throw new Error("Nepodařilo se načíst soubor");
+            const blob = await blobRes.blob();
+            const file = new File([blob], expense.fileName ?? "document", { type: expense.fileMime ?? blob.type });
+            const small = await resizeForGemini(file, 1024);
+
+            const fd = new FormData();
+            fd.append("file", small);
+            const res = await fetch("/api/expenses/analyze", { method: "POST", body: fd });
+            const data: ExpenseAnalysis & { error?: string } = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Chyba analýzy");
+
+            setAnalysis(data);
+            if (data.total_amount !== null && data.total_amount !== undefined) {
+                setAmount(String(data.total_amount).replace(".", ","));
+            }
+            if (data.account_code) setPurposeCategory(data.account_code);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Analýza selhala");
+        } finally {
+            setAnalyzing(false);
+        }
+    }
+
+    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+        setSaving(true); setError(null);
+        try {
+            const amountNum = parseFloat(amount.replace(",", "."));
+            if (isNaN(amountNum) || amountNum <= 0) throw new Error("Oprav částku");
+            if (!purposeText.trim()) throw new Error("Doplň účel dokladu");
+
+            const response = await fetch(`/api/events/${eventId}/expenses`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    expenseId: expense.id,
+                    amount: amountNum,
+                    purposeText: purposeText.trim(),
+                    purposeCategory,
+                    reimbursementPersonId: reimbursementPersonId || null,
+                }),
+            });
+            const payload = await response.json() as { error?: string };
+            if (!response.ok) throw new Error(payload.error ?? "Chyba uložení");
+            await onSaved();
+            onOpenChange(false);
+        } catch (submitError) {
+            setError(submitError instanceof Error ? submitError.message : "Chyba uložení");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    const blobProxyUrl = expense.fileUrl
+        ? `/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`
+        : null;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-base">
+                        <Sparkles size={16} className="text-violet-500" />
+                        Zpracovat návrh
+                    </DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4">
+                    {/* Image preview */}
+                    {blobProxyUrl && isImage(expense.fileMime) && (
+                        <div className="flex gap-3 items-start">
+                            <img src={blobProxyUrl} alt="doklad"
+                                className="w-28 h-36 object-cover rounded-lg border border-gray-200 shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500 mb-2">{expense.fileName}</p>
+                                <Button type="button" size="sm" onClick={runGeminiAnalysis} disabled={analyzing}
+                                    className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5 w-full sm:w-auto">
+                                    <Sparkles size={13} />
+                                    {analyzing ? "Analyzuji…" : "Analyzovat Gemini"}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+                    {blobProxyUrl && !isImage(expense.fileMime) && (
+                        <div className="flex items-center gap-3">
+                            <FileText size={20} className="text-red-400 shrink-0" />
+                            <div className="flex-1">
+                                <p className="text-xs text-gray-500">{expense.fileName}</p>
+                                <Button type="button" size="sm" onClick={runGeminiAnalysis} disabled={analyzing}
+                                    className="mt-2 bg-violet-600 hover:bg-violet-700 text-white gap-1.5">
+                                    <Sparkles size={13} />
+                                    {analyzing ? "Analyzuji…" : "Analyzovat Gemini"}
+                                </Button>
+                            </div>
+                        </div>
+                    )}
+
+                    {analysis && <AnalysisCard analysis={analysis} />}
+
+                    <form onSubmit={handleSubmit} className="space-y-3">
+                        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-gray-500">Částka (Kč) *</label>
+                                <input type="text" inputMode="decimal"
+                                    value={amount} onChange={e => setAmount(e.target.value)}
+                                    className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-gray-500">Účetní kód *</label>
+                                <select value={purposeCategory} onChange={e => setPurposeCategory(e.target.value as ExpenseCategory)}
+                                    className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                                    {CATEGORIES.map(c => (
+                                        <option key={c} value={c}>{c} · {EXPENSE_CATEGORY_LABELS[c]}</option>
+                                    ))}
+                                </select>
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Účel / popis *</label>
+                            <input type="text"
+                                value={purposeText} onChange={e => setPurposeText(e.target.value)}
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                        </div>
+                        <PersonAutocomplete
+                            people={people}
+                            peopleLoaded={peopleLoaded}
+                            value={reimbursementPersonId}
+                            disabled={saving}
+                            onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
+                            onPersonCreated={onPersonCreated}
+                        />
+                        {error && <p className="text-sm text-red-500">{error}</p>}
+                        <div className="flex justify-end gap-2">
+                            <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+                                Zrušit
+                            </Button>
+                            <Button type="submit" disabled={saving}>
+                                {saving ? "Ukládám…" : "Uložit náklad"}
+                            </Button>
+                        </div>
+                    </form>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 // ── Expense row ───────────────────────────────────────────────────────────────
 
 function ExpenseEditDialog({
@@ -919,18 +1200,18 @@ function ExpenseEditDialog({
     onPersonCreated: (person: PersonOption) => void;
     onSaved: () => void | Promise<void>;
 }) {
-    const [amount, setAmount] = useState(expense.amount.replace(".", ","));
-    const [purposeText, setPurposeText] = useState(expense.purposeText);
-    const [purposeCategory, setPurposeCategory] = useState<ExpenseCategory>(expense.purposeCategory);
+    const [amount, setAmount] = useState((expense.amount ?? "").replace(".", ","));
+    const [purposeText, setPurposeText] = useState(expense.purposeText ?? "");
+    const [purposeCategory, setPurposeCategory] = useState<ExpenseCategory>(expense.purposeCategory ?? "501/004");
     const [reimbursementPersonId, setReimbursementPersonId] = useState(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         if (!open) return;
-        setAmount(expense.amount.replace(".", ","));
-        setPurposeText(expense.purposeText);
-        setPurposeCategory(expense.purposeCategory);
+        setAmount((expense.amount ?? "").replace(".", ","));
+        setPurposeText(expense.purposeText ?? "");
+        setPurposeCategory(expense.purposeCategory ?? "501/004");
         setReimbursementPersonId(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
         setError(null);
     }, [open, expense]);
@@ -1064,6 +1345,12 @@ function ExpenseItem({
 }) {
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
+    const [processing, setProcessing] = useState(false);
+
+    const isDraft = expense.status === "draft";
+    const blobProxyUrl = expense.fileUrl
+        ? `/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`
+        : null;
 
     async function handleDelete() {
         if (!confirm("Smazat tento doklad?")) return;
@@ -1085,38 +1372,62 @@ function ExpenseItem({
         }
     }
 
-    const categoryLabel = EXPENSE_CATEGORY_LABELS[expense.purposeCategory] ?? expense.purposeCategory;
+    const categoryLabel = expense.purposeCategory
+        ? (EXPENSE_CATEGORY_LABELS[expense.purposeCategory] ?? expense.purposeCategory)
+        : null;
 
     return (
-        <div className="flex items-start gap-3 py-3 border-b last:border-0">
-            <div className="mt-0.5 shrink-0 text-gray-400">
-                {expense.fileUrl
-                    ? (isImage(expense.fileMime)
-                        ? <ImageIcon size={16} className="text-blue-400" />
-                        : <FileText size={16} className="text-red-400" />)
-                    : <Paperclip size={16} />
-                }
+        <div className={`flex items-start gap-3 py-3 border-b last:border-0 ${isDraft ? "opacity-75" : ""}`}>
+            {/* Thumbnail for images, icon for others */}
+            <div className="shrink-0">
+                {blobProxyUrl && isImage(expense.fileMime) ? (
+                    <img src={blobProxyUrl} alt="doklad"
+                        className="w-12 h-14 object-cover rounded border border-gray-200" />
+                ) : (
+                    <div className="mt-0.5 text-gray-400">
+                        {expense.fileUrl
+                            ? <FileText size={16} className="text-red-400" />
+                            : <Paperclip size={16} />
+                        }
+                    </div>
+                )}
             </div>
 
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-sm font-medium text-gray-900 tabular-nums">
-                        {fmtAmount(expense.amount)}
-                    </span>
-                    <span className="text-[11px] text-gray-500 border border-gray-200 rounded px-1.5 py-px bg-gray-50 shrink-0">
-                        {categoryLabel}
-                    </span>
-                </div>
-                <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
-                <p className={`text-xs mt-0.5 ${expense.reimbursementPayeeName ? "text-gray-500" : "text-amber-600"}`}>
-                    Proplatit: {expense.reimbursementPayeeName ?? "zatím neurčeno"}
-                    {expense.reimbursementPayeeKind === "external" && <span className="text-gray-400"> · nečlen</span>}
-                    {expense.reimbursementPayeeName && (!expense.reimbursementPayeeBankAccountNumber || !expense.reimbursementPayeeBankCode) && (
-                        <span className="text-amber-600"> · chybí účet</span>
+                    {isDraft ? (
+                        <span className="text-[10px] font-semibold uppercase tracking-wide text-amber-700 bg-amber-100 border border-amber-200 rounded px-1.5 py-px">
+                            Návrh
+                        </span>
+                    ) : (
+                        <span className="text-sm font-medium text-gray-900 tabular-nums">
+                            {fmtAmount(expense.amount)}
+                        </span>
                     )}
-                </p>
-                {expense.fileUrl && (
-                    <a href={`/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`}
+                    {categoryLabel && (
+                        <span className="text-[11px] text-gray-500 border border-gray-200 rounded px-1.5 py-px bg-gray-50 shrink-0">
+                            {categoryLabel}
+                        </span>
+                    )}
+                </div>
+                {expense.purposeText && (
+                    <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
+                )}
+                {isDraft ? (
+                    <p className="text-xs text-amber-600 mt-0.5">
+                        Foto uloženo — čeká na zpracování
+                    </p>
+                ) : (
+                    <p className={`text-xs mt-0.5 ${expense.reimbursementPayeeName ? "text-gray-500" : "text-amber-600"}`}>
+                        Proplatit: {expense.reimbursementPayeeName ?? "zatím neurčeno"}
+                        {expense.reimbursementPayeeKind === "external" && <span className="text-gray-400"> · nečlen</span>}
+                        {expense.reimbursementPayeeName && (!expense.reimbursementPayeeBankAccountNumber || !expense.reimbursementPayeeBankCode) && (
+                            <span className="text-amber-600"> · chybí účet</span>
+                        )}
+                    </p>
+                )}
+                {expense.fileUrl && !isImage(expense.fileMime) && (
+                    <a href={blobProxyUrl!}
                         target="_blank" rel="noopener noreferrer"
                         className="text-xs text-blue-600 hover:underline mt-0.5 block truncate">
                         {expense.fileName ?? "Příloha"}
@@ -1126,11 +1437,19 @@ function ExpenseItem({
             </div>
 
             <div className="flex shrink-0 items-center gap-1 mt-0.5">
-                <button onClick={() => setEditing(true)}
-                    className="text-gray-300 hover:text-gray-600 transition-colors"
-                    title="Upravit náklad">
-                    <Pencil size={15} />
-                </button>
+                {isDraft ? (
+                    <button onClick={() => setProcessing(true)}
+                        className="text-[11px] font-medium text-violet-600 hover:text-violet-800 border border-violet-200 rounded px-2 py-0.5 hover:bg-violet-50 transition-colors"
+                        title="Zpracovat návrh">
+                        Zpracovat
+                    </button>
+                ) : (
+                    <button onClick={() => setEditing(true)}
+                        className="text-gray-300 hover:text-gray-600 transition-colors"
+                        title="Upravit náklad">
+                        <Pencil size={15} />
+                    </button>
+                )}
                 <button onClick={handleDelete} disabled={deleting}
                     className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
                     title="Smazat doklad">
@@ -1138,16 +1457,29 @@ function ExpenseItem({
                 </button>
             </div>
 
-            <ExpenseEditDialog
-                expense={expense}
-                eventId={eventId}
-                open={editing}
-                people={personOptions}
-                peopleLoaded={peopleLoaded}
-                onOpenChange={setEditing}
-                onPersonCreated={onPersonCreated}
-                onSaved={onUpdated}
-            />
+            {isDraft ? (
+                <DraftProcessDialog
+                    expense={expense}
+                    eventId={eventId}
+                    open={processing}
+                    people={personOptions}
+                    peopleLoaded={peopleLoaded}
+                    onOpenChange={setProcessing}
+                    onPersonCreated={onPersonCreated}
+                    onSaved={onUpdated}
+                />
+            ) : (
+                <ExpenseEditDialog
+                    expense={expense}
+                    eventId={eventId}
+                    open={editing}
+                    people={personOptions}
+                    peopleLoaded={peopleLoaded}
+                    onOpenChange={setEditing}
+                    onPersonCreated={onPersonCreated}
+                    onSaved={onUpdated}
+                />
+            )}
         </div>
     );
 }

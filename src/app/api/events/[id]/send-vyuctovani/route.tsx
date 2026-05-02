@@ -235,8 +235,8 @@ export async function POST(
         <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.payeeName)}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${row.bankAccountNumber || row.bankCode ? `${escapeHtml(row.bankAccountNumber)}/${escapeHtml(row.bankCode)}` : "Nedoplněno"}</td>
         <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap">${formatAmount(row.amount)} Kč</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.purposeText)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${escapeHtml(row.purposeCategory)}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.purposeText ?? "")}</td>
+        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${escapeHtml(row.purposeCategory ?? "")}</td>
       </tr>
     `).join("");
 

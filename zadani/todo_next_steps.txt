@@ -1,0 +1,2 @@
+- přidat do nákladů akce rovnou ten form dopravy a obecných nákladů
+- odeslat náklady na mail
