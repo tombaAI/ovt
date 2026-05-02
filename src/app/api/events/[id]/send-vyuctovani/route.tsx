@@ -288,6 +288,10 @@ export async function POST(
       </tr>
     `).join("");
 
+    const senderDisplay = session.user.name?.trim()
+      ? `${session.user.name.trim()} (${session.user.email})`
+      : session.user.email;
+
     const html = `<!DOCTYPE html>
 <html lang="cs">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -298,7 +302,7 @@ export async function POST(
 
   <tr>
     <td style="background:#327600;padding:24px 32px;">
-      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">OVT Bohemians</p>
+      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Oddíl Vodní Turistiky TJ Bohemians</p>
       <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Vyúčtování akce</p>
     </td>
   </tr>
@@ -308,7 +312,7 @@ export async function POST(
       <p style="margin:0 0 16px;font-size:15px;color:#374151;">Dobrý den,</p>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
         v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>,
-        všechny uložené doklady nákladů a CSV tabulku komu co odeslat za peníze.
+        všechny uložené doklady nákladů a CSV tabulku s přehledem plateb k proplacení.
       </p>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;">
@@ -322,6 +326,10 @@ export async function POST(
       </table>
 
       ${warningHtml}
+
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        Poprosím o proplacení následujících nákladů z podúčtu oddílu 207 (oddíl vodní turistiky):
+      </p>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 16px;">
         <thead>
@@ -343,16 +351,16 @@ export async function POST(
         </tfoot>
       </table>
 
-      <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;">S pozdravem,<br><strong>OVT Bohemians</strong></p>
-      <p style="margin:0;font-size:12px;color:#9ca3af;">Odesláno z OVT správy uživatelem ${escapeHtml(session.user.email)}.</p>
+      <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;">Děkuji,<br/>hezký den,<br/>Tomáš Bauer<br/>Hospodář oddílu OVT</p>
+      <p style="margin:0;font-size:12px;color:#9ca3af;">Vyúčtování odeslal v systému správa OVT uživatel ${escapeHtml(senderDisplay)}.</p>
     </td>
   </tr>
 
   <tr>
     <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
-        OVT Bohemians — vodní turistika Praha<br>
-        Tento email byl odeslán ze systému správy OVT.
+        Oddíl Vodní Turistiky TJ Bohemians Praha<br>
+        Tento email byl odeslán ze systému správa OVT.
       </p>
     </td>
   </tr>
