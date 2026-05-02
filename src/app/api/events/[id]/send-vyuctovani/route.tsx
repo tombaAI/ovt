@@ -15,7 +15,6 @@ export const dynamic = "force-dynamic";
 
 const DEFAULT_ODDIL = "207 Oddíl vodní turistiky";
 const DEFAULT_SCHVALIL = "Tomáš Bauer";
-const SETTLEMENT_RECIPIENT = "tomas.bauer@centrum.cz";
 
 type EmailAttachment = {
   filename: string;
@@ -106,6 +105,7 @@ export async function POST(
         id: events.id,
         name: events.name,
         leaderName: members.fullName,
+        leaderEmail: members.email,
       })
       .from(events)
       .leftJoin(members, eq(events.leaderId, members.id))
@@ -116,9 +116,19 @@ export async function POST(
       return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
     }
 
-    const expenses = await db
+    const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
+    const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
+    if (recipients.length === 0) {
+      return NextResponse.json(
+        { error: "Vedoucí akce nemá e-mail a ENV EMAIL_HOSPODAR_ODDILU_TJB není nastavený. Nelze odeslat." },
+        { status: 503 },
+      );
+    }
+
+    const allExpenses = await db
       .select({
         id: eventExpenses.id,
+        status: eventExpenses.status,
         amount: eventExpenses.amount,
         purposeText: eventExpenses.purposeText,
         purposeCategory: eventExpenses.purposeCategory,
@@ -136,14 +146,33 @@ export async function POST(
       .where(eq(eventExpenses.eventId, eventId))
       .orderBy(asc(eventExpenses.createdAt));
 
-    if (expenses.length === 0) {
+    if (allExpenses.length === 0) {
       return NextResponse.json({ error: "Akce nemá žádné náklady k vyúčtování." }, { status: 400 });
     }
 
-    const missingExpensePayees = expenses
-      .filter((expense) => !expense.reimbursementPersonId || !expense.reimbursementPayeeName)
-      .map((expense) => ({ id: expense.id, purposeText: expense.purposeText }));
+    // Hard block: unconfirmed or draft expenses
+    const unconfirmedExpenses = allExpenses.filter((e) => e.status !== "final");
+    if (unconfirmedExpenses.length > 0) {
+      return NextResponse.json({
+        error: `Nelze odeslat — ${unconfirmedExpenses.length} doklad${unconfirmedExpenses.length === 1 ? "" : "ů"} není potvrzeno.`,
+        unconfirmedExpenses: unconfirmedExpenses.map((e) => ({ id: e.id, purposeText: e.purposeText })),
+      }, { status: 400 });
+    }
 
+    const expenses = allExpenses; // all final at this point
+
+    // Hard block: missing required fields on final expenses
+    const missingRequiredFields = expenses.filter(
+      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || !e.reimbursementPersonId,
+    );
+    if (missingRequiredFields.length > 0) {
+      return NextResponse.json({
+        error: `Nelze odeslat — ${missingRequiredFields.length} doklad${missingRequiredFields.length === 1 ? "" : "ů"} má nevyplněná povinná pole (částka, účel nebo příjemce).`,
+        missingRequiredFields: missingRequiredFields.map((e) => ({ id: e.id, purposeText: e.purposeText })),
+      }, { status: 400 });
+    }
+
+    // Hard block: missing bank accounts
     const missingBankAccounts = new Map<number, { id: number; name: string }>();
     for (const expense of expenses) {
       if (!expense.reimbursementPersonId || !expense.reimbursementPayeeName) continue;
@@ -154,6 +183,15 @@ export async function POST(
         });
       }
     }
+    if (missingBankAccounts.size > 0) {
+      return NextResponse.json({
+        error: `Nelze odeslat — ${missingBankAccounts.size} příjemce${missingBankAccounts.size === 1 ? "" : "ů"} nemá vyplněný bankovní účet.`,
+        missingBankAccounts: [...missingBankAccounts.values()],
+      }, { status: 400 });
+    }
+
+    // All blocking conditions passed — no warnings needed (payees + bank accounts guaranteed above)
+    const missingExpensePayees: Array<{ id: number; purposeText: string | null }> = [];
 
     const naklady: VyuctovaniNaklady = {};
     for (const expense of expenses) {
@@ -276,7 +314,7 @@ export async function POST(
     const resend = getResendClient();
     const { data, error } = await resend.emails.send({
       from: settings.from,
-      to: [SETTLEMENT_RECIPIENT],
+      to: recipients,
       subject: `OVT vyúčtování akce: ${event.name}`,
       html,
       text: `Vyúčtování akce: ${event.name}${warningText}\n\nKomu co odeslat:\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
@@ -291,7 +329,7 @@ export async function POST(
     return NextResponse.json({
       success: true,
       emailId: data?.id ?? null,
-      recipient: SETTLEMENT_RECIPIENT,
+      recipients,
       attachmentCount: attachments.length,
       warnings: warningItems,
     });

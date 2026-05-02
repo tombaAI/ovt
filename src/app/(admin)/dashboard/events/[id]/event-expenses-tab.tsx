@@ -10,7 +10,7 @@ import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
 import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
-import { EventExpenseActions } from "./event-expense-actions";
+import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
 
 const CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
@@ -980,6 +980,100 @@ function DraftProcessDialog({
     );
 }
 
+// ── Non-member person edit dialog ─────────────────────────────────────────────
+
+function PersonEditDialog({
+    personId,
+    initialFullName,
+    initialBankAccountNumber,
+    initialBankCode,
+    open,
+    onOpenChange,
+    onSaved,
+}: {
+    personId: number;
+    initialFullName: string;
+    initialBankAccountNumber: string | null;
+    initialBankCode: string | null;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSaved: () => void | Promise<void>;
+}) {
+    const [fullName, setFullName] = useState(initialFullName);
+    const [bankAccountNumber, setBankAccountNumber] = useState(initialBankAccountNumber ?? "");
+    const [bankCode, setBankCode] = useState(initialBankCode ?? "");
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setFullName(initialFullName);
+        setBankAccountNumber(initialBankAccountNumber ?? "");
+        setBankCode(initialBankCode ?? "");
+        setError(null);
+    }, [open, initialFullName, initialBankAccountNumber, initialBankCode]);
+
+    async function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+        e.preventDefault();
+        if (!fullName.trim()) { setError("Jméno je povinné"); return; }
+        setSaving(true); setError(null);
+        try {
+            const res = await fetch(`/api/people/${personId}`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ fullName: fullName.trim(), bankAccountNumber: bankAccountNumber.trim() || null, bankCode: bankCode.trim() || null }),
+            });
+            const data = await res.json() as { error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Chyba uložení");
+            await onSaved();
+            onOpenChange(false);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Chyba uložení");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle className="flex items-center gap-2 text-base">
+                        <Pencil size={16} className="text-gray-500" />
+                        Upravit nečlena
+                    </DialogTitle>
+                </DialogHeader>
+                <form onSubmit={handleSubmit} className="space-y-3">
+                    <div className="space-y-1.5">
+                        <label className="text-xs text-gray-500">Jméno *</label>
+                        <input type="text" value={fullName} onChange={e => setFullName(e.target.value)}
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Číslo účtu</label>
+                            <input type="text" value={bankAccountNumber} onChange={e => setBankAccountNumber(e.target.value)}
+                                placeholder="123456789"
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                        </div>
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Kód banky</label>
+                            <input type="text" value={bankCode} onChange={e => setBankCode(e.target.value)}
+                                placeholder="0800"
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
+                        </div>
+                    </div>
+                    {error && <p className="text-sm text-red-500">{error}</p>}
+                    <div className="flex justify-end gap-2">
+                        <Button type="button" variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>Zrušit</Button>
+                        <Button type="submit" disabled={saving}>{saving ? "Ukládám…" : "Uložit"}</Button>
+                    </div>
+                </form>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 // ── Expense row ───────────────────────────────────────────────────────────────
 
 function ExpenseEditDialog({
@@ -1147,10 +1241,12 @@ function ExpenseItem({
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
     const [processing, setProcessing] = useState(false);
+    const [editingPerson, setEditingPerson] = useState(false);
 
     const isDraft = expense.status === "draft";
     const isUnconfirmed = expense.status === "unconfirmed";
     const needsAction = isDraft || isUnconfirmed;
+    const isExternalPayee = expense.reimbursementPayeeKind === "external" && expense.reimbursementPersonId !== null;
     const blobProxyUrl = expense.fileUrl
         ? `/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`
         : null;
@@ -1222,13 +1318,22 @@ function ExpenseItem({
                     <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
                 )}
                 {!needsAction && (
-                    <p className={`text-xs mt-0.5 ${expense.reimbursementPayeeName ? "text-gray-500" : "text-amber-600"}`}>
-                        Proplatit: {expense.reimbursementPayeeName ?? "zatím neurčeno"}
-                        {expense.reimbursementPayeeKind === "external" && <span className="text-gray-400"> · nečlen</span>}
-                        {expense.reimbursementPayeeName && (!expense.reimbursementPayeeBankAccountNumber || !expense.reimbursementPayeeBankCode) && (
-                            <span className="text-amber-600"> · chybí účet</span>
+                    <div className={`flex items-center gap-1 flex-wrap text-xs mt-0.5 ${expense.reimbursementPayeeName ? "text-gray-500" : "text-amber-600"}`}>
+                        <span>
+                            Proplatit: {expense.reimbursementPayeeName ?? "zatím neurčeno"}
+                            {expense.reimbursementPayeeKind === "external" && <span className="text-gray-400"> · nečlen</span>}
+                            {expense.reimbursementPayeeName && (!expense.reimbursementPayeeBankAccountNumber || !expense.reimbursementPayeeBankCode) && (
+                                <span className="text-amber-600"> · chybí účet</span>
+                            )}
+                        </span>
+                        {isExternalPayee && (
+                            <button onClick={() => setEditingPerson(true)}
+                                className="text-gray-400 hover:text-gray-700 transition-colors"
+                                title="Upravit nečlena">
+                                <Pencil size={11} />
+                            </button>
                         )}
-                    </p>
+                    </div>
                 )}
                 {expense.fileUrl && !isImage(expense.fileMime) && (
                     <a href={blobProxyUrl!}
@@ -1280,6 +1385,17 @@ function ExpenseItem({
                 onPersonCreated={onPersonCreated}
                 onSaved={onUpdated}
             />
+            {isExternalPayee && (
+                <PersonEditDialog
+                    personId={expense.reimbursementPersonId!}
+                    initialFullName={expense.reimbursementPayeeName ?? ""}
+                    initialBankAccountNumber={expense.reimbursementPayeeBankAccountNumber}
+                    initialBankCode={expense.reimbursementPayeeBankCode}
+                    open={editingPerson}
+                    onOpenChange={setEditingPerson}
+                    onSaved={onUpdated}
+                />
+            )}
         </div>
     );
 }
@@ -1704,6 +1820,14 @@ export function EventExpensesTab({
 
             <EventExpenseActions
                 eventId={eventId}
+                expenses={expenses ?? []}
+            />
+
+            <AutoCropPoc />
+            <AutoRotatePoc />
+
+            <EventExpenseDocForms
+                eventId={eventId}
                 eventName={eventName}
                 leaderName={leaderName}
                 leaderCskNumber={leaderCskNumber}
@@ -1712,9 +1836,6 @@ export function EventExpensesTab({
                 onPersonCreated={handlePersonCreated}
                 onExpenseCreated={load}
             />
-
-            <AutoCropPoc />
-            <AutoRotatePoc />
         </div>
     );
 }

@@ -659,21 +659,54 @@ function HonorExpenseDialog({
   );
 }
 
+type ExpenseRow = {
+  status: "draft" | "unconfirmed" | "final";
+  amount: string | null;
+  purposeText: string | null;
+  reimbursementPersonId: number | null;
+  reimbursementPayeeBankAccountNumber: string | null;
+  reimbursementPayeeBankCode: string | null;
+};
+
+function computeBlockingIssues(expenses: ExpenseRow[]): string[] {
+  const issues: string[] = [];
+  const unconfirmed = expenses.filter((e) => e.status !== "final").length;
+  if (unconfirmed > 0) {
+    issues.push(`${unconfirmed} doklad${unconfirmed === 1 ? "" : "ů"} není potvrzeno`);
+  }
+  const missingFields = expenses.filter(
+    (e) => e.status === "final" && (!e.amount || Number(e.amount) <= 0 || !e.purposeText || !e.reimbursementPersonId),
+  ).length;
+  if (missingFields > 0) {
+    issues.push(`${missingFields} potvrzený doklad${missingFields === 1 ? "" : "ů"} má nevyplněná povinná pole`);
+  }
+  const seen = new Set<number>();
+  let missingBank = 0;
+  for (const e of expenses) {
+    if (e.status === "final" && e.reimbursementPersonId && !seen.has(e.reimbursementPersonId)) {
+      seen.add(e.reimbursementPersonId);
+      if (!e.reimbursementPayeeBankAccountNumber || !e.reimbursementPayeeBankCode) missingBank++;
+    }
+  }
+  if (missingBank > 0) {
+    issues.push(`${missingBank} příjemce${missingBank === 1 ? "" : "ů"} nemá bankovní účet`);
+  }
+  return issues;
+}
+
 export function EventExpenseActions({
   eventId,
-  eventName,
-  leaderName,
-  leaderCskNumber,
-  personOptions,
-  peopleLoaded,
-  onPersonCreated,
-  onExpenseCreated,
-}: ExpenseActionPanelProps) {
-  const [travelOpen, setTravelOpen] = useState(false);
-  const [honorOpen, setHonorOpen] = useState(false);
+  expenses,
+}: {
+  eventId: number;
+  expenses: ExpenseRow[];
+}) {
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
+
+  const blockingIssues = computeBlockingIssues(expenses);
+  const canSend = expenses.length > 0 && blockingIssues.length === 0;
 
   async function handleSendSettlement() {
     setSending(true);
@@ -685,25 +718,17 @@ export function EventExpenseActions({
       const payload = await response.json() as {
         success?: true;
         error?: string;
-        recipient?: string;
+        recipients?: string[];
         attachmentCount?: number;
         warnings?: string[];
-        missingExpensePayees?: Array<{ id: number; purposeText: string }>;
-        missingBankAccounts?: Array<{ id: number; name: string }>;
       };
 
       if (!response.ok) {
-        const missingExpenseText = payload.missingExpensePayees?.length
-          ? `\nNáklady bez příjemce: ${payload.missingExpensePayees.map((item) => item.purposeText).join(", ")}.`
-          : "";
-        const missingAccountText = payload.missingBankAccounts?.length
-          ? `\nČlenové bez účtu: ${payload.missingBankAccounts.map((item) => item.name).join(", ")}.`
-          : "";
-        throw new Error(`${payload.error ?? "Odeslání selhalo."}${missingExpenseText}${missingAccountText}`);
+        throw new Error(payload.error ?? "Odeslání selhalo.");
       }
 
-      const warningText = payload.warnings?.length ? ` Upozornění: ${payload.warnings.join("; ")}.` : "";
-      setSendMessage(`Vyúčtování bylo odesláno na ${payload.recipient} (${payload.attachmentCount ?? 0} příloh).${warningText}`);
+      const recipientList = payload.recipients?.join(", ") ?? "";
+      setSendMessage(`Vyúčtování odesláno na: ${recipientList} (${payload.attachmentCount ?? 0} příloh).`);
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Odeslání selhalo.");
     } finally {
@@ -712,23 +737,73 @@ export function EventExpenseActions({
   }
 
   return (
+    <div className="rounded-xl border bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-4 space-y-3">
+      <div>
+        <h3 className="text-sm font-semibold text-gray-900">Vyúčtování akce</h3>
+        <p className="mt-1 text-xs text-gray-500">
+          Odeslání pošle vedoucímu akce a hospodáři TJ Bohemians všechny doklady a CSV k proplacení.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap gap-2">
+        <Button asChild size="sm" variant="outline">
+          <a href={`/api/events/${eventId}/vyuctovani`}>
+            <CircleDollarSign className="size-4" />
+            Vyúčtování oddílu (PDF)
+          </a>
+        </Button>
+
+        <Button size="sm" onClick={handleSendSettlement} disabled={sending || !canSend}
+          title={blockingIssues.length > 0 ? blockingIssues.join("; ") : undefined}>
+          <Send className="size-4" />
+          {sending ? "Odesílám…" : "Odeslat vyúčtování"}
+        </Button>
+      </div>
+
+      {blockingIssues.length > 0 && !sendMessage && (
+        <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 space-y-0.5">
+          <p className="text-xs font-medium text-amber-700">Před odesláním je třeba:</p>
+          <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
+            {blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}
+          </ul>
+        </div>
+      )}
+
+      {sendMessage && <p className="text-xs text-green-700">{sendMessage}</p>}
+      {sendError && <p className="whitespace-pre-line text-xs text-red-600">{sendError}</p>}
+    </div>
+  );
+}
+
+export function EventExpenseDocForms({
+  eventId,
+  eventName,
+  leaderName,
+  leaderCskNumber,
+  personOptions,
+  peopleLoaded,
+  onPersonCreated,
+  onExpenseCreated,
+}: ExpenseActionPanelProps) {
+  const [travelOpen, setTravelOpen] = useState(false);
+  const [honorOpen, setHonorOpen] = useState(false);
+
+  return (
     <>
-      <div className="rounded-xl border bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-4 space-y-3">
+      <div className="rounded-xl border border-dashed border-gray-300 bg-gray-50/60 p-4 space-y-3">
         <div>
-          <h3 className="text-sm font-semibold text-gray-900">Formuláře k nákladům akce</h3>
-          <p className="mt-1 text-xs text-gray-500">
-            Vyúčtování oddílu se stáhne rovnou. Cestovní příkaz a čestné prohlášení založí samostatný náklad a uloží PDF mezi doklady akce.
+          <div className="flex items-center gap-2">
+            <h3 className="text-sm font-semibold text-gray-700">Formuláře — generování PDF</h3>
+            <span className="text-[10px] font-semibold uppercase tracking-wide text-gray-500 bg-gray-200 border border-gray-300 rounded px-1.5 py-px">
+              Experimentální
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-gray-400">
+            Cestovní příkaz a čestné prohlášení se uloží jako doklad akce. Funkčnost se průběžně ladí.
           </p>
         </div>
 
         <div className="flex flex-wrap gap-2">
-          <Button asChild size="sm" variant="outline">
-            <a href={`/api/events/${eventId}/vyuctovani`}>
-              <CircleDollarSign className="size-4" />
-              Vyúčtování oddílu
-            </a>
-          </Button>
-
           <Button size="sm" variant="outline" onClick={() => setTravelOpen(true)}>
             <BusFront className="size-4" />
             Náklady na dopravu
@@ -738,19 +813,7 @@ export function EventExpenseActions({
             <FileCheck2 className="size-4" />
             Čestné prohlášení o nákladech
           </Button>
-
-          <Button size="sm" onClick={handleSendSettlement} disabled={sending}>
-            <Send className="size-4" />
-            {sending ? "Odesílám…" : "Odeslat vyúčtování"}
-          </Button>
         </div>
-
-        {sendMessage && <p className="text-xs text-green-700">{sendMessage}</p>}
-        {sendError && (
-          <p className="whitespace-pre-line text-xs text-red-600">
-            {sendError}
-          </p>
-        )}
       </div>
 
       <TravelExpenseDialog
