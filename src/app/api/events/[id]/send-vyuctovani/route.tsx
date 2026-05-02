@@ -266,45 +266,102 @@ export async function POST(
       ...[...missingBankAccounts.values()].map((item) => `Příjemce bez účtu: ${item.name}`),
     ];
     const warningHtml = warningItems.length > 0
-      ? `<div style="margin:12px 0;padding:10px 12px;background:#fffbeb;border:1px solid #fcd34d;color:#92400e;font-size:13px"><strong>Upozornění:</strong><ul style="margin:6px 0 0 18px;padding:0">${warningItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul></div>`
+      ? `
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;">
+        <tr>
+          <td style="padding:12px 14px;color:#92400e;font-size:13px;line-height:1.55;">
+            <p style="margin:0 0 6px;font-weight:700;">Upozornění</p>
+            <ul style="margin:0 0 0 18px;padding:0;">
+              ${warningItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
+            </ul>
+          </td>
+        </tr>
+      </table>`
       : "";
-    const payoutTableRows = payoutRows.map((row) => `
+    const payoutTableRows = payoutRows.map((row, index) => `
       <tr>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.payeeName)}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${row.bankAccountNumber || row.bankCode ? `${escapeHtml(row.bankAccountNumber)}/${escapeHtml(row.bankCode)}` : "Nedoplněno"}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;text-align:right;white-space:nowrap">${formatAmount(row.amount)} Kč</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb">${escapeHtml(row.purposeText ?? "")}</td>
-        <td style="padding:6px 8px;border-bottom:1px solid #e5e7eb;font-family:monospace">${escapeHtml(row.purposeCategory ?? "")}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};">${escapeHtml(row.payeeName)}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};font-family:monospace">${row.bankAccountNumber || row.bankCode ? `${escapeHtml(row.bankAccountNumber)}/${escapeHtml(row.bankCode)}` : "Nedoplněno"}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};text-align:right;white-space:nowrap">${formatAmount(row.amount)} Kč</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};">${escapeHtml(row.purposeText ?? "")}</td>
+        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};font-family:monospace">${escapeHtml(row.purposeCategory ?? "")}</td>
       </tr>
     `).join("");
 
-    const html = `
-      <div style="font-family:Segoe UI, Arial, sans-serif; line-height:1.5; color:#111827">
-        <p>Dobrý den,</p>
-        <p>v příloze posílám vyúčtování akce <strong>${escapeHtml(event.name)}</strong>, všechny uložené doklady nákladů a CSV tabulku komu co odeslat za peníze.</p>
-        ${warningHtml}
-        <table style="border-collapse:collapse; width:100%; max-width:900px; font-size:13px">
-          <thead>
-            <tr style="background:#f3f4f6">
-              <th style="padding:6px 8px;text-align:left">Člen</th>
-              <th style="padding:6px 8px;text-align:left">Účet</th>
-              <th style="padding:6px 8px;text-align:right">Částka</th>
-              <th style="padding:6px 8px;text-align:left">Účel</th>
-              <th style="padding:6px 8px;text-align:left">Kód</th>
-            </tr>
-          </thead>
-          <tbody>${payoutTableRows}</tbody>
-          <tfoot>
-            <tr>
-              <td colspan="2" style="padding:8px;font-weight:600;text-align:right">Celkem</td>
-              <td style="padding:8px;font-weight:600;text-align:right;white-space:nowrap">${formatAmount(total)} Kč</td>
-              <td colspan="2"></td>
-            </tr>
-          </tfoot>
-        </table>
-        <p style="color:#6b7280;font-size:12px;margin-top:16px">Odesláno z OVT správy uživatelem ${escapeHtml(session.user.email)}.</p>
-      </div>
-    `;
+    const html = `<!DOCTYPE html>
+<html lang="cs">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
+<body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
+<tr><td align="center">
+<table width="760" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:760px;width:100%;">
+
+  <tr>
+    <td style="background:#327600;padding:24px 32px;">
+      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">OVT Bohemians</p>
+      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Vyúčtování akce</p>
+    </td>
+  </tr>
+
+  <tr>
+    <td style="padding:28px 32px 10px;">
+      <p style="margin:0 0 16px;font-size:15px;color:#374151;">Dobrý den,</p>
+      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
+        v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>,
+        všechny uložené doklady nákladů a CSV tabulku komu co odeslat za peníze.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;">
+        <tr>
+          <td style="padding:14px 16px;font-size:13px;color:#374151;line-height:1.55;">
+            <p style="margin:0 0 6px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.04em;font-size:12px;">Přehled zásilky</p>
+            <p style="margin:0;">Akce: <strong>${escapeHtml(event.name)}</strong></p>
+            <p style="margin:2px 0 0;">Počet příloh: <strong>${attachments.length}</strong></p>
+          </td>
+        </tr>
+      </table>
+
+      ${warningHtml}
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 16px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Příjemce</th>
+            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účet</th>
+            <th style="padding:8px 10px;text-align:right;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
+            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účel</th>
+            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Kód</th>
+          </tr>
+        </thead>
+        <tbody>${payoutTableRows}</tbody>
+        <tfoot>
+          <tr style="background:#f9fafb;">
+            <td colspan="2" style="padding:10px;font-weight:700;text-align:right;color:#111827;">Celkem</td>
+            <td style="padding:10px;font-weight:700;text-align:right;white-space:nowrap;color:#327600;">${formatAmount(total)} Kč</td>
+            <td colspan="2"></td>
+          </tr>
+        </tfoot>
+      </table>
+
+      <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;">S pozdravem,<br><strong>OVT Bohemians</strong></p>
+      <p style="margin:0;font-size:12px;color:#9ca3af;">Odesláno z OVT správy uživatelem ${escapeHtml(session.user.email)}.</p>
+    </td>
+  </tr>
+
+  <tr>
+    <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
+      <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
+        OVT Bohemians — vodní turistika Praha<br>
+        Tento email byl odeslán ze systému správy OVT.
+      </p>
+    </td>
+  </tr>
+
+</table>
+</td></tr>
+</table>
+</body>
+</html>`;
 
     const textRows = payoutRows.map((row) => (
       `${row.payeeName}; ${row.bankAccountNumber || row.bankCode ? `${row.bankAccountNumber}/${row.bankCode}` : "Nedoplněno"}; ${formatAmount(row.amount)} Kč; ${row.purposeText}; ${row.purposeCategory}`
