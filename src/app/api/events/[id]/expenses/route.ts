@@ -108,16 +108,16 @@ export async function POST(
         }
 
         const formData = await request.formData();
-        const statusRaw       = String(formData.get("status") ?? "final");
-        const status          = (["draft", "unconfirmed", "final"] as const).includes(statusRaw as "draft" | "unconfirmed" | "final")
+        const statusRaw = String(formData.get("status") ?? "final");
+        const status = (["draft", "unconfirmed", "final"] as const).includes(statusRaw as "draft" | "unconfirmed" | "final")
             ? statusRaw as "draft" | "unconfirmed" | "final"
             : "final";
-        const amountStr       = String(formData.get("amount") ?? "").replace(",", ".");
-        const purposeText     = String(formData.get("purposeText") ?? "").trim();
+        const amountStr = String(formData.get("amount") ?? "").replace(",", ".");
+        const purposeText = String(formData.get("purposeText") ?? "").trim();
         const purposeCategory = String(formData.get("purposeCategory") ?? "");
         const reimbursementPersonIdRaw = String(formData.get("reimbursementPersonId") ?? "").trim();
         const reimbursementMemberIdRaw = String(formData.get("reimbursementMemberId") ?? "").trim();
-        const file            = formData.get("file") as File | null;
+        const file = formData.get("file") as File | null;
 
         let amount: number | null = null;
         if (status === "final") {

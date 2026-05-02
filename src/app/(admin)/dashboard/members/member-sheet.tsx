@@ -44,7 +44,7 @@ function todayIso() {
 
 // ── Audit history ────────────────────────────────────────────────────────────
 function AuditHistory({ memberId }: { memberId: number }) {
-    const [log, setLog]         = useState<AuditEntry[]>([]);
+    const [log, setLog] = useState<AuditEntry[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
@@ -74,16 +74,16 @@ function AuditHistory({ memberId }: { memberId: number }) {
                     {Object.entries(entry.changes)
                         .filter(([field]) => field !== "source")
                         .map(([field, diff]) => (
-                        <div key={field} className="flex gap-1 flex-wrap">
-                            <span className="text-gray-500">{FIELD_LABELS[field] ?? field}:</span>
-                            {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
-                            {diff.old !== null && diff.new !== null && <span className="text-gray-400">→</span>}
-                            {diff.new !== null
-                                ? <span className="text-green-600">{diff.new}</span>
-                                : <span className="text-gray-400">(odstraněno)</span>
-                            }
-                        </div>
-                    ))}
+                            <div key={field} className="flex gap-1 flex-wrap">
+                                <span className="text-gray-500">{FIELD_LABELS[field] ?? field}:</span>
+                                {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
+                                {diff.old !== null && diff.new !== null && <span className="text-gray-400">→</span>}
+                                {diff.new !== null
+                                    ? <span className="text-green-600">{diff.new}</span>
+                                    : <span className="text-gray-400">(odstraněno)</span>
+                                }
+                            </div>
+                        ))}
                 </div>
             ))}
         </div>
@@ -92,8 +92,8 @@ function AuditHistory({ memberId }: { memberId: number }) {
 
 // ── TJ diffs section ─────────────────────────────────────────────────────────
 function TjDiffsSection({ memberId, onApplied }: { memberId: number; onApplied: () => void }) {
-    const [diffs, setDiffs]     = useState<TjDiff[] | null>(null);
-    const [done, setDone]       = useState<Set<string>>(new Set());
+    const [diffs, setDiffs] = useState<TjDiff[] | null>(null);
+    const [done, setDone] = useState<Set<string>>(new Set());
     const [pending, startTrans] = useTransition();
 
     useEffect(() => {
@@ -158,11 +158,11 @@ function DiscountDialog({
     currentDiscount: number | null; currentNote: string | null;
     currentValidUntil: number | null; onDone: () => void;
 }) {
-    const [amount, setAmount]     = useState(currentDiscount ? Math.abs(currentDiscount) : 0);
-    const [note, setNote]         = useState(currentNote ?? "");
-    const [validUntil, setValid]  = useState<number>(currentValidUntil ?? selectedYear);
-    const [remove, setRemove]     = useState(false);
-    const [error, setError]       = useState<string | null>(null);
+    const [amount, setAmount] = useState(currentDiscount ? Math.abs(currentDiscount) : 0);
+    const [note, setNote] = useState(currentNote ?? "");
+    const [validUntil, setValid] = useState<number>(currentValidUntil ?? selectedYear);
+    const [remove, setRemove] = useState(false);
+    const [error, setError] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
 
     useEffect(() => {
@@ -255,8 +255,8 @@ function TerminateDialog({
     open: boolean; onOpenChange: (v: boolean) => void;
     member: MemberWithFlags; onDone: () => void;
 }) {
-    const [date, setDate]   = useState(todayIso);
-    const [note, setNote]   = useState("");
+    const [date, setDate] = useState(todayIso);
+    const [note, setNote] = useState("");
     const [error, setError] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
 
@@ -316,7 +316,7 @@ function TodoSection({ currentNote, onSave }: {
     currentNote: string | null;
     onSave: (note: string | null) => Promise<void>;
 }) {
-    const [text, setText]     = useState(currentNote ?? "");
+    const [text, setText] = useState(currentNote ?? "");
     const [saving, setSaving] = useState(false);
 
     useEffect(() => { setText(currentNote ?? ""); }, [currentNote]);
@@ -401,7 +401,7 @@ function ContributionHistory({ memberId }: { memberId: number }) {
                                         <td className="py-1.5 pr-3 text-right font-mono text-xs text-gray-600">{fmt(r.paidTotal)}</td>
                                         <td className="py-1.5 text-right text-xs font-medium">
                                             {balance === null && <span className="text-gray-400">—</span>}
-                                            {balance === 0   && <span className="text-green-600">OK</span>}
+                                            {balance === 0 && <span className="text-green-600">OK</span>}
                                             {balance !== null && balance > 0 && (
                                                 <span className="text-blue-600">+{balance.toLocaleString("cs-CZ")} Kč</span>
                                             )}
@@ -467,7 +467,7 @@ interface Props {
 }
 
 export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
-    const [showHistory, setShowHistory]               = useState(false);
+    const [showHistory, setShowHistory] = useState(false);
     const [showContribHistory, setShowContribHistory] = useState(false);
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
     const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
@@ -476,9 +476,9 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
     const [reviewedPending, startReviewedTransition] = useTransition();
     const [toggleError, setToggleError] = useState<string | null>(null);
     const [optCommittee, setOptCommittee] = useState<boolean | null>(null);
-    const [optTom, setOptTom]             = useState<boolean | null>(null);
+    const [optTom, setOptTom] = useState<boolean | null>(null);
     const [activeField, setActiveField] = useState<string | null>(null);
-    const [tjDiffs, setTjDiffs]         = useState<Record<string, string | null>>({});
+    const [tjDiffs, setTjDiffs] = useState<Record<string, string | null>>({});
 
     // Reset optimistického stavu při přepnutí na jiného člena
     useEffect(() => { setOptCommittee(null); setOptTom(null); }, [member?.id]);
@@ -570,20 +570,20 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
 
                             {/* Inline edit fields */}
                             <div className="rounded-xl border px-4 mb-4">
-                                <InlineField label="Jméno"     value={member.firstName}                       fieldId="firstName"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
-                                <InlineField label="Příjmení"  value={member.lastName}                        fieldId="lastName"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")}  tjValue={tjDiffs["lastName"]}  onTjAccept={tjAcceptor("lastName")} />
-                                <InlineField label="Přezdívka"   value={member.nickname}   placeholder="(žádná)"    fieldId="nickname"   activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")}   tjValue={tjDiffs["nickname"]}    onTjAccept={tjAcceptor("nickname")} />
-                                <InlineField label="Login"       value={member.userLogin}  placeholder="(nezadáno)" fieldId="userLogin"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
-                                <InlineField label="E-mail"      value={member.email}      type="email"             fieldId="email"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")}       tjValue={tjDiffs["email"]}       onTjAccept={tjAcceptor("email")} />
-                                <InlineField label="Telefon"     value={member.phone}      type="tel"               fieldId="phone"      activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")}       tjValue={tjDiffs["phone"]}       onTjAccept={tjAcceptor("phone")} />
-                                <InlineField label="Pohlaví"     value={member.gender}     placeholder="(nezadáno)" fieldId="gender"     activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")}      tjValue={tjDiffs["gender"]}      onTjAccept={tjAcceptor("gender")} />
-                                <InlineField label="Adresa"      value={member.address}    placeholder="(nezadáno)" fieldId="address"    activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")}     tjValue={tjDiffs["address"]}     onTjAccept={tjAcceptor("address")} />
-                                <InlineField label="Číslo účtu"  value={member.bankAccountNumber} placeholder="(nezadáno)" fieldId="bankAccountNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankAccountNumber")} />
-                                <InlineField label="Kód banky"   value={member.bankCode} placeholder="(nezadáno)" fieldId="bankCode" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankCode")} />
+                                <InlineField label="Jméno" value={member.firstName} fieldId="firstName" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
+                                <InlineField label="Příjmení" value={member.lastName} fieldId="lastName" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")} tjValue={tjDiffs["lastName"]} onTjAccept={tjAcceptor("lastName")} />
+                                <InlineField label="Přezdívka" value={member.nickname} placeholder="(žádná)" fieldId="nickname" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")} tjValue={tjDiffs["nickname"]} onTjAccept={tjAcceptor("nickname")} />
+                                <InlineField label="Login" value={member.userLogin} placeholder="(nezadáno)" fieldId="userLogin" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
+                                <InlineField label="E-mail" value={member.email} type="email" fieldId="email" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} tjValue={tjDiffs["email"]} onTjAccept={tjAcceptor("email")} />
+                                <InlineField label="Telefon" value={member.phone} type="tel" fieldId="phone" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")} tjValue={tjDiffs["phone"]} onTjAccept={tjAcceptor("phone")} />
+                                <InlineField label="Pohlaví" value={member.gender} placeholder="(nezadáno)" fieldId="gender" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")} tjValue={tjDiffs["gender"]} onTjAccept={tjAcceptor("gender")} />
+                                <InlineField label="Adresa" value={member.address} placeholder="(nezadáno)" fieldId="address" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")} tjValue={tjDiffs["address"]} onTjAccept={tjAcceptor("address")} />
+                                <InlineField label="Číslo účtu" value={member.bankAccountNumber} placeholder="(nezadáno)" fieldId="bankAccountNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankAccountNumber")} />
+                                <InlineField label="Kód banky" value={member.bankCode} placeholder="(nezadáno)" fieldId="bankCode" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankCode")} />
                                 <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
-                                <InlineField label="Číslo ČSK"   value={member.cskNumber ?? null}                  fieldId="cskNumber"  activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")}   tjValue={tjDiffs["cskNumber"]}   onTjAccept={tjAcceptor("cskNumber")} />
-                                <InlineField label="Poznámka"    value={member.note}       placeholder="(žádná)"    fieldId="note"       activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
-                                <InlineField label="Člen od"     value={member.memberFrom} type="date"              fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} />
+                                <InlineField label="Číslo ČSK" value={member.cskNumber ?? null} fieldId="cskNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} tjValue={tjDiffs["cskNumber"]} onTjAccept={tjAcceptor("cskNumber")} />
+                                <InlineField label="Poznámka" value={member.note} placeholder="(žádná)" fieldId="note" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
+                                <InlineField label="Člen od" value={member.memberFrom} type="date" fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} />
                             </div>
 
                             {/* Citlivé údaje — skryté za očíčkem */}
@@ -655,7 +655,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                             {member.discountIndividual
                                                 ? <p className="text-sm font-semibold text-purple-700">
                                                     −{Math.abs(member.discountIndividual)} Kč
-                                                  </p>
+                                                </p>
                                                 : <p className="text-sm text-gray-400">Žádná</p>
                                             }
                                         </div>

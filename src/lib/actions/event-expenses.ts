@@ -8,11 +8,11 @@ import type { ExpenseCategory } from "@/lib/expense-categories";
 export type { ExpenseCategory };
 
 export type EventExpenseRow = {
-    id:              number;
-    eventId:         number;
-    status:          "draft" | "unconfirmed" | "final";
-    amount:          string | null;
-    purposeText:     string | null;
+    id: number;
+    eventId: number;
+    status: "draft" | "unconfirmed" | "final";
+    amount: string | null;
+    purposeText: string | null;
     purposeCategory: ExpenseCategory | null;
     reimbursementPersonId: number | null;
     reimbursementMemberId: number | null;
@@ -20,11 +20,11 @@ export type EventExpenseRow = {
     reimbursementPayeeKind: "member" | "external" | null;
     reimbursementPayeeBankAccountNumber: string | null;
     reimbursementPayeeBankCode: string | null;
-    fileUrl:         string | null;
-    fileName:        string | null;
-    fileMime:        string | null;
-    uploadedBy:      string;
-    createdAt:       Date;
+    fileUrl: string | null;
+    fileName: string | null;
+    fileMime: string | null;
+    uploadedBy: string;
+    createdAt: Date;
 };
 
 export async function getEventExpenses(eventId: number): Promise<EventExpenseRow[]> {

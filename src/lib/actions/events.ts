@@ -61,30 +61,30 @@ export async function getEvents(year: number): Promise<EventRow[]> {
 
     const rows = await db
         .select({
-            id:           events.id,
-            year:         events.year,
-            name:         events.name,
-            eventType:    events.eventType,
-            dateFrom:         events.dateFrom,
-            dateTo:           events.dateTo,
-            timeFrom:         events.timeFrom,
-            timeTo:           events.timeTo,
-            approxMonth:      events.approxMonth,
+            id: events.id,
+            year: events.year,
+            name: events.name,
+            eventType: events.eventType,
+            dateFrom: events.dateFrom,
+            dateTo: events.dateTo,
+            timeFrom: events.timeFrom,
+            timeTo: events.timeTo,
+            approxMonth: events.approxMonth,
             registrationFrom: events.registrationFrom,
-            registrationTo:   events.registrationTo,
-            location:         events.location,
-            leaderId:     events.leaderId,
-            leaderName:   members.fullName,
+            registrationTo: events.registrationTo,
+            location: events.location,
+            leaderId: events.leaderId,
+            leaderName: members.fullName,
             leaderCskNumber: members.cskNumber,
-            status:       events.status,
-            description:  events.description,
-            externalUrl:  events.externalUrl,
-            source:       events.source,
-            gcalEventId:  events.gcalEventId,
-            gcalSync:     events.gcalSync,
+            status: events.status,
+            description: events.description,
+            externalUrl: events.externalUrl,
+            source: events.source,
+            gcalEventId: events.gcalEventId,
+            gcalSync: events.gcalSync,
             gcalSyncedAt: events.gcalSyncedAt,
-            note:         events.note,
-            updatedAt:    events.updatedAt,
+            note: events.note,
+            updatedAt: events.updatedAt,
         })
         .from(events)
         .leftJoin(members, eq(events.leaderId, members.id))
@@ -93,12 +93,12 @@ export async function getEvents(year: number): Promise<EventRow[]> {
 
     return rows.map(r => ({
         ...r,
-        year:             Number(r.year),
-        dateFrom:         r.dateFrom         as unknown as string | null,
-        dateTo:           r.dateTo           as unknown as string | null,
+        year: Number(r.year),
+        dateFrom: r.dateFrom as unknown as string | null,
+        dateTo: r.dateTo as unknown as string | null,
         registrationFrom: r.registrationFrom as unknown as string | null,
-        registrationTo:   r.registrationTo   as unknown as string | null,
-        approxMonth:      r.approxMonth ? Number(r.approxMonth) : null,
+        registrationTo: r.registrationTo as unknown as string | null,
+        approxMonth: r.approxMonth ? Number(r.approxMonth) : null,
     }));
 }
 
@@ -117,11 +117,11 @@ export async function getMembersForAutocomplete(): Promise<MemberOption[]> {
     const db = getDb();
     return db
         .select({
-            id:        members.id,
+            id: members.id,
             firstName: members.firstName,
-            lastName:  members.lastName,
-            fullName:  members.fullName,
-            nickname:  members.nickname,
+            lastName: members.lastName,
+            fullName: members.fullName,
+            nickname: members.nickname,
             cskNumber: members.cskNumber,
             bankAccountNumber: members.bankAccountNumber,
             bankCode: members.bankCode,
@@ -134,30 +134,30 @@ export async function getEventById(id: number): Promise<EventRow | null> {
     const db = getDb();
     const rows = await db
         .select({
-            id:           events.id,
-            year:         events.year,
-            name:         events.name,
-            eventType:    events.eventType,
-            dateFrom:         events.dateFrom,
-            dateTo:           events.dateTo,
-            timeFrom:         events.timeFrom,
-            timeTo:           events.timeTo,
-            approxMonth:      events.approxMonth,
+            id: events.id,
+            year: events.year,
+            name: events.name,
+            eventType: events.eventType,
+            dateFrom: events.dateFrom,
+            dateTo: events.dateTo,
+            timeFrom: events.timeFrom,
+            timeTo: events.timeTo,
+            approxMonth: events.approxMonth,
             registrationFrom: events.registrationFrom,
-            registrationTo:   events.registrationTo,
-            location:         events.location,
-            leaderId:     events.leaderId,
-            leaderName:   members.fullName,
+            registrationTo: events.registrationTo,
+            location: events.location,
+            leaderId: events.leaderId,
+            leaderName: members.fullName,
             leaderCskNumber: members.cskNumber,
-            status:       events.status,
-            description:  events.description,
-            externalUrl:  events.externalUrl,
-            source:       events.source,
-            gcalEventId:  events.gcalEventId,
-            gcalSync:     events.gcalSync,
+            status: events.status,
+            description: events.description,
+            externalUrl: events.externalUrl,
+            source: events.source,
+            gcalEventId: events.gcalEventId,
+            gcalSync: events.gcalSync,
             gcalSyncedAt: events.gcalSyncedAt,
-            note:         events.note,
-            updatedAt:    events.updatedAt,
+            note: events.note,
+            updatedAt: events.updatedAt,
         })
         .from(events)
         .leftJoin(members, eq(events.leaderId, members.id))
@@ -168,12 +168,12 @@ export async function getEventById(id: number): Promise<EventRow | null> {
     const r = rows[0]!;
     return {
         ...r,
-        year:             Number(r.year),
-        dateFrom:         r.dateFrom         as unknown as string | null,
-        dateTo:           r.dateTo           as unknown as string | null,
+        year: Number(r.year),
+        dateFrom: r.dateFrom as unknown as string | null,
+        dateTo: r.dateTo as unknown as string | null,
         registrationFrom: r.registrationFrom as unknown as string | null,
-        registrationTo:   r.registrationTo   as unknown as string | null,
-        approxMonth:      r.approxMonth ? Number(r.approxMonth) : null,
+        registrationTo: r.registrationTo as unknown as string | null,
+        approxMonth: r.approxMonth ? Number(r.approxMonth) : null,
     };
 }
 
@@ -200,20 +200,20 @@ export async function createEvent(data: EventFormData): Promise<{ id: number }> 
     const [event] = await db
         .insert(events)
         .values({
-            year:        data.year,
-            name:        data.name,
-            eventType:   data.eventType,
-            dateFrom:    data.dateFrom ?? undefined,
-            dateTo:      data.dateTo ?? undefined,
+            year: data.year,
+            name: data.name,
+            eventType: data.eventType,
+            dateFrom: data.dateFrom ?? undefined,
+            dateTo: data.dateTo ?? undefined,
             approxMonth: data.approxMonth ?? undefined,
-            location:    data.location ?? undefined,
-            leaderId:    data.leaderId ?? undefined,
-            status:      data.status,
+            location: data.location ?? undefined,
+            leaderId: data.leaderId ?? undefined,
+            status: data.status,
             description: data.description ?? undefined,
             externalUrl: data.externalUrl ?? undefined,
-            gcalSync:    data.gcalSync,
-            note:        data.note ?? undefined,
-            createdBy:   session.user.email,
+            gcalSync: data.gcalSync,
+            note: data.note ?? undefined,
+            createdBy: session.user.email,
         })
         .returning({ id: events.id });
 
@@ -229,20 +229,20 @@ export async function updateEvent(id: number, data: EventFormData): Promise<void
     await db
         .update(events)
         .set({
-            year:        data.year,
-            name:        data.name,
-            eventType:   data.eventType,
-            dateFrom:    data.dateFrom ?? null,
-            dateTo:      data.dateTo ?? null,
+            year: data.year,
+            name: data.name,
+            eventType: data.eventType,
+            dateFrom: data.dateFrom ?? null,
+            dateTo: data.dateTo ?? null,
             approxMonth: data.approxMonth ?? null,
-            location:    data.location ?? null,
-            leaderId:    data.leaderId ?? null,
-            status:      data.status,
+            location: data.location ?? null,
+            leaderId: data.leaderId ?? null,
+            status: data.status,
             description: data.description ?? null,
             externalUrl: data.externalUrl ?? null,
-            gcalSync:    data.gcalSync,
-            note:        data.note ?? null,
-            updatedAt:   new Date(),
+            gcalSync: data.gcalSync,
+            note: data.note ?? null,
+            updatedAt: new Date(),
         })
         .where(eq(events.id, id));
 
@@ -274,20 +274,20 @@ export async function copyEventsFromYear(fromYear: number, toYear: number): Prom
     if (source.length === 0) return { count: 0 };
 
     const toInsert = source.map(e => ({
-        year:        toYear,
-        name:        e.name,
-        eventType:   e.eventType,
-        dateFrom:    null as string | null,       // nový rok = termíny zatím neznámé
-        dateTo:      null as string | null,
+        year: toYear,
+        name: e.name,
+        eventType: e.eventType,
+        dateFrom: null as string | null,       // nový rok = termíny zatím neznámé
+        dateTo: null as string | null,
         approxMonth: e.approxMonth ?? undefined,  // orientační měsíc zachováme
-        location:    e.location ?? undefined,
-        leaderId:    null as number | null,        // vedoucí se určí nově
-        status:      "planned" as const,
+        location: e.location ?? undefined,
+        leaderId: null as number | null,        // vedoucí se určí nově
+        status: "planned" as const,
         description: e.description ?? undefined,
         externalUrl: e.externalUrl ?? undefined,
-        gcalSync:    false,
-        note:        null as string | null,
-        createdBy:   session.user!.email!,
+        gcalSync: false,
+        note: null as string | null,
+        createdBy: session.user!.email!,
     }));
 
     await db.insert(events).values(toInsert);
@@ -315,13 +315,13 @@ export async function syncEventToGcal(id: number): Promise<{ gcalEventId: string
     const { upsertGcalEvent } = await import("@/lib/gcal");
 
     const gcalId = await upsertGcalEvent(event.gcalEventId, {
-        summary:     event.name,
+        summary: event.name,
         description: event.description,
-        location:    event.location,
-        dateFrom:    event.dateFrom as unknown as string,
-        dateTo:      event.dateTo   as unknown as string | null,
-        timeFrom:    event.timeFrom,
-        timeTo:      event.timeTo,
+        location: event.location,
+        dateFrom: event.dateFrom as unknown as string,
+        dateTo: event.dateTo as unknown as string | null,
+        timeFrom: event.timeFrom,
+        timeTo: event.timeTo,
         externalUrl: event.externalUrl,
     });
 
@@ -405,17 +405,17 @@ export async function importGcalEvents(
     await db.insert(events).values(
         toInsert.map(i => ({
             year,
-            name:        i.summary,
-            eventType:   "other" as const,
-            dateFrom:    i.dateFrom ?? undefined,
-            dateTo:      i.dateTo   ?? undefined,
-            location:    i.location ?? undefined,
-            status:      "planned"  as const,
-            source:      "google_calendar" as const,
+            name: i.summary,
+            eventType: "other" as const,
+            dateFrom: i.dateFrom ?? undefined,
+            dateTo: i.dateTo ?? undefined,
+            location: i.location ?? undefined,
+            status: "planned" as const,
+            source: "google_calendar" as const,
             gcalEventId: i.gcalEventId,
-            gcalSync:    true,
+            gcalSync: true,
             gcalSyncedAt: new Date(),
-            createdBy:   session.user!.email!,
+            createdBy: session.user!.email!,
         }))
     );
 
@@ -472,10 +472,10 @@ export async function updateEventField(
     if (oldVal !== newVal) {
         await db.insert(auditLog).values({
             entityType: "event",
-            entityId:   id,
-            action:     "update_field",
-            changes:    { [field]: { old: oldVal || null, new: newVal || null } },
-            changedBy:  session.user.email,
+            entityId: id,
+            action: "update_field",
+            changes: { [field]: { old: oldVal || null, new: newVal || null } },
+            changedBy: session.user.email,
         });
     }
 
@@ -521,46 +521,46 @@ export async function getEventGcalDiff(id: number): Promise<GcalDiffResult> {
 
     const fields: GcalDiffField[] = [
         {
-            field:     "name",
-            label:     "Název",
-            appValue:  event.name,
+            field: "name",
+            label: "Název",
+            appValue: event.name,
             gcalValue: gcal.summary,
-            match:     event.name === gcal.summary,
+            match: event.name === gcal.summary,
         },
         {
-            field:     "dateFrom",
-            label:     "Datum od",
-            appValue:  event.dateFrom as unknown as string | null,
+            field: "dateFrom",
+            label: "Datum od",
+            appValue: event.dateFrom as unknown as string | null,
             gcalValue: gcal.dateFrom,
-            match:     (event.dateFrom as unknown as string | null) === gcal.dateFrom,
+            match: (event.dateFrom as unknown as string | null) === gcal.dateFrom,
         },
         {
-            field:     "timeFrom",
-            label:     "Čas od",
-            appValue:  event.timeFrom,
+            field: "timeFrom",
+            label: "Čas od",
+            appValue: event.timeFrom,
             gcalValue: gcal.timeFrom,
-            match:     (event.timeFrom ?? null) === (gcal.timeFrom ?? null),
+            match: (event.timeFrom ?? null) === (gcal.timeFrom ?? null),
         },
         {
-            field:     "dateTo",
-            label:     "Datum do",
-            appValue:  event.dateTo as unknown as string | null,
+            field: "dateTo",
+            label: "Datum do",
+            appValue: event.dateTo as unknown as string | null,
             gcalValue: gcal.dateTo,
-            match:     (event.dateTo as unknown as string | null) === gcal.dateTo,
+            match: (event.dateTo as unknown as string | null) === gcal.dateTo,
         },
         {
-            field:     "timeTo",
-            label:     "Čas do",
-            appValue:  event.timeTo,
+            field: "timeTo",
+            label: "Čas do",
+            appValue: event.timeTo,
             gcalValue: gcal.timeTo,
-            match:     (event.timeTo ?? null) === (gcal.timeTo ?? null),
+            match: (event.timeTo ?? null) === (gcal.timeTo ?? null),
         },
         {
-            field:     "location",
-            label:     "Místo",
-            appValue:  event.location,
+            field: "location",
+            label: "Místo",
+            appValue: event.location,
             gcalValue: gcal.location,
-            match:     (event.location ?? null) === (gcal.location ?? null),
+            match: (event.location ?? null) === (gcal.location ?? null),
         },
         (() => {
             // GCal description = appDescription + "\n\nOdkaz: url" — stripujeme URL suffix
@@ -571,11 +571,11 @@ export async function getEventGcalDiff(id: number): Promise<GcalDiffResult> {
                 : gcalRaw;
             const appDesc = event.description?.trim() || null;
             return {
-                field:     "description",
-                label:     "Popis",
-                appValue:  appDesc,
+                field: "description",
+                label: "Popis",
+                appValue: appDesc,
                 gcalValue: gcalDesc,
-                match:     appDesc === gcalDesc,
+                match: appDesc === gcalDesc,
             };
         })(),
     ];
@@ -594,10 +594,10 @@ export async function acceptGcalField(id: number, field: string, gcalValue: stri
     const db = getDb();
     await db.insert(auditLog).values({
         entityType: "event",
-        entityId:   id,
-        action:     "accept_from_gcal",
-        changes:    { [field]: { old: null, new: gcalValue } },
-        changedBy:  session?.user?.email ?? "unknown",
+        entityId: id,
+        action: "accept_from_gcal",
+        changes: { [field]: { old: null, new: gcalValue } },
+        changedBy: session?.user?.email ?? "unknown",
     }).onConflictDoNothing();
 
     revalidatePath("/dashboard/events");

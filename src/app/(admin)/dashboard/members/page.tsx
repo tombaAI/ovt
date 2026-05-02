@@ -82,7 +82,7 @@ export default async function MembersPage({
 
     // Načíst TJ import tabulku pro výpočet hasTjDiffs
     const tjAll = await db.select().from(importMembersTjBohemians);
-    const tjByCsk  = new Map(tjAll.filter(r => r.cskNumber).map(r => [r.cskNumber!, r]));
+    const tjByCsk = new Map(tjAll.filter(r => r.cskNumber).map(r => [r.cskNumber!, r]));
     const tjByName = new Map(tjAll.map(r => [
         [r.jmeno, r.prijmeni].filter(Boolean).join(" ").trim().toLowerCase(), r
     ]));
@@ -99,53 +99,53 @@ export default async function MembersPage({
             : tjByName.get(nameLower);
         if (!tj) return false;
         const checks: Array<[SyncUpdatableField, unknown, unknown]> = [
-            ["firstName",   tj.jmeno,       m.firstName],
-            ["lastName",    tj.prijmeni,    m.lastName],
-            ["email",       tj.email,       m.email],
-            ["phone",       tj.phone,       m.phone],
-            ["address",     tj.address,     m.address],
-            ["birthDate",   tj.birthDate,   m.birthDate],
+            ["firstName", tj.jmeno, m.firstName],
+            ["lastName", tj.prijmeni, m.lastName],
+            ["email", tj.email, m.email],
+            ["phone", tj.phone, m.phone],
+            ["address", tj.address, m.address],
+            ["birthDate", tj.birthDate, m.birthDate],
             ["birthNumber", tj.birthNumber, m.birthNumber],
-            ["gender",      tj.gender,      m.gender],
-            ["nickname",    tj.nickname,    m.nickname],
-            ["cskNumber",   tj.cskNumber,   m.cskNumber],
+            ["gender", tj.gender, m.gender],
+            ["nickname", tj.nickname, m.nickname],
+            ["cskNumber", tj.cskNumber, m.cskNumber],
         ];
         return checks.some(([, tjVal, mVal]) => {
             const a = tjVal === null || tjVal === undefined ? null : String(tjVal);
-            const b = mVal  === null || mVal  === undefined ? null : String(mVal);
+            const b = mVal === null || mVal === undefined ? null : String(mVal);
             return a !== b;
         });
     }
     // Všichni členové — filtrování aktivní/neaktivní probíhá klientsky
     const result = await db
         .select({
-            id:                 members.id,
-            firstName:          members.firstName,
-            lastName:           members.lastName,
-            userLogin:          members.userLogin,
-            email:              members.email,
-            phone:              members.phone,
-            variableSymbol:     members.variableSymbol,
-            cskNumber:          members.cskNumber,
-            nickname:           members.nickname,
-            gender:             members.gender,
-            address:            members.address,
-            birthDate:          members.birthDate,
-            birthNumber:        members.birthNumber,
-            bankAccountNumber:  members.bankAccountNumber,
-            bankCode:           members.bankCode,
-            note:               members.note,
-            todoNote:           members.todoNote,
+            id: members.id,
+            firstName: members.firstName,
+            lastName: members.lastName,
+            userLogin: members.userLogin,
+            email: members.email,
+            phone: members.phone,
+            variableSymbol: members.variableSymbol,
+            cskNumber: members.cskNumber,
+            nickname: members.nickname,
+            gender: members.gender,
+            address: members.address,
+            birthDate: members.birthDate,
+            birthNumber: members.birthNumber,
+            bankAccountNumber: members.bankAccountNumber,
+            bankCode: members.bankCode,
+            note: members.note,
+            todoNote: members.todoNote,
             membershipReviewed: members.membershipReviewed,
-            memberFrom:         members.memberFrom,
-            memberTo:           members.memberTo,
-            memberToNote:       members.memberToNote,
-            isCommitteeMember:  members.isCommitteeMember,
-            isTomLeader:        members.isTomLeader,
+            memberFrom: members.memberFrom,
+            memberTo: members.memberTo,
+            memberToNote: members.memberToNote,
+            isCommitteeMember: members.isCommitteeMember,
+            isTomLeader: members.isTomLeader,
             discountIndividual: memberContributions.discountIndividual,
-            isPaid:             memberContributions.isPaid,
-            amountTotal:        memberContributions.amountTotal,
-            contribId:          memberContributions.id,
+            isPaid: memberContributions.isPaid,
+            amountTotal: memberContributions.amountTotal,
+            contribId: memberContributions.id,
         })
         .from(members)
         .leftJoin(
@@ -159,41 +159,41 @@ export default async function MembersPage({
 
     const rows: MemberWithFlags[] = result.map(r => {
         const mFrom = r.memberFrom as unknown as string;
-        const mTo   = r.memberTo   as unknown as string | null;
+        const mTo = r.memberTo as unknown as string | null;
         const fromDate = mFrom && mFrom.startsWith(`${actualYear}`) ? mFrom : null;
-        const toDate   = mTo   && mTo.startsWith(`${actualYear}`)   ? mTo   : null;
+        const toDate = mTo && mTo.startsWith(`${actualYear}`) ? mTo : null;
         return {
-            id:                 r.id,
-            firstName:          r.firstName,
-            lastName:           r.lastName,
-            userLogin:          r.userLogin,
-            email:              r.email,
-            phone:              r.phone,
-            variableSymbol:     r.variableSymbol,
-            cskNumber:          r.cskNumber,
-            nickname:           r.nickname,
-            gender:             r.gender,
-            address:            r.address,
-            birthDate:          r.birthDate as unknown as string | null,
-            birthNumber:        r.birthNumber,
-            bankAccountNumber:  r.bankAccountNumber,
-            bankCode:           r.bankCode,
-            note:               r.note,
-            todoNote:           r.todoNote,
+            id: r.id,
+            firstName: r.firstName,
+            lastName: r.lastName,
+            userLogin: r.userLogin,
+            email: r.email,
+            phone: r.phone,
+            variableSymbol: r.variableSymbol,
+            cskNumber: r.cskNumber,
+            nickname: r.nickname,
+            gender: r.gender,
+            address: r.address,
+            birthDate: r.birthDate as unknown as string | null,
+            birthNumber: r.birthNumber,
+            bankAccountNumber: r.bankAccountNumber,
+            bankCode: r.bankCode,
+            note: r.note,
+            todoNote: r.todoNote,
             membershipReviewed: r.membershipReviewed,
-            memberFrom:         mFrom,
-            memberTo:           mTo,
-            memberToNote:       r.memberToNote,
+            memberFrom: mFrom,
+            memberTo: mTo,
+            memberToNote: r.memberToNote,
             fromDate,
             toDate,
-            isCommittee:        r.isCommitteeMember,
-            isTom:              r.isTomLeader,
+            isCommittee: r.isCommitteeMember,
+            isTom: r.isTomLeader,
             discountIndividual: r.discountIndividual,
-            isPaid:             r.isPaid,
-            amountTotal:        r.amountTotal,
-            hasContrib:         r.contribId !== null,
-            hasBrigade:         brigadeMembers.has(r.id),
-            hasTjDiffs:         computeHasTjDiffs({
+            isPaid: r.isPaid,
+            amountTotal: r.amountTotal,
+            hasContrib: r.contribId !== null,
+            hasBrigade: brigadeMembers.has(r.id),
+            hasTjDiffs: computeHasTjDiffs({
                 id: r.id, firstName: r.firstName, lastName: r.lastName, cskNumber: r.cskNumber,
                 email: r.email, phone: r.phone, address: r.address,
                 birthDate: r.birthDate as unknown as string | null,

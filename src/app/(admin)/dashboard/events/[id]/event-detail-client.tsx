@@ -63,7 +63,7 @@ function getFieldDiff(diff: GcalDiffResult | null, field: string): GcalDiffField
     return entry && !entry.match ? entry : null;
 }
 
-const EVENT_TYPES    = Object.entries(EVENT_TYPE_LABELS)   as [EventType, string][];
+const EVENT_TYPES = Object.entries(EVENT_TYPE_LABELS) as [EventType, string][];
 const EVENT_STATUSES = Object.entries(EVENT_STATUS_LABELS) as [EventStatus, string][];
 
 const EVENT_FIELD_LABELS: Record<string, string> = {
@@ -77,33 +77,33 @@ const EVENT_FIELD_LABELS: Record<string, string> = {
 };
 
 const STATUS_COLORS: Record<string, string> = {
-    planned:   "bg-blue-50 text-blue-700",
+    planned: "bg-blue-50 text-blue-700",
     confirmed: "bg-green-50 text-green-700",
     cancelled: "bg-red-50 text-red-600",
     completed: "bg-gray-100 text-gray-500",
 };
 
 const TYPE_COLORS: Record<string, string> = {
-    cpv:          "bg-amber-50 text-amber-700",
-    foreign:      "bg-purple-50 text-purple-700",
+    cpv: "bg-amber-50 text-amber-700",
+    foreign: "bg-purple-50 text-purple-700",
     recreational: "bg-sky-50 text-sky-700",
-    club:         "bg-teal-50 text-teal-700",
-    race:         "bg-orange-50 text-orange-700",
-    brigada:      "bg-lime-50 text-lime-700",
-    other:        "bg-gray-50 text-gray-500",
+    club: "bg-teal-50 text-teal-700",
+    race: "bg-orange-50 text-orange-700",
+    brigada: "bg-lime-50 text-lime-700",
+    other: "bg-gray-50 text-gray-500",
 };
 
 const PAYMENT_STATUS_COLORS: Record<string, string> = {
-    pending:   "bg-amber-50 text-amber-700",
-    matched:   "bg-blue-50 text-blue-700",
-    paid:      "bg-green-50 text-green-700",
+    pending: "bg-amber-50 text-amber-700",
+    matched: "bg-blue-50 text-blue-700",
+    paid: "bg-green-50 text-green-700",
     cancelled: "bg-red-50 text-red-600",
 };
 
 const PAYMENT_STATUS_LABELS: Record<string, string> = {
-    pending:   "čeká",
-    matched:   "spárováno",
-    paid:      "zaplaceno",
+    pending: "čeká",
+    matched: "spárováno",
+    paid: "zaplaceno",
     cancelled: "zrušeno",
 };
 
@@ -119,7 +119,7 @@ const PAYMENT_STATUS_BAR_COLORS: Record<string, string> = {
 function AuditLogDialog({ open, onOpenChange, eventId }: {
     open: boolean; onOpenChange: (v: boolean) => void; eventId: number;
 }) {
-    const [log, setLog]         = useState<EventAuditEntry[]>([]);
+    const [log, setLog] = useState<EventAuditEntry[]>([]);
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
@@ -201,30 +201,30 @@ function ImmediateSelect({ label, value, options, eventId, field, onSaved }: {
 
 function ImmediateDate({ label, value, eventId, field, onSaved, min, gcalValue, onGcalAccept, onGcalPush,
     timeValue, timeField, timeGcalValue, onTimeGcalAccept, onTimeGcalPush }: {
-    label: string;
-    value: string | null;
-    eventId: number;
-    field: string;
-    onSaved: () => void;
-    min?: string;
-    gcalValue?: string | null;
-    onGcalAccept?: () => Promise<void>;
-    onGcalPush?: () => Promise<void>;
-    // optional inline time
-    timeValue?: string | null;
-    timeField?: string;
-    timeGcalValue?: string | null;
-    onTimeGcalAccept?: () => Promise<void>;
-    onTimeGcalPush?: () => Promise<void>;
-}) {
-    const [savingDate, setSavingDate]         = useState(false);
-    const [savingTime, setSavingTime]         = useState(false);
-    const [draftDate, setDraftDate]           = useState(value ?? "");
-    const [draftTime, setDraftTime]           = useState(timeValue ?? "");
-    const [acceptingGcal, setAcceptingGcal]   = useState(false);
-    const [pushingGcal, setPushingGcal]       = useState(false);
+        label: string;
+        value: string | null;
+        eventId: number;
+        field: string;
+        onSaved: () => void;
+        min?: string;
+        gcalValue?: string | null;
+        onGcalAccept?: () => Promise<void>;
+        onGcalPush?: () => Promise<void>;
+        // optional inline time
+        timeValue?: string | null;
+        timeField?: string;
+        timeGcalValue?: string | null;
+        onTimeGcalAccept?: () => Promise<void>;
+        onTimeGcalPush?: () => Promise<void>;
+    }) {
+    const [savingDate, setSavingDate] = useState(false);
+    const [savingTime, setSavingTime] = useState(false);
+    const [draftDate, setDraftDate] = useState(value ?? "");
+    const [draftTime, setDraftTime] = useState(timeValue ?? "");
+    const [acceptingGcal, setAcceptingGcal] = useState(false);
+    const [pushingGcal, setPushingGcal] = useState(false);
     const [acceptingTimeGcal, setAcceptingTimeGcal] = useState(false);
-    const [pushingTimeGcal, setPushingTimeGcal]     = useState(false);
+    const [pushingTimeGcal, setPushingTimeGcal] = useState(false);
 
     useEffect(() => setDraftDate(value ?? ""), [value]);
     useEffect(() => setDraftTime(timeValue ?? ""), [timeValue]);
@@ -340,10 +340,10 @@ function ImmediateLeader({ value, valueId, eventId, allMembers, membersLoaded, o
     membersLoaded: boolean;
     onSaved: () => void;
 }) {
-    const [text, setText]           = useState(value ?? "");
-    const [focused, setFocused]     = useState(false);
+    const [text, setText] = useState(value ?? "");
+    const [focused, setFocused] = useState(false);
     const [currentId, setCurrentId] = useState<number | null>(valueId);
-    const [saving, setSaving]       = useState(false);
+    const [saving, setSaving] = useState(false);
 
     useEffect(() => { setText(value ?? ""); setCurrentId(valueId); }, [value, valueId]);
 
@@ -426,11 +426,11 @@ function ImmediateTextarea({ label, value, eventId, field, onSaved, placeholder,
     onGcalAccept?: () => Promise<void>;
     onGcalPush?: () => Promise<void>; // předávat vždy pokud je akce v GCal
 }) {
-    const [editing, setEditing]             = useState(false);
-    const [draft, setDraft]                 = useState(value ?? "");
-    const [saving, setSaving]               = useState(false);
+    const [editing, setEditing] = useState(false);
+    const [draft, setDraft] = useState(value ?? "");
+    const [saving, setSaving] = useState(false);
     const [acceptingGcal, setAcceptingGcal] = useState(false);
-    const [pushingGcal, setPushingGcal]     = useState(false);
+    const [pushingGcal, setPushingGcal] = useState(false);
 
     useEffect(() => { if (!editing) setDraft(value ?? ""); }, [value, editing]);
 
@@ -553,7 +553,7 @@ function GcalStatusBar({ diff, syncing, onPush }: {
 
 function GcalSyncStarter({ event, onSaved }: { event: EventRow; onSaved: () => void }) {
     const [syncing, setSyncing] = useState(false);
-    const [msg, setMsg]         = useState<string | null>(null);
+    const [msg, setMsg] = useState<string | null>(null);
 
     async function handleSync() {
         if (!event.dateFrom) { setMsg("Nejprve nastav termín akce"); return; }
@@ -581,19 +581,19 @@ const fmtShortDate = (d: Date) =>
     new Intl.DateTimeFormat("cs-CZ", { day: "2-digit", month: "2-digit", year: "numeric" }).format(new Date(d));
 
 const REGISTRATION_FIELD_LABELS: Record<string, string> = {
-    email:        "E-mail",
-    phone:        "Telefon",
-    firstName:    "Jméno",
-    lastName:     "Příjmení",
+    email: "E-mail",
+    phone: "Telefon",
+    firstName: "Jméno",
+    lastName: "Příjmení",
     personsCount: "Počet osob",
     personsNames: "Účastníci",
     transportInfo: "Doprava / lodě",
-    cancelledAt:  "Zrušení přihlášky",
+    cancelledAt: "Zrušení přihlášky",
 };
 
 function RegistrationHistory({ registrationId }: { registrationId: number }) {
-    const [open, setOpen]       = useState(false);
-    const [log, setLog]         = useState<RegistrationAuditEntry[] | null>(null);
+    const [open, setOpen] = useState(false);
+    const [log, setLog] = useState<RegistrationAuditEntry[] | null>(null);
     const [loading, setLoading] = useState(false);
 
     function toggle() {
@@ -615,8 +615,8 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
                 {open ? "▲" : "▼"}
                 {loading ? " Načítám historii…"
                     : log === null ? " Historie změn"
-                    : log.length === 0 ? " Žádné změny"
-                    : ` Historie změn (${log.length})`}
+                        : log.length === 0 ? " Žádné změny"
+                            : ` Historie změn (${log.length})`}
             </button>
             {open && log && log.length > 0 && (
                 <div className="mt-2 space-y-1.5">
@@ -625,11 +625,10 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
                             <div className="flex items-center justify-between gap-2 text-gray-400 flex-wrap">
                                 <div className="flex items-center gap-1.5">
                                     <span className="font-medium text-gray-600">{entry.changedBy}</span>
-                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${
-                                        entry.action === "cancel"
+                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${entry.action === "cancel"
                                             ? "bg-red-50 text-red-600 border-red-200"
                                             : "bg-amber-50 text-amber-600 border-amber-200"
-                                    }`}>
+                                        }`}>
                                         {entry.action === "cancel" ? "zrušení" : "úprava"}
                                     </span>
                                 </div>
@@ -654,9 +653,9 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
 }
 
 function RegistrationsTab({ eventId }: { eventId: number }) {
-    const [rows, setRows]       = useState<EventRegistrationAdminRow[] | null>(null);
+    const [rows, setRows] = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
-    const [error, setError]     = useState<string | null>(null);
+    const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
         getEventRegistrationsForAdmin(eventId)
@@ -665,7 +664,7 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
     }, [eventId]);
 
     if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Načítám přihlášky…</p>;
-    if (error)   return <p className="text-sm text-red-500 py-4">{error}</p>;
+    if (error) return <p className="text-sm text-red-500 py-4">{error}</p>;
     if (!rows || rows.length === 0) return (
         <p className="text-sm text-gray-400 py-8 text-center">Žádné přihlášky</p>
     );
@@ -823,13 +822,13 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
 export function EventDetailClient({ event }: Props) {
     const router = useRouter();
     const [activeField, setActiveField] = useState<string | null>(null);
-    const [diff, setDiff]               = useState<GcalDiffResult | null>(null);
-    const [syncing, setSyncing]         = useState(false);
-    const [auditOpen, setAuditOpen]     = useState(false);
-    const [deleting, startDeleteT]      = useTransition();
+    const [diff, setDiff] = useState<GcalDiffResult | null>(null);
+    const [syncing, setSyncing] = useState(false);
+    const [auditOpen, setAuditOpen] = useState(false);
+    const [deleting, startDeleteT] = useTransition();
 
     // Members loaded lazily — not needed for initial render
-    const [allMembers, setAllMembers]     = useState<MemberOption[]>([]);
+    const [allMembers, setAllMembers] = useState<MemberOption[]>([]);
     const [membersLoaded, setMembersLoaded] = useState(false);
 
     useEffect(() => {
@@ -847,7 +846,7 @@ export function EventDetailClient({ event }: Props) {
     // Po každém uložení pole, které může být v GCal, obnovíme diff
     function refreshWithDiff() {
         router.refresh();
-        if (event.gcalEventId) getEventGcalDiff(event.id).then(setDiff).catch(() => {});
+        if (event.gcalEventId) getEventGcalDiff(event.id).then(setDiff).catch(() => { });
     }
 
     function save(field: string) {

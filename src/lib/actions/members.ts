@@ -100,24 +100,24 @@ export async function saveMember(
     const db = getDb();
 
     const firstName = (formData.get("first_name") as string)?.trim();
-    const lastName  = (formData.get("last_name")  as string)?.trim();
+    const lastName = (formData.get("last_name") as string)?.trim();
     if (!firstName) return { error: "Jméno je povinné" };
-    if (!lastName)  return { error: "Příjmení je povinné" };
+    if (!lastName) return { error: "Příjmení je povinné" };
 
     const idRaw = formData.get("id") as string;
 
     const memberData = {
         firstName,
         lastName,
-        fullName:       `${firstName} ${lastName}`,
-        userLogin:      (formData.get("user_login") as string)?.trim()  || null,
-        email:          (formData.get("email") as string)?.trim()        || null,
-        phone:          (formData.get("phone") as string)?.trim()        || null,
+        fullName: `${firstName} ${lastName}`,
+        userLogin: (formData.get("user_login") as string)?.trim() || null,
+        email: (formData.get("email") as string)?.trim() || null,
+        phone: (formData.get("phone") as string)?.trim() || null,
         variableSymbol: Number(formData.get("variable_symbol")) || null,
-        cskNumber:      (formData.get("csk_number") as string)?.trim() || null,
+        cskNumber: (formData.get("csk_number") as string)?.trim() || null,
         bankAccountNumber: (formData.get("bank_account_number") as string)?.trim() || null,
-        bankCode:          (formData.get("bank_code") as string)?.trim() || null,
-        note:           (formData.get("note") as string)?.trim()         || null,
+        bankCode: (formData.get("bank_code") as string)?.trim() || null,
+        note: (formData.get("note") as string)?.trim() || null,
     };
 
     try {
@@ -140,28 +140,28 @@ export async function saveMember(
 
             const memberChanges = diffObjects(
                 {
-                    firstName:      current.firstName,
-                    lastName:       current.lastName,
-                    userLogin:      current.userLogin,
-                    email:          current.email,
-                    phone:          current.phone,
+                    firstName: current.firstName,
+                    lastName: current.lastName,
+                    userLogin: current.userLogin,
+                    email: current.email,
+                    phone: current.phone,
                     variableSymbol: current.variableSymbol,
-                    cskNumber:      current.cskNumber,
+                    cskNumber: current.cskNumber,
                     bankAccountNumber: current.bankAccountNumber,
-                    bankCode:       current.bankCode,
-                    note:           current.note,
+                    bankCode: current.bankCode,
+                    note: current.note,
                 },
                 {
-                    firstName:      memberData.firstName,
-                    lastName:       memberData.lastName,
-                    userLogin:      memberData.userLogin,
-                    email:          memberData.email,
-                    phone:          memberData.phone,
+                    firstName: memberData.firstName,
+                    lastName: memberData.lastName,
+                    userLogin: memberData.userLogin,
+                    email: memberData.email,
+                    phone: memberData.phone,
                     variableSymbol: memberData.variableSymbol,
-                    cskNumber:      memberData.cskNumber,
+                    cskNumber: memberData.cskNumber,
                     bankAccountNumber: memberData.bankAccountNumber,
-                    bankCode:       memberData.bankCode,
-                    note:           memberData.note,
+                    bankCode: memberData.bankCode,
+                    note: memberData.note,
                 }
             );
 
@@ -181,31 +181,31 @@ export async function saveMember(
 
                 if (contrib) {
                     const isCommittee = formData.get("is_committee") === "on";
-                    const isTom       = formData.get("is_tom") === "on";
-                    const indRaw      = formData.get("individual_discount");
-                    const indAmount   = indRaw ? Math.abs(Number(indRaw)) : 0;
+                    const isTom = formData.get("is_tom") === "on";
+                    const indRaw = formData.get("individual_discount");
+                    const indAmount = indRaw ? Math.abs(Number(indRaw)) : 0;
 
-                    const newDiscCommittee  = isCommittee ? -period.discountCommittee : null;
-                    const newDiscTom        = isTom       ? -period.discountTom       : null;
-                    const newDiscIndividual = indAmount   ? -indAmount                : null;
+                    const newDiscCommittee = isCommittee ? -period.discountCommittee : null;
+                    const newDiscTom = isTom ? -period.discountTom : null;
+                    const newDiscIndividual = indAmount ? -indAmount : null;
 
                     await db.update(memberContributions).set({
-                        discountCommittee:  newDiscCommittee,
-                        discountTom:        newDiscTom,
+                        discountCommittee: newDiscCommittee,
+                        discountTom: newDiscTom,
                         discountIndividual: newDiscIndividual,
                     }).where(eq(memberContributions.id, contrib.id));
 
                     const flagChanges = diffObjects(
                         {
-                            isCommittee:        Boolean(contrib.discountCommittee),
-                            isTom:              Boolean(contrib.discountTom),
+                            isCommittee: Boolean(contrib.discountCommittee),
+                            isTom: Boolean(contrib.discountTom),
                             discountIndividual: contrib.discountIndividual
                                 ? Math.abs(contrib.discountIndividual)
                                 : null,
                         },
                         {
-                            isCommittee:        isCommittee,
-                            isTom:              isTom,
+                            isCommittee: isCommittee,
+                            isTom: isTom,
                             discountIndividual: indAmount || null,
                         }
                     );
@@ -216,9 +216,9 @@ export async function saveMember(
             if (Object.keys(memberChanges).length > 0) {
                 await db.insert(auditLog).values({
                     entityType: "member",
-                    entityId:   id,
-                    action:     "update",
-                    changes:    memberChanges,
+                    entityId: id,
+                    action: "update",
+                    changes: memberChanges,
                     changedBy,
                 });
             }
@@ -245,9 +245,9 @@ export async function saveMember(
 
             await db.insert(auditLog).values({
                 entityType: "member",
-                entityId:   nextId,
-                action:     "create",
-                changes:    Object.fromEntries(
+                entityId: nextId,
+                action: "create",
+                changes: Object.fromEntries(
                     Object.entries({ ...memberData, memberFrom: memberFromRaw })
                         .map(([k, v]) => [k, { old: null, new: str(v) }])
                 ),
@@ -265,7 +265,7 @@ export async function saveMember(
 
 // ── updateMemberField — inline edit jednoho pole ─────────────────────────────
 type EditableField = "firstName" | "lastName" | "nickname" | "userLogin" | "email" | "phone" | "gender" | "address" | "bankAccountNumber" | "bankCode" | "variableSymbol" | "cskNumber" | "note" | "memberFrom";
-const EDITABLE_FIELD_KEYS = new Set<EditableField>(["firstName","lastName","nickname","userLogin","email","phone","gender","address","bankAccountNumber","bankCode","variableSymbol","cskNumber","note","memberFrom"]);
+const EDITABLE_FIELD_KEYS = new Set<EditableField>(["firstName", "lastName", "nickname", "userLogin", "email", "phone", "gender", "address", "bankAccountNumber", "bankCode", "variableSymbol", "cskNumber", "note", "memberFrom"]);
 
 export async function updateMemberField(
     memberId: number,
@@ -310,7 +310,7 @@ export async function updateMemberField(
         if (field === "firstName" || field === "lastName") {
             const updated = field === "firstName"
                 ? { firstName: newValue as string, fullName: `${newValue} ${current.lastName}`, updatedAt: new Date() }
-                : { lastName:  newValue as string, fullName: `${current.firstName} ${newValue}`, updatedAt: new Date() };
+                : { lastName: newValue as string, fullName: `${current.firstName} ${newValue}`, updatedAt: new Date() };
             await db.update(members).set(updated).where(eq(members.id, memberId));
         } else if (field === "memberFrom") {
             await db.update(members).set({ memberFrom: newValue as string, updatedAt: new Date() }).where(eq(members.id, memberId));
@@ -360,8 +360,8 @@ export async function setIndividualDiscount(
         if (!contrib) return { error: "Příspěvkový záznam nenalezen" };
 
         const patch = {
-            discountIndividual:          amount !== null ? -Math.abs(amount) : null,
-            discountIndividualNote:      amount !== null ? note.trim() : null,
+            discountIndividual: amount !== null ? -Math.abs(amount) : null,
+            discountIndividualNote: amount !== null ? note.trim() : null,
             discountIndividualValidUntil: amount !== null ? validUntilYear : null,
         };
 
@@ -374,8 +374,8 @@ export async function setIndividualDiscount(
                     old: str(contrib.discountIndividual),
                     new: amount !== null ? str(-Math.abs(amount)) : null,
                 },
-                discountNote:       { old: contrib.discountIndividualNote, new: patch.discountIndividualNote },
-                validUntil:         { old: str(contrib.discountIndividualValidUntil), new: str(validUntilYear) },
+                discountNote: { old: contrib.discountIndividualNote, new: patch.discountIndividualNote },
+                validUntil: { old: str(contrib.discountIndividualValidUntil), new: str(validUntilYear) },
             },
             changedBy,
         });
@@ -412,13 +412,13 @@ export async function setContributionFlags(
 
         await db.update(memberContributions).set({
             discountCommittee: isCommittee ? -period.discountCommittee : null,
-            discountTom:       isTom       ? -period.discountTom       : null,
+            discountTom: isTom ? -period.discountTom : null,
         }).where(eq(memberContributions.id, contrib.id));
 
         // Uložit trvalý příznak přímo na člena (zachová se i po smazání předpisů)
         await db.update(members).set({
             isCommitteeMember: isCommittee,
-            isTomLeader:       isTom,
+            isTomLeader: isTom,
         }).where(eq(members.id, memberId));
 
         const flagChanges = diffObjects(
@@ -465,7 +465,7 @@ export async function terminateMembership(
         await db.insert(auditLog).values({
             entityType: "member", entityId: memberId, action: "membership_terminated",
             changes: {
-                memberTo:     { old: current.memberTo ?? null, new: toDate },
+                memberTo: { old: current.memberTo ?? null, new: toDate },
                 memberToNote: { old: null, new: note.trim() },
             },
             changedBy,
@@ -498,7 +498,7 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
     if (!member) return [];
 
     const fromYear = parseInt((member.memberFrom as unknown as string).slice(0, 4));
-    const toYear   = member.memberTo ? parseInt((member.memberTo as unknown as string).slice(0, 4)) : null;
+    const toYear = member.memberTo ? parseInt((member.memberTo as unknown as string).slice(0, 4)) : null;
 
     // All contribution periods within the member's active years
     const allPeriods = await db
@@ -514,9 +514,9 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
     // Contributions for this member with payment totals
     const contribs = await db
         .select({
-            periodId:    memberContributions.periodId,
+            periodId: memberContributions.periodId,
             amountTotal: memberContributions.amountTotal,
-            paidTotal:   sql<number>`coalesce(sum(${payments.amount}), 0)`,
+            paidTotal: sql<number>`coalesce(sum(${payments.amount}), 0)`,
         })
         .from(memberContributions)
         .leftJoin(payments, eq(payments.contribId, memberContributions.id))
@@ -529,10 +529,10 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
         .map(p => {
             const contrib = contribMap.get(p.id);
             return {
-                year:        p.year,
-                hasContrib:  Boolean(contrib),
+                year: p.year,
+                hasContrib: Boolean(contrib),
                 amountTotal: contrib?.amountTotal ?? null,
-                paidTotal:   contrib ? Number(contrib.paidTotal) : 0,
+                paidTotal: contrib ? Number(contrib.paidTotal) : 0,
             };
         })
         .sort((a, b) => b.year - a.year);
@@ -612,9 +612,9 @@ export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]>
         .limit(50);
 
     return rows.map(r => ({
-        id:        r.id,
-        action:    r.action,
-        changes:   r.changes as AuditEntry["changes"],
+        id: r.id,
+        action: r.action,
+        changes: r.changes as AuditEntry["changes"],
         changedBy: r.changedBy,
         changedAt: r.changedAt,
     }));

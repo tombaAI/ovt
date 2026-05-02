@@ -35,20 +35,20 @@ function isImage(mime: string | null) {
 // ── Gemini analysis result type ───────────────────────────────────────────────
 
 type ExpenseAnalysis = {
-    merchant:      string;
-    date:          string | null;
-    total_amount:  number | null;
-    currency:      string;
-    account_code:  ExpenseCategory | null;
+    merchant: string;
+    date: string | null;
+    total_amount: number | null;
+    currency: string;
+    account_code: ExpenseCategory | null;
     category_name: string;
-    reasoning:     string;
-    confidence:    number;
+    reasoning: string;
+    confidence: number;
 };
 
 // ── Analysis card ─────────────────────────────────────────────────────────────
 
 function ConfidenceBar({ value }: { value: number }) {
-    const pct   = Math.round(value * 100);
+    const pct = Math.round(value * 100);
     const color = pct >= 80 ? "bg-green-500" : pct >= 55 ? "bg-amber-400" : "bg-red-400";
     return (
         <div className="flex items-center gap-2">
@@ -150,7 +150,7 @@ function resizeForGemini(file: File, maxPx = 1024): Promise<File> {
             } // už je dost malý
 
             const canvas = document.createElement("canvas");
-            canvas.width  = Math.round(img.naturalWidth  * scale);
+            canvas.width = Math.round(img.naturalWidth * scale);
             canvas.height = Math.round(img.naturalHeight * scale);
             const ctx = canvas.getContext("2d");
             if (!ctx) {
@@ -194,9 +194,9 @@ async function prepareFileForGemini(file: File): Promise<File> {
 
 function expandCrop(crop: Crop, paddingPct: number): Crop {
     if (crop.unit !== "%") return crop;
-    const x      = Math.max(0,   crop.x - paddingPct);
-    const y      = Math.max(0,   crop.y - paddingPct);
-    const right  = Math.min(100, crop.x + crop.width  + paddingPct);
+    const x = Math.max(0, crop.x - paddingPct);
+    const y = Math.max(0, crop.y - paddingPct);
+    const right = Math.min(100, crop.x + crop.width + paddingPct);
     const bottom = Math.min(100, crop.y + crop.height + paddingPct);
     return { unit: "%", x, y, width: right - x, height: bottom - y };
 }
@@ -210,15 +210,15 @@ function rotateImage(srcUrl: string, angleDeg: number, originalName: string): Pr
             const rad = (angleDeg * Math.PI) / 180;
             const sin = Math.abs(Math.sin(rad));
             const cos = Math.abs(Math.cos(rad));
-            const w   = img.naturalWidth;
-            const h   = img.naturalHeight;
+            const w = img.naturalWidth;
+            const h = img.naturalHeight;
 
             // Canvas musí být dost velký aby pojal otočený obrázek
             const canvasW = Math.round(w * cos + h * sin);
             const canvasH = Math.round(w * sin + h * cos);
 
             const canvas = document.createElement("canvas");
-            canvas.width  = canvasW;
+            canvas.width = canvasW;
             canvas.height = canvasH;
             const ctx = canvas.getContext("2d");
             if (!ctx) { reject(new Error("Canvas context unavailable")); return; }
@@ -252,7 +252,7 @@ function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: str
         img.onload = () => {
             const sx = crop ? crop.x : 0;
             const sy = crop ? crop.y : 0;
-            const sw = crop ? crop.width  : img.naturalWidth;
+            const sw = crop ? crop.width : img.naturalWidth;
             const sh = crop ? crop.height : img.naturalHeight;
 
             const scale = Math.min(1, MAX_PX / Math.max(sw, sh));
@@ -260,7 +260,7 @@ function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: str
             const dh = Math.round(sh * scale);
 
             const canvas = document.createElement("canvas");
-            canvas.width  = dw;
+            canvas.width = dw;
             canvas.height = dh;
             const ctx = canvas.getContext("2d");
             if (!ctx) { reject(new Error("Canvas context unavailable")); return; }
@@ -286,16 +286,16 @@ function compressImage(srcUrl: string, crop: PixelCrop | null, originalName: str
 // ── Custom vertical slider (pointer events — CSS rotate nefunguje správně) ────
 
 function VerticalSlider({ value, min, max, onChange, onCommit, disabled, height = 150 }: {
-    value:    number;
-    min:      number;
-    max:      number;
+    value: number;
+    min: number;
+    max: number;
     onChange: (v: number) => void;
     onCommit: () => void;
     disabled?: boolean;
-    height?:  number;
+    height?: number;
 }) {
-    const trackRef  = useRef<HTMLDivElement>(null);
-    const dragging  = useRef(false);
+    const trackRef = useRef<HTMLDivElement>(null);
+    const dragging = useRef(false);
 
     function valueFromY(clientY: number): number {
         const rect = trackRef.current!.getBoundingClientRect();
@@ -330,15 +330,21 @@ function VerticalSlider({ value, min, max, onChange, onCommit, disabled, height 
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
-            style={{ width: 28, height, position: "relative", touchAction: "none",
-                cursor: disabled ? "default" : "ns-resize", userSelect: "none" }}
+            style={{
+                width: 28, height, position: "relative", touchAction: "none",
+                cursor: disabled ? "default" : "ns-resize", userSelect: "none"
+            }}
         >
             {/* Track */}
-            <div style={{ position: "absolute", left: "50%", top: 6, bottom: 6,
-                width: 4, background: "#d1d5db", transform: "translateX(-50%)", borderRadius: 2 }} />
+            <div style={{
+                position: "absolute", left: "50%", top: 6, bottom: 6,
+                width: 4, background: "#d1d5db", transform: "translateX(-50%)", borderRadius: 2
+            }} />
             {/* Střed — 0° indikátor */}
-            <div style={{ position: "absolute", left: "50%", top: "50%",
-                width: 10, height: 2, background: "#9ca3af", transform: "translate(-50%, -50%)", borderRadius: 1 }} />
+            <div style={{
+                position: "absolute", left: "50%", top: "50%",
+                width: 10, height: 2, background: "#9ca3af", transform: "translate(-50%, -50%)", borderRadius: 1
+            }} />
             {/* Thumb */}
             <div style={{
                 position: "absolute", left: "50%",
@@ -355,33 +361,33 @@ function VerticalSlider({ value, min, max, onChange, onCommit, disabled, height 
 }
 
 type GeminiCropInfo = {
-    confidence:   number;
+    confidence: number;
     fields_check: {
         company_name: boolean;
-        ico:          boolean | null;
-        dic:          boolean | null;
+        ico: boolean | null;
+        dic: boolean | null;
         total_amount: boolean;
     };
 };
 
 function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop, geminiInfo }: {
-    srcUrl:        string;
-    originalName:  string;
-    onDone:        (file: File) => void;
-    onCancel:      () => void;
+    srcUrl: string;
+    originalName: string;
+    onDone: (file: File) => void;
+    onCancel: () => void;
     suggestedCrop?: Crop;
-    geminiInfo?:   GeminiCropInfo;
+    geminiInfo?: GeminiCropInfo;
 }) {
-    const [currentUrl, setCurrentUrl]   = useState(srcUrl);
-    const [crop, setCrop]               = useState<Crop | undefined>(suggestedCrop);
-    const [pixelCrop, setPixelCrop]     = useState<PixelCrop>();
-    const [processing, setProcessing]   = useState(false);
-    const [rotating, setRotating]       = useState(false);
-    const [sizeInfo, setSizeInfo]       = useState<string | null>(null);
-    const [sliderVal, setSliderVal]     = useState(0);
-    const [totalRot, setTotalRot]       = useState(0);
-    const imgRef                        = useRef<HTMLImageElement>(null);
-    const ownedUrls                     = useRef<string[]>([]);
+    const [currentUrl, setCurrentUrl] = useState(srcUrl);
+    const [crop, setCrop] = useState<Crop | undefined>(suggestedCrop);
+    const [pixelCrop, setPixelCrop] = useState<PixelCrop>();
+    const [processing, setProcessing] = useState(false);
+    const [rotating, setRotating] = useState(false);
+    const [sizeInfo, setSizeInfo] = useState<string | null>(null);
+    const [sliderVal, setSliderVal] = useState(0);
+    const [totalRot, setTotalRot] = useState(0);
+    const imgRef = useRef<HTMLImageElement>(null);
+    const ownedUrls = useRef<string[]>([]);
 
     // Revoke any URLs we created during rotation when modal closes
     useEffect(() => {
@@ -400,7 +406,7 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
         setRotating(true);
         try {
             const rotated = await rotateImage(currentUrl, deg, originalName);
-            const newUrl  = URL.createObjectURL(rotated);
+            const newUrl = URL.createObjectURL(rotated);
             ownedUrls.current.push(newUrl);
             // Revoke previous intermediate URL (but never the original srcUrl)
             if (currentUrl !== srcUrl) URL.revokeObjectURL(currentUrl);
@@ -432,14 +438,14 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
         try {
             let activeCrop: PixelCrop | null = null;
             if (useCrop && pixelCrop?.width && pixelCrop?.height && imgRef.current) {
-                const img    = imgRef.current;
-                const scaleX = img.naturalWidth  / img.width;
+                const img = imgRef.current;
+                const scaleX = img.naturalWidth / img.width;
                 const scaleY = img.naturalHeight / img.height;
                 activeCrop = {
-                    unit:   "px",
-                    x:      Math.round(pixelCrop.x      * scaleX),
-                    y:      Math.round(pixelCrop.y      * scaleY),
-                    width:  Math.round(pixelCrop.width  * scaleX),
+                    unit: "px",
+                    x: Math.round(pixelCrop.x * scaleX),
+                    y: Math.round(pixelCrop.y * scaleY),
+                    width: Math.round(pixelCrop.width * scaleX),
                     height: Math.round(pixelCrop.height * scaleY),
                 };
             }
@@ -452,9 +458,9 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
         }
     }
 
-    const hasCrop    = !!pixelCrop?.width && !!pixelCrop?.height;
-    const busyNow    = processing || rotating;
-    const rotLabel   = totalRot === 0 ? "" : `${totalRot}°`;
+    const hasCrop = !!pixelCrop?.width && !!pixelCrop?.height;
+    const busyNow = processing || rotating;
+    const rotLabel = totalRot === 0 ? "" : `${totalRot}°`;
 
     return (
         <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
@@ -495,8 +501,8 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                     <span className="text-xs text-gray-400 shrink-0 w-24 text-right">
                         {rotating ? "otáčím…"
                             : sliderVal !== 0 ? "pusť pro aplikovat"
-                            : rotLabel ? `celkem ${rotLabel}`
-                            : ""}
+                                : rotLabel ? `celkem ${rotLabel}`
+                                    : ""}
                     </span>
                 </div>
 
@@ -596,10 +602,10 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
                             </div>
                             <div className="flex flex-wrap gap-x-3 gap-y-0.5">
                                 {([
-                                    ["Firma",   geminiInfo.fields_check.company_name],
-                                    ["Částka",  geminiInfo.fields_check.total_amount],
-                                    ["IČ",      geminiInfo.fields_check.ico],
-                                    ["DIČ",     geminiInfo.fields_check.dic],
+                                    ["Firma", geminiInfo.fields_check.company_name],
+                                    ["Částka", geminiInfo.fields_check.total_amount],
+                                    ["IČ", geminiInfo.fields_check.ico],
+                                    ["DIČ", geminiInfo.fields_check.dic],
                                 ] as [string, boolean | null][]).map(([label, ok]) => (
                                     <span key={label} className={`text-[10px] ${ok === null ? "text-gray-300" : ok ? "text-green-600" : "text-red-500 font-semibold"}`}>
                                         {ok === null ? `— ${label}` : ok ? `✓ ${label}` : `⚠ ${label}`}
@@ -652,29 +658,43 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
 type FlowState =
     | { tag: "idle" }
     | { tag: "cropping"; file: File; previewUrl: string }
-    | { tag: "analyzing"; file: File };
+    | { tag: "analyzing"; file: File }
+    | { tag: "analyzed"; file: File; analysis: ExpenseAnalysis }
+    | { tag: "uploading"; file: File };
 
 function AddExpenseForm({
     eventId,
+    personOptions,
+    peopleLoaded,
+    onPersonCreated,
     onAdded,
 }: {
     eventId: number;
+    personOptions: PersonOption[];
+    peopleLoaded: boolean;
+    onPersonCreated: (person: PersonOption) => void;
     onAdded: () => void;
 }) {
     const [state, setState]  = useState<FlowState>({ tag: "idle" });
     const [error, setError]  = useState<string | null>(null);
-    const fileInputRef       = useRef<HTMLInputElement>(null);
-    const cameraInputRef     = useRef<HTMLInputElement>(null);
-    const abandonRef         = useRef(false);
+    const [amount, setAmount]     = useState("");
+    const [category, setCategory] = useState<ExpenseCategory>("501/004");
+    const [purposeText, setPurposeText] = useState("");
+    const [reimbursementPersonId, setReimbursementPersonId] = useState("");
+    const fileInputRef   = useRef<HTMLInputElement>(null);
+    const cameraInputRef = useRef<HTMLInputElement>(null);
+    const purposeRef     = useRef<HTMLInputElement>(null);
+    const abandonRef     = useRef(false);
 
     function resetToIdle() {
         setState({ tag: "idle" });
         setError(null);
+        setAmount(""); setCategory("501/004"); setPurposeText(""); setReimbursementPersonId("");
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
 
-    async function runAnalysisAndAutoSave(file: File) {
+    async function runAnalysis(file: File) {
         abandonRef.current = false;
         setState({ tag: "analyzing", file });
         setError(null);
@@ -686,7 +706,30 @@ function AddExpenseForm({
             const analysisData: ExpenseAnalysis & { error?: string } = await analysisRes.json();
             if (!analysisRes.ok) throw new Error(analysisData.error ?? "Chyba analýzy");
 
-            // Auto-save as unconfirmed with Gemini pre-fill
+            const amt = analysisData.total_amount !== null && analysisData.total_amount !== undefined
+                ? String(analysisData.total_amount).replace(".", ",")
+                : "";
+            const cat = analysisData.account_code ?? "501/004";
+            setAmount(amt);
+            setCategory(cat);
+
+            if (abandonRef.current) {
+                // User clicked "Nahrát další" during analysis — auto-save as unconfirmed in background
+                void autoSaveUnconfirmed(file, analysisData);
+            } else {
+                setState({ tag: "analyzed", file, analysis: analysisData });
+                setTimeout(() => purposeRef.current?.focus(), 50);
+            }
+        } catch (err) {
+            if (!abandonRef.current) {
+                setError(err instanceof Error ? err.message : "Analýza selhala");
+                setState({ tag: "idle" });
+            }
+        }
+    }
+
+    async function autoSaveUnconfirmed(file: File, analysisData: ExpenseAnalysis) {
+        try {
             const saveFd = new FormData();
             saveFd.append("status", "unconfirmed");
             saveFd.append("file", file);
@@ -696,17 +739,10 @@ function AddExpenseForm({
             if (analysisData.account_code) {
                 saveFd.append("purposeCategory", analysisData.account_code);
             }
-            const saveRes = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: saveFd });
-            const saveData = await saveRes.json();
-            if (!saveRes.ok) throw new Error(saveData.error ?? "Chyba uložení");
-
+            await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: saveFd });
             onAdded();
-            if (!abandonRef.current) resetToIdle();
-        } catch (err) {
-            if (!abandonRef.current) {
-                setError(err instanceof Error ? err.message : "Analýza selhala");
-                setState({ tag: "idle" });
-            }
+        } catch {
+            // silently ignore — user has moved on
         }
     }
 
@@ -715,7 +751,7 @@ function AddExpenseForm({
         if (f.type.startsWith("image/")) {
             setState({ tag: "cropping", file: f, previewUrl: URL.createObjectURL(f) });
         } else {
-            runAnalysisAndAutoSave(f);
+            runAnalysis(f);
         }
     }
 
@@ -723,7 +759,7 @@ function AddExpenseForm({
         if (state.tag === "cropping") URL.revokeObjectURL(state.previewUrl);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
-        runAnalysisAndAutoSave(processed);
+        runAnalysis(processed);
     }
 
     function handleCropCancel() {
@@ -734,11 +770,42 @@ function AddExpenseForm({
     }
 
     function handleUploadAnother() {
-        abandonRef.current = true;  // analysis continues in background, saves when done
+        abandonRef.current = true;  // analysis continues in bg → auto-saves as unconfirmed
         setState({ tag: "idle" });
         setError(null);
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
+    }
+
+    async function handleSave() {
+        if (state.tag !== "analyzed") return;
+        setError(null);
+        const amountNum = parseFloat(amount.replace(",", "."));
+        if (isNaN(amountNum) || amountNum <= 0) { setError("Oprav částku"); return; }
+        if (!purposeText.trim()) { setError("Doplň účel dokladu"); purposeRef.current?.focus(); return; }
+
+        const savedFile = state.file;
+        const savedAnalysis = state.analysis;
+        setState({ tag: "uploading", file: savedFile });
+        try {
+            const fd = new FormData();
+            fd.append("status", "final");
+            fd.append("amount", String(amountNum));
+            fd.append("purposeText", purposeText.trim());
+            fd.append("purposeCategory", category);
+            if (reimbursementPersonId) fd.append("reimbursementPersonId", reimbursementPersonId);
+            fd.append("file", savedFile);
+
+            const res = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: fd });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Chyba uložení");
+
+            resetToIdle();
+            onAdded();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Chyba uložení");
+            setState({ tag: "analyzed", file: savedFile, analysis: savedAnalysis });
+        }
     }
 
     // ── Render ──
@@ -773,9 +840,91 @@ function AddExpenseForm({
                 <div className="h-1 rounded-full bg-gray-100 overflow-hidden">
                     <div className="h-full bg-violet-400 rounded-full animate-pulse" style={{ width: "60%" }} />
                 </div>
-                <p className="text-[11px] text-gray-400">
-                    Gemini vyčte částku a kategorii — doklad se uloží jako nepotvrzený. Mezitím můžeš nahrát další.
-                </p>
+            </div>
+        );
+    }
+
+    if (state.tag === "analyzed" || state.tag === "uploading") {
+        const analysis = state.tag === "analyzed" ? state.analysis : null;
+        const isUploading = state.tag === "uploading";
+        return (
+            <div className="space-y-3">
+                <div className="flex items-center gap-2 text-xs text-gray-500">
+                    {isImage(state.file.type) ? <ImageIcon size={13} /> : <FileText size={13} />}
+                    <span className="truncate">{state.file.name}</span>
+                    <span className="text-gray-300">·</span>
+                    <span>{Math.round(state.file.size / 1024)} kB</span>
+                    <button type="button" onClick={resetToIdle} disabled={isUploading}
+                        className="ml-auto text-gray-400 hover:text-gray-600 disabled:opacity-40 text-xs shrink-0">
+                        Zrušit
+                    </button>
+                </div>
+
+                {analysis && <AnalysisCard analysis={analysis} />}
+
+                <div className="rounded-xl border bg-gray-50 p-4 space-y-3">
+                    <p className="text-xs font-medium text-gray-500 uppercase tracking-wide">Zkontroluj a doplň</p>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                                Částka (Kč)
+                                <span className="text-violet-400">✦</span>
+                            </label>
+                            <input type="text" inputMode="decimal"
+                                value={amount} onChange={e => setAmount(e.target.value)}
+                                className="w-full h-9 rounded-md border border-violet-200 bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1 flex items-center gap-1">
+                                Účetní kód
+                                <span className="text-violet-400">✦</span>
+                            </label>
+                            <select value={category} onChange={e => setCategory(e.target.value as ExpenseCategory)}
+                                className="w-full h-9 rounded-md border border-violet-200 bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-violet-300">
+                                {CATEGORIES.map(c => (
+                                    <option key={c} value={c}>{c} · {EXPENSE_CATEGORY_LABELS[c]}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label className="text-xs text-gray-500 mb-1 block">
+                            Účel / popis <span className="text-red-400">*</span>
+                        </label>
+                        <input ref={purposeRef} type="text"
+                            placeholder="Např. jízdenky Praha–Brno, oběd pro závodníky…"
+                            value={purposeText} onChange={e => setPurposeText(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); handleSave(); } }}
+                            disabled={isUploading}
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+
+                    <PersonAutocomplete
+                        people={personOptions}
+                        peopleLoaded={peopleLoaded}
+                        value={reimbursementPersonId}
+                        disabled={isUploading}
+                        onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
+                        onPersonCreated={onPersonCreated}
+                    />
+
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+
+                    <div className="flex items-center gap-2 flex-wrap">
+                        <Button onClick={handleSave} disabled={isUploading} size="sm"
+                            className="bg-[#327600] hover:bg-[#2a6400] text-white">
+                            {isUploading ? "Ukládám…" : "Přidat doklad"}
+                        </Button>
+                        <button type="button" onClick={handleUploadAnother} disabled={isUploading}
+                            className="text-xs text-gray-400 hover:text-gray-600 disabled:opacity-40 border border-gray-200 rounded px-2 py-1 hover:bg-gray-50 transition-colors">
+                            Nahrát další (uložit tento jako nepotvrzený)
+                        </button>
+                    </div>
+                </div>
             </div>
         );
     }
@@ -1321,11 +1470,10 @@ function ExpenseItem({
             <div className="flex-1 min-w-0">
                 <div className="flex items-center gap-2 flex-wrap">
                     {needsAction ? (
-                        <span className={`text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-px border ${
-                            isUnconfirmed
+                        <span className={`text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-px border ${isUnconfirmed
                                 ? "text-amber-700 bg-amber-100 border-amber-200"
                                 : "text-gray-600 bg-gray-100 border-gray-200"
-                        }`}>
+                            }`}>
                             {isUnconfirmed ? "Nepotvrzeno" : "Návrh"}
                         </span>
                     ) : null}
@@ -1431,13 +1579,13 @@ function ExpenseItem({
 type AutoCropState =
     | { tag: "idle" }
     | { tag: "detecting"; previewUrl: string; file: File }
-    | { tag: "cropping";  previewUrl: string; file: File; suggestedCrop?: Crop; geminiInfo?: GeminiCropInfo }
-    | { tag: "done";      result: File; sizeKb: number };
+    | { tag: "cropping"; previewUrl: string; file: File; suggestedCrop?: Crop; geminiInfo?: GeminiCropInfo }
+    | { tag: "done"; result: File; sizeKb: number };
 
 function AutoCropPoc() {
     const [state, setState] = useState<AutoCropState>({ tag: "idle" });
     const [error, setError] = useState<string | null>(null);
-    const inputRef          = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     function reset() {
         if (state.tag === "detecting" || state.tag === "cropping") {
@@ -1458,7 +1606,7 @@ function AutoCropPoc() {
             const small = await resizeForGemini(f, 1024);
             const fd = new FormData();
             fd.append("file", small);
-            const res  = await fetch("/api/expenses/detect-crop", { method: "POST", body: fd });
+            const res = await fetch("/api/expenses/detect-crop", { method: "POST", body: fd });
             const data: {
                 detected: boolean;
                 x_pct: number | null; y_pct: number | null;
@@ -1473,10 +1621,10 @@ function AutoCropPoc() {
             let suggested: Crop | undefined;
             if (data.detected && data.x_pct !== null && data.y_pct !== null && data.width_pct !== null && data.height_pct !== null) {
                 const raw: Crop = {
-                    unit:   "%",
-                    x:      data.x_pct      * 100,
-                    y:      data.y_pct      * 100,
-                    width:  data.width_pct  * 100,
+                    unit: "%",
+                    x: data.x_pct * 100,
+                    y: data.y_pct * 100,
+                    width: data.width_pct * 100,
                     height: data.height_pct * 100,
                 };
                 // Klientský safety margin: expand 3 % na každou stranu
@@ -1578,22 +1726,22 @@ function AutoCropPoc() {
 // ── PoC: Gemini auto-rotate ───────────────────────────────────────────────────
 
 type GeminiRotation = {
-    angle_degrees:  number;
+    angle_degrees: number;
     text_direction: string;
-    text_samples:   string[];
-    confidence:     number;
+    text_samples: string[];
+    confidence: number;
 };
 
 type RotateState =
     | { tag: "idle" }
     | { tag: "detecting"; previewUrl: string; file: File }
-    | { tag: "rotating";  previewUrl: string; file: File; gemini: GeminiRotation }
-    | { tag: "done";      resultUrl: string; resultFile: File; gemini: GeminiRotation };
+    | { tag: "rotating"; previewUrl: string; file: File; gemini: GeminiRotation }
+    | { tag: "done"; resultUrl: string; resultFile: File; gemini: GeminiRotation };
 
 function AutoRotatePoc() {
     const [state, setState] = useState<RotateState>({ tag: "idle" });
     const [error, setError] = useState<string | null>(null);
-    const inputRef          = useRef<HTMLInputElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
 
     function reset() {
         if (state.tag === "detecting" || state.tag === "rotating") URL.revokeObjectURL(state.previewUrl);
@@ -1614,19 +1762,19 @@ function AutoRotatePoc() {
             const small = await resizeForGemini(f, 1024);
             const fd = new FormData();
             fd.append("file", small);
-            const res  = await fetch("/api/expenses/detect-rotation", { method: "POST", body: fd });
+            const res = await fetch("/api/expenses/detect-rotation", { method: "POST", body: fd });
             const data: {
                 rotation_needed: boolean; angle_degrees: number; confidence: number;
                 text_direction?: string; text_samples?: string[]; error?: string;
             } = await res.json();
             if (!res.ok) throw new Error(data.error ?? "Chyba detekce");
 
-            const angle   = data.angle_degrees ?? 0;
+            const angle = data.angle_degrees ?? 0;
             const gemini: GeminiRotation = {
-                angle_degrees:  angle,
+                angle_degrees: angle,
                 text_direction: data.text_direction ?? "unknown",
-                text_samples:   data.text_samples  ?? [],
-                confidence:     data.confidence,
+                text_samples: data.text_samples ?? [],
+                confidence: data.confidence,
             };
 
             if (!data.rotation_needed || Math.abs(angle) < 1) {
@@ -1636,7 +1784,7 @@ function AutoRotatePoc() {
 
             // 2. Canvas rotace
             setState({ tag: "rotating", previewUrl, file: f, gemini });
-            const rotated    = await rotateImage(previewUrl, angle, f.name);
+            const rotated = await rotateImage(previewUrl, angle, f.name);
             const rotatedUrl = URL.createObjectURL(rotated);
             URL.revokeObjectURL(previewUrl);
             setState({ tag: "done", resultUrl: rotatedUrl, resultFile: rotated, gemini });
@@ -1691,11 +1839,11 @@ function AutoRotatePoc() {
                 const { gemini } = state;
                 const pct = Math.round(gemini.confidence * 100);
                 const dirLabels: Record<string, string> = {
-                    correct:       "✓ správně",
-                    rotated_cw90:  "otočeno 90° doprava",
+                    correct: "✓ správně",
+                    rotated_cw90: "otočeno 90° doprava",
                     rotated_ccw90: "otočeno 90° doleva",
-                    upside_down:   "vzhůru nohama (180°)",
-                    slight_tilt:   "mírně nakloněno",
+                    upside_down: "vzhůru nohama (180°)",
+                    slight_tilt: "mírně nakloněno",
                 };
                 return (
                     <div className="space-y-3">
@@ -1769,8 +1917,8 @@ export function EventExpensesTab({
     leaderCskNumber: string | null;
 }) {
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
-    const [loading, setLoading]   = useState(true);
-    const [error, setError]       = useState<string | null>(null);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState<string | null>(null);
     const [personOptions, setPersonOptions] = useState<PersonOption[]>([]);
     const [peopleLoaded, setPeopleLoaded] = useState(false);
 
@@ -1804,11 +1952,14 @@ export function EventExpensesTab({
         <div className="space-y-4">
             <AddExpenseForm
                 eventId={eventId}
+                personOptions={personOptions}
+                peopleLoaded={peopleLoaded}
+                onPersonCreated={handlePersonCreated}
                 onAdded={load}
             />
 
             {loading && <p className="text-sm text-gray-400 py-4 text-center">Načítám doklady…</p>}
-            {error   && <p className="text-sm text-red-500 py-4">{error}</p>}
+            {error && <p className="text-sm text-red-500 py-4">{error}</p>}
 
             {!loading && expenses !== null && (
                 <>
