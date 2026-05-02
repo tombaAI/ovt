@@ -1,2 +1,17 @@
-- přidat do nákladů akce rovnou ten form dopravy a obecných nákladů
-- odeslat náklady na mail
+
+odebrat možnost generovat čestné a dopravu
+
+
+celkově dotáhnout proces vykázání
+- je tam i tisk těch čestných??
+NE, ty budou nahrané jako doklady
+
+vyúčtování:
+poslat mail nejde, pokud
+- není nějaký doklad dodělaný, včetně beneficienta
+- existuje beneficient bez účtu
+
+mail s vyúčtováním poslat také autorovi akce
+a mě na bohemku
+
+kam se ukládají nečlenové??

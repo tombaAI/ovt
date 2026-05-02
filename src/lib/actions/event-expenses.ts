@@ -10,7 +10,7 @@ export type { ExpenseCategory };
 export type EventExpenseRow = {
     id:              number;
     eventId:         number;
-    status:          "draft" | "final";
+    status:          "draft" | "unconfirmed" | "final";
     amount:          string | null;
     purposeText:     string | null;
     purposeCategory: ExpenseCategory | null;

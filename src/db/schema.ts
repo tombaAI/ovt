@@ -496,7 +496,7 @@ export const expenseCategoryEnum = [
 ] as const;
 export type ExpenseCategory = typeof expenseCategoryEnum[number];
 
-export const eventExpenseStatusEnum = ["draft", "final"] as const;
+export const eventExpenseStatusEnum = ["draft", "unconfirmed", "final"] as const;
 export type EventExpenseStatus = typeof eventExpenseStatusEnum[number];
 
 export const eventExpenses = appSchema.table(

@@ -108,7 +108,10 @@ export async function POST(
         }
 
         const formData = await request.formData();
-        const isDraft         = String(formData.get("draft") ?? "") === "true";
+        const statusRaw       = String(formData.get("status") ?? "final");
+        const status          = (["draft", "unconfirmed", "final"] as const).includes(statusRaw as "draft" | "unconfirmed" | "final")
+            ? statusRaw as "draft" | "unconfirmed" | "final"
+            : "final";
         const amountStr       = String(formData.get("amount") ?? "").replace(",", ".");
         const purposeText     = String(formData.get("purposeText") ?? "").trim();
         const purposeCategory = String(formData.get("purposeCategory") ?? "");
@@ -117,7 +120,7 @@ export async function POST(
         const file            = formData.get("file") as File | null;
 
         let amount: number | null = null;
-        if (!isDraft) {
+        if (status === "final") {
             amount = parseFloat(amountStr);
             if (isNaN(amount) || amount <= 0)
                 return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
@@ -125,6 +128,9 @@ export async function POST(
                 return NextResponse.json({ error: "Chybí účel" }, { status: 400 });
             if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory))
                 return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
+        } else {
+            const parsed = parseFloat(amountStr);
+            if (!isNaN(parsed) && parsed > 0) amount = parsed;
         }
 
         const db = getDb();
@@ -154,12 +160,16 @@ export async function POST(
             fileMime = file.type;
         }
 
+        const purposeCategoryVal = (expenseCategoryEnum as readonly string[]).includes(purposeCategory)
+            ? purposeCategory as typeof expenseCategoryEnum[number]
+            : null;
+
         await db.insert(eventExpenses).values({
             eventId,
-            status: isDraft ? "draft" : "final",
+            status,
             amount: amount !== null ? String(amount) : null,
-            purposeText: isDraft ? null : purposeText,
-            purposeCategory: isDraft ? null : purposeCategory as typeof expenseCategoryEnum[number],
+            purposeText: purposeText || null,
+            purposeCategory: purposeCategoryVal,
             reimbursementPersonId,
             reimbursementMemberId,
             fileUrl,
