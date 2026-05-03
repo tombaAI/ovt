@@ -10,6 +10,7 @@ import {
     eventRegistrationParticipants,
     eventPaymentPrescriptions,
     auditLog,
+    members,
     type EventPaymentPrescriptionStatus,
 } from "@/db/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
@@ -847,9 +848,12 @@ export async function submitForeignWaterRegistration(
 }
 
 export type ForeignWaterRegistrationParticipant = {
+    id?: number;
     participantOrder: number;
     fullName: string;
     isPrimary: boolean;
+    memberId?: number | null;
+    memberName?: string | null;
 };
 
 export type ForeignWaterRegistrationDetail = {
@@ -1110,14 +1114,15 @@ export type EventRegistrationAdminRow = {
     participants: ForeignWaterRegistrationParticipant[];
     participantNames: string[];
     transportInfo: string | null;
-    paymentId: number;
-    paymentCode: number;
+    cancelledAt: Date | null;
+    paymentId: number | null;
+    paymentCode: number | null;
     paymentCodeLabel: string;
-    paymentAccount: string;
-    paymentVariableSymbol: string;
+    paymentAccount: string | null;
+    paymentVariableSymbol: string | null;
     paymentAmount: number;
-    paymentMessageForRecipient: string;
-    paymentStatus: EventPaymentPrescriptionStatus;
+    paymentMessageForRecipient: string | null;
+    paymentStatus: EventPaymentPrescriptionStatus | null;
     matchedLedgerId: number | null;
 };
 
@@ -1137,6 +1142,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             personsCount: eventRegistrations.personsCount,
             personsNames: eventRegistrations.personsNames,
             transportInfo: eventRegistrations.transportInfo,
+            cancelledAt: eventRegistrations.cancelledAt,
             paymentId: eventPaymentPrescriptions.id,
             paymentCode: eventPaymentPrescriptions.prescriptionCode,
             paymentAccount: eventPaymentPrescriptions.bankAccount,
@@ -1147,7 +1153,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             matchedLedgerId: eventPaymentPrescriptions.matchedLedgerId,
         })
         .from(eventRegistrations)
-        .innerJoin(
+        .leftJoin(
             eventPaymentPrescriptions,
             eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
         )
@@ -1158,12 +1164,16 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
     const participantRows = registrationIds.length > 0
         ? await db
             .select({
+                id: eventRegistrationParticipants.id,
                 registrationId: eventRegistrationParticipants.registrationId,
                 participantOrder: eventRegistrationParticipants.participantOrder,
                 fullName: eventRegistrationParticipants.fullName,
                 isPrimary: eventRegistrationParticipants.isPrimary,
+                memberId: eventRegistrationParticipants.memberId,
+                memberName: members.fullName,
             })
             .from(eventRegistrationParticipants)
+            .leftJoin(members, eq(eventRegistrationParticipants.memberId, members.id))
             .where(inArray(eventRegistrationParticipants.registrationId, registrationIds))
             .orderBy(
                 asc(eventRegistrationParticipants.registrationId),
@@ -1175,9 +1185,12 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
     for (const participantRow of participantRows) {
         const list = participantsByRegistration.get(participantRow.registrationId) ?? [];
         list.push({
+            id: participantRow.id,
             participantOrder: Number(participantRow.participantOrder),
             fullName: participantRow.fullName,
             isPrimary: participantRow.isPrimary,
+            memberId: participantRow.memberId,
+            memberName: participantRow.memberName,
         });
         participantsByRegistration.set(participantRow.registrationId, list);
     }
@@ -1206,12 +1219,13 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         participants,
         participantNames,
         transportInfo: row.transportInfo,
+        cancelledAt: row.cancelledAt as unknown as Date | null,
         paymentId: row.paymentId,
         paymentCode: row.paymentCode,
-        paymentCodeLabel: formatForeignWaterCode(row.paymentCode),
+        paymentCodeLabel: row.paymentCode ? formatForeignWaterCode(row.paymentCode) : "—",
         paymentAccount: row.paymentAccount,
         paymentVariableSymbol: row.paymentVariableSymbol,
-        paymentAmount: Number(row.paymentAmount),
+        paymentAmount: row.paymentAmount ? Number(row.paymentAmount) : 0,
         paymentMessageForRecipient: row.paymentMessageForRecipient,
         paymentStatus: row.paymentStatus,
         matchedLedgerId: row.matchedLedgerId,

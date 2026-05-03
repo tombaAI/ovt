@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -24,6 +24,9 @@ import type {
 } from "@/lib/actions/events";
 import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
 import { EventExpensesTab } from "./event-expenses-tab";
+import { EventSettlementTab } from "./event-settlement-tab";
+import { AddRegistrationDialog, LinkParticipantDialog } from "./admin-registration-dialog";
+import type { SettlementParticipant } from "@/lib/actions/event-settlement";
 
 interface Props {
     event: EventRow;
@@ -656,17 +659,32 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
     const [rows, setRows] = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const [addOpen, setAddOpen] = useState(false);
+    const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
 
-    useEffect(() => {
+    function load() {
+        setLoading(true);
         getEventRegistrationsForAdmin(eventId)
             .then(r => { setRows(r); setLoading(false); })
             .catch(e => { setError(e instanceof Error ? e.message : "Chyba"); setLoading(false); });
-    }, [eventId]);
+    }
+
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    useEffect(() => { load(); }, [eventId]);
 
     if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Načítám přihlášky…</p>;
     if (error) return <p className="text-sm text-red-500 py-4">{error}</p>;
+
     if (!rows || rows.length === 0) return (
-        <p className="text-sm text-gray-400 py-8 text-center">Žádné přihlášky</p>
+        <div className="space-y-3">
+            <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="text-xs h-8 gap-1.5">
+                    + Přidat přihlášku
+                </Button>
+            </div>
+            <p className="text-sm text-gray-400 py-8 text-center">Žádné přihlášky</p>
+            <AddRegistrationDialog eventId={eventId} open={addOpen} onClose={() => setAddOpen(false)} onAdded={load} />
+        </div>
     );
 
     const totalPersons = rows.reduce((s, r) => s + r.personsCount, 0);
@@ -703,6 +721,11 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
 
     return (
         <div className="space-y-4">
+            <div className="flex justify-end">
+                <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="text-xs h-8 gap-1.5">
+                    + Přidat přihlášku
+                </Button>
+            </div>
             <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
@@ -726,19 +749,32 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                 </div>
             </div>
 
+            <AddRegistrationDialog eventId={eventId} open={addOpen} onClose={() => setAddOpen(false)} onAdded={load} />
+            {linkTarget && (
+                <LinkParticipantDialog
+                    participant={linkTarget}
+                    open={!!linkTarget}
+                    onClose={() => setLinkTarget(null)}
+                    onLinked={load}
+                />
+            )}
+
             <div className="space-y-3">
                 {rows.map(r => {
                     const participants = r.participants.length > 0
                         ? r.participants
                         : r.participantNames.map((name, i) => ({
+                            id: undefined as number | undefined,
                             fullName: name,
                             isPrimary: i === 0,
                             participantOrder: i + 1,
+                            memberId: undefined as number | null | undefined,
+                            memberName: undefined as string | null | undefined,
                         }));
 
                     return (
                         <div key={r.registrationId} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                            <div className={`h-1 bg-gradient-to-r ${PAYMENT_STATUS_BAR_COLORS[r.paymentStatus] ?? "from-slate-200 via-slate-300 to-slate-400"}`} />
+                            <div className={`h-1 bg-gradient-to-r ${PAYMENT_STATUS_BAR_COLORS[r.paymentStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400"}`} />
 
                             <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
                                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -758,8 +794,8 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                                                 banka spárována
                                             </span>
                                         )}
-                                        <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
-                                            {PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus}
+                                        <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                                            {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
                                         </Badge>
                                         <span className="text-sm font-semibold text-slate-700 tabular-nums">
                                             {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
@@ -802,6 +838,21 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                                                         kontakt
                                                     </span>
                                                 )}
+                                                {p.memberId ? (
+                                                    <button
+                                                        onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, registrationId: r.registrationId })}
+                                                        title={`Člen: ${p.memberName}`}
+                                                        className="text-emerald-500 hover:text-emerald-700 transition-colors">
+                                                        <UserCheck size={11} />
+                                                    </button>
+                                                ) : p.id ? (
+                                                    <button
+                                                        onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, registrationId: r.registrationId })}
+                                                        title="Spárovat s členem OVT"
+                                                        className="text-gray-300 hover:text-emerald-500 transition-colors">
+                                                        <UserCheck size={11} />
+                                                    </button>
+                                                ) : null}
                                             </div>
                                         ))}
                                     </div>
@@ -943,7 +994,7 @@ export function EventDetailClient({ event }: Props) {
                 {/* ── Tabs ── */}
                 <Tabs defaultValue="detail" className="gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
-                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-3 gap-1.5 bg-transparent p-0">
+                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-4 gap-1.5 bg-transparent p-0">
                             <TabsTrigger value="detail"
                                 className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
                                 <span className="inline-flex items-center gap-1.5">
@@ -963,6 +1014,13 @@ export function EventDetailClient({ event }: Props) {
                                 <span className="inline-flex items-center gap-1.5">
                                     <Wallet size={14} />
                                     <span className="font-semibold">Náklady</span>
+                                </span>
+                            </TabsTrigger>
+                            <TabsTrigger value="settlement"
+                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <Calculator size={14} />
+                                    <span className="font-semibold">Vyúčtování</span>
                                 </span>
                             </TabsTrigger>
                         </TabsList>
@@ -1068,6 +1126,11 @@ export function EventDetailClient({ event }: Props) {
                             leaderName={event.leaderName}
                             leaderCskNumber={event.leaderCskNumber}
                         />
+                    </TabsContent>
+
+                    {/* ── Tab: Vyúčtování ── */}
+                    <TabsContent value="settlement" className="mt-0">
+                        <EventSettlementTab eventId={event.id} />
                     </TabsContent>
                 </Tabs>
 

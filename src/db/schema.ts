@@ -404,6 +404,7 @@ export const events = appSchema.table(
         gcalSync: boolean("gcal_sync").notNull().default(false),
         gcalSyncedAt: timestamp("gcal_synced_at", { withTimezone: true }),
         note: text("note"),
+        subsidyPerMember: numeric("subsidy_per_member", { precision: 10, scale: 2 }),
         createdBy: text("created_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -449,6 +450,8 @@ export const eventRegistrationParticipants = appSchema.table(
         participantOrder: smallint("participant_order").notNull(),
         fullName: text("full_name").notNull(),
         isPrimary: boolean("is_primary").notNull().default(false),
+        memberId: integer("member_id").references(() => members.id, { onDelete: "set null" }),
+        personId: integer("person_id").references(() => people.id, { onDelete: "set null" }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
@@ -475,6 +478,7 @@ export const eventPaymentPrescriptions = appSchema.table(
         matchedLedgerId: integer("matched_ledger_id").references(() => paymentLedger.id, { onDelete: "set null" }),
         matchedAmount: numeric("matched_amount", { precision: 10, scale: 2 }),
         matchedAt: timestamp("matched_at", { withTimezone: true }),
+        paymentDue: date("payment_due"),
         note: text("note"),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -499,6 +503,9 @@ export type ExpenseCategory = typeof expenseCategoryEnum[number];
 export const eventExpenseStatusEnum = ["draft", "unconfirmed", "final"] as const;
 export type EventExpenseStatus = typeof eventExpenseStatusEnum[number];
 
+export const eventExpenseAllocationMethodEnum = ["split_all", "per_registration"] as const;
+export type EventExpenseAllocationMethod = typeof eventExpenseAllocationMethodEnum[number];
+
 export const eventExpenses = appSchema.table(
     "event_expenses",
     {
@@ -506,6 +513,7 @@ export const eventExpenses = appSchema.table(
         eventId: integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
         status: text("status", { enum: eventExpenseStatusEnum }).notNull().default("final"),
         amount: numeric("amount", { precision: 10, scale: 2 }),        // null u draftů
+        allocationMethod: text("allocation_method", { enum: eventExpenseAllocationMethodEnum }).notNull().default("split_all"),
         purposeText: text("purpose_text"),
         purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }),
         reimbursementPersonId: integer("reimbursement_person_id").references(() => people.id, { onDelete: "set null" }),
@@ -520,6 +528,22 @@ export const eventExpenses = appSchema.table(
         index("event_expenses_event_idx").on(t.eventId),
         index("event_expenses_reimbursement_person_idx").on(t.reimbursementPersonId),
         index("event_expenses_reimbursement_member_idx").on(t.reimbursementMemberId),
+    ]
+);
+
+export const eventExpenseAllocations = appSchema.table(
+    "event_expense_allocations",
+    {
+        id: serial("id").primaryKey(),
+        expenseId: integer("expense_id").notNull().references(() => eventExpenses.id, { onDelete: "cascade" }),
+        registrationId: integer("registration_id").notNull().references(() => eventRegistrations.id, { onDelete: "cascade" }),
+        amount: numeric("amount", { precision: 10, scale: 2 }).notNull(),
+        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [
+        uniqueIndex("event_expense_allocations_uq").on(t.expenseId, t.registrationId),
+        index("event_expense_allocations_expense_idx").on(t.expenseId),
+        index("event_expense_allocations_registration_idx").on(t.registrationId),
     ]
 );
 
