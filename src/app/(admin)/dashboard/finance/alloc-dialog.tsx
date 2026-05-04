@@ -41,7 +41,7 @@ function vsMatchesDesc(vs: number, desc: string): boolean {
 
 type ContribSuggestion = { kind: "contrib"; contrib: ContribOption; reasons: string[]; score: number };
 type EventSuggestion   = { kind: "event";  presc: EventPrescriptionOption; confidence: number; amountMatch: boolean };
-type AnyMatch = ContribSuggestion | EventSuggestion;
+
 
 function findContribSuggestions(tx: FinanceTjTransaction, contribs: ContribOption[]): ContribSuggestion[] {
     const desc    = normalize(tx.description);
