@@ -117,9 +117,10 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     }
 
     // ── Formulář nové alokace ─────────────────────────────────────────────────
-    const [memberFilter, setMemberFilter] = useState("");
+    const [memberFilter, setMemberFilter]       = useState("");
+    const [selectedMemberId, setSelectedMemberId] = useState<number | null>(null); // nezávislý stav člena
     const [selectedContribId, setSelectedContribId] = useState<number | null>(null);
-    const [amount, setAmount]             = useState(credit.toFixed(2));
+    const [amount, setAmount]                   = useState(credit.toFixed(2));
 
     // Unikátní členové pro výběr
     const memberOptions = useMemo(() => {
@@ -137,9 +138,6 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
         ? memberOptions.filter(m => m.memberName.toLowerCase().includes(memberFilter.toLowerCase()))
         : memberOptions;
 
-    const selectedContrib = contribs.find(c => c.contribId === selectedContribId);
-    const selectedMemberId = selectedContrib?.memberId ?? null;
-
     // Předpisy vybraného člena — jen nezaplacené (sestupně dle roku)
     const memberContribs = selectedMemberId
         ? contribs
@@ -148,9 +146,12 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
             .sort((a, b) => b.year - a.year)
         : [];
 
+    const memberFullyPaid = selectedMemberId !== null && memberContribs.length === 0;
+
     function handleMemberSelect(memberId: number) {
         const memberName = memberOptions.find(m => m.memberId === memberId)?.memberName ?? "";
         setMemberFilter(memberName);
+        setSelectedMemberId(memberId);      // uložit výběr člena nezávisle
         setSelectedContribId(null);
         // Automaticky vyber nejnovější NEZAPLACENÝ předpis
         const latest = contribs
@@ -196,6 +197,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     function handleClose() {
         setAllocations(null);
         setSelectedContribId(null);
+        setSelectedMemberId(null);
         setMemberFilter("");
         setError(null);
         onClose();
@@ -303,7 +305,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                             <input
                                 type="text"
                                 value={memberFilter}
-                                onChange={e => { setMemberFilter(e.target.value); setSelectedContribId(null); }}
+                                onChange={e => { setMemberFilter(e.target.value); setSelectedContribId(null); setSelectedMemberId(null); }}
                                 placeholder="Hledat podle jména…"
                                 className="w-full rounded-md border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#327600]/30"
                             />
@@ -326,9 +328,10 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                         </div>
 
                         {/* Zpráva: člen nemá žádný volný předpis */}
-                        {selectedMemberId && memberContribs.length === 0 && (
-                            <p className="text-xs text-amber-700 bg-amber-50 rounded-md px-3 py-2">
-                                Všechny předpisy tohoto člena jsou již plně napárovány.
+                        {memberFullyPaid && (
+                            <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-md px-3 py-2">
+                                Tomuto členovi jsou všechny předpisy příspěvků za rok s touto částkou již napárovány.
+                                Nelze přidat další platbu — součet by neseděl.
                             </p>
                         )}
 
@@ -377,6 +380,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                             </div>
                         )}
 
+                        {!memberFullyPaid && (
                         <Button
                             size="sm"
                             className="gap-1.5"
@@ -389,6 +393,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                             }
                             Napárovat
                         </Button>
+                        )}
                     </div>
                 )}
 
