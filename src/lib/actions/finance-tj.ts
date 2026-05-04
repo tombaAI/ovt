@@ -7,12 +7,15 @@ import {
     importFinTjAllocations, memberContributions, contributionPeriods, members,
     paymentLedger, paymentAllocations,
     eventPaymentPrescriptions, eventRegistrations, events,
+    mailEvents,
 } from "@/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-parser";
 import { parseHospodareniPdf } from "@/lib/parsers/tj-hospodareni-parser";
+import { getEmailSettings, getResendClient } from "@/lib/email";
+import { buildContribPaymentConfirmationEmail, buildEventPaymentConfirmationEmail } from "@/lib/email-templates/payment-confirmation";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -867,6 +870,57 @@ export async function createTjAllocation(params: {
             createdBy:       session.user.email,
         });
 
+        // ── Potvrzovací e-mail členovi ───────────────────────────────────────
+        try {
+            const emailSettings = getEmailSettings();
+            if (emailSettings.configured) {
+                const [memberRow] = await db
+                    .select({ email: members.email, firstName: members.firstName, lastName: members.lastName, variableSymbol: members.variableSymbol })
+                    .from(members).where(eq(members.id, params.memberId));
+                const [contribRow] = await db
+                    .select({ amountTotal: memberContributions.amountTotal })
+                    .from(memberContributions).where(eq(memberContributions.id, params.contribId));
+                const [periodRow] = await db
+                    .select({ year: contributionPeriods.year })
+                    .from(contributionPeriods)
+                    .innerJoin(memberContributions, eq(memberContributions.periodId, contributionPeriods.id))
+                    .where(eq(memberContributions.id, params.contribId));
+
+                if (memberRow?.email) {
+                    const toEmail = emailSettings.testTo ?? memberRow.email;
+                    const { subject, html } = buildContribPaymentConfirmationEmail({
+                        firstName:      memberRow.firstName,
+                        lastName:       memberRow.lastName,
+                        year:           Number(periodRow?.year ?? new Date().getFullYear()),
+                        amountPaid:     contribRow?.amountTotal ?? params.amount,
+                        paidAt:         tjTx.docDate,
+                        variableSymbol: memberRow.variableSymbol,
+                    });
+                    const resend = getResendClient();
+                    let messageId: string | null = null;
+                    let sendError: string | null = null;
+                    try {
+                        const result = await resend.emails.send({ from: emailSettings.from, to: toEmail, subject, html, ...(emailSettings.replyTo ? { replyTo: emailSettings.replyTo } : {}) });
+                        messageId = result.data?.id ?? null;
+                    } catch (err) {
+                        sendError = String(err);
+                        console.error("createTjAllocation: e-mail failed", err);
+                    }
+                    await db.insert(mailEvents).values({
+                        provider: "resend", direction: "outbound",
+                        eventType: sendError ? "send_failed" : "sent",
+                        emailType: "contrib_payment_confirmation",
+                        messageId, fromEmail: emailSettings.from, toEmail, subject,
+                        payload:  { error: sendError, tjTransactionId: params.tjTransactionId },
+                        memberId: params.memberId, contribId: params.contribId,
+                    });
+                }
+            }
+        } catch (emailErr) {
+            console.error("createTjAllocation: e-mail pipeline error", emailErr);
+            // Neblokuje úspěch párování
+        }
+
         revalidatePath("/dashboard/finance");
         revalidatePath("/dashboard/contributions");
         return { success: true };
@@ -1016,6 +1070,57 @@ export async function createTjEventAllocation(params: {
             note:                params.note || null,
             createdBy:           session.user.email,
         });
+
+        // ── Potvrzovací e-mail přihlášenému ─────────────────────────────────
+        try {
+            const emailSettings = getEmailSettings();
+            if (emailSettings.configured) {
+                const [prescFull] = await db
+                    .select({ prescriptionCode: eventPaymentPrescriptions.prescriptionCode, registrationId: eventPaymentPrescriptions.registrationId, eventId: eventPaymentPrescriptions.eventId })
+                    .from(eventPaymentPrescriptions)
+                    .where(eq(eventPaymentPrescriptions.id, params.prescriptionId));
+                const [regRow] = prescFull ? await db
+                    .select({ email: eventRegistrations.email, firstName: eventRegistrations.firstName, lastName: eventRegistrations.lastName })
+                    .from(eventRegistrations)
+                    .where(eq(eventRegistrations.id, prescFull.registrationId)) : [];
+                const [eventRow] = prescFull ? await db
+                    .select({ name: events.name })
+                    .from(events)
+                    .where(eq(events.id, prescFull.eventId)) : [];
+
+                if (regRow?.email && eventRow && prescFull) {
+                    const toEmail = emailSettings.testTo ?? regRow.email;
+                    const { subject, html } = buildEventPaymentConfirmationEmail({
+                        firstName:        regRow.firstName,
+                        lastName:         regRow.lastName,
+                        eventName:        eventRow.name,
+                        amountPaid:       params.amount,
+                        paidAt:           tjTx.docDate,
+                        prescriptionCode: prescFull.prescriptionCode,
+                    });
+                    const resend = getResendClient();
+                    let messageId: string | null = null;
+                    let sendError: string | null = null;
+                    try {
+                        const result = await resend.emails.send({ from: emailSettings.from, to: toEmail, subject, html, ...(emailSettings.replyTo ? { replyTo: emailSettings.replyTo } : {}) });
+                        messageId = result.data?.id ?? null;
+                    } catch (err) {
+                        sendError = String(err);
+                        console.error("createTjEventAllocation: e-mail failed", err);
+                    }
+                    await db.insert(mailEvents).values({
+                        provider: "resend", direction: "outbound",
+                        eventType: sendError ? "send_failed" : "sent",
+                        emailType: "event_payment_confirmation",
+                        messageId, fromEmail: emailSettings.from, toEmail, subject,
+                        payload:  { error: sendError, tjTransactionId: params.tjTransactionId, prescriptionId: params.prescriptionId },
+                    });
+                }
+            }
+        } catch (emailErr) {
+            console.error("createTjEventAllocation: e-mail pipeline error", emailErr);
+            // Neblokuje úspěch párování
+        }
 
         revalidatePath("/dashboard/finance");
         return { success: true };
