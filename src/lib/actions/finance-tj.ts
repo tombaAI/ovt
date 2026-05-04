@@ -820,6 +820,7 @@ export async function createTjAllocation(params: {
     memberId:        number;
     amount:          number;
     note?:           string;
+    sendEmail?:      boolean;
 }): Promise<AllocResult> {
     const session = await auth();
     if (!session?.user?.email) return { error: "Nepřihlášen" };
@@ -873,7 +874,7 @@ export async function createTjAllocation(params: {
         // ── Potvrzovací e-mail členovi ───────────────────────────────────────
         try {
             const emailSettings = getEmailSettings();
-            if (emailSettings.configured) {
+            if (params.sendEmail !== false && emailSettings.configured) {
                 const [memberRow] = await db
                     .select({ email: members.email, firstName: members.firstName, lastName: members.lastName, variableSymbol: members.variableSymbol })
                     .from(members).where(eq(members.id, params.memberId));
@@ -1017,6 +1018,7 @@ export async function createTjEventAllocation(params: {
     prescriptionId:   number;
     amount:           number;
     note?:            string;
+    sendEmail?:       boolean;
 }): Promise<AllocResult> {
     const session = await auth();
     if (!session?.user?.email) return { error: "Nepřihlášen" };
@@ -1074,7 +1076,7 @@ export async function createTjEventAllocation(params: {
         // ── Potvrzovací e-mail přihlášenému ─────────────────────────────────
         try {
             const emailSettings = getEmailSettings();
-            if (emailSettings.configured) {
+            if (params.sendEmail !== false && emailSettings.configured) {
                 const [prescFull] = await db
                     .select({ prescriptionCode: eventPaymentPrescriptions.prescriptionCode, registrationId: eventPaymentPrescriptions.registrationId, eventId: eventPaymentPrescriptions.eventId })
                     .from(eventPaymentPrescriptions)

@@ -156,7 +156,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     function handleQuickAlloc(contrib: ContribOption) {
         setError(null);
         startSave(async () => {
-            const res = await createTjAllocation({ tjTransactionId: tx.id, contribId: contrib.contribId, memberId: contrib.memberId, amount: parseFloat(tx.credit) });
+            const res = await createTjAllocation({ tjTransactionId: tx.id, contribId: contrib.contribId, memberId: contrib.memberId, amount: parseFloat(tx.credit), sendEmail });
             if ("error" in res) { setError(res.error); return; }
             try { setAllocations(await getTjAllocations(tx.id)); } catch { setAllocations([]); }
         });
@@ -165,7 +165,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     function handleQuickEventAlloc(presc: EventPrescriptionOption) {
         setError(null);
         startSave(async () => {
-            const res = await createTjEventAllocation({ tjTransactionId: tx.id, prescriptionId: presc.prescriptionId, amount: parseFloat(tx.credit) });
+            const res = await createTjEventAllocation({ tjTransactionId: tx.id, prescriptionId: presc.prescriptionId, amount: parseFloat(tx.credit), sendEmail });
             if ("error" in res) { setError(res.error); return; }
             try {
                 const [a, e] = await Promise.all([getTjAllocations(tx.id), getEventPrescriptionsForAllocation()]);
@@ -185,6 +185,9 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
             } catch { setAllocations([]); }
         });
     }
+
+    // ── E-mail opt-out ────────────────────────────────────────────────────────
+    const [sendEmail, setSendEmail] = useState(true);
 
     // ── Manuální formulář ─────────────────────────────────────────────────────
     const [mode, setMode] = useState<"contrib" | "event">("contrib");
@@ -247,7 +250,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
         if (isNaN(amt) || amt <= 0) { setError("Zadejte platnou částku"); return; }
         setError(null);
         startSave(async () => {
-            const res = await createTjAllocation({ tjTransactionId: tx.id, contribId: selectedContribId, memberId: selectedMemberId, amount: amt });
+            const res = await createTjAllocation({ tjTransactionId: tx.id, contribId: selectedContribId, memberId: selectedMemberId, amount: amt, sendEmail });
             if ("error" in res) { setError(res.error); return; }
             try { setAllocations(await getTjAllocations(tx.id)); } catch { setAllocations([]); }
             setSelectedContribId(null); setMemberFilter(""); setSelectedMemberId(null);
@@ -260,7 +263,7 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
         if (isNaN(amt) || amt <= 0) { setError("Zadejte platnou částku"); return; }
         setError(null);
         startSave(async () => {
-            const res = await createTjEventAllocation({ tjTransactionId: tx.id, prescriptionId: selectedPrescId, amount: amt });
+            const res = await createTjEventAllocation({ tjTransactionId: tx.id, prescriptionId: selectedPrescId, amount: amt, sendEmail });
             if ("error" in res) { setError(res.error); return; }
             try {
                 const [a, e] = await Promise.all([getTjAllocations(tx.id), getEventPrescriptionsForAllocation()]);
@@ -307,6 +310,17 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                         </div>
                     )}
                 </div>
+
+                {/* E-mail opt-out — globální, nad všemi akcemi */}
+                <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                    <input
+                        type="checkbox"
+                        checked={sendEmail}
+                        onChange={e => setSendEmail(e.target.checked)}
+                        className="h-4 w-4 rounded border-gray-300 text-[#327600] focus:ring-[#327600]/30"
+                    />
+                    Odeslat potvrzovací e-mail po napárování
+                </label>
 
                 {/* Automatické návrhy */}
                 {hasSuggestions && !loadPending && (
