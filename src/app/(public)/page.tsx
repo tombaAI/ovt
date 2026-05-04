@@ -320,18 +320,14 @@ export default function HomePage() {
             </section>
 
             {/* Footer */}
-            <footer style={{ backgroundColor: "#26272b" }} className="mt-auto py-10 px-4 text-gray-400 text-sm">
-                <div className="max-w-6xl mx-auto flex flex-col sm:flex-row justify-between gap-6">
-                    <div>
-                        <p className="text-white font-semibold mb-1">OVT Bohemians</p>
-                        <p>Oddíl vodní turistiky · TJ Bohemians Praha</p>
+            <footer style={{ backgroundColor: "#26272b" }} className="mt-auto py-3 px-4 text-gray-400 text-sm">
+                <div className="max-w-6xl mx-auto flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <a href="https://hamerak.ovtbohemians.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Hamerský potok</a>
+                        <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TOM</a>
+                        <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Bohemians</a>
                     </div>
-                    <div className="flex flex-col gap-1 sm:text-right">
-                        <a href="https://www.bohemianstj.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TJ Bohemians Praha ↗</a>
-                        <a href="https://klokani-bohemians.cz/" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">TOM Bohemians (mládež) ↗</a>
-                        <a href="https://hamerak.ovtbohemians.cz" target="_blank" rel="noopener noreferrer" className="hover:text-white transition-colors">Hamerský potok ↗</a>
-                        <a href="https://is.ovtbohemians.cz/login" className="hover:text-white transition-colors">Přihlásit se do IS</a>
-                    </div>
+                    <span>© Tomáš Bauer</span>
                 </div>
             </footer>
         </div>
