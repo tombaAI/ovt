@@ -6,6 +6,7 @@ import {
     importFinTjHospodareniImports, importFinTjHospodareniRows,
     importFinTjAllocations, memberContributions, contributionPeriods, members,
     paymentLedger, paymentAllocations,
+    eventPaymentPrescriptions, eventRegistrations, events,
 } from "@/db/schema";
 import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -649,16 +650,23 @@ export async function getStavUctu(): Promise<StavUctuData> {
 // ── TJ Alokace: typy ──────────────────────────────────────────────────────────
 
 export type TjAllocation = {
-    id:              number;
-    tjTransactionId: number;
-    contribId:       number;
-    memberId:        number;
-    memberName:      string;
-    year:            number;
-    amount:          string;
-    note:            string | null;
-    createdBy:       string;
-    createdAt:       Date;
+    id:                  number;
+    tjTransactionId:     number;
+    // Příspěvek:
+    contribId:           number | null;
+    memberId:            number | null;
+    memberName:          string | null;
+    year:                number | null;
+    // Akce:
+    eventPrescriptionId: number | null;
+    prescriptionCode:    number | null;
+    eventName:           string | null;
+    registrantName:      string | null;
+    // Společné:
+    amount:              string;
+    note:                string | null;
+    createdBy:           string;
+    createdAt:           Date;
 };
 
 export type ContribOption = {
@@ -677,26 +685,92 @@ export type AllocResult = { error: string } | { success: true };
 
 export async function getTjAllocations(tjTransactionId: number): Promise<TjAllocation[]> {
     const db = getDb();
-    const rows = await db
+
+    // Příspěvky
+    const contribRows = await db
         .select({
-            id:              importFinTjAllocations.id,
-            tjTransactionId: importFinTjAllocations.tjTransactionId,
-            contribId:       importFinTjAllocations.contribId,
-            memberId:        importFinTjAllocations.memberId,
-            memberName:      members.fullName,
-            year:            contributionPeriods.year,
-            amount:          importFinTjAllocations.amount,
-            note:            importFinTjAllocations.note,
-            createdBy:       importFinTjAllocations.createdBy,
-            createdAt:       importFinTjAllocations.createdAt,
+            id:                  importFinTjAllocations.id,
+            tjTransactionId:     importFinTjAllocations.tjTransactionId,
+            contribId:           importFinTjAllocations.contribId,
+            eventPrescriptionId: importFinTjAllocations.eventPrescriptionId,
+            memberId:            importFinTjAllocations.memberId,
+            memberName:          members.fullName,
+            year:                contributionPeriods.year,
+            amount:              importFinTjAllocations.amount,
+            note:                importFinTjAllocations.note,
+            createdBy:           importFinTjAllocations.createdBy,
+            createdAt:           importFinTjAllocations.createdAt,
         })
         .from(importFinTjAllocations)
         .innerJoin(members, eq(members.id, importFinTjAllocations.memberId))
         .innerJoin(memberContributions, eq(memberContributions.id, importFinTjAllocations.contribId))
         .innerJoin(contributionPeriods, eq(contributionPeriods.id, memberContributions.periodId))
-        .where(eq(importFinTjAllocations.tjTransactionId, tjTransactionId))
+        .where(and(
+            eq(importFinTjAllocations.tjTransactionId, tjTransactionId),
+            sql`${importFinTjAllocations.contribId} IS NOT NULL`,
+        ))
         .orderBy(importFinTjAllocations.createdAt);
-    return rows.map(r => ({ ...r, year: Number(r.year) }));
+
+    // Akce / event prescriptions
+    const eventRows = await db
+        .select({
+            id:                  importFinTjAllocations.id,
+            tjTransactionId:     importFinTjAllocations.tjTransactionId,
+            eventPrescriptionId: importFinTjAllocations.eventPrescriptionId,
+            prescriptionCode:    eventPaymentPrescriptions.prescriptionCode,
+            eventName:           events.name,
+            registrantFirstName: eventRegistrations.firstName,
+            registrantLastName:  eventRegistrations.lastName,
+            amount:              importFinTjAllocations.amount,
+            note:                importFinTjAllocations.note,
+            createdBy:           importFinTjAllocations.createdBy,
+            createdAt:           importFinTjAllocations.createdAt,
+        })
+        .from(importFinTjAllocations)
+        .innerJoin(eventPaymentPrescriptions, eq(eventPaymentPrescriptions.id, importFinTjAllocations.eventPrescriptionId))
+        .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventPaymentPrescriptions.registrationId))
+        .innerJoin(events, eq(events.id, eventPaymentPrescriptions.eventId))
+        .where(and(
+            eq(importFinTjAllocations.tjTransactionId, tjTransactionId),
+            sql`${importFinTjAllocations.eventPrescriptionId} IS NOT NULL`,
+        ))
+        .orderBy(importFinTjAllocations.createdAt);
+
+    const contribAllocs: TjAllocation[] = contribRows.map(r => ({
+        id:                  r.id,
+        tjTransactionId:     r.tjTransactionId,
+        contribId:           r.contribId,
+        memberId:            r.memberId,
+        memberName:          r.memberName,
+        year:                Number(r.year),
+        eventPrescriptionId: null,
+        prescriptionCode:    null,
+        eventName:           null,
+        registrantName:      null,
+        amount:              r.amount,
+        note:                r.note,
+        createdBy:           r.createdBy,
+        createdAt:           r.createdAt,
+    }));
+
+    const eventAllocs: TjAllocation[] = eventRows.map(r => ({
+        id:                  r.id,
+        tjTransactionId:     r.tjTransactionId,
+        contribId:           null,
+        memberId:            null,
+        memberName:          null,
+        year:                null,
+        eventPrescriptionId: r.eventPrescriptionId,
+        prescriptionCode:    r.prescriptionCode,
+        eventName:           r.eventName,
+        registrantName:      `${r.registrantFirstName} ${r.registrantLastName}`,
+        amount:              r.amount,
+        note:                r.note,
+        createdBy:           r.createdBy,
+        createdAt:           r.createdAt,
+    }));
+
+    return [...contribAllocs, ...eventAllocs].sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
 
 export async function getAllTjAllocationSums(): Promise<Map<number, number>> {
@@ -808,17 +882,24 @@ export async function deleteTjAllocation(allocationId: number): Promise<AllocRes
     try {
         const db = getDb();
 
-        // Najdeme ledger_id
         const [alloc] = await db
-            .select({ ledgerId: importFinTjAllocations.ledgerId })
+            .select({ ledgerId: importFinTjAllocations.ledgerId, eventPrescriptionId: importFinTjAllocations.eventPrescriptionId })
             .from(importFinTjAllocations)
             .where(eq(importFinTjAllocations.id, allocationId));
 
-        // Pořadí: nejdřív payment_allocations, pak payment_ledger, pak tj_alloc
-        if (alloc?.ledgerId) {
+        // Příspěvky: smazat payment_allocations → payment_ledger
+        if (alloc?.ledgerId && !alloc.eventPrescriptionId) {
             await db.delete(paymentAllocations).where(eq(paymentAllocations.ledgerId, alloc.ledgerId));
             await db.delete(paymentLedger).where(eq(paymentLedger.id, alloc.ledgerId));
         }
+        // Akce: vrátit event prescription na pending + smazat ledger
+        if (alloc?.eventPrescriptionId && alloc.ledgerId) {
+            await db.update(eventPaymentPrescriptions)
+                .set({ status: "pending", matchedLedgerId: null, matchedAmount: null, matchedAt: null, updatedAt: new Date() })
+                .where(eq(eventPaymentPrescriptions.id, alloc.eventPrescriptionId));
+            await db.delete(paymentLedger).where(eq(paymentLedger.id, alloc.ledgerId));
+        }
+
         await db.delete(importFinTjAllocations).where(eq(importFinTjAllocations.id, allocationId));
 
         revalidatePath("/dashboard/finance");
@@ -827,5 +908,119 @@ export async function deleteTjAllocation(allocationId: number): Promise<AllocRes
     } catch (e) {
         console.error("deleteTjAllocation error:", e);
         return { error: "Chyba při mazání alokace" };
+    }
+}
+
+// ── Event prescription párování ───────────────────────────────────────────────
+
+export type EventPrescriptionOption = {
+    prescriptionId:   number;
+    prescriptionCode: number;
+    eventId:          number;
+    eventName:        string;
+    registrationId:   number;
+    registrantName:   string;
+    amount:           string;
+    status:           string;
+    variableSymbol:   string;
+};
+
+export async function getEventPrescriptionsForAllocation(): Promise<EventPrescriptionOption[]> {
+    const db = getDb();
+    const rows = await db
+        .select({
+            prescriptionId:   eventPaymentPrescriptions.id,
+            prescriptionCode: eventPaymentPrescriptions.prescriptionCode,
+            eventId:          eventPaymentPrescriptions.eventId,
+            eventName:        events.name,
+            registrationId:   eventPaymentPrescriptions.registrationId,
+            registrantFirst:  eventRegistrations.firstName,
+            registrantLast:   eventRegistrations.lastName,
+            amount:           eventPaymentPrescriptions.amount,
+            status:           eventPaymentPrescriptions.status,
+            variableSymbol:   eventPaymentPrescriptions.variableSymbol,
+        })
+        .from(eventPaymentPrescriptions)
+        .innerJoin(events, eq(events.id, eventPaymentPrescriptions.eventId))
+        .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventPaymentPrescriptions.registrationId))
+        .where(sql`${eventPaymentPrescriptions.status} IN ('pending', 'matched')`)
+        .orderBy(events.name, eventRegistrations.lastName, eventRegistrations.firstName);
+    return rows.map(r => ({
+        prescriptionId:   r.prescriptionId,
+        prescriptionCode: r.prescriptionCode,
+        eventId:          r.eventId,
+        eventName:        r.eventName,
+        registrationId:   r.registrationId,
+        registrantName:   `${r.registrantFirst} ${r.registrantLast}`,
+        amount:           r.amount,
+        status:           r.status,
+        variableSymbol:   r.variableSymbol,
+    }));
+}
+
+export async function createTjEventAllocation(params: {
+    tjTransactionId:  number;
+    prescriptionId:   number;
+    amount:           number;
+    note?:            string;
+}): Promise<AllocResult> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    try {
+        const db = getDb();
+
+        const [tjTx] = await db
+            .select({ docDate: importFinTjTransactions.docDate, description: importFinTjTransactions.description, docNumber: importFinTjTransactions.docNumber })
+            .from(importFinTjTransactions)
+            .where(eq(importFinTjTransactions.id, params.tjTransactionId));
+        if (!tjTx) return { error: "TJ transakce nenalezena" };
+
+        const [presc] = await db
+            .select({ id: eventPaymentPrescriptions.id, status: eventPaymentPrescriptions.status })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, params.prescriptionId));
+        if (!presc) return { error: "Předpis platby nenalezen" };
+        if (presc.status === "paid") return { error: "Tento předpis je již zaplacen" };
+
+        // 1. Zapsat do payment_ledger
+        const [ledgerRow] = await db
+            .insert(paymentLedger)
+            .values({
+                sourceType:           "tj_finance",
+                paidAt:               tjTx.docDate,
+                amount:               params.amount.toFixed(2),
+                message:              tjTx.description,
+                note:                 params.note || `TJ doklad: ${tjTx.docNumber}`,
+                reconciliationStatus: "confirmed",
+                createdBy:            session.user.email,
+            })
+            .returning({ id: paymentLedger.id });
+
+        // 2. Aktualizovat event prescription
+        await db.update(eventPaymentPrescriptions)
+            .set({
+                status:          "matched",
+                matchedLedgerId: ledgerRow.id,
+                matchedAmount:   params.amount.toFixed(2),
+                matchedAt:       new Date(),
+                updatedAt:       new Date(),
+            })
+            .where(eq(eventPaymentPrescriptions.id, params.prescriptionId));
+
+        // 3. Zapsat do TJ alokační tabulky
+        await db.insert(importFinTjAllocations).values({
+            tjTransactionId:     params.tjTransactionId,
+            eventPrescriptionId: params.prescriptionId,
+            ledgerId:            ledgerRow.id,
+            amount:              params.amount.toFixed(2),
+            note:                params.note || null,
+            createdBy:           session.user.email,
+        });
+
+        revalidatePath("/dashboard/finance");
+        return { success: true };
+    } catch (e) {
+        console.error("createTjEventAllocation error:", e);
+        return { error: "Chyba při ukládání alokace" };
     }
 }

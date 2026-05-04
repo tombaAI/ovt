@@ -727,19 +727,22 @@ export const importFinTjImportLines = appSchema.table(
 export const importFinTjAllocations = appSchema.table(
     "import_fin_tj_allocations",
     {
-        id: serial("id").primaryKey(),
-        tjTransactionId: integer("tj_transaction_id").notNull().references(() => importFinTjTransactions.id, { onDelete: "cascade" }),
-        contribId: integer("contrib_id").notNull().references(() => memberContributions.id),
-        memberId: integer("member_id").notNull().references(() => members.id),
-        ledgerId: integer("ledger_id").references(() => paymentLedger.id, { onDelete: "set null" }),
-        amount: numeric("amount", { precision: 12, scale: 2 }).notNull(),
-        note: text("note"),
-        createdBy: text("created_by").notNull(),
-        createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        id:                  serial("id").primaryKey(),
+        tjTransactionId:     integer("tj_transaction_id").notNull().references(() => importFinTjTransactions.id, { onDelete: "cascade" }),
+        // Právě jedno z contribId / eventPrescriptionId musí být vyplněno
+        contribId:           integer("contrib_id").references(() => memberContributions.id),
+        eventPrescriptionId: integer("event_prescription_id").references(() => eventPaymentPrescriptions.id, { onDelete: "set null" }),
+        memberId:            integer("member_id").references(() => members.id),
+        ledgerId:            integer("ledger_id").references(() => paymentLedger.id, { onDelete: "set null" }),
+        amount:              numeric("amount", { precision: 12, scale: 2 }).notNull(),
+        note:                text("note"),
+        createdBy:           text("created_by").notNull(),
+        createdAt:           timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
     (t) => [
         index("import_fin_tj_alloc_tx_idx").on(t.tjTransactionId),
         index("import_fin_tj_alloc_contrib_idx").on(t.contribId),
+        index("import_fin_tj_alloc_event_idx").on(t.eventPrescriptionId),
     ]
 );
 
