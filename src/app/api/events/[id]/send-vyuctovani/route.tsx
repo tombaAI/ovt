@@ -1,5 +1,6 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { asc, eq } from "drizzle-orm";
+import * as iconv from "iconv-lite";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { eventExpenses, events, members, people } from "@/db/schema";
@@ -49,6 +50,73 @@ function csvCell(value: string | number | null): string {
 
 function formatAmount(amount: number): string {
   return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(amount);
+}
+
+type PohodaPayment = {
+  id: string;
+  payeeName: string;
+  bankAccountNumber: string;
+  bankCode: string;
+  amount: number;
+  text: string;
+  note: string;
+  datePayment: string;
+};
+
+function xmlEscape(value: string): string {
+  return value
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function generatePohodaXml(
+  payments: PohodaPayment[],
+  eventName: string,
+  ico: string,
+): Buffer {
+  const itemsXml = payments.map((p) => `
+  <dat:dataPackItem version="2.0" id="${xmlEscape(p.id)}">
+    <bnk:bank version="2.0">
+      <bnk:bankHeader>
+        <bnk:bankType>expense</bnk:bankType>
+        <bnk:datePayment>${p.datePayment}</bnk:datePayment>
+        <bnk:text>${xmlEscape(p.text.slice(0, 96))}</bnk:text>
+        <bnk:partnerIdentity>
+          <typ:address>
+            <typ:name>${xmlEscape(p.payeeName)}</typ:name>
+          </typ:address>
+        </bnk:partnerIdentity>
+        <bnk:paymentAccount>
+          <typ:accountNo>${xmlEscape(p.bankAccountNumber)}</typ:accountNo>
+          <typ:bankCode>${xmlEscape(p.bankCode)}</typ:bankCode>
+        </bnk:paymentAccount>
+        <bnk:note>${xmlEscape(p.note)}</bnk:note>
+      </bnk:bankHeader>
+      <bnk:bankSummary>
+        <bnk:homeCurrency>
+          <typ:priceNone>${p.amount.toFixed(2)}</typ:priceNone>
+        </bnk:homeCurrency>
+      </bnk:bankSummary>
+    </bnk:bank>
+  </dat:dataPackItem>`).join("");
+
+  const xml = `<?xml version="1.0" encoding="Windows-1250"?>
+<dat:dataPack
+    xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
+    xmlns:bnk="http://www.stormware.cz/schema/version_2/bank.xsd"
+    xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd"
+    version="2.0"
+    id="ovt-vydaje-${Date.now()}"
+    ico="${xmlEscape(ico)}"
+    application="OVT Bohemians"
+    note="${xmlEscape(`Proplacení výdajů z akce: ${eventName}`)}">${itemsXml}
+</dat:dataPack>`;
+
+  // POHODA requires Windows-1250 encoding
+  return iconv.encode(xml, "win1250");
 }
 
 async function fetchPrivateBlobAttachment(url: string, filename: string): Promise<EmailAttachment> {
@@ -271,6 +339,21 @@ export async function POST(
       ));
 
     const documentAttachments = await Promise.all(attachmentPromises);
+
+    const ico = process.env.ICO_TJ_BOHEMIANS ?? "";
+    const datePayment = new Date().toISOString().slice(0, 10);
+    const pohodaPayments: PohodaPayment[] = payeeGroups.map((g, i) => ({
+      id: `vydaj-${i + 1}`,
+      payeeName: g.payeeName,
+      bankAccountNumber: g.bankAccountNumber,
+      bankCode: g.bankCode,
+      amount: g.total,
+      text: `Propl. vyd. - ${g.payeeName} - ${event.name}`.slice(0, 96),
+      note: g.paymentMessage,
+      datePayment,
+    }));
+    const pohodaXml = generatePohodaXml(pohodaPayments, event.name, ico);
+
     const attachments: EmailAttachment[] = [
       {
         filename: eventPdfName("vyuctovani-oddilu", event.name),
@@ -279,6 +362,10 @@ export async function POST(
       {
         filename: "komu-co-odeslat.csv",
         content: Buffer.from(csv, "utf-8"),
+      },
+      {
+        filename: eventPdfName("pohoda-import", event.name).replace(".pdf", ".xml"),
+        content: pohodaXml,
       },
       ...documentAttachments,
     ];

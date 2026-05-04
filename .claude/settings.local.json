@@ -12,7 +12,8 @@
       "mcp__Neon__list_projects",
       "Bash(git commit -m ' *)",
       "Bash(git *)",
-      "WebFetch(domain:www.bohemianstj.cz)"
+      "WebFetch(domain:www.bohemianstj.cz)",
+      "Bash(curl -s \"https://www.stormware.cz/pohoda/datove-rozhrani.aspx\")"
     ],
     "additionalDirectories": [
       "/Users/ext93895/work/ovt/src/app/(admin)/dashboard/members"
