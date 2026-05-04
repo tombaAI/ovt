@@ -33,6 +33,13 @@ function normalize(s: string): string {
 interface SuggestionMatch {
     contrib:  ContribOption;
     reasons:  string[];   // ["VS 044", "jméno"]
+    score:    number;     // 1=VS, 2=jméno, 3=VS+jméno
+}
+
+// VS musí stát jako samostatné číslo — nesmí být součástí delšího čísla
+function vsMatchesDesc(vs: number, desc: string): boolean {
+    const vsStr = String(vs);
+    return new RegExp(`(?:^|[^0-9])0*${vsStr}(?:$|[^0-9])`).test(desc);
 }
 
 function findSuggestions(tx: FinanceTjTransaction, contribs: ContribOption[]): SuggestionMatch[] {
@@ -45,27 +52,25 @@ function findSuggestions(tx: FinanceTjTransaction, contribs: ContribOption[]): S
         if (c.year !== txYear) continue;
         if (c.amountTotal === null || Math.abs(c.amountTotal - txAmt) > 0.01) continue;
 
-        const reasons: string[] = [];
-
-        // Shoda VS: hledáme číslo (i s nulami vlevo) v popisu
-        if (c.variableSymbol !== null) {
-            const vs       = String(c.variableSymbol);
-            const vsPadded = vs.padStart(3, "0");
-            if (desc.includes(vs) || desc.includes(vsPadded)) {
-                reasons.push(`VS ${vsPadded}`);
-            }
-        }
-
-        // Shoda jménem: obě části jména musí být v popisu (bez diakritiky)
+        const vsMatch   = c.variableSymbol !== null && vsMatchesDesc(c.variableSymbol, desc);
         const nameParts = normalize(c.memberName).split(" ").filter(Boolean);
-        if (nameParts.length >= 2 && nameParts.every(p => desc.includes(p))) {
-            if (!reasons.some(r => r === "jméno")) reasons.push("jméno");
-        }
+        const nameMatch = nameParts.length >= 2 && nameParts.every(p => desc.includes(p));
 
-        if (reasons.length > 0) results.push({ contrib: c, reasons });
+        if (!vsMatch && !nameMatch) continue;
+
+        const reasons: string[] = [];
+        if (vsMatch)   reasons.push(`VS ${String(c.variableSymbol).padStart(3, "0")}`);
+        if (nameMatch) reasons.push("jméno");
+
+        const score = (vsMatch ? 1 : 0) + (nameMatch ? 2 : 0);
+        results.push({ contrib: c, reasons, score });
     }
 
-    return results;
+    if (results.length === 0) return [];
+
+    // Zobrazit jen kandidáty s nejvyšším skóre — nevypisovat méně jisté alternativy
+    const maxScore = Math.max(...results.map(r => r.score));
+    return results.filter(r => r.score === maxScore);
 }
 
 export function AllocDialog({ tx, contribs, open, onClose }: Props) {
