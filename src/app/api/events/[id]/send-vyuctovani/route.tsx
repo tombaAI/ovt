@@ -24,7 +24,7 @@ type EmailAttachment = {
 function eventPdfName(baseName: string, eventName: string): string {
   const slug = eventName
     .normalize("NFKD")
-    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[̀-ͯ]/g, "")
     .toLowerCase()
     .replace(/[^a-z0-9._-]+/g, "-")
     .replace(/-+/g, "-")
@@ -159,7 +159,7 @@ export async function POST(
       }, { status: 400 });
     }
 
-    const expenses = allExpenses; // all final at this point
+    const expenses = allExpenses;
 
     // Hard block: missing required fields on final expenses
     const missingRequiredFields = expenses.filter(
@@ -190,9 +190,6 @@ export async function POST(
       }, { status: 400 });
     }
 
-    // All blocking conditions passed — no warnings needed (payees + bank accounts guaranteed above)
-    const missingExpensePayees: Array<{ id: number; purposeText: string | null }> = [];
-
     const naklady: VyuctovaniNaklady = {};
     for (const expense of expenses) {
       const category = expense.purposeCategory as keyof VyuctovaniNaklady;
@@ -213,32 +210,58 @@ export async function POST(
     };
 
     const settlementBuffer = Buffer.from(await renderToBuffer(<VyuctovaniDocument data={settlementData} />));
-    const payoutRows = expenses.map((expense) => {
-      const amount = Number(expense.amount);
-      return {
-        personId: expense.reimbursementPersonId,
-        payeeName: expense.reimbursementPayeeName ?? "Nedoplněno",
-        bankAccountNumber: expense.bankAccountNumber ?? "",
-        bankCode: expense.bankCode ?? "",
-        amount,
-        purposeText: expense.purposeText,
-        purposeCategory: expense.purposeCategory,
-        fileName: expense.fileName ?? "",
-      };
-    });
 
-    const csv = "\ufeff" + [
-      ["Příjemce", "Číslo účtu", "Kód banky", "Částka Kč", "Účel", "Účetní kód", "Doklad"],
-      ...payoutRows.map((row) => [
-        row.payeeName,
-        row.bankAccountNumber,
-        row.bankCode,
-        row.amount,
-        row.purposeText,
-        row.purposeCategory,
-        row.fileName,
+    // Group expenses by beneficiary
+    type PayeeGroup = {
+      personId: number | null;
+      payeeName: string;
+      bankAccountNumber: string;
+      bankCode: string;
+      paymentMessage: string;
+      items: Array<{ amount: number; purposeText: string; purposeCategory: string; fileName: string }>;
+      total: number;
+    };
+    const groupMap = new Map<string, PayeeGroup>();
+    for (const expense of expenses) {
+      const key = String(expense.reimbursementPersonId ?? "__none__");
+      if (!groupMap.has(key)) {
+        groupMap.set(key, {
+          personId: expense.reimbursementPersonId,
+          payeeName: expense.reimbursementPayeeName ?? "Nedoplněno",
+          bankAccountNumber: expense.bankAccountNumber ?? "",
+          bankCode: expense.bankCode ?? "",
+          paymentMessage: `proplacení nákladů z akce OVT: ${event.name}`,
+          items: [],
+          total: 0,
+        });
+      }
+      const g = groupMap.get(key)!;
+      const amount = Number(expense.amount);
+      g.items.push({
+        amount,
+        purposeText: expense.purposeText ?? "",
+        purposeCategory: expense.purposeCategory ?? "",
+        fileName: expense.fileName ?? "",
+      });
+      g.total += amount;
+    }
+    const payeeGroups = [...groupMap.values()];
+    const total = payeeGroups.reduce((s, g) => s + g.total, 0);
+
+    // CSV — one summary row per beneficiary (for bank transfers)
+    const csvBom = "﻿";
+    const csvRows = [
+      ["Příjemce", "Číslo účtu", "Kód banky", "Částka Kč", "Zpráva pro příjemce", "Počet dokladů"],
+      ...payeeGroups.map((g) => [
+        g.payeeName,
+        g.bankAccountNumber,
+        g.bankCode,
+        g.total,
+        g.paymentMessage,
+        g.items.length,
       ]),
-    ].map((row) => row.map(csvCell).join(";")).join("\n");
+    ];
+    const csv = csvBom + csvRows.map((row) => row.map(csvCell).join(";")).join("\n");
 
     const attachmentPromises = expenses
       .filter((expense) => expense.fileUrl)
@@ -260,33 +283,46 @@ export async function POST(
       ...documentAttachments,
     ];
 
-    const total = payoutRows.reduce((sum, row) => sum + row.amount, 0);
-    const warningItems = [
-      ...missingExpensePayees.map((item) => `Náklad bez příjemce: ${item.purposeText}`),
-      ...[...missingBankAccounts.values()].map((item) => `Příjemce bez účtu: ${item.name}`),
-    ];
-    const warningHtml = warningItems.length > 0
-      ? `
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #fcd34d;border-radius:8px;background:#fffbeb;">
+    // HTML: grouped table — beneficiary header + expense detail rows
+    const payeeGroupsHtml = payeeGroups.map((g) => {
+      const accountDisplay = g.bankAccountNumber && g.bankCode
+        ? `${escapeHtml(g.bankAccountNumber)}/${escapeHtml(g.bankCode)}`
+        : "<em style='color:#ef4444'>chybí účet</em>";
+      const itemRows = g.items.map((item) => `
         <tr>
-          <td style="padding:12px 14px;color:#92400e;font-size:13px;line-height:1.55;">
-            <p style="margin:0 0 6px;font-weight:700;">Upozornění</p>
-            <ul style="margin:0 0 0 18px;padding:0;">
-              ${warningItems.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}
-            </ul>
+          <td style="padding:5px 10px 5px 24px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#374151;">${escapeHtml(item.purposeText)}</td>
+          <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;font-family:monospace;color:#6b7280;">${escapeHtml(item.purposeCategory)}</td>
+          <td style="padding:5px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;text-align:right;white-space:nowrap;color:#374151;">${formatAmount(item.amount)}&nbsp;Kč</td>
+        </tr>`).join("");
+
+      return `
+        <tr style="background:#f0fdf4;">
+          <td colspan="3" style="padding:10px 10px 8px;border-top:2px solid #86efac;border-bottom:1px solid #d1fae5;">
+            <table width="100%" cellpadding="0" cellspacing="0">
+              <tr>
+                <td>
+                  <span style="font-size:13px;font-weight:700;color:#111827;">${escapeHtml(g.payeeName)}</span>
+                  &nbsp;&nbsp;<span style="font-size:12px;font-family:monospace;color:#6b7280;">${accountDisplay}</span>
+                </td>
+                <td style="text-align:right;white-space:nowrap;">
+                  <span style="font-size:14px;font-weight:700;color:#327600;">${formatAmount(g.total)}&nbsp;Kč</span>
+                </td>
+              </tr>
+              <tr>
+                <td colspan="2" style="padding-top:4px;">
+                  <span style="font-size:11px;color:#6b7280;">Zpráva:&nbsp;</span>
+                  <span style="font-size:11px;color:#374151;font-style:italic;">${escapeHtml(g.paymentMessage)}</span>
+                </td>
+              </tr>
+            </table>
           </td>
         </tr>
-      </table>`
-      : "";
-    const payoutTableRows = payoutRows.map((row, index) => `
-      <tr>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};">${escapeHtml(row.payeeName)}</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};font-family:monospace">${row.bankAccountNumber || row.bankCode ? `${escapeHtml(row.bankAccountNumber)}/${escapeHtml(row.bankCode)}` : "Nedoplněno"}</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};text-align:right;white-space:nowrap">${formatAmount(row.amount)} Kč</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};">${escapeHtml(row.purposeText ?? "")}</td>
-        <td style="padding:8px 10px;border-bottom:1px solid #e5e7eb;background:${index % 2 === 0 ? "#ffffff" : "#f9fafb"};font-family:monospace">${escapeHtml(row.purposeCategory ?? "")}</td>
-      </tr>
-    `).join("");
+        ${itemRows}
+        <tr style="background:#f9fafb;">
+          <td colspan="2" style="padding:6px 10px;text-align:right;font-size:12px;color:#6b7280;">Celkem ${escapeHtml(g.payeeName)}</td>
+          <td style="padding:6px 10px;text-align:right;font-size:13px;font-weight:600;white-space:nowrap;color:#327600;">${formatAmount(g.total)}&nbsp;Kč</td>
+        </tr>`;
+    }).join(`<tr><td colspan="3" style="padding:8px 0;background:#ffffff;"></td></tr>`);
 
     const senderDisplay = session.user.name?.trim()
       ? `${session.user.name.trim()} (${session.user.email})`
@@ -298,7 +334,7 @@ export async function POST(
 <body style="margin:0;padding:0;background:#f3f4f6;font-family:Arial,Helvetica,sans-serif;">
 <table width="100%" cellpadding="0" cellspacing="0" style="background:#f3f4f6;padding:32px 16px;">
 <tr><td align="center">
-<table width="760" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:760px;width:100%;">
+<table width="680" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:680px;width:100%;">
 
   <tr>
     <td style="background:#327600;padding:24px 32px;">
@@ -311,42 +347,27 @@ export async function POST(
     <td style="padding:28px 32px 10px;">
       <p style="margin:0 0 16px;font-size:15px;color:#374151;">Dobrý den,</p>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>,
-        všechny uložené doklady nákladů a CSV tabulku s přehledem plateb k proplacení.
+        v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>
+        včetně všech dokladů. CSV příloha obsahuje přehled pro bankovní převody.
       </p>
 
-      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 20px;border:1px solid #e5e7eb;border-radius:8px;background:#f9fafb;">
-        <tr>
-          <td style="padding:14px 16px;font-size:13px;color:#374151;line-height:1.55;">
-            <p style="margin:0 0 6px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.04em;font-size:12px;">Přehled zásilky</p>
-            <p style="margin:0;">Akce: <strong>${escapeHtml(event.name)}</strong></p>
-            <p style="margin:2px 0 0;">Počet příloh: <strong>${attachments.length}</strong></p>
-          </td>
-        </tr>
-      </table>
-
-      ${warningHtml}
-
-      <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        Poprosím o proplacení následujících nákladů z podúčtu oddílu 207 (oddíl vodní turistiky):
+      <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
+        Proplacení nákladů &mdash; podúčet oddílu 207
       </p>
 
-      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 16px;">
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 24px;">
         <thead>
           <tr style="background:#f3f4f6;">
-            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Příjemce</th>
-            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účet</th>
-            <th style="padding:8px 10px;text-align:right;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
-            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účel</th>
-            <th style="padding:8px 10px;text-align:left;font-size:12px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Kód</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účel nákladu</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Kód</th>
+            <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
           </tr>
         </thead>
-        <tbody>${payoutTableRows}</tbody>
+        <tbody>${payeeGroupsHtml}</tbody>
         <tfoot>
-          <tr style="background:#f9fafb;">
-            <td colspan="2" style="padding:10px;font-weight:700;text-align:right;color:#111827;">Celkem</td>
-            <td style="padding:10px;font-weight:700;text-align:right;white-space:nowrap;color:#327600;">${formatAmount(total)} Kč</td>
-            <td colspan="2"></td>
+          <tr style="background:#dcfce7;border-top:2px solid #86efac;">
+            <td colspan="2" style="padding:10px 10px;font-weight:700;font-size:13px;color:#111827;">Celkem k proplacení</td>
+            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:#15803d;">${formatAmount(total)}&nbsp;Kč</td>
           </tr>
         </tfoot>
       </table>
@@ -358,8 +379,8 @@ export async function POST(
   <tr>
     <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
-        Oddíl Vodní Turistiky TJ Bohemians Praha<br>
-        Tento email byl odeslán ze systému správa OVT uživatelem ${escapeHtml(senderDisplay)}.
+        Oddíl Vodní Turistiky TJ Bohemians Praha &mdash;
+        Odesláno ze správy OVT uživatelem ${escapeHtml(senderDisplay)}.
       </p>
     </td>
   </tr>
@@ -370,10 +391,16 @@ export async function POST(
 </body>
 </html>`;
 
-    const textRows = payoutRows.map((row) => (
-      `${row.payeeName}; ${row.bankAccountNumber || row.bankCode ? `${row.bankAccountNumber}/${row.bankCode}` : "Nedoplněno"}; ${formatAmount(row.amount)} Kč; ${row.purposeText}; ${row.purposeCategory}`
-    )).join("\n");
-    const warningText = warningItems.length > 0 ? `\n\nUpozornění:\n${warningItems.map((item) => `- ${item}`).join("\n")}` : "";
+    // Plain text version
+    const textRows = payeeGroups.map((g) => {
+      const account = g.bankAccountNumber && g.bankCode
+        ? `${g.bankAccountNumber}/${g.bankCode}`
+        : "bez účtu";
+      const itemLines = g.items.map((item) =>
+        `  - ${item.purposeText} (${item.purposeCategory}): ${formatAmount(item.amount)} Kč`,
+      ).join("\n");
+      return `${g.payeeName} | ${account} | celkem ${formatAmount(g.total)} Kč\n${itemLines}\nZpráva: ${g.paymentMessage}`;
+    }).join("\n\n");
 
     const resend = getResendClient();
     const { data, error } = await resend.emails.send({
@@ -381,7 +408,7 @@ export async function POST(
       to: recipients,
       subject: `OVT vyúčtování akce: ${event.name}`,
       html,
-      text: `Vyúčtování akce: ${event.name}${warningText}\n\nKomu co odeslat:\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
+      text: `Vyúčtování akce: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
       replyTo: settings.replyTo,
       attachments,
     });
@@ -395,7 +422,7 @@ export async function POST(
       emailId: data?.id ?? null,
       recipients,
       attachmentCount: attachments.length,
-      warnings: warningItems,
+      warnings: [],
     });
   } catch (error) {
     const message = error instanceof Error ? error.message : "Interní chyba";
