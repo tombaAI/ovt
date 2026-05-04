@@ -151,9 +151,11 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     function handleMemberSelect(memberId: number) {
         const memberName = memberOptions.find(m => m.memberId === memberId)?.memberName ?? "";
         setMemberFilter(memberName);
-        // Automaticky vyber nejnovější předpis
+        setSelectedContribId(null);
+        // Automaticky vyber nejnovější NEZAPLACENÝ předpis
         const latest = contribs
             .filter(c => c.memberId === memberId)
+            .filter(c => c.amountTotal === null || c.allocatedAmount < c.amountTotal - 0.01)
             .sort((a, b) => b.year - a.year)[0];
         if (latest) {
             setSelectedContribId(latest.contribId);
@@ -322,6 +324,13 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
                                 </div>
                             )}
                         </div>
+
+                        {/* Zpráva: člen nemá žádný volný předpis */}
+                        {selectedMemberId && memberContribs.length === 0 && (
+                            <p className="text-xs text-amber-700 bg-amber-50 rounded-md px-3 py-2">
+                                Všechny předpisy tohoto člena jsou již plně napárovány.
+                            </p>
+                        )}
 
                         {/* Výběr roku / předpisu */}
                         {memberContribs.length > 0 && (
