@@ -376,6 +376,141 @@ export type GcalImportItem = {
     location: string | null;
 };
 
+export type GcalSyncOverviewMissingInGcalItem = {
+    id: number;
+    name: string;
+    dateFrom: string | null;
+    dateTo: string | null;
+    gcalEventId: string | null;
+    gcalSync: boolean;
+};
+
+export type GcalSyncOverview = {
+    checkedAt: string;
+    comparedGcalCount: number;
+    ignoredRecurringCount: number;
+    missingInApp: GcalImportItem[];
+    missingInGcal: GcalSyncOverviewMissingInGcalItem[];
+};
+
+function normalizeFingerprintText(value: string | null | undefined): string {
+    return (value ?? "").trim().replace(/\s+/g, " ").toLowerCase();
+}
+
+function buildEventFingerprint(name: string | null | undefined, dateFrom: string | null, dateTo: string | null): string {
+    const normalizedName = normalizeFingerprintText(name);
+    if (!normalizedName) return "";
+    return `${normalizedName}|${dateFrom ?? ""}|${dateTo ?? ""}`;
+}
+
+/**
+ * Porovná Google Kalendář a systém pro daný rok.
+ * - ignoruje opakující se GCal události,
+ * - vrací GCal akce chybějící v systému (k importu),
+ * - vrací systémové akce (s aktivním GCal sync), které chybí v GCal.
+ */
+export async function getGcalSyncOverview(year: number): Promise<GcalSyncOverview> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+
+    const db = getDb();
+    const { listGcalEventsWithMeta } = await import("@/lib/gcal");
+
+    const [gcalResult, appRows] = await Promise.all([
+        listGcalEventsWithMeta(year, year, { skipRecurring: true }),
+        db
+            .select({
+                id: events.id,
+                name: events.name,
+                dateFrom: events.dateFrom,
+                dateTo: events.dateTo,
+                gcalEventId: events.gcalEventId,
+                gcalSync: events.gcalSync,
+            })
+            .from(events)
+            .where(eq(events.year, year)),
+    ]);
+
+    const gcalEvents = gcalResult.events;
+
+    const appGcalIds = new Set(
+        appRows.map((row) => row.gcalEventId).filter((id): id is string => Boolean(id))
+    );
+
+    const appFingerprints = new Set(
+        appRows
+            .map((row) => buildEventFingerprint(
+                row.name,
+                row.dateFrom as unknown as string | null,
+                row.dateTo as unknown as string | null,
+            ))
+            .filter(Boolean)
+    );
+
+    const gcalFingerprints = new Set(
+        gcalEvents
+            .map((row) => buildEventFingerprint(row.summary, row.dateFrom, row.dateTo))
+            .filter(Boolean)
+    );
+
+    const missingInApp = gcalEvents
+        .filter((row) => !appGcalIds.has(row.gcalEventId))
+        .filter((row) => {
+            const fingerprint = buildEventFingerprint(row.summary, row.dateFrom, row.dateTo);
+            return fingerprint ? !appFingerprints.has(fingerprint) : true;
+        })
+        .map((row) => ({
+            gcalEventId: row.gcalEventId,
+            summary: row.summary,
+            dateFrom: row.dateFrom,
+            dateTo: row.dateTo,
+            location: row.location,
+        }))
+        .sort((a, b) => {
+            const aDate = a.dateFrom ?? "9999-99-99";
+            const bDate = b.dateFrom ?? "9999-99-99";
+            if (aDate !== bDate) return aDate.localeCompare(bDate);
+            return a.summary.localeCompare(b.summary, "cs");
+        });
+
+    const gcalIds = new Set(gcalEvents.map((row) => row.gcalEventId));
+
+    const missingInGcal = appRows
+        .filter((row) => row.gcalSync || Boolean(row.gcalEventId))
+        .filter((row) => {
+            if (row.gcalEventId && gcalIds.has(row.gcalEventId)) return false;
+
+            const fingerprint = buildEventFingerprint(
+                row.name,
+                row.dateFrom as unknown as string | null,
+                row.dateTo as unknown as string | null,
+            );
+            return fingerprint ? !gcalFingerprints.has(fingerprint) : true;
+        })
+        .map((row) => ({
+            id: row.id,
+            name: row.name,
+            dateFrom: row.dateFrom as unknown as string | null,
+            dateTo: row.dateTo as unknown as string | null,
+            gcalEventId: row.gcalEventId,
+            gcalSync: row.gcalSync,
+        }))
+        .sort((a, b) => {
+            const aDate = a.dateFrom ?? "9999-99-99";
+            const bDate = b.dateFrom ?? "9999-99-99";
+            if (aDate !== bDate) return aDate.localeCompare(bDate);
+            return a.name.localeCompare(b.name, "cs");
+        });
+
+    return {
+        checkedAt: new Date().toISOString(),
+        comparedGcalCount: gcalEvents.length,
+        ignoredRecurringCount: gcalResult.ignoredRecurring,
+        missingInApp,
+        missingInGcal,
+    };
+}
+
 /**
  * Importuje vybrané GCal eventy jako nové akce do DB.
  * Eventy s existujícím gcal_event_id se přeskočí (idempotentní).

@@ -1,13 +1,14 @@
 "use client";
 
-import { useState, useTransition, useCallback, useMemo } from "react";
+import { useState, useTransition, useCallback, useMemo, useEffect } from "react";
 import { useRouter } from "next/navigation";
+import { ChevronDown, ChevronRight, Loader2, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { AddEventSheet } from "./add-event-sheet";
-import { copyEventsFromYear } from "@/lib/actions/events";
-import type { EventRow } from "@/lib/actions/events";
+import { copyEventsFromYear, getGcalSyncOverview, importGcalEvents } from "@/lib/actions/events";
+import type { EventRow, GcalImportItem, GcalSyncOverview } from "@/lib/actions/events";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import { pushNavStack } from "@/lib/nav-stack";
 
@@ -58,6 +59,293 @@ function fmtDateRange(dateFrom: string | null, dateTo: string | null, approxMont
     if (dateFrom) return fmtDate(dateFrom);
     if (approxMonth) return `~ ${MONTH_NAMES[approxMonth]}`;
     return "—";
+}
+
+function GcalSyncOverviewCard({ year, onImported }: { year: number; onImported: () => void }) {
+    const [loading, setLoading] = useState(true);
+    const [refreshing, setRefreshing] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const [overview, setOverview] = useState<GcalSyncOverview | null>(null);
+    const [selected, setSelected] = useState<Set<string>>(new Set());
+    const [expandedMissingInApp, setExpandedMissingInApp] = useState(false);
+    const [expandedMissingInGcal, setExpandedMissingInGcal] = useState(false);
+    const [importing, setImporting] = useState(false);
+    const [message, setMessage] = useState<string | null>(null);
+
+    const loadOverview = useCallback(async (mode: "initial" | "refresh") => {
+        if (mode === "initial") {
+            setLoading(true);
+        } else {
+            setRefreshing(true);
+        }
+        setError(null);
+
+        try {
+            const result = await getGcalSyncOverview(year);
+            setOverview(result);
+            setSelected(new Set(result.missingInApp.map((item) => item.gcalEventId)));
+            setExpandedMissingInApp(false);
+            setExpandedMissingInGcal(false);
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Synchronizace se nepodařila");
+        } finally {
+            if (mode === "initial") {
+                setLoading(false);
+            } else {
+                setRefreshing(false);
+            }
+        }
+    }, [year]);
+
+    useEffect(() => {
+        let active = true;
+        setMessage(null);
+
+        (async () => {
+            setLoading(true);
+            setError(null);
+            try {
+                const result = await getGcalSyncOverview(year);
+                if (!active) return;
+
+                setOverview(result);
+                setSelected(new Set(result.missingInApp.map((item) => item.gcalEventId)));
+                setExpandedMissingInApp(false);
+                setExpandedMissingInGcal(false);
+            } catch (e) {
+                if (!active) return;
+                setError(e instanceof Error ? e.message : "Synchronizace se nepodařila");
+            } finally {
+                if (active) setLoading(false);
+            }
+        })();
+
+        return () => {
+            active = false;
+        };
+    }, [year]);
+
+    function toggleSelect(id: string) {
+        setSelected((prev) => {
+            const next = new Set(prev);
+            if (next.has(id)) {
+                next.delete(id);
+            } else {
+                next.add(id);
+            }
+            return next;
+        });
+    }
+
+    function toggleSelectAll(checked: boolean) {
+        if (!overview) return;
+        setSelected(checked ? new Set(overview.missingInApp.map((item) => item.gcalEventId)) : new Set());
+    }
+
+    async function handleImportSelected() {
+        if (!overview) return;
+
+        const toImport: GcalImportItem[] = overview.missingInApp.filter((item) => selected.has(item.gcalEventId));
+        if (toImport.length === 0) return;
+
+        setImporting(true);
+        setError(null);
+        setMessage(null);
+
+        try {
+            const result = await importGcalEvents(year, toImport);
+            setMessage(
+                `Importováno ${result.imported} akcí` +
+                (result.skipped > 0 ? `, přeskočeno ${result.skipped}.` : ".")
+            );
+            onImported();
+            await loadOverview("refresh");
+        } catch (e) {
+            setError(e instanceof Error ? e.message : "Import se nepodařil");
+        } finally {
+            setImporting(false);
+        }
+    }
+
+    const checkedAt = overview ? new Date(overview.checkedAt) : null;
+    const canImport = overview ? overview.missingInApp.length > 0 : false;
+    const allSelected = overview
+        ? overview.missingInApp.length > 0 && selected.size === overview.missingInApp.length
+        : false;
+
+    return (
+        <div className="rounded-xl border bg-white p-4 min-h-[176px]">
+            <div className="flex items-start justify-between gap-3">
+                <div>
+                    <h2 className="text-sm font-semibold text-gray-900">Google kalendář: stav synchronizace</h2>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        Kontrola běží automaticky po otevření stránky.
+                    </p>
+                </div>
+                <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={loading || refreshing || importing}
+                    onClick={() => void loadOverview("refresh")}
+                >
+                    <RefreshCw className={`mr-1.5 h-3.5 w-3.5 ${refreshing ? "animate-spin" : ""}`} />
+                    {refreshing ? "Obnovuji…" : "Obnovit"}
+                </Button>
+            </div>
+
+            <div className="mt-3">
+                {loading ? (
+                    <div className="h-[118px] rounded-lg border border-dashed border-gray-200 bg-gray-50/50 px-3 py-2 text-sm text-gray-500 flex items-center gap-2">
+                        <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                        <span>Zjišťuji stav Google kalendáře…</span>
+                    </div>
+                ) : error ? (
+                    <div className="h-[118px] rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
+                        {error}
+                    </div>
+                ) : overview ? (
+                    <div className="space-y-3">
+                        <div className="rounded-lg border border-gray-200 bg-gray-50/60 px-3 py-2 text-xs text-gray-600">
+                            <p>
+                                Porovnáno {overview.comparedGcalCount} akcí z Google kalendáře.
+                                {overview.ignoredRecurringCount > 0 && (
+                                    <span> Opakující se akce ignorovány: {overview.ignoredRecurringCount}.</span>
+                                )}
+                            </p>
+                            {checkedAt && (
+                                <p className="mt-1 text-gray-500">
+                                    Poslední kontrola: {new Intl.DateTimeFormat("cs-CZ", {
+                                        day: "2-digit",
+                                        month: "2-digit",
+                                        year: "numeric",
+                                        hour: "2-digit",
+                                        minute: "2-digit",
+                                    }).format(checkedAt)}
+                                </p>
+                            )}
+                        </div>
+
+                        <div className="grid gap-2 lg:grid-cols-2">
+                            <div className="rounded-lg border p-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-sm font-medium text-gray-800">
+                                        V Google jsou, v systému chybí: {overview.missingInApp.length}
+                                    </p>
+                                    {overview.missingInApp.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setExpandedMissingInApp((v) => !v)}
+                                            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900"
+                                        >
+                                            {expandedMissingInApp ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                            {expandedMissingInApp ? "Skrýt" : "Rozbalit"}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {overview.missingInApp.length === 0 && (
+                                    <p className="text-xs text-gray-500 mt-1">Není co doplňovat.</p>
+                                )}
+
+                                {expandedMissingInApp && overview.missingInApp.length > 0 && (
+                                    <div className="mt-2 border rounded-md overflow-hidden">
+                                        <div className="flex items-center gap-2 px-2 py-1.5 border-b bg-gray-50 text-xs text-gray-600">
+                                            <input
+                                                type="checkbox"
+                                                checked={allSelected}
+                                                onChange={(e) => toggleSelectAll(e.target.checked)}
+                                                className="h-4 w-4 rounded border-gray-300 accent-[#327600]"
+                                            />
+                                            <span>Vybrat vše</span>
+                                            <span className="ml-auto">{selected.size} vybráno</span>
+                                        </div>
+                                        <div className="max-h-52 overflow-y-auto divide-y">
+                                            {overview.missingInApp.map((item) => (
+                                                <label
+                                                    key={item.gcalEventId}
+                                                    className="flex items-start gap-2 px-2 py-1.5 text-xs hover:bg-gray-50 cursor-pointer"
+                                                >
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={selected.has(item.gcalEventId)}
+                                                        onChange={() => toggleSelect(item.gcalEventId)}
+                                                        className="mt-0.5 h-4 w-4 rounded border-gray-300 accent-[#327600]"
+                                                    />
+                                                    <span className="min-w-0">
+                                                        <span className="block truncate text-gray-800">{item.summary}</span>
+                                                        <span className="text-gray-500">
+                                                            {fmtDateRange(item.dateFrom, item.dateTo, null)}
+                                                            {item.location ? ` · ${item.location}` : ""}
+                                                        </span>
+                                                    </span>
+                                                </label>
+                                            ))}
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="rounded-lg border p-2.5">
+                                <div className="flex items-center justify-between gap-2">
+                                    <p className="text-sm font-medium text-gray-800">
+                                        V systému jsou, v Google chybí: {overview.missingInGcal.length}
+                                    </p>
+                                    {overview.missingInGcal.length > 0 && (
+                                        <button
+                                            type="button"
+                                            onClick={() => setExpandedMissingInGcal((v) => !v)}
+                                            className="inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900"
+                                        >
+                                            {expandedMissingInGcal ? <ChevronDown className="h-3.5 w-3.5" /> : <ChevronRight className="h-3.5 w-3.5" />}
+                                            {expandedMissingInGcal ? "Skrýt" : "Rozbalit"}
+                                        </button>
+                                    )}
+                                </div>
+
+                                {overview.missingInGcal.length === 0 && (
+                                    <p className="text-xs text-gray-500 mt-1">Bez nesrovnalostí.</p>
+                                )}
+
+                                {expandedMissingInGcal && overview.missingInGcal.length > 0 && (
+                                    <div className="mt-2 border rounded-md max-h-52 overflow-y-auto divide-y">
+                                        {overview.missingInGcal.map((item) => (
+                                            <div key={item.id} className="px-2 py-1.5 text-xs">
+                                                <p className="text-gray-800 truncate">{item.name}</p>
+                                                <p className="text-gray-500">
+                                                    {fmtDateRange(item.dateFrom, item.dateTo, null)}
+                                                    {!item.gcalEventId && item.gcalSync ? " · sync zapnut" : ""}
+                                                </p>
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {canImport && (
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <Button
+                                    size="sm"
+                                    disabled={importing || selected.size === 0}
+                                    className="bg-[#327600] hover:bg-[#2a6400]"
+                                    onClick={() => void handleImportSelected()}
+                                >
+                                    {importing ? "Přidávám…" : `Přidat vybrané do systému (${selected.size})`}
+                                </Button>
+                                <p className="text-xs text-gray-500">Použije stejný import jako sekce Importy.</p>
+                            </div>
+                        )}
+
+                        {message && (
+                            <p className="text-xs text-green-700 bg-green-50 border border-green-200 rounded-md px-2.5 py-1.5">
+                                {message}
+                            </p>
+                        )}
+                    </div>
+                ) : null}
+            </div>
+        </div>
+    );
 }
 
 interface Props {
@@ -184,6 +472,8 @@ export function EventsClient({ years: yearsProp, selectedYear, events, allMember
                     );
                 })}
             </div>
+
+            <GcalSyncOverviewCard key={selectedYear} year={selectedYear} onImported={onSaved} />
 
             {/* ── Table ── */}
             <div className={`rounded-xl border bg-white overflow-hidden transition-opacity duration-150 ${isPending ? "opacity-30 pointer-events-none" : ""}`}>

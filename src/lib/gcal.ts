@@ -209,11 +209,61 @@ export type GCalEventRow = {
     description:  string | null;
 };
 
+export type ListGcalEventsOptions = {
+    skipRecurring?: boolean;
+};
+
+export type ListGcalEventsResult = {
+    events: GCalEventRow[];
+    ignoredRecurring: number;
+};
+
+function mapGcalEventToRow(e: {
+    id?: string | null;
+    summary?: string | null;
+    start?: { date?: string | null; dateTime?: string | null } | null;
+    end?: { date?: string | null; dateTime?: string | null } | null;
+    location?: string | null;
+    description?: string | null;
+}): GCalEventRow | null {
+    if (!e.id) return null;
+
+    const startInfo = parsePragueDateTime(e.start);
+    const endInfo   = parsePragueDateTime(e.end);
+
+    const endDate = startInfo.isAllDay && endInfo.date
+        ? addDays(endInfo.date, -1)
+        : endInfo.date;
+
+    const dateTo = endDate && endDate !== startInfo.date ? endDate : null;
+
+    return {
+        gcalEventId: e.id,
+        summary:     e.summary ?? "(bez názvu)",
+        dateFrom:    startInfo.date,
+        dateTo,
+        timeFrom:    startInfo.time,
+        location:    e.location ?? null,
+        description: e.description ?? null,
+    };
+}
+
 export async function listGcalEvents(
     yearFrom: number,
     yearTo: number,
+    options: ListGcalEventsOptions = {},
 ): Promise<GCalEventRow[]> {
+    const result = await listGcalEventsWithMeta(yearFrom, yearTo, options);
+    return result.events;
+}
+
+export async function listGcalEventsWithMeta(
+    yearFrom: number,
+    yearTo: number,
+    options: ListGcalEventsOptions = {},
+): Promise<ListGcalEventsResult> {
     const cal = getCalendarClient();
+    const skipRecurring = options.skipRecurring ?? false;
 
     const res = await cal.events.list({
         calendarId:   GCAL_CALENDAR_ID,
@@ -224,24 +274,17 @@ export async function listGcalEvents(
         maxResults:   500,
     });
 
-    return (res.data.items ?? []).map(e => {
-        const startInfo = parsePragueDateTime(e.start);
-        const endInfo   = parsePragueDateTime(e.end);
+    let ignoredRecurring = 0;
+    const events = (res.data.items ?? []).flatMap((e) => {
+        const isRecurring = Boolean(e.recurringEventId) || (e.recurrence?.length ?? 0) > 0;
+        if (skipRecurring && isRecurring) {
+            ignoredRecurring += 1;
+            return [];
+        }
 
-        const endDate = startInfo.isAllDay && endInfo.date
-            ? addDays(endInfo.date, -1)
-            : endInfo.date;
-
-        const dateTo = endDate && endDate !== startInfo.date ? endDate : null;
-
-        return {
-            gcalEventId: e.id!,
-            summary:     e.summary ?? "(bez názvu)",
-            dateFrom:    startInfo.date,
-            dateTo,
-            timeFrom:    startInfo.time,
-            location:    e.location ?? null,
-            description: e.description ?? null,
-        };
+        const row = mapGcalEventToRow(e);
+        return row ? [row] : [];
     });
+
+    return { events, ignoredRecurring };
 }
