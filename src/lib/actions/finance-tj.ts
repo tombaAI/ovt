@@ -662,12 +662,13 @@ export type TjAllocation = {
 };
 
 export type ContribOption = {
-    contribId:      number;
-    memberId:       number;
-    memberName:     string;
-    year:           number;
-    amountTotal:    number | null;
-    variableSymbol: number | null;
+    contribId:       number;
+    memberId:        number;
+    memberName:      string;
+    year:            number;
+    amountTotal:     number | null;
+    variableSymbol:  number | null;
+    allocatedAmount: number;   // součet existujících payment_allocations
 };
 
 export type AllocResult = { error: string } | { success: true };
@@ -714,18 +715,26 @@ export async function getContribsForAllocation(): Promise<ContribOption[]> {
     const db = getDb();
     const rows = await db
         .select({
-            contribId:      memberContributions.id,
-            memberId:       memberContributions.memberId,
-            memberName:     members.fullName,
-            year:           contributionPeriods.year,
-            amountTotal:    memberContributions.amountTotal,
-            variableSymbol: members.variableSymbol,
+            contribId:       memberContributions.id,
+            memberId:        memberContributions.memberId,
+            memberName:      members.fullName,
+            year:            contributionPeriods.year,
+            amountTotal:     memberContributions.amountTotal,
+            variableSymbol:  members.variableSymbol,
+            allocatedAmount: sql<number>`COALESCE(SUM(${paymentAllocations.amount}::numeric), 0)`.mapWith(Number),
         })
         .from(memberContributions)
         .innerJoin(members, eq(members.id, memberContributions.memberId))
         .innerJoin(contributionPeriods, eq(contributionPeriods.id, memberContributions.periodId))
+        .leftJoin(paymentAllocations, eq(paymentAllocations.contribId, memberContributions.id))
+        .groupBy(memberContributions.id, members.id, contributionPeriods.id)
         .orderBy(members.lastName, members.firstName, desc(contributionPeriods.year));
-    return rows.map(r => ({ ...r, year: Number(r.year), variableSymbol: r.variableSymbol ?? null }));
+    return rows.map(r => ({
+        ...r,
+        year:            Number(r.year),
+        variableSymbol:  r.variableSymbol ?? null,
+        allocatedAmount: r.allocatedAmount ?? 0,
+    }));
 }
 
 export async function createTjAllocation(params: {

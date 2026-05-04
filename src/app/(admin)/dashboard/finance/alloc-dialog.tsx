@@ -51,6 +51,8 @@ function findSuggestions(tx: FinanceTjTransaction, contribs: ContribOption[]): S
     for (const c of contribs) {
         if (c.year !== txYear) continue;
         if (c.amountTotal === null || Math.abs(c.amountTotal - txAmt) > 0.01) continue;
+        // Přeskočit předpisy, které jsou už plně zaplacené
+        if (c.allocatedAmount >= c.amountTotal - 0.01) continue;
 
         const vsMatch   = c.variableSymbol !== null && vsMatchesDesc(c.variableSymbol, desc);
         const nameParts = normalize(c.memberName).split(" ").filter(Boolean);
@@ -138,9 +140,12 @@ export function AllocDialog({ tx, contribs, open, onClose }: Props) {
     const selectedContrib = contribs.find(c => c.contribId === selectedContribId);
     const selectedMemberId = selectedContrib?.memberId ?? null;
 
-    // Předpisy vybraného člena (sestupně dle roku)
+    // Předpisy vybraného člena — jen nezaplacené (sestupně dle roku)
     const memberContribs = selectedMemberId
-        ? contribs.filter(c => c.memberId === selectedMemberId).sort((a, b) => b.year - a.year)
+        ? contribs
+            .filter(c => c.memberId === selectedMemberId)
+            .filter(c => c.amountTotal === null || c.allocatedAmount < c.amountTotal - 0.01)
+            .sort((a, b) => b.year - a.year)
         : [];
 
     function handleMemberSelect(memberId: number) {
