@@ -1,0 +1,48 @@
+Co znamená udělat finanční vyúčtování oddílové akce:
+
+Cílem finančního vyúčtování je:
+- účastníkům spočítat, kolik mají zaplatit (nebo doplatit, pokud předem platili zálohu)
+- sestavit seznam nákladů akce, které byly uhrazené z peněz účasntíků a které má tedy finanční oddělení TJ Bohemians Praha proplatit
+- všechny platby, jak příjmové, tak výdajové, evidovat v systému, aby bylo možné je spárovat s výpisem z účtu a potvrdit, že byly zaplacení (import financí z TJ Bohemians)
+- nakonec spárovat předpisy plateb na jejich reálné platby a tím potvrdit, že jsou platby všechny provedené (přijaté i vydané)
+
+Předpoklady:
+1) Existuje seznam účastníků akce
+Kdo může být účastník akce:
+- členové oddílu
+- nečlenové (partneři členů, děti, cizí jednotlivci nebo rodiny)
+Seznam účastníků akce je již nyní v systému, viz akce ID 4. Na webu není zatím možnost přidat účastníka jinak, než přes přihlášku, ta je pouze pro akci ID 4 => bude potřeba přidat možnost přidat účastníka akce v administraci akce (pro vedoucího akce a správce).
+
+2) Existuje seznam nákladů akce
+Náklady jsou již nyní evidované u akce, viz například akce ID 1, 3
+Náklad má vlastnosti (z pohledu vyúčtování):
+- částka
+- účel (textový popis)
+- kategorie dle TJ Bohemians
+- osoba, která náklad uhradila (člen nebo nečlen, může to být i někdo, kdo se akce neúčastnil) - říkáme mu beneficient
+- mohou existovat náklady, které se celé rovnoměrně rozpočítají na účasntíky akce (typicky doprava autobusem) a pak mohou být náklady, které jsou per osoba (a neúčastnili se všichni), pak je potřeba určit, kdo tam byl a za kolik - když se třeba liší cena za dítě nebo dospělého. )
+
+
+3) přístupová práva v systému
+- nyní v systému nejsou žádná přistupová práva, vše může dělat jen admin.
+- v první iteraci toto nebudeme měnit, ale v budoucnu bude potřeba přidat roli vedoucí akce, která bude mít právo spravovat účastníky a náklady své akce, a roli běžný člen, která bude mít právo upravovat seznam účastníků a nákladů své akce
+
+4) Dotace akce
+- akce může být dotována z financí oddílu.
+- dotace je částka, o kterou každému členovi oddílu zlevníme akci.
+- je nyní v první iteraci zadána ke každému členovi oddílu. Pouze ke členům oddílu.
+- tato sleva pro členy = dotace akce, je částka, o kteoru budou v konečném součtu vyšší náklady akce, než příjmy z plateb účastníků.
+
+Jaké jsou vlastnosti finančního vyúčtování:
+- každý náklad může mít určeno, zda je rozpočítává mezi všechny účastníky, nebo jen vybrané.
+- účastníci mohou být seskupeni podle skupin, nejčastěji rodin, podle toho, jak se přihlašovali - předpis doplatku akce se spočítá za jednotlivé lidi, ale seskupí podle těchto skupin a pak pošle na ně.
+- účastníci mohli předem platit zálohu
+- účastník může být zároveň beneficientem nákladu, vyúčtování je separátní - nezapočítává se jeho příjem z vynaloženého nákladu proti doplatku akce. Vlastně je úplně jedno, kdo platil jakou účtenku/fakturu (= je beneficientem nákladu).
+- náklady akce a tím i komu se co proplatí se řeší zcela nezávisle na účastnících akce, tedy i na tom, kdo je beneficientem nákladu. Například Tomáš zaplatil 550 za vlak na akci, ty jsou v nákladech a účetní TJ Bohemians mu je proplatí, Tomáš se zároveň účastnil akce, kde cena pro jednoho vyšla 420 Kč, to bude předpis platby, který takto přímo Tomáš dostane na mail a zaplatí ho ze svého účtu. Finance se nezapočítávají proti sobě. Stejně tak by Tomáš na akci nemusel být účastnikem, nehraje to roli.
+
+Co bude výsledkem:
+- každý účastník bude mít spočítané, kolik ho akce stála.
+- každý náklad akce bude evidovaný s částkou a beneficientem (a dalšími vlastnostmi co tam teď jsou).
+- suma nákladů akce + dotace se bude rovnat suma předpisů plateb účastníků akce.
+- každý účastník dostane e-mail s informací, kolik má zaplatit. Pro testovací účely se zde bude dodržovat ENV variable pro testovací e-mail - aby to nechodilo účastníkům akce.
+

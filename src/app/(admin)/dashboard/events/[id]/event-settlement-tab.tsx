@@ -11,6 +11,7 @@ import {
     updateExpenseAllocationMethod,
     setExpenseRegistrationAllocations,
     generateEventPrescriptions,
+    sendEventSettlementEmails,
 } from "@/lib/actions/event-settlement";
 import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
 
@@ -244,6 +245,8 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     const [subsidy, setSubsidy] = useState(0);
     const [generating, startGenerate] = useTransition();
     const [genResult, setGenResult] = useState<{ created: number; updated: number } | { error: string } | null>(null);
+    const [sending, startSend] = useTransition();
+    const [sendResult, setSendResult] = useState<{ sent: number; skipped: number } | { error: string } | null>(null);
 
     function load() {
         setLoading(true);
@@ -261,6 +264,14 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
             const res = await generateEventPrescriptions(eventId);
             setGenResult(res);
             if (!("error" in res)) load();
+        });
+    }
+
+    function handleSendEmails() {
+        startSend(async () => {
+            setSendResult(null);
+            const res = await sendEventSettlementEmails(eventId);
+            setSendResult(res);
         });
     }
 
@@ -381,6 +392,41 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                         {"error" in genResult
                             ? <><AlertCircle size={14} /> {genResult.error}</>
                             : <><Check size={14} /> Hotovo — vytvořeno: {genResult.created}, aktualizováno: {genResult.updated}</>
+                        }
+                    </div>
+                )}
+            </div>
+
+            {/* Odeslání e-mailů */}
+            <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
+                <div className="flex items-start gap-4 flex-wrap">
+                    <div className="flex-1 min-w-0">
+                        <p className="text-sm font-semibold text-gray-800">Odeslat e-maily s předpisy</p>
+                        <p className="text-xs text-gray-500 mt-0.5">
+                            Odešle každé přihlášce e-mail s částkou k úhradě, platebními údaji a QR kódem.
+                            Přihlášky bez předpisu nebo se stavem Zrušeno jsou přeskočeny.
+                        </p>
+                        {!settlement.registrations.some(r => r.existingPrescription) && (
+                            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
+                                <AlertCircle size={12} /> Nejprve vygenerujte předpisy plateb.
+                            </p>
+                        )}
+                    </div>
+                    <Button
+                        onClick={handleSendEmails}
+                        disabled={sending || !settlement.registrations.some(r => r.existingPrescription)}
+                        variant="outline"
+                        className="shrink-0">
+                        {sending ? <><Loader2 size={14} className="animate-spin mr-1.5" />Odesílám…</> : "Odeslat e-maily"}
+                    </Button>
+                </div>
+                {sendResult && (
+                    <div className={`mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
+                        "error" in sendResult ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"
+                    }`}>
+                        {"error" in sendResult
+                            ? <><AlertCircle size={14} /> {sendResult.error}</>
+                            : <><Check size={14} /> Odesláno: {sendResult.sent} e-mailů{sendResult.skipped > 0 ? `, přeskočeno: ${sendResult.skipped}` : ""}</>
                         }
                     </div>
                 )}

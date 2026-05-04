@@ -15,6 +15,8 @@ import {
 import { eq, and, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
+import { getEmailSettings, getResendClient } from "@/lib/email";
+import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -460,4 +462,59 @@ export async function getMembersForSettlement() {
 export async function getPeopleForSettlement() {
     const db = getDb();
     return db.select({ id: people.id, fullName: people.fullName, memberId: people.memberId }).from(people).orderBy(people.fullName);
+}
+
+// ── Odeslání e-mailů s předpisy ───────────────────────────────────────────────
+
+export async function sendEventSettlementEmails(
+    eventId: number,
+): Promise<{ sent: number; skipped: number } | { error: string }> {
+    const emailSettings = getEmailSettings();
+    if (!emailSettings.configured) return { error: "E-mail není nakonfigurován (chybí RESEND_API_KEY)" };
+
+    try {
+        const settlement = await getEventSettlement(eventId);
+        const [event] = await getDb().select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        if (!event) return { error: "Akce nenalezena" };
+
+        const resend = getResendClient();
+        let sent = 0;
+        let skipped = 0;
+
+        for (const reg of settlement.registrations) {
+            const p = reg.existingPrescription;
+            if (!p || p.status === "cancelled") { skipped++; continue; }
+
+            const to = emailSettings.testTo ?? reg.email;
+
+            const { subject, html } = buildEventSettlementEmail({
+                firstName: reg.firstName,
+                lastName: reg.lastName,
+                email: reg.email,
+                eventName: event.name,
+                prescriptionCode: p.prescriptionCode,
+                amount: p.amount,
+                bankAccount: "351416278/0300",
+                paymentDue: p.paymentDue,
+                expenses: reg.expenses.map(e => ({
+                    purposeText: e.purposeText,
+                    allocatedAmount: e.allocatedAmount,
+                })),
+                subsidy: reg.subsidy,
+            });
+
+            await resend.emails.send({
+                from: emailSettings.from,
+                to,
+                replyTo: emailSettings.replyTo,
+                subject,
+                html,
+            });
+            sent++;
+        }
+
+        return { sent, skipped };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Chyba při odesílání e-mailů" };
+    }
 }

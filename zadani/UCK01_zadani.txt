@@ -1,0 +1,12 @@
+V kalendáři je připravena synchronizace událostí s Google kalendářem.
+Nyní je to ruční práce, a samotná možnost přidání akce je v importech.
+
+Co chci, aby se změnilo:
+Na stránce Kalendář (events) bude v horní části nad tabulkou událostí sekce, kde bude aktuální stav synchronizace s Google kalendářem
+Co bude tato sekce obsahovat a dělat:
+- sama po svém zobrazení provede synchronizaci s Google kalendářem, a to asynchronně (nebrání načtení stránky)
+- pokud existuje nějaká akce v Google kalendáři, která není v systému, tak ji nabídne k přidání do systému (stejně jako je to u importů)
+- v porovnání vynechá všechny opakující se události, to je nyní "Tělocvična", tu nechceme mít v systému, ale chceme ji mít v Google kalendáři, takže ji necháme být
+- komponenta by měla být graficky udělaná tak, že po dokončení synchronizace se nezvětší/nezmenší, aby nehýbala stránkou, jen se doplní text. s nějakou možností rozbalení seznamu akcí, které nejsou v systému a nabídkou jejich přidání do systému
+- může tam být i informace, zda v systému je akce, která naopak není v Google kalendáři
+- pokud bude synchronizace probíhat, tak tam bude nějaká informace o tom, že se právě synchronizuje (zjišťuje stav Google kalendáře)
