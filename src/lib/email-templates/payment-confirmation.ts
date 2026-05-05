@@ -145,16 +145,16 @@ export function buildEventPaymentConfirmationEmail(
 
   <!-- Header -->
   <tr>
-    <td style="background:#1d4ed8;padding:24px 32px;">
+    <td style="background:#327600;padding:24px 32px;">
       <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">OVT Bohemians</p>
-      <p style="margin:4px 0 0;color:#93c5fd;font-size:14px;">Potvrzení platby za akci</p>
+      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Potvrzení platby za akci</p>
     </td>
   </tr>
 
   <!-- Ikona zaplaceno -->
   <tr>
     <td style="padding:28px 32px 0;text-align:center;">
-      <div style="display:inline-block;background:#eff6ff;border-radius:50%;width:64px;height:64px;line-height:64px;font-size:32px;text-align:center;">✅</div>
+      <div style="display:inline-block;background:#f0fdf4;border-radius:50%;width:64px;height:64px;line-height:64px;font-size:32px;text-align:center;">✅</div>
     </td>
   </tr>
 
@@ -170,14 +170,14 @@ export function buildEventPaymentConfirmationEmail(
 
       <!-- Souhrn platby -->
       <table width="100%" cellpadding="0" cellspacing="0"
-             style="border:1px solid #bfdbfe;border-radius:8px;padding:16px;margin-bottom:24px;background:#eff6ff;">
+             style="border:1px solid #d1fae5;border-radius:8px;padding:16px;margin-bottom:24px;background:#f0fdf4;">
         <tr>
           <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Akce</td>
           <td style="padding:4px 0;font-size:14px;font-weight:600;color:#111827;text-align:right;">${data.eventName}</td>
         </tr>
         <tr>
           <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Uhrazená částka</td>
-          <td style="padding:4px 0;font-size:16px;font-weight:700;color:#1d4ed8;text-align:right;">${fmt(data.amountPaid)}</td>
+          <td style="padding:4px 0;font-size:16px;font-weight:700;color:#15803d;text-align:right;">${fmt(data.amountPaid)}</td>
         </tr>
         <tr>
           <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Datum platby</td>
