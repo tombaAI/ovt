@@ -83,9 +83,9 @@ export function buildEventSettlementEmail(
 
   <!-- Header -->
   <tr>
-    <td style="background:#1d4ed8;padding:24px 32px;">
+    <td style="background:#327600;padding:24px 32px;">
       <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">OVT Bohemians</p>
-      <p style="margin:4px 0 0;color:#93c5fd;font-size:14px;">Předpis platby za akci</p>
+      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Předpis platby za akci</p>
     </td>
   </tr>
 
@@ -112,14 +112,14 @@ export function buildEventSettlementEmail(
         <tr><td colspan="2" style="padding:12px 0 0;border-top:1px solid #e5e7eb;"></td></tr>
         <tr>
           <td style="font-size:15px;font-weight:700;color:#111827;">Celkem k úhradě</td>
-          <td style="font-size:18px;font-weight:700;color:#1d4ed8;text-align:right;">${fmt(data.amount)}</td>
+          <td style="font-size:18px;font-weight:700;color:#327600;text-align:right;">${fmt(data.amount)}</td>
         </tr>
       </table>` : `
       <table width="100%" cellpadding="0" cellspacing="0"
              style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">
         <tr>
           <td style="font-size:15px;font-weight:700;color:#111827;">Celkem k úhradě</td>
-          <td style="font-size:18px;font-weight:700;color:#1d4ed8;text-align:right;">${fmt(data.amount)}</td>
+          <td style="font-size:18px;font-weight:700;color:#327600;text-align:right;">${fmt(data.amount)}</td>
         </tr>
       </table>`}
 
@@ -138,18 +138,23 @@ export function buildEventSettlementEmail(
 
       <!-- QR kód -->
       <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:24px;">
-        <tr>
-          <td align="center">
-            <p style="margin:0 0 10px;font-size:13px;color:#6b7280;">QR platba</p>
-            <img src="${qrUrl}" width="160" height="160"
-                 alt="QR kód pro platbu"
-                 style="display:block;border-radius:8px;border:1px solid #e5e7eb;" />
-          </td>
-        </tr>
+        <tr><td align="center">
+          <p style="margin:0 0 4px;font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">
+            QR platba
+          </p>
+          <p style="margin:0 0 12px;font-size:12px;color:#9ca3af;line-height:1.5;">
+            Naskenuj kód v mobilní aplikaci své banky.<br>
+            Pokud obrázek nevidíš, povol zobrazení obrázků ve svém emailovém klientu
+            nebo si kód zobraz přes
+            <a href="${qrUrl}" style="color:#327600;">tento odkaz</a>.
+          </p>
+          <img src="${qrUrl}" width="200" height="200" alt="QR kód pro platbu"
+               style="display:block;border:1px solid #e5e7eb;border-radius:8px;padding:8px;background:#fff;margin:0 auto;" />
+        </td></tr>
       </table>
 
       <p style="margin:0 0 8px;font-size:13px;color:#9ca3af;line-height:1.6;">
-        V případě dotazů odpověz na tento email nebo kontaktuj Tomáše Bauera.
+        V případě dotazů odpověz na tento email, případně kontaktuj Tomáše Bauera.
       </p>
     </td>
   </tr>
