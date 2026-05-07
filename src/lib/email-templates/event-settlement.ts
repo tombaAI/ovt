@@ -66,8 +66,8 @@ export function buildEventSettlementEmail(
           <td style="padding:6px 8px 6px 0;font-size:13px;color:#111827;">${p.fullName}</td>
           <td style="padding:6px 8px;font-size:12px;text-align:center;">
             ${p.isMember
-                ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;">Člen OVT</span>`
-                : `<span style="color:#9ca3af;font-size:12px;">—</span>`}
+                ? `<span style="color:#15803d;font-size:13px;font-weight:600;">ano</span>`
+                : `<span style="color:#6b7280;font-size:13px;">ne</span>`}
           </td>
           <td style="padding:6px 0;font-size:13px;text-align:right;color:#374151;white-space:nowrap;">${fmt(data.unitPrice)}</td>
         </tr>`).join("");
@@ -115,7 +115,7 @@ export function buildEventSettlementEmail(
         </td></tr>
         <tr style="border-bottom:1px solid #e5e7eb;">
           <th style="padding:4px 8px 8px 0;text-align:left;font-size:11px;color:#9ca3af;font-weight:normal;">Jméno</th>
-          <th style="padding:4px 8px 8px;text-align:center;font-size:11px;color:#9ca3af;font-weight:normal;">Členství</th>
+          <th style="padding:4px 8px 8px;text-align:center;font-size:11px;color:#9ca3af;font-weight:normal;">Člen OVT</th>
           <th style="padding:4px 0 8px;text-align:right;font-size:11px;color:#9ca3af;font-weight:normal;">Cena/os.</th>
         </tr>
         ${participantRows}
