@@ -177,6 +177,9 @@ export async function sendContributionEmails(
             contribId: row.contribId,
             periodId:  row.periodId,
         });
+
+        // max. 4 maily za vteřinu — Resend limit je 5/s
+        await new Promise(r => setTimeout(r, 250));
     }
 
     return { success: true, sent, failed, noEmail, errors };

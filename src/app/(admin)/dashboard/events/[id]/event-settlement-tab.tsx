@@ -249,7 +249,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     const [generating, startGenerate] = useTransition();
     const [genResult, setGenResult] = useState<{ created: number; updated: number } | { error: string } | null>(null);
     const [sending, startSend] = useTransition();
-    const [sendResult, setSendResult] = useState<{ sent: number; skipped: number } | { error: string } | null>(null);
+    const [sendResult, setSendResult] = useState<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string } | null>(null);
 
     function load() {
         setLoading(true);
@@ -424,13 +424,31 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                     </Button>
                 </div>
                 {sendResult && (
-                    <div className={`mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
-                        "error" in sendResult ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"
-                    }`}>
-                        {"error" in sendResult
-                            ? <><AlertCircle size={14} /> {sendResult.error}</>
-                            : <><Check size={14} /> Odesláno: {sendResult.sent} e-mailů{sendResult.skipped > 0 ? `, přeskočeno: ${sendResult.skipped}` : ""}</>
-                        }
+                    <div className="mt-3 space-y-2">
+                        <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
+                            "error" in sendResult
+                                ? "bg-red-50 text-red-600"
+                                : sendResult.failed.length > 0
+                                    ? "bg-amber-50 text-amber-700"
+                                    : "bg-green-50 text-green-700"
+                        }`}>
+                            {"error" in sendResult
+                                ? <><AlertCircle size={14} /> {sendResult.error}</>
+                                : sendResult.failed.length > 0
+                                    ? <><AlertCircle size={14} /> Odesláno: {sendResult.sent}{sendResult.skipped > 0 ? `, přeskočeno: ${sendResult.skipped}` : ""} — <strong>{sendResult.failed.length} se nepodařilo odeslat</strong></>
+                                    : <><Check size={14} /> Odesláno: {sendResult.sent} e-mailů{sendResult.skipped > 0 ? `, přeskočeno: ${sendResult.skipped}` : ""}</>
+                            }
+                        </div>
+                        {"failed" in sendResult && sendResult.failed.length > 0 && (
+                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs space-y-1">
+                                <p className="font-semibold text-red-700">Neodeslané e-maily:</p>
+                                {sendResult.failed.map((f, i) => (
+                                    <p key={i} className="text-red-600">
+                                        <span className="font-medium">{f.name}</span> ({f.email}) — {f.error}
+                                    </p>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 )}
             </div>

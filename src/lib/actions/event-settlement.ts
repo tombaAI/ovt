@@ -470,7 +470,7 @@ export async function getPeopleForSettlement() {
 
 export async function sendEventSettlementEmails(
     eventId: number,
-): Promise<{ sent: number; skipped: number } | { error: string }> {
+): Promise<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string }> {
     const emailSettings = getEmailSettings();
     if (!emailSettings.configured) return { error: "E-mail není nakonfigurován (chybí RESEND_API_KEY)" };
 
@@ -482,12 +482,14 @@ export async function sendEventSettlementEmails(
         const resend = getResendClient();
         let sent = 0;
         let skipped = 0;
+        const failed: { name: string; email: string; error: string }[] = [];
 
         for (const reg of settlement.registrations) {
             const p = reg.existingPrescription;
             if (!p || p.status === "cancelled") { skipped++; continue; }
 
             const to = emailSettings.testTo ?? reg.email;
+            const fullName = `${reg.firstName} ${reg.lastName}`;
 
             const { subject, html } = buildEventSettlementEmail({
                 firstName: reg.firstName,
@@ -506,17 +508,28 @@ export async function sendEventSettlementEmails(
                 subsidy: reg.subsidy,
             });
 
-            await resend.emails.send({
-                from: emailSettings.from,
-                to,
-                replyTo: emailSettings.replyTo,
-                subject,
-                html,
-            });
-            sent++;
+            try {
+                const result = await resend.emails.send({
+                    from: emailSettings.from,
+                    to,
+                    replyTo: emailSettings.replyTo,
+                    subject,
+                    html,
+                });
+                if (result.error) {
+                    failed.push({ name: fullName, email: to, error: result.error.message });
+                } else {
+                    sent++;
+                }
+            } catch (e) {
+                failed.push({ name: fullName, email: to, error: e instanceof Error ? e.message : "Neznámá chyba" });
+            }
+
+            // max. 4 maily za vteřinu — Resend limit je 5/s
+            await new Promise(r => setTimeout(r, 250));
         }
 
-        return { sent, skipped };
+        return { sent, skipped, failed };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Chyba při odesílání e-mailů" };
     }
