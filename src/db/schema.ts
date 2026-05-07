@@ -620,6 +620,7 @@ export const importFinTjTransactions = appSchema.table(
         accountName: text("account_name").notNull(),
         debit: numeric("debit", { precision: 12, scale: 2 }).notNull().default("0"),
         credit: numeric("credit", { precision: 12, scale: 2 }).notNull().default("0"),
+        isSuspect: boolean("is_suspect").notNull().default(false),
     },
     (t) => [
         index("import_fin_tj_tx_import_idx").on(t.importId),

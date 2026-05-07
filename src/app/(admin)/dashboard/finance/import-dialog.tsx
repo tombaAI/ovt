@@ -9,7 +9,7 @@ import { importTjFinancePdf } from "@/lib/actions/finance-tj";
 import { Upload, Loader2, CheckCircle2, AlertCircle } from "lucide-react";
 
 type Result =
-    | { success: true; importId: number; added: number; matched: number; conflicts: number }
+    | { success: true; importId: number; added: number; matched: number; conflicts: number; suspicious: number }
     | { error: string }
     | null;
 
@@ -81,7 +81,7 @@ export function ImportDialog() {
                                     <CheckCircle2 className="h-4 w-4 shrink-0" />
                                     Import dokončen
                                 </div>
-                                <div className="grid grid-cols-3 gap-2 pt-1">
+                                <div className="grid grid-cols-4 gap-2 pt-1">
                                     <div className="text-center bg-white rounded p-2 border border-green-100">
                                         <div className="text-xl font-bold text-green-700">{success!.added}</div>
                                         <div className="text-xs text-gray-500">nových</div>
@@ -96,7 +96,18 @@ export function ImportDialog() {
                                         </div>
                                         <div className="text-xs text-gray-500">konfliktů</div>
                                     </div>
+                                    <div className="text-center bg-white rounded p-2 border border-green-100">
+                                        <div className={`text-xl font-bold ${success!.suspicious > 0 ? "text-red-600" : "text-gray-400"}`}>
+                                            {success!.suspicious}
+                                        </div>
+                                        <div className="text-xs text-gray-500">podezřelých</div>
+                                    </div>
                                 </div>
+                                {success!.suspicious > 0 && (
+                                    <p className="text-xs text-red-700 pt-1">
+                                        V databázi máme transakce, které v importovaném PDF chybí. Zkontrolujte záložku Přehled účetnictví.
+                                    </p>
+                                )}
                             </div>
                     )}
 

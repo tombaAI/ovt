@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import {
     Table, TableBody, TableCell, TableHead, TableHeader, TableRow,
 } from "@/components/ui/table";
@@ -15,7 +15,8 @@ import { ImportHistory } from "./import-history";
 import { StavUctuTab } from "./stav-uctu-tab";
 import { AllocDialog } from "./alloc-dialog";
 import type { FinanceTjImport, FinanceTjTransaction, HospodareniWithReconciliation, StavUctuData, ContribOption } from "@/lib/actions/finance-tj";
-import { FileText, Link2 } from "lucide-react";
+import { deleteSuspectTjTransaction, dismissSuspectTjTransaction } from "@/lib/actions/finance-tj";
+import { FileText, Link2, AlertTriangle, Trash2, X } from "lucide-react";
 
 interface Props {
     imports:      FinanceTjImport[];
@@ -106,6 +107,26 @@ function TransactionsTable({
     const importMap = new Map(imports.map(i => [i.id, i]));
     const sorted = [...transactions].sort((a, b) => b.docDate.localeCompare(a.docDate));
     const [allocTx, setAllocTx] = useState<FinanceTjTransaction | null>(null);
+    const [actionError, setActionError] = useState<string | null>(null);
+    const [isPendingAction, startActionTransition] = useTransition();
+
+    function handleDelete(txId: number) {
+        setActionError(null);
+        startActionTransition(async () => {
+            const result = await deleteSuspectTjTransaction(txId);
+            if ("error" in result) setActionError(result.error);
+        });
+    }
+
+    function handleDismiss(txId: number) {
+        setActionError(null);
+        startActionTransition(async () => {
+            const result = await dismissSuspectTjTransaction(txId);
+            if ("error" in result) setActionError(result.error);
+        });
+    }
+
+    const suspectCount = sorted.filter(tx => tx.isSuspect).length;
 
     if (sorted.length === 0) {
         return (
@@ -118,6 +139,23 @@ function TransactionsTable({
 
     return (
         <>
+            {suspectCount > 0 && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    <div>
+                        <span className="font-medium">{suspectCount} podezřelá transakce{suspectCount > 1 ? "  " : ""}</span>
+                        {" "}— nalezena v naší databázi, ale v posledním importu PDF za stejné období chybí.
+                        Účetní ji pravděpodobně odebral ze sestavy. Zkontrolujte níže označené řádky.
+                    </div>
+                </div>
+            )}
+            {actionError && (
+                <div className="flex items-start gap-2 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+                    <AlertTriangle className="h-4 w-4 mt-0.5 shrink-0" />
+                    {actionError}
+                </div>
+            )}
+
             <div className="rounded-lg border bg-white overflow-x-auto">
                 <Table>
                     <TableHeader>
@@ -129,7 +167,7 @@ function TransactionsTable({
                             <TableHead className="max-w-xs">Popis</TableHead>
                             <TableHead className="text-right w-28 shrink-0">MD</TableHead>
                             <TableHead className="text-right w-28 shrink-0">D</TableHead>
-                            <TableHead className="w-28 text-center shrink-0">Párování</TableHead>
+                            <TableHead className="w-44 text-center shrink-0">Párování</TableHead>
                             <TableHead className="w-16 text-center hidden xl:table-cell shrink-0">Import</TableHead>
                         </TableRow>
                     </TableHeader>
@@ -140,9 +178,10 @@ function TransactionsTable({
                             const allocated = allocSums[tx.id] ?? 0;
                             const isPaired = credit > 0 && Math.abs(allocated - credit) < 0.01;
                             const isPartial = credit > 0 && allocated > 0 && !isPaired;
+                            const hasAllocations = allocated > 0;
 
                             return (
-                                <TableRow key={tx.id}>
+                                <TableRow key={tx.id} className={cn(tx.isSuspect && "bg-red-50/70")}>
                                     <TableCell className="text-gray-700 tabular-nums">{formatDate(tx.docDate)}</TableCell>
                                     <TableCell className="font-mono text-xs text-gray-600">{tx.docNumber}</TableCell>
                                     <TableCell>
@@ -169,7 +208,30 @@ function TransactionsTable({
                                         {formatAmount(tx.credit)}
                                     </TableCell>
                                     <TableCell className="text-center">
-                                        {credit > 0 ? (
+                                        {tx.isSuspect ? (
+                                            <div className="flex items-center justify-center gap-1 flex-wrap">
+                                                <Badge className="bg-red-100 text-red-800 border-red-200 font-normal text-xs gap-1">
+                                                    <AlertTriangle className="h-3 w-3" />
+                                                    Podezřelá
+                                                </Badge>
+                                                {!hasAllocations && (
+                                                    <Button size="sm" variant="ghost"
+                                                        className="h-6 text-xs px-1.5 text-red-700 hover:text-red-900 hover:bg-red-100"
+                                                        disabled={isPendingAction}
+                                                        onClick={() => handleDelete(tx.id)}
+                                                        title="Smazat transakci">
+                                                        <Trash2 className="h-3 w-3" />
+                                                    </Button>
+                                                )}
+                                                <Button size="sm" variant="ghost"
+                                                    className="h-6 text-xs px-1.5 text-gray-600 hover:text-gray-900 hover:bg-gray-100"
+                                                    disabled={isPendingAction}
+                                                    onClick={() => handleDismiss(tx.id)}
+                                                    title="Zamítnout příznak (ponechat transakci)">
+                                                    <X className="h-3 w-3" />
+                                                </Button>
+                                            </div>
+                                        ) : credit > 0 ? (
                                             isPaired ? (
                                                 <Badge className="bg-green-100 text-green-800 border-green-200 font-normal text-xs cursor-pointer"
                                                     onClick={() => setAllocTx(tx)}>
@@ -216,6 +278,7 @@ function TransactionsTable({
 
 export function FinanceClient({ imports, transactions, hospodareni, stavUctu, allocSums, contribs }: Props) {
     const conflictCount = imports.reduce((s, i) => s + i.conflictCount, 0);
+    const suspectCount  = transactions.filter(tx => tx.isSuspect).length;
 
     return (
         <div className="space-y-4">
@@ -229,7 +292,14 @@ export function FinanceClient({ imports, transactions, hospodareni, stavUctu, al
 
             <Tabs defaultValue="prehled">
                 <TabsList>
-                    <TabsTrigger value="prehled">Přehled účetnictví</TabsTrigger>
+                    <TabsTrigger value="prehled">
+                        Přehled účetnictví
+                        {suspectCount > 0 && (
+                            <span className="ml-1.5 inline-flex h-4 min-w-4 items-center justify-center rounded-full bg-red-500 px-1 text-[10px] font-medium text-white">
+                                {suspectCount}
+                            </span>
+                        )}
+                    </TabsTrigger>
                     <TabsTrigger value="stav">Stav účtu</TabsTrigger>
                     <TabsTrigger value="historie">
                         Historie importů

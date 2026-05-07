@@ -9,7 +9,7 @@ import {
     eventPaymentPrescriptions, eventRegistrations, events,
     mailEvents,
 } from "@/db/schema";
-import { and, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { parseTjFinancePdf, type TjParseResult } from "@/lib/parsers/tj-finance-parser";
@@ -45,6 +45,7 @@ export type FinanceTjTransaction = {
     accountName: string;
     debit:       string;
     credit:      string;
+    isSuspect:   boolean;
 };
 
 export type ImportLine = {
@@ -65,7 +66,7 @@ export type ImportLine = {
 
 export type ImportResult =
     | { error: string }
-    | { success: true; importId: number; added: number; matched: number; conflicts: number };
+    | { success: true; importId: number; added: number; matched: number; conflicts: number; suspicious: number };
 
 // ── Import PDF ────────────────────────────────────────────────────────────────
 
@@ -188,8 +189,52 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
 
         await db.insert(importFinTjImportLines).values(lines);
 
+        // ── Detekce podezřelých transakcí ────────────────────────────────────
+        // Pokud PDF obsahuje filtr období (filterFrom–filterTo), porovnáme sadu
+        // čísle dokladů v PDF se všemi transakcemi v DB za stejné období.
+        // Transakce v DB, které v PDF chybí, označíme jako podezřelé (is_suspect=true).
+        // Transakce, které jsou zpět v PDF a dříve byly podezřelé, odznačíme.
+        let suspicious = 0;
+        if (parsed.meta.filterFrom && parsed.meta.filterTo) {
+            const dbTxsInPeriod = await db
+                .select({
+                    id:        importFinTjTransactions.id,
+                    docNumber: importFinTjTransactions.docNumber,
+                    isSuspect: importFinTjTransactions.isSuspect,
+                })
+                .from(importFinTjTransactions)
+                .where(and(
+                    gte(importFinTjTransactions.docDate, parsed.meta.filterFrom),
+                    lte(importFinTjTransactions.docDate, parsed.meta.filterTo),
+                ));
+
+            const pdfDocNumbers = new Set(parsed.transactions.map(tx => tx.docNumber));
+
+            const toMarkSuspect = dbTxsInPeriod
+                .filter(tx => !pdfDocNumbers.has(tx.docNumber) && !tx.isSuspect)
+                .map(tx => tx.id);
+
+            const toUnsuspect = dbTxsInPeriod
+                .filter(tx => pdfDocNumbers.has(tx.docNumber) && tx.isSuspect)
+                .map(tx => tx.id);
+
+            if (toMarkSuspect.length > 0) {
+                await db.update(importFinTjTransactions)
+                    .set({ isSuspect: true })
+                    .where(inArray(importFinTjTransactions.id, toMarkSuspect));
+                suspicious = toMarkSuspect.length;
+                console.log(`[finance-tj] Podezřelé transakce (chybí v PDF): ${toMarkSuspect.length}`, toMarkSuspect);
+            }
+            if (toUnsuspect.length > 0) {
+                await db.update(importFinTjTransactions)
+                    .set({ isSuspect: false })
+                    .where(inArray(importFinTjTransactions.id, toUnsuspect));
+                console.log(`[finance-tj] Odznačeno podezřelých (vrátily se do PDF): ${toUnsuspect.length}`);
+            }
+        }
+
         revalidatePath("/dashboard/finance");
-        return { success: true, importId: importRow.id, added, matched, conflicts };
+        return { success: true, importId: importRow.id, added, matched, conflicts, suspicious };
     } catch (e) {
         console.error("importTjFinancePdf error:", e);
         return { error: "Chyba při zpracování PDF" };
@@ -1011,6 +1056,50 @@ export async function getEventPrescriptionsForAllocation(): Promise<EventPrescri
         status:           r.status,
         variableSymbol:   r.variableSymbol,
     }));
+}
+
+// ── Správa podezřelých transakcí ─────────────────────────────────────────────
+
+export async function deleteSuspectTjTransaction(txId: number): Promise<AllocResult> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    try {
+        const db = getDb();
+
+        // Zamezit smazání, pokud existují alokace (cascade by smazal ledger záznamy)
+        const [existingAlloc] = await db
+            .select({ id: importFinTjAllocations.id })
+            .from(importFinTjAllocations)
+            .where(eq(importFinTjAllocations.tjTransactionId, txId))
+            .limit(1);
+
+        if (existingAlloc) return { error: "Transakce má alokace — nejprve je odeberte v dialogu párování" };
+
+        await db.delete(importFinTjTransactions).where(eq(importFinTjTransactions.id, txId));
+
+        revalidatePath("/dashboard/finance");
+        return { success: true };
+    } catch (e) {
+        console.error("deleteSuspectTjTransaction error:", e);
+        return { error: "Chyba při mazání transakce" };
+    }
+}
+
+export async function dismissSuspectTjTransaction(txId: number): Promise<AllocResult> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    try {
+        const db = getDb();
+        await db.update(importFinTjTransactions)
+            .set({ isSuspect: false })
+            .where(eq(importFinTjTransactions.id, txId));
+
+        revalidatePath("/dashboard/finance");
+        return { success: true };
+    } catch (e) {
+        console.error("dismissSuspectTjTransaction error:", e);
+        return { error: "Chyba při zamítnutí příznaku" };
+    }
 }
 
 export async function createTjEventAllocation(params: {
