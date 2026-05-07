@@ -193,6 +193,9 @@ function RegistrationSummaryTable({ rows }: { rows: SettlementRegistrationRow[] 
                             <td className="py-2 pr-3">
                                 <p className="font-medium text-gray-800">{reg.firstName} {reg.lastName}</p>
                                 <p className="text-xs text-gray-400">{reg.email}</p>
+                                {reg.existingPrescription && (
+                                    <p className="text-xs font-mono text-gray-500 mt-0.5">C{reg.existingPrescription.prescriptionCode}</p>
+                                )}
                             </td>
                             <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
                                 {reg.personsCount}
