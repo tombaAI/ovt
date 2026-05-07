@@ -177,7 +177,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             let allocatedAmount = 0;
             if (expense.allocationMethod === "split_all") {
                 allocatedAmount = totalParticipants > 0
-                    ? Math.round((expense.amount / totalParticipants) * personsCount)
+                    ? Math.ceil((expense.amount / totalParticipants) * personsCount)
                     : 0;
             } else {
                 const alloc = allocations.find(a => a.expenseId === expense.id && a.registrationId === reg.id);
