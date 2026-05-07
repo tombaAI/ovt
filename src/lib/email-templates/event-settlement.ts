@@ -3,24 +3,15 @@
  * Zasílá se po vygenerování předpisů vyúčtování akce.
  */
 
+import { vocative } from "./vocative";
+
 function fmt(n: number): string {
-    return n.toLocaleString("cs-CZ") + " Kč";
+    return n.toLocaleString("cs-CZ") + " Kč";
 }
 
 function fmtDate(iso: string): string {
     const [y, m, d] = iso.split("-");
-    return `${Number(d)}. ${Number(m)}. ${y}`;
-}
-
-function vocative(name: string): string {
-    if (/něk$/.test(name))      return name.replace(/něk$/, "ňku");
-    if (/ch$/.test(name))       return name + "u";
-    if (/[aá]$/.test(name))     return name.slice(0, -1) + "o";
-    if (/[eí]$/.test(name))     return name;
-    if (/o$/.test(name))        return name;
-    if (/[šžčřj]$/.test(name))  return name + "i";
-    if (/k$/.test(name))        return name + "u";
-    return name + "e";
+    return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
 function buildPayliboUrl(amount: number, prescriptionCode: number, variableSymbol: string, bankAccount: string, eventName: string): string {
@@ -55,11 +46,10 @@ export type EventSettlementEmailData = {
     variableSymbol:   string;
     amount:           number;
     bankAccount:      string;
-    paymentDue:       string | null;  // ISO date
-    expenses: {
-        purposeText: string | null;
-        allocatedAmount: number;
-    }[];
+    paymentDue:       string | null;
+    unitPrice:        number;
+    participants:     { fullName: string; isMember: boolean }[];
+    memberCount:      number;
     subsidy:          number;
 };
 
@@ -70,9 +60,25 @@ export function buildEventSettlementEmail(
     const qrUrl = buildPayliboUrl(data.amount, data.prescriptionCode, data.variableSymbol, data.bankAccount, data.eventName);
     const [accountNumber, bankCode] = data.bankAccount.split("/");
 
-    const expenseRows = data.expenses
-        .filter(e => e.allocatedAmount > 0)
-        .map(e => tableRow(e.purposeText ?? "Náklad", fmt(e.allocatedAmount)));
+    // Řádky účastníků
+    const participantRows = data.participants.map(p => `
+        <tr style="border-bottom:1px solid #f3f4f6;">
+          <td style="padding:6px 8px 6px 0;font-size:13px;color:#111827;">${p.fullName}</td>
+          <td style="padding:6px 8px;font-size:12px;text-align:center;">
+            ${p.isMember
+                ? `<span style="background:#dcfce7;color:#15803d;padding:2px 8px;border-radius:99px;font-size:11px;font-weight:600;">Člen OVT</span>`
+                : `<span style="color:#9ca3af;font-size:12px;">—</span>`}
+          </td>
+          <td style="padding:6px 0;font-size:13px;text-align:right;color:#374151;white-space:nowrap;">${fmt(data.unitPrice)}</td>
+        </tr>`).join("");
+
+    const subsidyRow = data.subsidy > 0 ? `
+        <tr>
+          <td colspan="2" style="padding:8px 8px 8px 0;font-size:13px;color:#15803d;">
+            Dotace OVT Bohemians${data.memberCount > 1 ? ` (${data.memberCount} členové)` : ""}
+          </td>
+          <td style="padding:8px 0;font-size:13px;font-weight:600;text-align:right;color:#15803d;white-space:nowrap;">−${fmt(data.subsidy)}</td>
+        </tr>` : "";
 
     const html = `<!DOCTYPE html>
 <html lang="cs">
@@ -99,30 +105,27 @@ export function buildEventSettlementEmail(
         Prosíme tě o uhrazení níže uvedené částky.
       </p>
 
-      <!-- Rozpis nákladů -->
-      ${expenseRows.length > 0 ? `
+      <!-- Přihlášení účastníci -->
       <table width="100%" cellpadding="0" cellspacing="0"
              style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">
-        <tr><td colspan="2" style="padding:0 0 12px;">
+        <tr><td colspan="3" style="padding:0 0 10px;">
           <p style="margin:0;font-size:13px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:.05em;">
-            Rozpis nákladů
+            Přihlášení účastníci
           </p>
         </td></tr>
-        ${expenseRows.join("")}
-        ${data.subsidy > 0 ? tableRow("Dotace OVT Bohemians", "−" + fmt(data.subsidy), "#15803d") : ""}
-        <tr><td colspan="2" style="padding:12px 0 0;border-top:1px solid #e5e7eb;"></td></tr>
-        <tr>
-          <td style="font-size:15px;font-weight:700;color:#111827;">Celkem k úhradě</td>
-          <td style="font-size:18px;font-weight:700;color:#327600;text-align:right;">${fmt(data.amount)}</td>
+        <tr style="border-bottom:1px solid #e5e7eb;">
+          <th style="padding:4px 8px 8px 0;text-align:left;font-size:11px;color:#9ca3af;font-weight:normal;">Jméno</th>
+          <th style="padding:4px 8px 8px;text-align:center;font-size:11px;color:#9ca3af;font-weight:normal;">Členství</th>
+          <th style="padding:4px 0 8px;text-align:right;font-size:11px;color:#9ca3af;font-weight:normal;">Cena/os.</th>
         </tr>
-      </table>` : `
-      <table width="100%" cellpadding="0" cellspacing="0"
-             style="border:1px solid #e5e7eb;border-radius:8px;padding:16px;margin-bottom:16px;">
+        ${participantRows}
+        ${subsidyRow}
+        <tr><td colspan="3" style="padding:10px 0 0;border-top:2px solid #e5e7eb;"></td></tr>
         <tr>
-          <td style="font-size:15px;font-weight:700;color:#111827;">Celkem k úhradě</td>
-          <td style="font-size:18px;font-weight:700;color:#327600;text-align:right;">${fmt(data.amount)}</td>
+          <td colspan="2" style="font-size:15px;font-weight:700;color:#111827;">Celkem k úhradě</td>
+          <td style="font-size:18px;font-weight:700;color:#327600;text-align:right;white-space:nowrap;">${fmt(data.amount)}</td>
         </tr>
-      </table>`}
+      </table>
 
       <!-- Platební údaje -->
       <table width="100%" cellpadding="0" cellspacing="0"
@@ -146,8 +149,7 @@ export function buildEventSettlementEmail(
           </p>
           <p style="margin:0 0 12px;font-size:12px;color:#9ca3af;line-height:1.5;">
             Naskenuj kód v mobilní aplikaci své banky.<br>
-            Pokud obrázek nevidíš, povol zobrazení obrázků ve svém emailovém klientu
-            nebo si kód zobraz přes
+            Pokud obrázek nevidíš, zobraz si kód přes
             <a href="${qrUrl}" style="color:#327600;">tento odkaz</a>.
           </p>
           <img src="${qrUrl}" width="200" height="200" alt="QR kód pro platbu"

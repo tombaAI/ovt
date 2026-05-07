@@ -511,10 +511,12 @@ export async function sendEventSettlementEmails(
                 amount: p.amount,
                 bankAccount: EVENT_BANK_ACCOUNT,
                 paymentDue: p.paymentDue,
-                expenses: reg.expenses.map(e => ({
-                    purposeText: e.purposeText,
-                    allocatedAmount: e.allocatedAmount,
+                unitPrice: settlement.unitPrice,
+                participants: reg.participants.map(pt => ({
+                    fullName: pt.fullName,
+                    isMember: pt.memberId !== null,
                 })),
+                memberCount: reg.memberCount,
                 subsidy: reg.subsidy,
             });
 

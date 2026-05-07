@@ -12,16 +12,7 @@ function fmtDate(iso: string): string {
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
-function vocative(name: string): string {
-    if (/něk$/.test(name))      return name.replace(/něk$/, "ňku");
-    if (/ch$/.test(name))       return name + "u";
-    if (/[aá]$/.test(name))     return name.slice(0, -1) + "o";
-    if (/[eí]$/.test(name))     return name;
-    if (/o$/.test(name))        return name;
-    if (/[šžčřj]$/.test(name))  return name + "i";
-    if (/k$/.test(name))        return name + "u";
-    return name + "e";
-}
+import { vocative } from "./vocative";
 
 // ── Potvrzení platby příspěvků ────────────────────────────────────────────────
 
