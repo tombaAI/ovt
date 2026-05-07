@@ -19,8 +19,8 @@ export function vocative(name: string): string {
     if (/[^aeiouáéíóúůý]ek$/.test(name)) return name.slice(0, -2) + "ku";
     // -k → +u  (Dominik→Dominiku, Patrik→Patriku)
     if (/k$/.test(name))             return name + "u";
-    // -r → -ře  (Petr→Petře, Lubor→Luboře, Libor→Liboře)
-    if (/r$/.test(name))             return name.slice(0, -1) + "ře";
+    // -[souhláska]r → -[souhláska]ře  (Petr→Petře); po samohlásce bez změny (Lubor→Lubore)
+    if (/[^aeiouáéíóúůý]r$/.test(name)) return name.slice(0, -1) + "ře";
     // Ostatní → +e  (Jan→Jane, Pavel→Pavle)
     return name + "e";
 }
