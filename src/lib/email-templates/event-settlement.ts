@@ -23,7 +23,7 @@ function vocative(name: string): string {
     return name + "e";
 }
 
-function buildPayliboUrl(amount: number, prescriptionCode: number, bankAccount: string, eventName: string): string {
+function buildPayliboUrl(amount: number, prescriptionCode: number, variableSymbol: string, bankAccount: string, eventName: string): string {
     const [accountNumber, bankCode] = bankAccount.split("/");
     const message = encodeURIComponent(`C${prescriptionCode} ${eventName}`);
     return (
@@ -32,7 +32,7 @@ function buildPayliboUrl(amount: number, prescriptionCode: number, bankAccount: 
         `&bankCode=${bankCode}` +
         `&amount=${amount}` +
         `&currency=CZK` +
-        `&vs=${prescriptionCode}` +
+        `&vs=${variableSymbol}` +
         `&message=${message}` +
         `&size=200`
     );
@@ -52,6 +52,7 @@ export type EventSettlementEmailData = {
     email:            string;
     eventName:        string;
     prescriptionCode: number;
+    variableSymbol:   string;
     amount:           number;
     bankAccount:      string;
     paymentDue:       string | null;  // ISO date
@@ -66,7 +67,7 @@ export function buildEventSettlementEmail(
     data: EventSettlementEmailData,
 ): { subject: string; html: string } {
     const subject = `Předpis platby — ${data.eventName}`;
-    const qrUrl = buildPayliboUrl(data.amount, data.prescriptionCode, data.bankAccount, data.eventName);
+    const qrUrl = buildPayliboUrl(data.amount, data.prescriptionCode, data.variableSymbol, data.bankAccount, data.eventName);
     const [accountNumber, bankCode] = data.bankAccount.split("/");
 
     const expenseRows = data.expenses
@@ -132,7 +133,8 @@ export function buildEventSettlementEmail(
           </p>
         </td></tr>
         ${tableRow("Číslo účtu", `${accountNumber}/${bankCode}`)}
-        ${tableRow("Variabilní symbol", String(data.prescriptionCode))}
+        ${tableRow("Variabilní symbol", data.variableSymbol)}
+        ${tableRow("Zpráva pro příjemce", `C${data.prescriptionCode} ${data.firstName} ${data.lastName}`)}
         ${data.paymentDue ? tableRow("Splatnost", fmtDate(data.paymentDue), "#b45309") : ""}
       </table>
 

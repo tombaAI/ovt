@@ -303,6 +303,7 @@ export async function setExpenseRegistrationAllocations(
 // ── Generování předpisů plateb ────────────────────────────────────────────────
 
 const EVENT_BANK_ACCOUNT = "351416278/0300";
+const EVENT_VS = "20702"; // oddíl OVT v rámci TJ Bohemians — stejný VS jako u záloh za zahraniční akce
 
 export async function generateEventPrescriptions(eventId: number): Promise<{ success: true; created: number; updated: number } | { error: string }> {
     try {
@@ -339,7 +340,7 @@ export async function generateEventPrescriptions(eventId: number): Promise<{ suc
                         registrationId: reg.registrationId,
                         prescriptionCode: code,
                         bankAccount: EVENT_BANK_ACCOUNT,
-                        variableSymbol: String(code),
+                        variableSymbol: EVENT_VS,
                         amount,
                         messageForRecipient: `C${code} ${fullName} ${event.name}`,
                         status: "pending",
@@ -494,8 +495,9 @@ export async function sendEventSettlementEmails(
                 email: reg.email,
                 eventName: event.name,
                 prescriptionCode: p.prescriptionCode,
+                variableSymbol: p.variableSymbol,
                 amount: p.amount,
-                bankAccount: "351416278/0300",
+                bankAccount: EVENT_BANK_ACCOUNT,
                 paymentDue: p.paymentDue,
                 expenses: reg.expenses.map(e => ({
                     purposeText: e.purposeText,
