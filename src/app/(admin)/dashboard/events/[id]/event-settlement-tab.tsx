@@ -30,7 +30,9 @@ function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount:
 
 // ── Subsidy section ───────────────────────────────────────────────────────────
 
-function SubsidyField({ eventId, value, onChange }: { eventId: number; value: number; onChange: (v: number) => void }) {
+function SubsidyField({ eventId, value, totalMemberParticipants, onChange }: {
+    eventId: number; value: number; totalMemberParticipants: number; onChange: (v: number) => void;
+}) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(String(value));
     const [saving, startSave] = useTransition();
@@ -46,10 +48,17 @@ function SubsidyField({ eventId, value, onChange }: { eventId: number; value: nu
 
     if (!editing) {
         return (
-            <button onClick={() => { setDraft(String(value)); setEditing(true); }}
-                className="text-sm font-medium text-gray-900 hover:text-emerald-700 transition-colors">
-                {value > 0 ? fmtCzk(value) : <span className="text-gray-400 italic">Nezadána</span>}
-            </button>
+            <div>
+                <button onClick={() => { setDraft(String(value)); setEditing(true); }}
+                    className="text-sm font-medium text-gray-900 hover:text-emerald-700 transition-colors">
+                    {value > 0 ? fmtCzk(value) : <span className="text-gray-400 italic">Nezadána</span>}
+                </button>
+                {value > 0 && totalMemberParticipants > 0 && (
+                    <p className="text-xs text-gray-400 mt-0.5">
+                        = {fmtCzk(Math.round(value / totalMemberParticipants))}/člen ({totalMemberParticipants} členů)
+                    </p>
+                )}
+            </div>
         );
     }
     return (
@@ -173,7 +182,7 @@ function ExpenseAllocationRow({
 
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationSummaryTable({ rows }: { rows: SettlementRegistrationRow[] }) {
+function RegistrationSummaryTable({ rows, unitPrice }: { rows: SettlementRegistrationRow[]; unitPrice: number }) {
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -181,7 +190,10 @@ function RegistrationSummaryTable({ rows }: { rows: SettlementRegistrationRow[] 
                     <tr className="border-b border-gray-200">
                         <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Přihláška</th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Osoby</th>
-                        <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Náklady</th>
+                        <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">
+                            Cena akce
+                            {unitPrice > 0 && <span className="block text-gray-400 font-normal">{fmtCzk(unitPrice)}/os.</span>}
+                        </th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Dotace</th>
                         <th className="text-right py-2 pr-3 text-xs font-semibold text-gray-800">K zaplacení</th>
                         <th className="text-right py-2 text-xs font-medium text-gray-500 font-normal">Stav</th>
@@ -245,7 +257,7 @@ function RegistrationSummaryTable({ rows }: { rows: SettlementRegistrationRow[] 
 export function EventSettlementTab({ eventId }: { eventId: number }) {
     const [settlement, setSettlement] = useState<EventSettlement | null>(null);
     const [loading, setLoading] = useState(true);
-    const [subsidy, setSubsidy] = useState(0);
+    const [subsidyTotal, setSubsidyTotal] = useState(0);
     const [generating, startGenerate] = useTransition();
     const [genResult, setGenResult] = useState<{ created: number; updated: number } | { error: string } | null>(null);
     const [sending, startSend] = useTransition();
@@ -254,7 +266,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     function load() {
         setLoading(true);
         getEventSettlement(eventId)
-            .then(s => { setSettlement(s); setSubsidy(s.subsidyPerMember); })
+            .then(s => { setSettlement(s); setSubsidyTotal(s.subsidyTotal); })
             .finally(() => setLoading(false));
     }
 
@@ -304,20 +316,53 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     });
     const canGenerate = hasExpenses && hasRegistrations && (perRegExpenses.length === 0 || allPerRegConfigured);
 
+    // Varování: předpisy nesedí s aktuálními daty
+    const prescriptionsStale = settlement.registrations.some(r =>
+        r.existingPrescription &&
+        r.existingPrescription.status !== "cancelled" &&
+        Math.abs(r.existingPrescription.amount - r.totalAmount) > 0.01
+    );
+    const hasPaidOrMatched = settlement.registrations.some(r =>
+        r.existingPrescription &&
+        (r.existingPrescription.status === "matched" || r.existingPrescription.status === "paid")
+    );
+
     return (
         <div className="space-y-5">
+
+            {/* Varování o zastaralých předpisech */}
+            {prescriptionsStale && (
+                <div className="rounded-xl border-2 border-orange-400 bg-orange-50 px-4 py-3 space-y-1">
+                    <p className="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                        <AlertCircle size={16} /> Předpisy nesedí s aktuálními daty
+                    </p>
+                    <p className="text-xs text-orange-700">
+                        Změnily se náklady nebo dotace. Je potřeba přegenerovat předpisy před dalším odesíláním e-mailů.
+                        Kód předpisu (C{settlement.registrations.find(r => r.existingPrescription)?.existingPrescription?.prescriptionCode ?? "nnn"}) zůstane zachován, změní se jen výše platby.
+                    </p>
+                    {hasPaidOrMatched && (
+                        <p className="text-xs font-semibold text-red-700 flex items-center gap-1">
+                            <AlertCircle size={12} /> Pozor: u některých předpisů již proběhla nebo je spárována platba — zkontrolujte ručně.
+                        </p>
+                    )}
+                </div>
+            )}
 
             {/* Dotace */}
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
                 <div className="flex items-center justify-between gap-3">
                     <div>
-                        <p className="text-xs text-gray-500 mb-0.5">Dotace akce pro členy OVT</p>
-                        <SubsidyField eventId={eventId} value={subsidy} onChange={v => { setSubsidy(v); load(); }} />
+                        <p className="text-xs text-gray-500 mb-0.5">Celková dotace akce pro členy OVT</p>
+                        <SubsidyField
+                            eventId={eventId}
+                            value={subsidyTotal}
+                            totalMemberParticipants={settlement.totalMemberParticipants}
+                            onChange={v => { setSubsidyTotal(v); load(); }}
+                        />
                     </div>
-                    {subsidy > 0 && (
+                    {subsidyTotal > 0 && (
                         <p className="text-xs text-gray-400 text-right">
-                            {settlement.registrations.reduce((s, r) => s + r.memberCount, 0)} členů ×{" "}
-                            {fmtCzk(subsidy)} = −{fmtCzk(settlement.registrations.reduce((s, r) => s + r.subsidy, 0))}
+                            celková sleva −{fmtCzk(settlement.registrations.reduce((s, r) => s + r.subsidy, 0))}
                         </p>
                     )}
                 </div>
@@ -358,7 +403,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                 {!hasRegistrations ? (
                     <p className="text-sm text-gray-400 py-4 text-center">Žádné přihlášky na akci.</p>
                 ) : (
-                    <RegistrationSummaryTable rows={settlement.registrations} />
+                    <RegistrationSummaryTable rows={settlement.registrations} unitPrice={settlement.unitPrice} />
                 )}
             </div>
 
@@ -369,6 +414,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                         <p className="text-sm font-semibold text-gray-800">Vygenerovat předpisy plateb</p>
                         <p className="text-xs text-gray-500 mt-0.5">
                             Vytvoří nebo přepíše předpisy pro všechny přihlášky. Splatnost: 7 dní. Účet: 351416278/0300.
+                            Existující kód předpisu (Cnnn) zůstane zachován — změní se jen výše platby.
                         </p>
                         {!canGenerate && hasExpenses && perRegExpenses.length > 0 && !allPerRegConfigured && (
                             <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">

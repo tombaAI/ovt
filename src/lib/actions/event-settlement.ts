@@ -62,8 +62,10 @@ export type SettlementRegistrationRow = {
 
 export type EventSettlement = {
     eventId: number;
-    subsidyPerMember: number;
+    subsidyTotal: number;           // celková dotace akce (uložena v events.subsidy_per_member)
+    unitPrice: number;              // cena per osoba = Math.ceil(expensesSum / totalParticipants)
     totalParticipants: number;
+    totalMemberParticipants: number;
     finalExpenses: { id: number; purposeText: string | null; amount: number; allocationMethod: "split_all" | "per_registration" }[];
     registrations: SettlementRegistrationRow[];
     grandTotal: number;
@@ -83,7 +85,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
     if (!event) throw new Error(`Akce ${eventId} nenalezena`);
 
-    const subsidyPerMember = parseFloat(event.subsidyPerMember ?? "0") || 0;
+    const subsidyTotal = parseFloat(event.subsidyPerMember ?? "0") || 0;
 
     // Náklady ve stavu final
     const expenses = await db
@@ -160,6 +162,11 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         : [];
 
     const totalParticipants = regs.reduce((s, r) => s + (r.personsCount ?? 1), 0);
+    const totalMemberParticipants = participants.filter(p => p.memberId !== null).length;
+
+    // Jednotná cena per osobu — stejná pro všechny, zaokrouhlená nahoru
+    const expensesSum = finalExpenses.reduce((s, e) => s + e.amount, 0);
+    const unitPrice = totalParticipants > 0 ? Math.ceil(expensesSum / totalParticipants) : 0;
 
     const registrationRows: SettlementRegistrationRow[] = regs.map(reg => {
         const regParticipants = participants.filter(p => p.registrationId === reg.id).map(p => ({
@@ -173,11 +180,12 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         const memberCount = regParticipants.filter(p => p.memberId !== null).length;
         const personsCount = reg.personsCount ?? 1;
 
+        // Podrobný rozpis nákladů — pro e-mail a zobrazení v záložce Náklady
         const expenseRows: SettlementExpenseRow[] = finalExpenses.map(expense => {
             let allocatedAmount = 0;
             if (expense.allocationMethod === "split_all") {
                 allocatedAmount = totalParticipants > 0
-                    ? (expense.amount / totalParticipants) * personsCount  // přesný zlomek, zaokrouhlíme až jednou na konci
+                    ? (expense.amount / totalParticipants) * personsCount
                     : 0;
             } else {
                 const alloc = allocations.find(a => a.expenseId === expense.id && a.registrationId === reg.id);
@@ -186,10 +194,13 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod, allocatedAmount };
         });
 
-        const expensesTotal = expenseRows.reduce((s, e) => s + e.allocatedAmount, 0);
-        const subsidy = memberCount * subsidyPerMember;
-        // Math.ceil jednou na celkové sumě — max. odchylka 1 Kč na přihlášku
-        const totalAmount = Math.max(0, Math.ceil(expensesTotal - subsidy));
+        // Cena akce = unitPrice × počet osob (stejná sazba pro všechny)
+        const expensesTotal = unitPrice * personsCount;
+        // Dotace: poměrná část celkové dotace podle počtu členů v přihlášce
+        const subsidy = totalMemberParticipants > 0
+            ? Math.round(subsidyTotal * memberCount / totalMemberParticipants)
+            : 0;
+        const totalAmount = Math.max(0, expensesTotal - subsidy);
 
         const prescription = prescriptions.find(p => p.registrationId === reg.id) ?? null;
 
@@ -217,10 +228,9 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         };
     });
 
-    const expensesSum = finalExpenses.reduce((s, e) => s + e.amount, 0);
     const grandTotal = registrationRows.reduce((s, r) => s + r.totalAmount, 0);
 
-    return { eventId, subsidyPerMember, totalParticipants, finalExpenses, registrations: registrationRows, grandTotal, expensesSum };
+    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses, registrations: registrationRows, grandTotal, expensesSum };
 }
 
 // ── Dotace akce ───────────────────────────────────────────────────────────────
