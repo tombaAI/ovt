@@ -177,7 +177,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             let allocatedAmount = 0;
             if (expense.allocationMethod === "split_all") {
                 allocatedAmount = totalParticipants > 0
-                    ? Math.ceil((expense.amount / totalParticipants) * personsCount)
+                    ? (expense.amount / totalParticipants) * personsCount  // přesný zlomek, zaokrouhlíme až jednou na konci
                     : 0;
             } else {
                 const alloc = allocations.find(a => a.expenseId === expense.id && a.registrationId === reg.id);
@@ -188,7 +188,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
         const expensesTotal = expenseRows.reduce((s, e) => s + e.allocatedAmount, 0);
         const subsidy = memberCount * subsidyPerMember;
-        const totalAmount = Math.max(0, expensesTotal - subsidy);
+        // Math.ceil jednou na celkové sumě — max. odchylka 1 Kč na přihlášku
+        const totalAmount = Math.max(0, Math.ceil(expensesTotal - subsidy));
 
         const prescription = prescriptions.find(p => p.registrationId === reg.id) ?? null;
 
