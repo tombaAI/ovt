@@ -42,8 +42,6 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
     const [allMembers, setAllMembers] = useState<MemberOption[] | null>(null);
     const [search, setSearch] = useState("");
     const [selectedMembers, setSelectedMembers] = useState<MemberOption[]>([]);
-    const [contactEmail, setContactEmail] = useState("");
-    const [contactPhone, setContactPhone] = useState("");
     const [showNonMember, setShowNonMember] = useState(false);
     const [nonMember, setNonMember] = useState<NonMemberDraft>({ firstName: "", lastName: "", email: "", phone: "" });
     const [saving, startSave] = useTransition();
@@ -59,21 +57,11 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
         if (!open) {
             setSearch("");
             setSelectedMembers([]);
-            setContactEmail("");
-            setContactPhone("");
             setShowNonMember(false);
             setNonMember({ firstName: "", lastName: "", email: "", phone: "" });
             setError(null);
         }
     }, [open]);
-
-    // předvyplnit kontakt z prvního vybraného člena
-    useEffect(() => {
-        if (selectedMembers.length > 0) {
-            setContactEmail(prev => prev || selectedMembers[0].email || "");
-            setContactPhone(prev => prev || selectedMembers[0].phone || "");
-        }
-    }, [selectedMembers]);
 
     const filtered = (allMembers ?? [])
         .filter(m =>
@@ -88,12 +76,7 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
     }
 
     function removeMember(id: number) {
-        setSelectedMembers(prev => {
-            const next = prev.filter(m => m.id !== id);
-            // po odebrání prvního člena vymazat předvyplněný e-mail, pokud patřil jemu
-            if (next.length === 0) { setContactEmail(""); setContactPhone(""); }
-            return next;
-        });
+        setSelectedMembers(prev => prev.filter(m => m.id !== id));
     }
 
     function handleSubmit() {
@@ -110,9 +93,9 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
             return;
         }
 
-        // kontaktní e-mail: z formuláře člena, nebo z pole nečlena
-        const email = hasMember ? contactEmail.trim() : nonMember.email.trim();
-        const phone = hasMember ? contactPhone.trim() : nonMember.phone.trim();
+        // kontaktní e-mail: z profilu prvního člena, nebo z pole nečlena
+        const email = hasMember ? (selectedMembers[0].email ?? "") : nonMember.email.trim();
+        const phone = hasMember ? (selectedMembers[0].phone ?? "") : nonMember.phone.trim();
 
         if (!email) {
             setError("Vyplňte e-mail kontaktní osoby");
@@ -186,6 +169,12 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
                         <Input
                             value={search}
                             onChange={e => setSearch(e.target.value)}
+                            onKeyDown={e => {
+                                if (e.key === "Enter" && filtered.length > 0) {
+                                    e.preventDefault();
+                                    addMember(filtered[0]);
+                                }
+                            }}
                             placeholder={selectedMembers.length === 0 ? "Hledat člena OVT…" : "Přidat dalšího člena…"}
                             className="h-8 text-sm"
                             autoFocus
@@ -209,20 +198,19 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
                         )}
                     </div>
 
-                    {/* ── Kontaktní údaje (zobrazí se po výběru člena) ── */}
+                    {/* ── Kontaktní údaje z profilu člena (read-only) ── */}
                     {selectedMembers.length > 0 && (
-                        <div className="grid grid-cols-2 gap-2">
+                        <div className="grid grid-cols-2 gap-3 text-sm">
                             <div>
-                                <Label className="text-xs text-gray-600">E-mail *</Label>
-                                <Input type="email" value={contactEmail}
-                                    onChange={e => setContactEmail(e.target.value)}
-                                    className="mt-1 h-8 text-sm" placeholder="jana@example.cz" />
+                                <p className="text-xs text-gray-500 mb-0.5">E-mail</p>
+                                {selectedMembers[0].email
+                                    ? <p className="text-gray-800 truncate">{selectedMembers[0].email}</p>
+                                    : <p className="text-amber-600 text-xs">Člen nemá e-mail v systému</p>
+                                }
                             </div>
                             <div>
-                                <Label className="text-xs text-gray-600">Telefon</Label>
-                                <Input value={contactPhone}
-                                    onChange={e => setContactPhone(e.target.value)}
-                                    className="mt-1 h-8 text-sm" placeholder="+420…" />
+                                <p className="text-xs text-gray-500 mb-0.5">Telefon</p>
+                                <p className="text-gray-800">{selectedMembers[0].phone ?? "—"}</p>
                             </div>
                         </div>
                     )}
