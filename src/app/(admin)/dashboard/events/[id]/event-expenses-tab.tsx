@@ -135,6 +135,50 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
     );
 }
 
+// ── Náhled dokladu (lightbox) ─────────────────────────────────────────────────
+
+function DocPreviewDialog({ url, mime, fileName, open, onClose }: {
+    url: string;
+    mime: string | null;
+    fileName: string | null;
+    open: boolean;
+    onClose: () => void;
+}) {
+    const isPdf = mime === "application/pdf";
+    const isImg = isImage(mime);
+
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-4xl max-h-[92vh] p-0 overflow-hidden flex flex-col">
+                <DialogHeader className="px-4 py-3 border-b shrink-0">
+                    <DialogTitle className="text-sm font-medium truncate">{fileName ?? "Doklad"}</DialogTitle>
+                </DialogHeader>
+                <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-50 p-4 min-h-0">
+                    {isImg && (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img src={url} alt={fileName ?? "doklad"}
+                            className="max-w-full max-h-full object-contain rounded shadow" />
+                    )}
+                    {isPdf && (
+                        <iframe src={url} className="w-full rounded" style={{ height: "78vh" }}
+                            title={fileName ?? "doklad"} />
+                    )}
+                    {!isImg && !isPdf && (
+                        <div className="text-center space-y-3 py-8">
+                            <FileText size={48} className="text-gray-300 mx-auto" />
+                            <p className="text-sm text-gray-600">{fileName}</p>
+                            <a href={url} target="_blank" rel="noopener noreferrer"
+                                className="text-sm text-blue-600 hover:underline">
+                                Otevřít soubor
+                            </a>
+                        </div>
+                    )}
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 // ── Resize image for Gemini (client-side, before API call) ───────────────────
 
 function resizeForGemini(file: File, maxPx = 1024): Promise<File> {
@@ -992,6 +1036,7 @@ function DraftProcessDialog({
     const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [previewOpen, setPreviewOpen] = useState(false);
 
     useEffect(() => {
         if (!open) return;
@@ -1066,6 +1111,7 @@ function DraftProcessDialog({
         : null;
 
     return (
+        <>
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-xl max-h-[90vh] overflow-y-auto">
                 <DialogHeader>
@@ -1079,8 +1125,12 @@ function DraftProcessDialog({
                     {/* Image preview */}
                     {blobProxyUrl && isImage(expense.fileMime) && (
                         <div className="flex gap-3 items-start">
-                            <img src={blobProxyUrl} alt="doklad"
-                                className="w-28 h-36 object-cover rounded-lg border border-gray-200 shrink-0" />
+                            <button onClick={() => setPreviewOpen(true)} title="Zobrazit doklad"
+                                className="shrink-0 rounded-lg border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all">
+                                {/* eslint-disable-next-line @next/next/no-img-element */}
+                                <img src={blobProxyUrl} alt="doklad"
+                                    className="w-28 h-36 object-cover" />
+                            </button>
                             <div className="flex-1">
                                 <p className="text-xs text-gray-500 mb-2">{expense.fileName}</p>
                                 <Button type="button" size="sm" onClick={runGeminiAnalysis} disabled={analyzing}
@@ -1093,14 +1143,22 @@ function DraftProcessDialog({
                     )}
                     {blobProxyUrl && !isImage(expense.fileMime) && (
                         <div className="flex items-center gap-3">
-                            <FileText size={20} className="text-red-400 shrink-0" />
+                            <button onClick={() => setPreviewOpen(true)} title="Zobrazit doklad"
+                                className="text-red-400 hover:text-red-600 transition-colors shrink-0">
+                                <FileText size={20} />
+                            </button>
                             <div className="flex-1">
-                                <p className="text-xs text-gray-500">{expense.fileName}</p>
-                                <Button type="button" size="sm" onClick={runGeminiAnalysis} disabled={analyzing}
-                                    className="mt-2 bg-violet-600 hover:bg-violet-700 text-white gap-1.5">
-                                    <Sparkles size={13} />
-                                    {analyzing ? "Analyzuji…" : "Analyzovat Gemini"}
-                                </Button>
+                                <button onClick={() => setPreviewOpen(true)}
+                                    className="text-xs text-blue-600 hover:underline text-left">
+                                    {expense.fileName}
+                                </button>
+                                <div className="mt-2">
+                                    <Button type="button" size="sm" onClick={runGeminiAnalysis} disabled={analyzing}
+                                        className="bg-violet-600 hover:bg-violet-700 text-white gap-1.5">
+                                        <Sparkles size={13} />
+                                        {analyzing ? "Analyzuji…" : "Analyzovat Gemini"}
+                                    </Button>
+                                </div>
                             </div>
                         </div>
                     )}
@@ -1152,6 +1210,16 @@ function DraftProcessDialog({
                 </div>
             </DialogContent>
         </Dialog>
+        {blobProxyUrl && (
+            <DocPreviewDialog
+                url={blobProxyUrl}
+                mime={expense.fileMime}
+                fileName={expense.fileName}
+                open={previewOpen}
+                onClose={() => setPreviewOpen(false)}
+            />
+        )}
+        </>
     );
 }
 
@@ -1417,6 +1485,7 @@ function ExpenseItem({
     const [editing, setEditing] = useState(false);
     const [processing, setProcessing] = useState(false);
     const [editingPerson, setEditingPerson] = useState(false);
+    const [previewOpen, setPreviewOpen] = useState(false);
 
     const isDraft = expense.status === "draft";
     const isUnconfirmed = expense.status === "unconfirmed";
@@ -1455,12 +1524,21 @@ function ExpenseItem({
             {/* Thumbnail for images, icon for others */}
             <div className="shrink-0">
                 {blobProxyUrl && isImage(expense.fileMime) ? (
-                    <img src={blobProxyUrl} alt="doklad"
-                        className="w-12 h-14 object-cover rounded border border-gray-200" />
+                    <button onClick={() => setPreviewOpen(true)} title="Zobrazit doklad"
+                        className="block rounded border border-gray-200 overflow-hidden hover:ring-2 hover:ring-blue-400 transition-all">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={blobProxyUrl} alt="doklad"
+                            className="w-12 h-14 object-cover" />
+                    </button>
                 ) : (
                     <div className="mt-0.5 text-gray-400">
-                        {expense.fileUrl
-                            ? <FileText size={16} className="text-red-400" />
+                        {blobProxyUrl
+                            ? (
+                                <button onClick={() => setPreviewOpen(true)} title="Zobrazit doklad"
+                                    className="text-red-400 hover:text-red-600 transition-colors">
+                                    <FileText size={16} />
+                                </button>
+                            )
                             : <Paperclip size={16} />
                         }
                     </div>
@@ -1510,11 +1588,10 @@ function ExpenseItem({
                     </div>
                 )}
                 {expense.fileUrl && !isImage(expense.fileMime) && (
-                    <a href={blobProxyUrl!}
-                        target="_blank" rel="noopener noreferrer"
-                        className="text-xs text-blue-600 hover:underline mt-0.5 block truncate">
+                    <button onClick={() => setPreviewOpen(true)}
+                        className="text-xs text-blue-600 hover:underline mt-0.5 block truncate text-left">
                         {expense.fileName ?? "Příloha"}
-                    </a>
+                    </button>
                 )}
                 <p className="text-xs text-gray-400 mt-1">{fmtDate(expense.createdAt)}</p>
             </div>
@@ -1568,6 +1645,15 @@ function ExpenseItem({
                     open={editingPerson}
                     onOpenChange={setEditingPerson}
                     onSaved={onUpdated}
+                />
+            )}
+            {blobProxyUrl && (
+                <DocPreviewDialog
+                    url={blobProxyUrl}
+                    mime={expense.fileMime}
+                    fileName={expense.fileName}
+                    open={previewOpen}
+                    onClose={() => setPreviewOpen(false)}
                 />
             )}
         </div>
