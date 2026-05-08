@@ -468,7 +468,14 @@ export async function linkParticipantToMember(
 
 export async function getMembersForSettlement() {
     const db = getDb();
-    return db.select({ id: members.id, fullName: members.fullName }).from(members).orderBy(members.fullName);
+    return db.select({
+        id: members.id,
+        fullName: members.fullName,
+        firstName: members.firstName,
+        lastName: members.lastName,
+        email: members.email,
+        phone: members.phone,
+    }).from(members).orderBy(members.fullName);
 }
 
 export async function getPeopleForSettlement() {
