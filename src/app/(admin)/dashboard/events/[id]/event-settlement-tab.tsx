@@ -396,8 +396,6 @@ function handleSendEmails() {
 
     const hasExpenses = settlement.finalExpenses.length > 0;
     const hasRegistrations = settlement.registrations.length > 0;
-    // toggle-based alokace vždy garantuje platný součet (Math.ceil) — nepotřebujeme extra check
-    const canGenerate = hasExpenses && hasRegistrations;
 
     // Varování: předpisy nesedí s aktuálními daty
     const prescriptionsStale = settlement.registrations.some(r =>
