@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useTransition } from "react";
+import { useState, useEffect, useTransition, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -73,6 +73,21 @@ function SubsidyField({ eventId, value, totalMemberParticipants, onChange }: {
     );
 }
 
+// ── Toggle pill ───────────────────────────────────────────────────────────────
+
+function TogglePill({ checked, onClick }: { checked: boolean; onClick: () => void }) {
+    return (
+        <button
+            type="button"
+            onClick={e => { e.stopPropagation(); onClick(); }}
+            className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-150 focus:outline-none ${checked ? "bg-blue-500" : "bg-gray-200"}`}
+            aria-pressed={checked}
+        >
+            <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-6" : "translate-x-1"}`} />
+        </button>
+    );
+}
+
 // ── Expense allocation row ────────────────────────────────────────────────────
 
 function ExpenseAllocationRow({
@@ -94,15 +109,15 @@ function ExpenseAllocationRow({
         });
         for (const reg of registrations) {
             const ex = reg.expenses.find(e => e.expenseId === expense.id);
-            // žádné alokace ještě → default všichni; jinak jen ti s > 0
-            if (!hasAnyAlloc || (ex && ex.allocatedAmount > 0)) {
-                init.add(reg.registrationId);
-            }
+            if (!hasAnyAlloc || (ex && ex.allocatedAmount > 0)) init.add(reg.registrationId);
         }
         return init;
     });
-    const [saving, startSave] = useTransition();
-    const [msg, setMsg] = useState<string | null>(null);
+    const [saveError, setSaveError] = useState<string | null>(null);
+    const [methodSaving, startMethodSave] = useTransition();
+    const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
     function calcAmounts(newChecked: Set<number>): { registrationId: number; amount: number }[] {
         const totalPersons = registrations
@@ -116,25 +131,40 @@ function ExpenseAllocationRow({
     }
 
     function handleToggle(regId: number) {
+        // Okamžitá vizuální odezva — bez blokování UI
         const newChecked = new Set(checked);
         if (newChecked.has(regId)) newChecked.delete(regId); else newChecked.add(regId);
         setChecked(newChecked);
-        const allocs = calcAmounts(newChecked);
-        startSave(async () => {
-            const res = await setExpenseRegistrationAllocations(expense.id, allocs);
-            if ("error" in res) setMsg(res.error); else { setMsg(null); onChanged(); }
-        });
+
+        // Debounce: uložíme až po 500 ms od posledního kliknutí
+        if (saveTimer.current) clearTimeout(saveTimer.current);
+        saveTimer.current = setTimeout(async () => {
+            const res = await setExpenseRegistrationAllocations(expense.id, calcAmounts(newChecked));
+            if ("error" in res) setSaveError(res.error); else setSaveError(null);
+            // onChanged() voláme až při zavření panelu — vyhýbáme se zbytečnému reloadu
+        }, 500);
     }
 
     function handleMethodChange(newMethod: "split_all" | "per_registration") {
-        startSave(async () => {
+        startMethodSave(async () => {
             const res = await updateExpenseAllocationMethod(expense.id, newMethod);
-            if ("error" in res) { setMsg(res.error); } else { setMethod(newMethod); setMsg(null); if (newMethod === "per_registration") setExpanded(true); onChanged(); }
+            if ("error" in res) { setSaveError(res.error); return; }
+            setMethod(newMethod);
+            setSaveError(null);
+            if (newMethod === "per_registration") setExpanded(true);
+            onChanged();
         });
     }
 
-    // Zobrazené částky dle aktuálního stavu checkboxů
-    const totalCheckedPersons = registrations.filter(r => checked.has(r.registrationId)).reduce((s, r) => s + r.personsCount, 0);
+    function handleChevron() {
+        const closing = expanded;
+        setExpanded(v => !v);
+        if (closing) onChanged(); // refresh nadřazené komponenty až při zavírání
+    }
+
+    const totalCheckedPersons = registrations
+        .filter(r => checked.has(r.registrationId))
+        .reduce((s, r) => s + r.personsCount, 0);
     const ppCost = totalCheckedPersons > 0 ? Math.ceil(expense.amount / totalCheckedPersons) : 0;
 
     return (
@@ -147,18 +177,18 @@ function ExpenseAllocationRow({
                 <div className="shrink-0 flex items-center gap-1.5">
                     <button
                         onClick={() => handleMethodChange("split_all")}
-                        disabled={saving}
+                        disabled={methodSaving}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                         Rovnoměrně
                     </button>
                     <button
-                        onClick={() => { handleMethodChange("per_registration"); }}
-                        disabled={saving}
+                        onClick={() => handleMethodChange("per_registration")}
+                        disabled={methodSaving}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                         Dle přihlášek
                     </button>
                     {method === "per_registration" && (
-                        <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button onClick={handleChevron} className="text-gray-400 hover:text-gray-600 transition-colors">
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                     )}
@@ -166,33 +196,43 @@ function ExpenseAllocationRow({
             </div>
 
             {method === "per_registration" && expanded && (
-                <div className="mt-2 ml-1 divide-y divide-gray-50">
+                <div className="mt-2 ml-1 space-y-1">
                     {registrations.map(reg => {
                         const isChecked = checked.has(reg.registrationId);
+                        const amount = ppCost * reg.personsCount;
+                        const extraParticipants = reg.participants.filter(p => p.fullName !== `${reg.firstName} ${reg.lastName}`);
                         return (
-                            <button
+                            <div
                                 key={reg.registrationId}
                                 onClick={() => handleToggle(reg.registrationId)}
-                                disabled={saving}
-                                className="w-full flex items-center gap-3 py-2 text-left hover:bg-gray-50 rounded transition-colors disabled:opacity-50"
+                                className="flex items-center gap-3 px-1 py-2 rounded-lg hover:bg-gray-50 cursor-pointer select-none"
                             >
-                                <span className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isChecked ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
-                                    {isChecked && <Check size={10} className="text-white" strokeWidth={3} />}
-                                </span>
-                                <span className="flex-1 text-xs text-gray-700 truncate">{reg.firstName} {reg.lastName}</span>
-                                <span className="text-xs tabular-nums text-right w-20 shrink-0">
+                                <TogglePill checked={isChecked} onClick={() => handleToggle(reg.registrationId)} />
+                                <div className="flex-1 min-w-0">
+                                    <p className={`text-xs font-medium leading-tight ${isChecked ? "text-gray-800" : "text-gray-400"}`}>
+                                        {reg.firstName} {reg.lastName}
+                                        {reg.personsCount > 1 && (
+                                            <span className="font-normal text-gray-400"> · {reg.personsCount} os.</span>
+                                        )}
+                                    </p>
+                                    {extraParticipants.length > 0 && (
+                                        <p className="text-xs text-gray-400 mt-0.5 truncate">
+                                            {extraParticipants.map(p => p.fullName).join(", ")}
+                                        </p>
+                                    )}
+                                </div>
+                                <span className="text-xs tabular-nums shrink-0 w-18 text-right">
                                     {isChecked
-                                        ? <span className="font-medium text-gray-800">{fmtCzk(ppCost * reg.personsCount)}</span>
+                                        ? <span className="font-medium text-gray-800">{fmtCzk(amount)}</span>
                                         : <span className="text-gray-300">—</span>}
                                 </span>
-                            </button>
+                            </div>
                         );
                     })}
-                    {saving && <p className="text-xs text-gray-400 pt-1 pb-0.5">Ukládám…</p>}
-                    {msg && <p className="text-xs text-red-500 pt-1">{msg}</p>}
+                    {saveError && <p className="text-xs text-red-500 px-1 pt-1">{saveError}</p>}
                 </div>
             )}
-            {msg && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{msg}</p>}
+            {saveError && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{saveError}</p>}
         </div>
     );
 }

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -25,8 +25,9 @@ import type {
 import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
-import { AddRegistrationDialog, LinkParticipantDialog } from "./admin-registration-dialog";
+import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration } from "@/lib/actions/event-settlement";
 
 interface Props {
     event: EventRow;
@@ -655,12 +656,192 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
     );
 }
 
+// ── Karta přihlášky ───────────────────────────────────────────────────────────
+
+function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRefresh: () => void }) {
+    const [removingId, setRemovingId] = useState<number | null>(null);
+    const [cancelling, setCancelling] = useState(false);
+    const [addParticipantOpen, setAddParticipantOpen] = useState(false);
+    const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
+
+    const isCancelled = !!r.cancelledAt;
+
+    const participants = r.participants.length > 0
+        ? r.participants
+        : r.participantNames.map((name, i) => ({
+            id: undefined as number | undefined,
+            fullName: name,
+            isPrimary: i === 0,
+            participantOrder: i + 1,
+            memberId: undefined as number | null | undefined,
+            memberName: undefined as string | null | undefined,
+        }));
+
+    async function handleRemove(participantId: number, name: string) {
+        if (!confirm(`Odebrat účastníka „${name}" z přihlášky?`)) return;
+        setRemovingId(participantId);
+        const res = await removeParticipantFromRegistration(participantId);
+        if ("error" in res) alert(res.error);
+        else onRefresh();
+        setRemovingId(null);
+    }
+
+    async function handleCancel() {
+        if (!confirm(`Zrušit přihlášku ${r.firstName} ${r.lastName}? Tato akce nastaví přihlášku jako zrušenou.`)) return;
+        setCancelling(true);
+        const res = await cancelAdminRegistration(r.registrationId);
+        if ("error" in res) alert(res.error);
+        else onRefresh();
+        setCancelling(false);
+    }
+
+    return (
+        <div className={`rounded-2xl border shadow-sm overflow-hidden ${isCancelled ? "border-red-100 bg-red-50/30 opacity-70" : "border-slate-200 bg-white"}`}>
+            <div className={`h-1 bg-gradient-to-r ${isCancelled ? "from-rose-300 via-rose-400 to-rose-500" : (PAYMENT_STATUS_BAR_COLORS[r.paymentStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400")}`} />
+
+            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
+                <div className="flex items-start justify-between gap-4 flex-wrap">
+                    <div>
+                        <p className="text-sm font-semibold text-slate-900">{r.firstName} {r.lastName}</p>
+                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
+                            <span>{r.email}</span>
+                            {r.phone && <span>{r.phone}</span>}
+                            <span className="text-slate-300">•</span>
+                            <span className="tabular-nums">{fmtShortDate(r.createdAt)}</span>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center gap-2 flex-wrap justify-end">
+                        {isCancelled ? (
+                            <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
+                                Zrušeno
+                            </span>
+                        ) : (
+                            <>
+                                {r.matchedLedgerId && (
+                                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700">
+                                        banka spárována
+                                    </span>
+                                )}
+                                <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                                    {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
+                                </Badge>
+                                <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                                    {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
+                                </span>
+                            </>
+                        )}
+                    </div>
+                </div>
+
+                {!isCancelled && (
+                    <div className="grid gap-2 sm:grid-cols-3 text-xs">
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+                            <p className="text-slate-400">Předpis</p>
+                            <p className="font-medium text-slate-700">{r.paymentCodeLabel}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+                            <p className="text-slate-400">Variabilní symbol</p>
+                            <p className="font-medium text-slate-700 tabular-nums">{r.paymentVariableSymbol}</p>
+                        </div>
+                        <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
+                            <p className="text-slate-400">Počet osob</p>
+                            <p className="font-medium text-slate-700 tabular-nums">{r.personsCount}</p>
+                        </div>
+                    </div>
+                )}
+
+                {r.transportInfo && (
+                    <div className="rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700">Doprava a lodě</p>
+                        <p className="mt-1 text-xs text-amber-900 whitespace-pre-wrap">{r.transportInfo}</p>
+                    </div>
+                )}
+
+                <div className="space-y-2">
+                    <p className="text-xs font-medium text-slate-500">Účastníci</p>
+                    <div className="flex flex-wrap gap-1.5">
+                        {participants.map(p => (
+                            <div key={p.participantOrder}
+                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 pl-2 pr-1.5 py-1">
+                                <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
+                                <span className="text-xs text-slate-700">{p.fullName}</span>
+                                {p.isPrimary && (
+                                    <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                                        kontakt
+                                    </span>
+                                )}
+                                {p.memberId ? (
+                                    <button
+                                        onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, registrationId: r.registrationId })}
+                                        title={`Člen: ${p.memberName}`}
+                                        className="text-emerald-500 hover:text-emerald-700 transition-colors">
+                                        <UserCheck size={11} />
+                                    </button>
+                                ) : p.id ? (
+                                    <button
+                                        onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, registrationId: r.registrationId })}
+                                        title="Spárovat s členem OVT"
+                                        className="text-gray-300 hover:text-emerald-500 transition-colors">
+                                        <UserCheck size={11} />
+                                    </button>
+                                ) : null}
+                                {!isCancelled && p.id && (
+                                    <button
+                                        onClick={() => handleRemove(p.id!, p.fullName)}
+                                        disabled={removingId === p.id}
+                                        title="Odebrat účastníka"
+                                        className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors ml-0.5">
+                                        <Trash2 size={10} />
+                                    </button>
+                                )}
+                            </div>
+                        ))}
+                    </div>
+                    {!isCancelled && (
+                        <button onClick={() => setAddParticipantOpen(true)}
+                            className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 transition-colors mt-1">
+                            <UserPlus size={12} /> Přidat účastníka
+                        </button>
+                    )}
+                </div>
+
+                {!isCancelled && (
+                    <div className="flex justify-end pt-1">
+                        <button onClick={handleCancel} disabled={cancelling}
+                            className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
+                            <Ban size={12} />
+                            {cancelling ? "Ruším…" : "Zrušit přihlášku"}
+                        </button>
+                    </div>
+                )}
+            </div>
+
+            <RegistrationHistory registrationId={r.registrationId} />
+
+            <AddParticipantDialog
+                registrationId={r.registrationId}
+                open={addParticipantOpen}
+                onClose={() => setAddParticipantOpen(false)}
+                onAdded={onRefresh}
+            />
+            {linkTarget && (
+                <LinkParticipantDialog
+                    participant={linkTarget}
+                    open={!!linkTarget}
+                    onClose={() => setLinkTarget(null)}
+                    onLinked={onRefresh}
+                />
+            )}
+        </div>
+    );
+}
+
 function RegistrationsTab({ eventId }: { eventId: number }) {
     const [rows, setRows] = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [addOpen, setAddOpen] = useState(false);
-    const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
 
     function load() {
         setLoading(true);
@@ -750,119 +931,11 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
             </div>
 
             <AddRegistrationDialog eventId={eventId} open={addOpen} onClose={() => setAddOpen(false)} onAdded={load} />
-            {linkTarget && (
-                <LinkParticipantDialog
-                    participant={linkTarget}
-                    open={!!linkTarget}
-                    onClose={() => setLinkTarget(null)}
-                    onLinked={load}
-                />
-            )}
 
             <div className="space-y-3">
-                {rows.map(r => {
-                    const participants = r.participants.length > 0
-                        ? r.participants
-                        : r.participantNames.map((name, i) => ({
-                            id: undefined as number | undefined,
-                            fullName: name,
-                            isPrimary: i === 0,
-                            participantOrder: i + 1,
-                            memberId: undefined as number | null | undefined,
-                            memberName: undefined as string | null | undefined,
-                        }));
-
-                    return (
-                        <div key={r.registrationId} className="rounded-2xl border border-slate-200 bg-white shadow-sm overflow-hidden">
-                            <div className={`h-1 bg-gradient-to-r ${PAYMENT_STATUS_BAR_COLORS[r.paymentStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400"}`} />
-
-                            <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
-                                <div className="flex items-start justify-between gap-4 flex-wrap">
-                                    <div>
-                                        <p className="text-sm font-semibold text-slate-900">{r.firstName} {r.lastName}</p>
-                                        <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-slate-500">
-                                            <span>{r.email}</span>
-                                            {r.phone && <span>{r.phone}</span>}
-                                            <span className="text-slate-300">•</span>
-                                            <span className="tabular-nums">{fmtShortDate(r.createdAt)}</span>
-                                        </div>
-                                    </div>
-
-                                    <div className="flex items-center gap-2 flex-wrap justify-end">
-                                        {r.matchedLedgerId && (
-                                            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-blue-200 bg-blue-50 text-blue-700">
-                                                banka spárována
-                                            </span>
-                                        )}
-                                        <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
-                                            {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
-                                        </Badge>
-                                        <span className="text-sm font-semibold text-slate-700 tabular-nums">
-                                            {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
-                                        </span>
-                                    </div>
-                                </div>
-
-                                <div className="grid gap-2 sm:grid-cols-3 text-xs">
-                                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                                        <p className="text-slate-400">Předpis</p>
-                                        <p className="font-medium text-slate-700">{r.paymentCodeLabel}</p>
-                                    </div>
-                                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                                        <p className="text-slate-400">Variabilní symbol</p>
-                                        <p className="font-medium text-slate-700 tabular-nums">{r.paymentVariableSymbol}</p>
-                                    </div>
-                                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                                        <p className="text-slate-400">Počet osob</p>
-                                        <p className="font-medium text-slate-700 tabular-nums">{r.personsCount}</p>
-                                    </div>
-                                </div>
-
-                                {r.transportInfo && (
-                                    <div className="rounded-lg border border-amber-100 bg-amber-50/70 px-3 py-2">
-                                        <p className="text-[11px] font-medium uppercase tracking-wide text-amber-700">Doprava a lodě</p>
-                                        <p className="mt-1 text-xs text-amber-900 whitespace-pre-wrap">{r.transportInfo}</p>
-                                    </div>
-                                )}
-
-                                <div className="space-y-2">
-                                    <p className="text-xs font-medium text-slate-500">Účastníci</p>
-                                    <div className="flex flex-wrap gap-1.5">
-                                        {participants.map(p => (
-                                            <div key={p.participantOrder}
-                                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 pl-2 pr-2.5 py-1">
-                                                <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
-                                                <span className="text-xs text-slate-700">{p.fullName}</span>
-                                                {p.isPrimary && (
-                                                    <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
-                                                        kontakt
-                                                    </span>
-                                                )}
-                                                {p.memberId ? (
-                                                    <button
-                                                        onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, registrationId: r.registrationId })}
-                                                        title={`Člen: ${p.memberName}`}
-                                                        className="text-emerald-500 hover:text-emerald-700 transition-colors">
-                                                        <UserCheck size={11} />
-                                                    </button>
-                                                ) : p.id ? (
-                                                    <button
-                                                        onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, registrationId: r.registrationId })}
-                                                        title="Spárovat s členem OVT"
-                                                        className="text-gray-300 hover:text-emerald-500 transition-colors">
-                                                        <UserCheck size={11} />
-                                                    </button>
-                                                ) : null}
-                                            </div>
-                                        ))}
-                                    </div>
-                                </div>
-                            </div>
-
-                            <RegistrationHistory registrationId={r.registrationId} />
-                        </div>
-                    );
-                })}
+                {rows.map(r => (
+                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} />
+                ))}
             </div>
         </div>
     );

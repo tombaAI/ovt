@@ -10,6 +10,7 @@ import {
     addAdminEventRegistration,
     linkParticipantToMember,
     getMembersForSettlement,
+    addParticipantToRegistration,
 } from "@/lib/actions/event-settlement";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
 
@@ -269,6 +270,140 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
                         <Button variant="outline" size="sm" onClick={onClose}>Zrušit</Button>
                         <Button size="sm" onClick={handleSubmit} disabled={saving || !canSubmit}>
                             {saving ? "Ukládám…" : "Přidat přihlášku"}
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Přidání účastníka do existující přihlášky ─────────────────────────────────
+
+interface AddParticipantDialogProps {
+    registrationId: number;
+    open: boolean;
+    onClose: () => void;
+    onAdded: () => void;
+}
+
+export function AddParticipantDialog({ registrationId, open, onClose, onAdded }: AddParticipantDialogProps) {
+    const [allMembers, setAllMembers] = useState<MemberOption[] | null>(null);
+    const [search, setSearch] = useState("");
+    const [selectedMember, setSelectedMember] = useState<MemberOption | null>(null);
+    const [showNonMember, setShowNonMember] = useState(false);
+    const [nonMemberName, setNonMemberName] = useState("");
+    const [saving, startSave] = useTransition();
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (open && !allMembers) getMembersForSettlement().then(setAllMembers);
+    }, [open, allMembers]);
+
+    useEffect(() => {
+        if (!open) {
+            setSearch(""); setSelectedMember(null);
+            setShowNonMember(false); setNonMemberName(""); setError(null);
+        }
+    }, [open]);
+
+    const filtered = (allMembers ?? [])
+        .filter(m => m.fullName.toLowerCase().includes(search.toLowerCase()))
+        .slice(0, 8);
+
+    function handleSubmit() {
+        setError(null);
+        const fullName = selectedMember ? selectedMember.fullName : nonMemberName.trim();
+        const memberId = selectedMember ? selectedMember.id : null;
+
+        if (!fullName) {
+            setError("Vyberte člena nebo zadejte jméno nečlena");
+            return;
+        }
+        startSave(async () => {
+            const res = await addParticipantToRegistration(registrationId, { fullName, memberId });
+            if ("error" in res) { setError(res.error); }
+            else { onAdded(); onClose(); }
+        });
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>Přidat účastníka</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                    {/* Člen OVT */}
+                    <div>
+                        <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Člen OVT</p>
+                        {selectedMember ? (
+                            <div className="flex items-center gap-1.5 text-xs bg-emerald-50 text-emerald-800 border border-emerald-200 rounded-full px-2.5 py-1.5 w-fit">
+                                <UserCheck size={11} />
+                                {selectedMember.fullName}
+                                <button onClick={() => { setSelectedMember(null); setSearch(""); }}
+                                    className="ml-1 text-emerald-500 hover:text-red-500 transition-colors">
+                                    <X size={11} />
+                                </button>
+                            </div>
+                        ) : (
+                            <>
+                                <Input
+                                    value={search}
+                                    onChange={e => setSearch(e.target.value)}
+                                    onKeyDown={e => {
+                                        if (e.key === "Enter" && filtered.length > 0) {
+                                            e.preventDefault();
+                                            setSelectedMember(filtered[0]);
+                                            setSearch("");
+                                        }
+                                    }}
+                                    placeholder="Hledat člena OVT…"
+                                    className="h-8 text-sm"
+                                    autoFocus
+                                />
+                                {search && (
+                                    <div className="mt-1 border border-gray-200 rounded-lg max-h-40 overflow-y-auto">
+                                        {allMembers === null && <p className="text-xs text-gray-400 px-3 py-2">Načítám…</p>}
+                                        {allMembers !== null && filtered.length === 0 && <p className="text-xs text-gray-400 px-3 py-2">Nic nenalezeno</p>}
+                                        {filtered.map(m => (
+                                            <button key={m.id} onClick={() => { setSelectedMember(m); setSearch(""); }}
+                                                className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition-colors border-b border-gray-100 last:border-0">
+                                                {m.fullName}
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </>
+                        )}
+                    </div>
+
+                    {/* Nečlen */}
+                    {!selectedMember && (
+                        <div>
+                            <button onClick={() => setShowNonMember(!showNonMember)}
+                                className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                                {showNonMember ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                                Přidat nečlena
+                            </button>
+                            {showNonMember && (
+                                <div className="mt-2">
+                                    <Label className="text-xs text-gray-600">Celé jméno</Label>
+                                    <Input value={nonMemberName}
+                                        onChange={e => setNonMemberName(e.target.value)}
+                                        onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+                                        className="mt-1 h-8 text-sm" placeholder="Jana Nováková" />
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {error && <p className="text-xs text-red-500 bg-red-50 rounded px-3 py-2">{error}</p>}
+
+                    <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" size="sm" onClick={onClose}>Zrušit</Button>
+                        <Button size="sm" onClick={handleSubmit} disabled={saving || (!selectedMember && !nonMemberName.trim())}>
+                            {saving ? "Ukládám…" : "Přidat"}
                         </Button>
                     </div>
                 </div>

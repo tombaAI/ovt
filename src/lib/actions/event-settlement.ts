@@ -11,6 +11,7 @@ import {
     eventPaymentPrescriptions,
     members,
     people,
+    auditLog,
 } from "@/db/schema";
 import { eq, and, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -552,5 +553,140 @@ export async function sendEventSettlementEmails(
         return { sent, skipped, failed };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Chyba při odesílání e-mailů" };
+    }
+}
+
+// ── Správa účastníků přihlášky ────────────────────────────────────────────────
+
+export async function addParticipantToRegistration(
+    registrationId: number,
+    participant: { fullName: string; memberId: number | null },
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        let eventId: number | null = null;
+
+        await db.transaction(async tx => {
+            const [{ nextOrder }] = await tx
+                .select({ nextOrder: sql<number>`COALESCE(MAX(${eventRegistrationParticipants.participantOrder}), 0) + 1` })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.registrationId, registrationId));
+
+            await tx.insert(eventRegistrationParticipants).values({
+                registrationId,
+                participantOrder: nextOrder,
+                fullName: participant.fullName.trim(),
+                isPrimary: false,
+                memberId: participant.memberId ?? null,
+            });
+
+            await tx.update(eventRegistrations)
+                .set({ personsCount: sql`${eventRegistrations.personsCount} + 1` })
+                .where(eq(eventRegistrations.id, registrationId));
+
+            const [reg] = await tx.select({ eventId: eventRegistrations.eventId })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, registrationId));
+            eventId = reg?.eventId ?? null;
+        });
+
+        if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Nepodařilo se přidat účastníka" };
+    }
+}
+
+export async function removeParticipantFromRegistration(
+    participantId: number,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        let eventId: number | null = null;
+
+        await db.transaction(async tx => {
+            const [p] = await tx
+                .select({ registrationId: eventRegistrationParticipants.registrationId })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            if (!p) throw new Error("Účastník nenalezen");
+
+            const [{ cnt }] = await tx
+                .select({ cnt: sql<number>`COUNT(*)::int` })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.registrationId, p.registrationId));
+
+            if (cnt <= 1) throw new Error("Přihláška musí mít alespoň jednoho účastníka. Pro zrušení přihlášky použijte tlačítko Zrušit přihlášku.");
+
+            await tx.delete(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            await tx.update(eventRegistrations)
+                .set({ personsCount: sql`GREATEST(1, ${eventRegistrations.personsCount} - 1)` })
+                .where(eq(eventRegistrations.id, p.registrationId));
+
+            const [reg] = await tx.select({ eventId: eventRegistrations.eventId })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, p.registrationId));
+            eventId = reg?.eventId ?? null;
+        });
+
+        if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Nepodařilo se odebrat účastníka" };
+    }
+}
+
+export async function cancelAdminRegistration(
+    registrationId: number,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const now = new Date();
+        let eventId: number | null = null;
+
+        await db.transaction(async tx => {
+            const [reg] = await tx
+                .select({ eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, registrationId));
+
+            if (!reg) throw new Error("Přihláška nenalezena");
+            if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
+
+            eventId = reg.eventId;
+
+            await tx.update(eventRegistrations)
+                .set({ cancelledAt: now })
+                .where(eq(eventRegistrations.id, registrationId));
+
+            await tx.update(eventPaymentPrescriptions)
+                .set({ status: "cancelled", updatedAt: now })
+                .where(eq(eventPaymentPrescriptions.registrationId, registrationId));
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: registrationId,
+                action: "cancel",
+                changes: { cancelledAt: { old: null, new: now.toISOString() } },
+                changedBy: session.user!.email!,
+            });
+        });
+
+        if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Nepodařilo se zrušit přihlášku" };
     }
 }
