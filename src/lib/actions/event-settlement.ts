@@ -290,8 +290,9 @@ export async function setExpenseRegistrationAllocations(
 
         const expenseAmount = parseFloat(exp.amount);
         const allocSum = allocations.reduce((s, a) => s + a.amount, 0);
-        if (Math.abs(allocSum - expenseAmount) > 0.01) {
-            return { error: `Součet alokací (${allocSum} Kč) neodpovídá částce nákladu (${expenseAmount} Kč)` };
+        // Povolíme mírný přebytek (Math.ceil na přihlášku může dát o pár Kč víc)
+        if (allocSum < expenseAmount - 0.01) {
+            return { error: `Součet alokací (${allocSum} Kč) je menší než náklad (${expenseAmount} Kč)` };
         }
 
         await db.transaction(async tx => {

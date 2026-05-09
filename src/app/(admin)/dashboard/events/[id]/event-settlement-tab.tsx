@@ -86,36 +86,56 @@ function ExpenseAllocationRow({
 }) {
     const [expanded, setExpanded] = useState(false);
     const [method, setMethod] = useState<"split_all" | "per_registration">(expense.allocationMethod);
-    const [amounts, setAmounts] = useState<Record<number, string>>(() => {
-        const init: Record<number, string> = {};
+    const [checked, setChecked] = useState<Set<number>>(() => {
+        const init = new Set<number>();
+        const hasAnyAlloc = registrations.some(r => {
+            const ex = r.expenses.find(e => e.expenseId === expense.id);
+            return ex && ex.allocatedAmount > 0;
+        });
         for (const reg of registrations) {
-            const existing = reg.expenses.find(e => e.expenseId === expense.id);
-            init[reg.registrationId] = existing?.allocatedAmount && expense.allocationMethod === "per_registration"
-                ? String(existing.allocatedAmount) : "";
+            const ex = reg.expenses.find(e => e.expenseId === expense.id);
+            // žádné alokace ještě → default všichni; jinak jen ti s > 0
+            if (!hasAnyAlloc || (ex && ex.allocatedAmount > 0)) {
+                init.add(reg.registrationId);
+            }
         }
         return init;
     });
     const [saving, startSave] = useTransition();
     const [msg, setMsg] = useState<string | null>(null);
 
-    const sum = Object.values(amounts).reduce((s, v) => s + (parseFloat(v) || 0), 0);
-    const diff = Math.abs(sum - expense.amount);
-    const sumOk = diff < 0.01;
+    function calcAmounts(newChecked: Set<number>): { registrationId: number; amount: number }[] {
+        const totalPersons = registrations
+            .filter(r => newChecked.has(r.registrationId))
+            .reduce((s, r) => s + r.personsCount, 0);
+        const ppCost = totalPersons > 0 ? Math.ceil(expense.amount / totalPersons) : 0;
+        return registrations.map(r => ({
+            registrationId: r.registrationId,
+            amount: newChecked.has(r.registrationId) ? ppCost * r.personsCount : 0,
+        }));
+    }
+
+    function handleToggle(regId: number) {
+        const newChecked = new Set(checked);
+        if (newChecked.has(regId)) newChecked.delete(regId); else newChecked.add(regId);
+        setChecked(newChecked);
+        const allocs = calcAmounts(newChecked);
+        startSave(async () => {
+            const res = await setExpenseRegistrationAllocations(expense.id, allocs);
+            if ("error" in res) setMsg(res.error); else { setMsg(null); onChanged(); }
+        });
+    }
 
     function handleMethodChange(newMethod: "split_all" | "per_registration") {
         startSave(async () => {
             const res = await updateExpenseAllocationMethod(expense.id, newMethod);
-            if ("error" in res) { setMsg(res.error); } else { setMethod(newMethod); setMsg(null); onChanged(); }
+            if ("error" in res) { setMsg(res.error); } else { setMethod(newMethod); setMsg(null); if (newMethod === "per_registration") setExpanded(true); onChanged(); }
         });
     }
 
-    function handleSaveAllocations() {
-        const allocs = registrations.map(r => ({ registrationId: r.registrationId, amount: parseFloat(amounts[r.registrationId] ?? "0") || 0 }));
-        startSave(async () => {
-            const res = await setExpenseRegistrationAllocations(expense.id, allocs);
-            if ("error" in res) { setMsg(res.error); } else { setMsg(null); setExpanded(false); onChanged(); }
-        });
-    }
+    // Zobrazené částky dle aktuálního stavu checkboxů
+    const totalCheckedPersons = registrations.filter(r => checked.has(r.registrationId)).reduce((s, r) => s + r.personsCount, 0);
+    const ppCost = totalCheckedPersons > 0 ? Math.ceil(expense.amount / totalCheckedPersons) : 0;
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
@@ -132,7 +152,7 @@ function ExpenseAllocationRow({
                         Rovnoměrně
                     </button>
                     <button
-                        onClick={() => { handleMethodChange("per_registration"); setExpanded(true); }}
+                        onClick={() => { handleMethodChange("per_registration"); }}
                         disabled={saving}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                         Dle přihlášek
@@ -146,33 +166,30 @@ function ExpenseAllocationRow({
             </div>
 
             {method === "per_registration" && expanded && (
-                <div className="mt-3 ml-1 space-y-2">
-                    {registrations.map(reg => (
-                        <div key={reg.registrationId} className="flex items-center gap-3">
-                            <span className="text-xs text-gray-600 w-40 truncate">{reg.firstName} {reg.lastName}</span>
-                            <Input
-                                value={amounts[reg.registrationId] ?? ""}
-                                onChange={e => setAmounts(prev => ({ ...prev, [reg.registrationId]: e.target.value }))}
-                                className="h-7 w-24 text-xs tabular-nums"
-                                placeholder="0"
-                            />
-                            <span className="text-xs text-gray-400">Kč</span>
-                        </div>
-                    ))}
-                    <div className="flex items-center gap-3 pt-1">
-                        <span className="text-xs text-gray-500 w-40">Součet</span>
-                        <span className={`text-xs font-semibold tabular-nums ${sumOk ? "text-green-700" : "text-red-500"}`}>
-                            {fmtCzk(sum)}
-                        </span>
-                        <span className="text-xs text-gray-400">/ {fmtCzk(expense.amount)}</span>
-                        {!sumOk && <span className="text-xs text-red-400">Nesedí o {fmtCzk(diff)}</span>}
-                    </div>
-                    <div className="flex items-center gap-2 pt-1">
-                        <Button size="sm" className="h-7 text-xs" onClick={handleSaveAllocations} disabled={saving || !sumOk}>
-                            {saving ? "Ukládám…" : "Uložit rozdělení"}
-                        </Button>
-                        {msg && <span className="text-xs text-red-500">{msg}</span>}
-                    </div>
+                <div className="mt-2 ml-1 divide-y divide-gray-50">
+                    {registrations.map(reg => {
+                        const isChecked = checked.has(reg.registrationId);
+                        return (
+                            <button
+                                key={reg.registrationId}
+                                onClick={() => handleToggle(reg.registrationId)}
+                                disabled={saving}
+                                className="w-full flex items-center gap-3 py-2 text-left hover:bg-gray-50 rounded transition-colors disabled:opacity-50"
+                            >
+                                <span className={`flex-shrink-0 w-4 h-4 rounded border-2 flex items-center justify-center transition-colors ${isChecked ? "bg-blue-600 border-blue-600" : "border-gray-300"}`}>
+                                    {isChecked && <Check size={10} className="text-white" strokeWidth={3} />}
+                                </span>
+                                <span className="flex-1 text-xs text-gray-700 truncate">{reg.firstName} {reg.lastName}</span>
+                                <span className="text-xs tabular-nums text-right w-20 shrink-0">
+                                    {isChecked
+                                        ? <span className="font-medium text-gray-800">{fmtCzk(ppCost * reg.personsCount)}</span>
+                                        : <span className="text-gray-300">—</span>}
+                                </span>
+                            </button>
+                        );
+                    })}
+                    {saving && <p className="text-xs text-gray-400 pt-1 pb-0.5">Ukládám…</p>}
+                    {msg && <p className="text-xs text-red-500 pt-1">{msg}</p>}
                 </div>
             )}
             {msg && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{msg}</p>}
