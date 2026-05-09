@@ -4,7 +4,7 @@ import { useState, useEffect, useTransition, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle, X } from "lucide-react";
 import {
     getEventSettlement,
     updateEventSubsidy,
@@ -73,19 +73,22 @@ function SubsidyField({ eventId, value, totalMemberParticipants, onChange }: {
     );
 }
 
-// ── Toggle pill ───────────────────────────────────────────────────────────────
+// ── Per-person allocation helpers ─────────────────────────────────────────────
 
-function TogglePill({ checked, onClick }: { checked: boolean; onClick: () => void }) {
-    return (
-        <button
-            type="button"
-            onClick={e => { e.stopPropagation(); onClick(); }}
-            className={`relative flex-shrink-0 w-11 h-6 rounded-full transition-colors duration-150 focus:outline-none ${checked ? "bg-blue-500" : "bg-gray-200"}`}
-            aria-pressed={checked}
-        >
-            <span className={`absolute top-1 w-4 h-4 rounded-full bg-white shadow transition-transform duration-150 ${checked ? "translate-x-6" : "translate-x-1"}`} />
-        </button>
-    );
+type AllocPerson = { key: string; fullName: string };
+
+function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
+    if (reg.participants.length > 0) {
+        return reg.participants.map((p, i) => ({
+            key: p.id > 0 ? `p${p.id}` : `r${reg.registrationId}-${i}`,
+            fullName: p.fullName,
+        }));
+    }
+    // Fallback — registrace bez zaznamenaných účastníků
+    return Array.from({ length: reg.personsCount }, (_, i) => ({
+        key: `r${reg.registrationId}-${i}`,
+        fullName: i === 0 ? `${reg.firstName} ${reg.lastName}` : `Účastník ${i + 1}`,
+    }));
 }
 
 // ── Expense allocation row ────────────────────────────────────────────────────
@@ -99,47 +102,46 @@ function ExpenseAllocationRow({
 }) {
     const [expanded, setExpanded] = useState(false);
     const [method, setMethod] = useState<"split_all" | "per_registration">(expense.allocationMethod);
-    const [checked, setChecked] = useState<Set<number>>(() => {
-        const init = new Set<number>();
+
+    // Per-person výběr: klíč = "p{participantId}" nebo "r{regId}-{index}"
+    const [checkedPersons, setCheckedPersons] = useState<Set<string>>(() => {
+        const init = new Set<string>();
         const hasAnyAlloc = registrations.some(r => {
             const ex = r.expenses.find(e => e.expenseId === expense.id);
             return ex && ex.allocatedAmount > 0;
         });
         for (const reg of registrations) {
             const ex = reg.expenses.find(e => e.expenseId === expense.id);
-            if (!hasAnyAlloc || (ex && ex.allocatedAmount > 0)) init.add(reg.registrationId);
+            const regIncluded = !hasAnyAlloc || (ex && ex.allocatedAmount > 0);
+            if (regIncluded) getPersonsForAlloc(reg).forEach(p => init.add(p.key));
         }
         return init;
     });
+
     const [saveError, setSaveError] = useState<string | null>(null);
     const [methodSaving, startMethodSave] = useTransition();
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
-    function calcAmounts(newChecked: Set<number>): { registrationId: number; amount: number }[] {
-        const totalPersons = registrations
-            .filter(r => newChecked.has(r.registrationId))
-            .reduce((s, r) => s + r.personsCount, 0);
-        const ppCost = totalPersons > 0 ? Math.ceil(expense.amount / totalPersons) : 0;
-        return registrations.map(r => ({
-            registrationId: r.registrationId,
-            amount: newChecked.has(r.registrationId) ? ppCost * r.personsCount : 0,
-        }));
+    function calcAmountsFor(cp: Set<string>): { registrationId: number; amount: number }[] {
+        const totalChecked = registrations.reduce((s, reg) =>
+            s + getPersonsForAlloc(reg).filter(p => cp.has(p.key)).length, 0);
+        const ppCost = totalChecked > 0 ? Math.ceil(expense.amount / totalChecked) : 0;
+        return registrations.map(reg => {
+            const count = getPersonsForAlloc(reg).filter(p => cp.has(p.key)).length;
+            return { registrationId: reg.registrationId, amount: count > 0 ? ppCost * count : 0 };
+        });
     }
 
-    function handleToggle(regId: number) {
-        // Okamžitá vizuální odezva — bez blokování UI
-        const newChecked = new Set(checked);
-        if (newChecked.has(regId)) newChecked.delete(regId); else newChecked.add(regId);
-        setChecked(newChecked);
-
-        // Debounce: uložíme až po 500 ms od posledního kliknutí
+    function handleTogglePerson(key: string) {
+        const newCp = new Set(checkedPersons);
+        if (newCp.has(key)) newCp.delete(key); else newCp.add(key);
+        setCheckedPersons(newCp);
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
-            const res = await setExpenseRegistrationAllocations(expense.id, calcAmounts(newChecked));
+            const res = await setExpenseRegistrationAllocations(expense.id, calcAmountsFor(newCp));
             if ("error" in res) setSaveError(res.error); else setSaveError(null);
-            // onChanged() voláme až při zavření panelu — vyhýbáme se zbytečnému reloadu
         }, 500);
     }
 
@@ -150,19 +152,13 @@ function ExpenseAllocationRow({
             setMethod(newMethod);
             setSaveError(null);
             if (newMethod === "per_registration") setExpanded(true);
-            // žádný reload — UI funguje dál z lokálního stavu
         });
     }
 
-    function handleChevron() {
-        setExpanded(v => !v);
-        // žádný reload při zavření panelu
-    }
-
-    const totalCheckedPersons = registrations
-        .filter(r => checked.has(r.registrationId))
-        .reduce((s, r) => s + r.personsCount, 0);
-    const ppCost = totalCheckedPersons > 0 ? Math.ceil(expense.amount / totalCheckedPersons) : 0;
+    // Cena per osoba z aktuálního výběru
+    const totalChecked = registrations.reduce((s, reg) =>
+        s + getPersonsForAlloc(reg).filter(p => checkedPersons.has(p.key)).length, 0);
+    const ppCost = totalChecked > 0 ? Math.ceil(expense.amount / totalChecked) : 0;
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
@@ -176,16 +172,16 @@ function ExpenseAllocationRow({
                         onClick={() => handleMethodChange("split_all")}
                         disabled={methodSaving}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
-                        Rovnoměrně
+                        Rovnoměrně na každého
                     </button>
                     <button
                         onClick={() => handleMethodChange("per_registration")}
                         disabled={methodSaving}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
-                        Dle přihlášek
+                        Jen někteří účastníci
                     </button>
                     {method === "per_registration" && (
-                        <button onClick={handleChevron} className="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                     )}
@@ -193,38 +189,51 @@ function ExpenseAllocationRow({
             </div>
 
             {method === "per_registration" && expanded && (
-                <div className="mt-2 ml-1 space-y-0.5">
+                <div className="mt-3 ml-1 space-y-3">
                     {registrations.map(reg => {
-                        const isChecked = checked.has(reg.registrationId);
-                        const persons = reg.participants.length > 0
-                            ? reg.participants
-                            : [{ id: -1, fullName: `${reg.firstName} ${reg.lastName}`, isPrimary: true, memberId: null, personId: null, memberName: null }];
+                        const persons = getPersonsForAlloc(reg);
+                        const checkedCount = persons.filter(p => checkedPersons.has(p.key)).length;
                         return (
-                            <div key={reg.registrationId} className={`rounded-lg border transition-colors ${isChecked ? "border-gray-100 bg-white" : "border-transparent bg-gray-50/50"}`}>
-                                {/* Řádek přihlášky s togglem */}
-                                <div
-                                    onClick={() => handleToggle(reg.registrationId)}
-                                    className="flex items-center gap-3 px-2 py-2 cursor-pointer select-none"
-                                >
-                                    <TogglePill checked={isChecked} onClick={() => handleToggle(reg.registrationId)} />
-                                    <span className={`flex-1 text-xs font-semibold leading-tight ${isChecked ? "text-gray-800" : "text-gray-400"}`}>
+                            <div key={reg.registrationId}>
+                                {/* Hlavička přihlášky */}
+                                <div className="flex items-center justify-between mb-1.5">
+                                    <span className="text-xs font-medium text-gray-500">
                                         {reg.firstName} {reg.lastName}
                                     </span>
-                                    <span className={`text-xs tabular-nums font-semibold shrink-0 ${isChecked ? "text-gray-800" : "text-gray-300"}`}>
-                                        {isChecked ? fmtCzk(ppCost * reg.personsCount) : "—"}
+                                    <span className="text-xs tabular-nums text-gray-600">
+                                        {checkedCount > 0 ? fmtCzk(ppCost * checkedCount) : <span className="text-gray-300">—</span>}
                                     </span>
                                 </div>
-                                {/* Per-person řádky */}
-                                {isChecked && persons.map((p, i) => (
-                                    <div key={i} className="flex items-center gap-3 px-2 pb-1.5 ml-14">
-                                        <span className="flex-1 text-xs text-gray-500 truncate">{p.fullName}</span>
-                                        <span className="text-xs tabular-nums text-gray-400 shrink-0">{fmtCzk(ppCost)}</span>
-                                    </div>
-                                ))}
+                                {/* Osoby jako klikatelné chipy */}
+                                <div className="flex flex-wrap gap-1.5">
+                                    {persons.map(p => {
+                                        const isIn = checkedPersons.has(p.key);
+                                        return (
+                                            <button
+                                                key={p.key}
+                                                type="button"
+                                                onClick={() => handleTogglePerson(p.key)}
+                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
+                                                    isIn
+                                                        ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
+                                                        : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                                                }`}
+                                            >
+                                                {isIn
+                                                    ? <Check size={11} strokeWidth={2.5} className="text-emerald-600 shrink-0" />
+                                                    : <X size={11} strokeWidth={2.5} className="text-gray-300 shrink-0" />}
+                                                {p.fullName}
+                                                {isIn && ppCost > 0 && (
+                                                    <span className="text-emerald-600 font-normal tabular-nums">{fmtCzk(ppCost)}</span>
+                                                )}
+                                            </button>
+                                        );
+                                    })}
+                                </div>
                             </div>
                         );
                     })}
-                    {saveError && <p className="text-xs text-red-500 px-2 pt-1">{saveError}</p>}
+                    {saveError && <p className="text-xs text-red-500 pt-1">{saveError}</p>}
                 </div>
             )}
             {saveError && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{saveError}</p>}
