@@ -243,7 +243,7 @@ function ExpenseAllocationRow({
 
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationSummaryTable({ rows, unitPrice }: { rows: SettlementRegistrationRow[]; unitPrice: number }) {
+function RegistrationSummaryTable({ rows, unitPrice, hasPerReg }: { rows: SettlementRegistrationRow[]; unitPrice: number; hasPerReg: boolean }) {
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -253,7 +253,7 @@ function RegistrationSummaryTable({ rows, unitPrice }: { rows: SettlementRegistr
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Osoby</th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">
                             Cena akce
-                            {unitPrice > 0 && <span className="block text-gray-400 font-normal">{fmtCzk(unitPrice)}/os.</span>}
+                            {unitPrice > 0 && !hasPerReg && <span className="block text-gray-400 font-normal">{fmtCzk(unitPrice)}/os.</span>}
                         </th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Dotace</th>
                         <th className="text-right py-2 pr-3 text-xs font-semibold text-gray-800">K zaplacení</th>
@@ -485,7 +485,11 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                 {!hasRegistrations ? (
                     <p className="text-sm text-gray-400 py-4 text-center">Žádné přihlášky na akci.</p>
                 ) : (
-                    <RegistrationSummaryTable rows={settlement.registrations} unitPrice={settlement.unitPrice} />
+                    <RegistrationSummaryTable
+                        rows={settlement.registrations}
+                        unitPrice={settlement.unitPrice}
+                        hasPerReg={settlement.finalExpenses.some(e => e.allocationMethod === "per_registration")}
+                    />
                 )}
             </div>
 

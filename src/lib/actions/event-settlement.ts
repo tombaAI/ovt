@@ -165,9 +165,10 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
     const totalParticipants = regs.reduce((s, r) => s + (r.personsCount ?? 1), 0);
     const totalMemberParticipants = participants.filter(p => p.memberId !== null).length;
 
-    // Jednotná cena per osobu — stejná pro všechny, zaokrouhlená nahoru
     const expensesSum = finalExpenses.reduce((s, e) => s + e.amount, 0);
-    const unitPrice = totalParticipants > 0 ? Math.ceil(expensesSum / totalParticipants) : 0;
+    // unitPrice platí jen pro "split_all" náklady — rovnoměrné rozdělení na každého
+    const splitAllSum = finalExpenses.filter(e => e.allocationMethod === "split_all").reduce((s, e) => s + e.amount, 0);
+    const unitPrice = totalParticipants > 0 ? Math.ceil(splitAllSum / totalParticipants) : 0;
 
     const registrationRows: SettlementRegistrationRow[] = regs.map(reg => {
         const regParticipants = participants.filter(p => p.registrationId === reg.id).map(p => ({
@@ -195,8 +196,11 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod, allocatedAmount };
         });
 
-        // Cena akce = unitPrice × počet osob (stejná sazba pro všechny)
-        const expensesTotal = unitPrice * personsCount;
+        // split_all: unitPrice × osoby (uniformní sazba); per_registration: explicitní alokace
+        const perRegTotal = expenseRows
+            .filter(e => e.allocationMethod === "per_registration")
+            .reduce((s, e) => s + e.allocatedAmount, 0);
+        const expensesTotal = unitPrice * personsCount + perRegTotal;
         // Dotace: poměrná část celkové dotace podle počtu členů v přihlášce
         const subsidy = totalMemberParticipants > 0
             ? Math.round(subsidyTotal * memberCount / totalMemberParticipants)
