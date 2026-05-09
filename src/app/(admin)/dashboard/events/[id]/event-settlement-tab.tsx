@@ -93,11 +93,9 @@ function TogglePill({ checked, onClick }: { checked: boolean; onClick: () => voi
 function ExpenseAllocationRow({
     expense,
     registrations,
-    onChanged,
 }: {
     expense: EventSettlement["finalExpenses"][0];
     registrations: SettlementRegistrationRow[];
-    onChanged: () => void;
 }) {
     const [expanded, setExpanded] = useState(false);
     const [method, setMethod] = useState<"split_all" | "per_registration">(expense.allocationMethod);
@@ -152,14 +150,13 @@ function ExpenseAllocationRow({
             setMethod(newMethod);
             setSaveError(null);
             if (newMethod === "per_registration") setExpanded(true);
-            onChanged();
+            // žádný reload — UI funguje dál z lokálního stavu
         });
     }
 
     function handleChevron() {
-        const closing = expanded;
         setExpanded(v => !v);
-        if (closing) onChanged(); // refresh nadřazené komponenty až při zavírání
+        // žádný reload při zavření panelu
     }
 
     const totalCheckedPersons = registrations
@@ -196,40 +193,38 @@ function ExpenseAllocationRow({
             </div>
 
             {method === "per_registration" && expanded && (
-                <div className="mt-2 ml-1 space-y-1">
+                <div className="mt-2 ml-1 space-y-0.5">
                     {registrations.map(reg => {
                         const isChecked = checked.has(reg.registrationId);
-                        const amount = ppCost * reg.personsCount;
-                        const extraParticipants = reg.participants.filter(p => p.fullName !== `${reg.firstName} ${reg.lastName}`);
+                        const persons = reg.participants.length > 0
+                            ? reg.participants
+                            : [{ id: -1, fullName: `${reg.firstName} ${reg.lastName}`, isPrimary: true, memberId: null, personId: null, memberName: null }];
                         return (
-                            <div
-                                key={reg.registrationId}
-                                onClick={() => handleToggle(reg.registrationId)}
-                                className="flex items-center gap-3 px-1 py-2 rounded-lg hover:bg-gray-50 cursor-pointer select-none"
-                            >
-                                <TogglePill checked={isChecked} onClick={() => handleToggle(reg.registrationId)} />
-                                <div className="flex-1 min-w-0">
-                                    <p className={`text-xs font-medium leading-tight ${isChecked ? "text-gray-800" : "text-gray-400"}`}>
+                            <div key={reg.registrationId} className={`rounded-lg border transition-colors ${isChecked ? "border-gray-100 bg-white" : "border-transparent bg-gray-50/50"}`}>
+                                {/* Řádek přihlášky s togglem */}
+                                <div
+                                    onClick={() => handleToggle(reg.registrationId)}
+                                    className="flex items-center gap-3 px-2 py-2 cursor-pointer select-none"
+                                >
+                                    <TogglePill checked={isChecked} onClick={() => handleToggle(reg.registrationId)} />
+                                    <span className={`flex-1 text-xs font-semibold leading-tight ${isChecked ? "text-gray-800" : "text-gray-400"}`}>
                                         {reg.firstName} {reg.lastName}
-                                        {reg.personsCount > 1 && (
-                                            <span className="font-normal text-gray-400"> · {reg.personsCount} os.</span>
-                                        )}
-                                    </p>
-                                    {extraParticipants.length > 0 && (
-                                        <p className="text-xs text-gray-400 mt-0.5 truncate">
-                                            {extraParticipants.map(p => p.fullName).join(", ")}
-                                        </p>
-                                    )}
+                                    </span>
+                                    <span className={`text-xs tabular-nums font-semibold shrink-0 ${isChecked ? "text-gray-800" : "text-gray-300"}`}>
+                                        {isChecked ? fmtCzk(ppCost * reg.personsCount) : "—"}
+                                    </span>
                                 </div>
-                                <span className="text-xs tabular-nums shrink-0 w-18 text-right">
-                                    {isChecked
-                                        ? <span className="font-medium text-gray-800">{fmtCzk(amount)}</span>
-                                        : <span className="text-gray-300">—</span>}
-                                </span>
+                                {/* Per-person řádky */}
+                                {isChecked && persons.map((p, i) => (
+                                    <div key={i} className="flex items-center gap-3 px-2 pb-1.5 ml-14">
+                                        <span className="flex-1 text-xs text-gray-500 truncate">{p.fullName}</span>
+                                        <span className="text-xs tabular-nums text-gray-400 shrink-0">{fmtCzk(ppCost)}</span>
+                                    </div>
+                                ))}
                             </div>
                         );
                     })}
-                    {saveError && <p className="text-xs text-red-500 px-1 pt-1">{saveError}</p>}
+                    {saveError && <p className="text-xs text-red-500 px-2 pt-1">{saveError}</p>}
                 </div>
             )}
             {saveError && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{saveError}</p>}
@@ -309,6 +304,24 @@ function RegistrationSummaryTable({ rows, unitPrice }: { rows: SettlementRegistr
     );
 }
 
+// ── Lokální přepočet po změně dotace (bez server roundtrip) ──────────────────
+
+function recomputeSettlement(s: EventSettlement, newSubsidyTotal: number): EventSettlement {
+    const newRegs = s.registrations.map(reg => {
+        const subsidy = s.totalMemberParticipants > 0
+            ? Math.round(newSubsidyTotal * reg.memberCount / s.totalMemberParticipants)
+            : 0;
+        const totalAmount = Math.max(0, reg.expensesTotal - subsidy);
+        return { ...reg, subsidy, totalAmount };
+    });
+    return {
+        ...s,
+        subsidyTotal: newSubsidyTotal,
+        registrations: newRegs,
+        grandTotal: newRegs.reduce((sum, r) => sum + r.totalAmount, 0),
+    };
+}
+
 // ── Main tab component ────────────────────────────────────────────────────────
 
 export function EventSettlementTab({ eventId }: { eventId: number }) {
@@ -330,12 +343,18 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { load(); }, [eventId]);
 
+    function handleSubsidyChange(newSubsidy: number) {
+        setSubsidyTotal(newSubsidy);
+        setSettlement(s => s ? recomputeSettlement(s, newSubsidy) : null);
+        // DB save proběhl uvnitř SubsidyField — tady jen aktualizujeme lokální stav
+    }
+
     function handleGenerate() {
         startGenerate(async () => {
             setGenResult(null);
             const res = await generateEventPrescriptions(eventId);
             setGenResult(res);
-            if (!("error" in res)) load();
+            if (!("error" in res)) load(); // reload po generování předpisů je OK — deliberate action
         });
     }
 
@@ -362,16 +381,8 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
 
     const hasExpenses = settlement.finalExpenses.length > 0;
     const hasRegistrations = settlement.registrations.length > 0;
-
-    const perRegExpenses = settlement.finalExpenses.filter(e => e.allocationMethod === "per_registration");
-    const allPerRegConfigured = perRegExpenses.every(exp => {
-        const sum = settlement.registrations.reduce((s, r) => {
-            const row = r.expenses.find(e => e.expenseId === exp.id);
-            return s + (row?.allocatedAmount ?? 0);
-        }, 0);
-        return Math.abs(sum - exp.amount) < 0.01;
-    });
-    const canGenerate = hasExpenses && hasRegistrations && (perRegExpenses.length === 0 || allPerRegConfigured);
+    // toggle-based alokace vždy garantuje platný součet (Math.ceil) — nepotřebujeme extra check
+    const canGenerate = hasExpenses && hasRegistrations;
 
     // Varování: předpisy nesedí s aktuálními daty
     const prescriptionsStale = settlement.registrations.some(r =>
@@ -414,7 +425,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                             eventId={eventId}
                             value={subsidyTotal}
                             totalMemberParticipants={settlement.totalMemberParticipants}
-                            onChange={v => { setSubsidyTotal(v); load(); }}
+                            onChange={handleSubsidyChange}
                         />
                     </div>
                     {subsidyTotal > 0 && (
@@ -443,7 +454,6 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                             key={exp.id}
                             expense={exp}
                             registrations={settlement.registrations}
-                            onChanged={load}
                         />
                     ))
                 )}
@@ -473,11 +483,6 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                             Vytvoří nebo přepíše předpisy pro všechny přihlášky. Splatnost: 7 dní. Účet: 351416278/0300.
                             Existující kód předpisu (Cnnn) zůstane zachován — změní se jen výše platby.
                         </p>
-                        {!canGenerate && hasExpenses && perRegExpenses.length > 0 && !allPerRegConfigured && (
-                            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                <AlertCircle size={12} /> Nejprve nakonfigurujte rozdělení pro všechny náklady Dle přihlášek.
-                            </p>
-                        )}
                         {!hasRegistrations && (
                             <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                 <AlertCircle size={12} /> Žádné přihlášky — přidejte účastníky v záložce Přihlášky.
