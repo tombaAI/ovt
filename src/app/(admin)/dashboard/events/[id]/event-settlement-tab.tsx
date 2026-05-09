@@ -199,21 +199,9 @@ function ExpenseAllocationRow({
 
                     {registrations.map(reg => {
                         const persons = getPersonsForAlloc(reg);
-                        const checkedCount = persons.filter(p => checkedPersons.has(p.key)).length;
                         return (
-                            <div key={reg.registrationId}>
-                                {/* Hlavička přihlášky */}
-                                <div className="flex items-center justify-between mb-1.5">
-                                    <span className="text-xs font-medium text-gray-500">
-                                        {reg.firstName} {reg.lastName}
-                                    </span>
-                                    <span className="text-xs tabular-nums text-gray-600">
-                                        {checkedCount > 0 ? fmtCzk(ppCost * checkedCount) : <span className="text-gray-300">—</span>}
-                                    </span>
-                                </div>
-                                {/* Osoby jako klikatelné chipy — cena je stejná pro všechny, zobrazena nahoře */}
-                                <div className="flex flex-wrap gap-1.5">
-                                    {persons.map(p => {
+                            <div key={reg.registrationId} className="flex flex-wrap gap-1.5">
+                                {persons.map(p => {
                                         const isIn = checkedPersons.has(p.key);
                                         return (
                                             <button
@@ -233,7 +221,6 @@ function ExpenseAllocationRow({
                                             </button>
                                         );
                                     })}
-                                </div>
                             </div>
                         );
                     })}
