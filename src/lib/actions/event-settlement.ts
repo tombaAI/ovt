@@ -170,6 +170,10 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
     const splitAllSum = finalExpenses.filter(e => e.allocationMethod === "split_all").reduce((s, e) => s + e.amount, 0);
     const unitPrice = totalParticipants > 0 ? Math.ceil(splitAllSum / totalParticipants) : 0;
 
+    // Per_registration náklady, které mají alespoň jednu alokaci v DB.
+    // Pokud žádnou nemají → fallback: rovnoměrné rozdělení (všichni zahrnuti).
+    const expensesWithAllocs = new Set(allocations.map(a => a.expenseId));
+
     const registrationRows: SettlementRegistrationRow[] = regs.map(reg => {
         const regParticipants = participants.filter(p => p.registrationId === reg.id).map(p => ({
             id: p.id,
@@ -186,6 +190,11 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         const expenseRows: SettlementExpenseRow[] = finalExpenses.map(expense => {
             let allocatedAmount = 0;
             if (expense.allocationMethod === "split_all") {
+                allocatedAmount = totalParticipants > 0
+                    ? (expense.amount / totalParticipants) * personsCount
+                    : 0;
+            } else if (!expensesWithAllocs.has(expense.id)) {
+                // Žádné alokace v DB → fallback: rovnoměrné rozdělení na všechny (jako split_all)
                 allocatedAmount = totalParticipants > 0
                     ? (expense.amount / totalParticipants) * personsCount
                     : 0;
