@@ -316,62 +316,71 @@ export async function setExpenseRegistrationAllocations(
     }
 }
 
-// ── Generování předpisů plateb ────────────────────────────────────────────────
+// ── Předpisy plateb ───────────────────────────────────────────────────────────
 
 const EVENT_BANK_ACCOUNT = "351416278/0300";
 const EVENT_VS = "20702"; // oddíl OVT v rámci TJ Bohemians — stejný VS jako u záloh za zahraniční akce
 
-export async function generateEventPrescriptions(eventId: number): Promise<{ success: true; created: number; updated: number } | { error: string }> {
-    try {
-        const db = getDb();
-        const settlement = await getEventSettlement(eventId);
+/**
+ * Interní helper: vytvoří předpis pro jednu přihlášku s kódem Cnnn a prázdnou částkou.
+ * Voláme hned při vzniku přihlášky — kód je trvalý, částka se spočítá při odeslání e-mailů.
+ */
+async function createPrescriptionForRegistration(
+    tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
+    eventId: number,
+    registrationId: number,
+    firstName: string,
+    lastName: string,
+    eventName: string,
+): Promise<number> {
+    const seqResult = await tx.execute(sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`);
+    const code = (seqResult as unknown as { code: number }[])[0]?.code;
+    if (!code) throw new Error("Nepodařilo se získat kód předpisu");
+    await tx.insert(eventPaymentPrescriptions).values({
+        eventId,
+        registrationId,
+        prescriptionCode: code,
+        bankAccount: EVENT_BANK_ACCOUNT,
+        variableSymbol: EVENT_VS,
+        amount: "0",
+        messageForRecipient: `C${code} ${firstName} ${lastName} ${eventName}`,
+        status: "pending",
+        paymentDue: null,
+    });
+    return code;
+}
 
-        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
-        if (!event) return { error: "Akce nenalezena" };
+/**
+ * Interní helper: přepočítá a uloží částky do všech existujících předpisů.
+ * Přihlášky bez předpisu dostanou nový kód a nový záznam.
+ * Vrací počty pro informaci calleru.
+ */
+async function upsertPrescriptionAmounts(
+    eventId: number,
+    settlement: Awaited<ReturnType<typeof getEventSettlement>>,
+    eventName: string,
+    db: ReturnType<typeof getDb>,
+): Promise<{ created: number; updated: number }> {
+    const paymentDue = new Date();
+    paymentDue.setDate(paymentDue.getDate() + 7);
+    const paymentDueStr = paymentDue.toISOString().slice(0, 10);
+    let created = 0, updated = 0;
 
-        const paymentDue = new Date();
-        paymentDue.setDate(paymentDue.getDate() + 7);
-        const paymentDueStr = paymentDue.toISOString().slice(0, 10);
-
-        let created = 0;
-        let updated = 0;
-
-        await db.transaction(async tx => {
-            for (const reg of settlement.registrations) {
-                const amount = String(reg.totalAmount);
-                const fullName = `${reg.firstName} ${reg.lastName}`;
-
-                if (reg.existingPrescription) {
-                    await tx.update(eventPaymentPrescriptions)
-                        .set({ amount, paymentDue: paymentDueStr, updatedAt: new Date() })
-                        .where(eq(eventPaymentPrescriptions.id, reg.existingPrescription.id));
-                    updated++;
-                } else {
-                    const seqResult = await tx.execute(sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`);
-                    const code = (seqResult as unknown as { code: number }[])[0]?.code;
-                    if (!code) throw new Error("Nepodařilo se získat kód předpisu");
-
-                    await tx.insert(eventPaymentPrescriptions).values({
-                        eventId,
-                        registrationId: reg.registrationId,
-                        prescriptionCode: code,
-                        bankAccount: EVENT_BANK_ACCOUNT,
-                        variableSymbol: EVENT_VS,
-                        amount,
-                        messageForRecipient: `C${code} ${fullName} ${event.name}`,
-                        status: "pending",
-                        paymentDue: paymentDueStr,
-                    });
-                    created++;
-                }
+    await db.transaction(async tx => {
+        for (const reg of settlement.registrations) {
+            const amount = String(reg.totalAmount);
+            if (reg.existingPrescription) {
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ amount, paymentDue: paymentDueStr, updatedAt: new Date() })
+                    .where(eq(eventPaymentPrescriptions.id, reg.existingPrescription.id));
+                updated++;
+            } else {
+                await createPrescriptionForRegistration(tx, eventId, reg.registrationId, reg.firstName, reg.lastName, eventName);
+                created++;
             }
-        });
-
-        revalidatePath(`/dashboard/events/${eventId}`);
-        return { success: true, created, updated };
-    } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se vygenerovat předpisy" };
-    }
+        }
+    });
+    return { created, updated };
 }
 
 // ── Správa přihlášek v adminu ─────────────────────────────────────────────────
@@ -400,6 +409,9 @@ export async function addAdminEventRegistration(
         const db = getDb();
         const publicToken = randomBytes(24).toString("hex");
 
+        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        if (!event) return { error: "Akce nenalezena" };
+
         const registrationId = await db.transaction(async tx => {
             const [reg] = await tx.insert(eventRegistrations).values({
                 eventId,
@@ -423,6 +435,10 @@ export async function addAdminEventRegistration(
                     personId: p.personId ?? null,
                 });
             }
+
+            // Přihláška dostane trvalý kód Cnnn hned při vzniku
+            await createPrescriptionForRegistration(tx, eventId, reg.id, input.firstName, input.lastName, event.name);
+
             return reg.id;
         });
 
@@ -498,16 +514,23 @@ export async function sendEventSettlementEmails(
     if (!emailSettings.configured) return { error: "E-mail není nakonfigurován (chybí RESEND_API_KEY)" };
 
     try {
-        const settlement = await getEventSettlement(eventId);
-        const [event] = await getDb().select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        const db = getDb();
+        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
+
+        // Přepočítej a ulož aktuální částky do předpisů (+ vytvoř chybějící)
+        const settlement = await getEventSettlement(eventId);
+        await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
+
+        // Načti čerstvý stav po upsert
+        const freshSettlement = await getEventSettlement(eventId);
 
         const resend = getResendClient();
         let sent = 0;
         let skipped = 0;
         const failed: { name: string; email: string; error: string }[] = [];
 
-        for (const reg of settlement.registrations) {
+        for (const reg of freshSettlement.registrations) {
             const p = reg.existingPrescription;
             if (!p || p.status === "cancelled") { skipped++; continue; }
 

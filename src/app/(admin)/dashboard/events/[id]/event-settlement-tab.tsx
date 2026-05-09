@@ -10,7 +10,6 @@ import {
     updateEventSubsidy,
     updateExpenseAllocationMethod,
     setExpenseRegistrationAllocations,
-    generateEventPrescriptions,
     sendEventSettlementEmails,
 } from "@/lib/actions/event-settlement";
 import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
@@ -96,9 +95,11 @@ function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
 function ExpenseAllocationRow({
     expense,
     registrations,
+    onAllocationsChanged,
 }: {
     expense: EventSettlement["finalExpenses"][0];
     registrations: SettlementRegistrationRow[];
+    onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[]) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
     const [method, setMethod] = useState<"split_all" | "per_registration">(expense.allocationMethod);
@@ -138,9 +139,13 @@ function ExpenseAllocationRow({
         const newCp = new Set(checkedPersons);
         if (newCp.has(key)) newCp.delete(key); else newCp.add(key);
         setCheckedPersons(newCp);
+        const newAllocs = calcAmountsFor(newCp);
+        // Okamžitý přepočet přehledu plateb v parent komponentě
+        onAllocationsChanged?.(expense.id, newAllocs);
+        // Debounced save do DB
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
-            const res = await setExpenseRegistrationAllocations(expense.id, calcAmountsFor(newCp));
+            const res = await setExpenseRegistrationAllocations(expense.id, newAllocs);
             if ("error" in res) setSaveError(res.error); else setSaveError(null);
         }, 500);
     }
@@ -328,8 +333,6 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     const [settlement, setSettlement] = useState<EventSettlement | null>(null);
     const [loading, setLoading] = useState(true);
     const [subsidyTotal, setSubsidyTotal] = useState(0);
-    const [generating, startGenerate] = useTransition();
-    const [genResult, setGenResult] = useState<{ created: number; updated: number } | { error: string } | null>(null);
     const [sending, startSend] = useTransition();
     const [sendResult, setSendResult] = useState<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string } | null>(null);
 
@@ -346,25 +349,31 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     function handleSubsidyChange(newSubsidy: number) {
         setSubsidyTotal(newSubsidy);
         setSettlement(s => s ? recomputeSettlement(s, newSubsidy) : null);
-        // DB save proběhl uvnitř SubsidyField — tady jen aktualizujeme lokální stav
     }
 
-    function handleGenerate() {
-        startGenerate(async () => {
-            setGenResult(null);
-            const res = await generateEventPrescriptions(eventId);
-            setGenResult(res);
-            if (!("error" in res)) {
-                // Tichý refresh bez spinneru — zobrazí nové Cnnn kódy a stavové badges v tabulce
-                getEventSettlement(eventId).then(s => {
-                    setSettlement(s);
-                    setSubsidyTotal(s.subsidyTotal);
-                });
-            }
+    function handleAllocationsChanged(expenseId: number, newAllocs: { registrationId: number; amount: number }[]) {
+        setSettlement(prev => {
+            if (!prev) return prev;
+            const allocMap = new Map(newAllocs.map(a => [a.registrationId, a.amount]));
+            const newRegs = prev.registrations.map(reg => {
+                const newExpenses = reg.expenses.map(e =>
+                    e.expenseId === expenseId ? { ...e, allocatedAmount: allocMap.get(reg.registrationId) ?? 0 } : e
+                );
+                const perRegPart = newExpenses
+                    .filter(e => e.allocationMethod === "per_registration")
+                    .reduce((s, e) => s + e.allocatedAmount, 0);
+                const expensesTotal = prev.unitPrice * reg.personsCount + perRegPart;
+                const subsidy = prev.totalMemberParticipants > 0
+                    ? Math.round(prev.subsidyTotal * reg.memberCount / prev.totalMemberParticipants)
+                    : 0;
+                const totalAmount = Math.max(0, expensesTotal - subsidy);
+                return { ...reg, expenses: newExpenses, expensesTotal, subsidy, totalAmount };
+            });
+            return { ...prev, registrations: newRegs, grandTotal: newRegs.reduce((s, r) => s + r.totalAmount, 0) };
         });
     }
 
-    function handleSendEmails() {
+function handleSendEmails() {
         startSend(async () => {
             setSendResult(null);
             const res = await sendEventSettlementEmails(eventId);
@@ -460,6 +469,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                             key={exp.id}
                             expense={exp}
                             registrations={settlement.registrations}
+                            onAllocationsChanged={handleAllocationsChanged}
                         />
                     ))
                 )}
@@ -484,20 +494,14 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                 )}
             </div>
 
-            {/* Generování předpisů */}
+            {/* Odeslání e-mailů — přepočítá a uzamkne částky, odešle e-maily s platebními údaji */}
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
                 <div className="flex items-start gap-4 flex-wrap">
                     <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800">
-                            {settlement.registrations.some(r => r.existingPrescription)
-                                ? "Přegenerovat předpisy plateb"
-                                : "Vygenerovat předpisy plateb"}
-                        </p>
+                        <p className="text-sm font-semibold text-gray-800">Odeslat e-maily s předpisy</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            Přiřadí každé přihlášce platební kód C&#123;nnn&#125;, částku a splatnost (7 dní).
-                            Po vygenerování lze odeslat e-maily s platebními údaji a QR kódem.
-                            {settlement.registrations.some(r => r.existingPrescription) &&
-                                " Existující kódy Cnnn zůstanou — změní se jen výše platby."}
+                            Přepočítá aktuální částky, přiřadí platební kódy a odešle každé přihlášce e-mail
+                            s částkou k úhradě, platebními údaji a QR kódem.
                         </p>
                         {!hasRegistrations && (
                             <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
@@ -506,56 +510,8 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                         )}
                     </div>
                     <Button
-                        onClick={handleGenerate}
-                        disabled={generating || !canGenerate}
-                        className="shrink-0">
-                        {generating
-                            ? <><Loader2 size={14} className="animate-spin mr-1.5" />Generuji…</>
-                            : settlement.registrations.some(r => r.existingPrescription)
-                                ? "Přegenerovat"
-                                : "Vygenerovat předpisy"}
-                    </Button>
-                </div>
-                {genResult && (
-                    <div className={`mt-3 text-sm px-3 py-2 rounded-lg ${
-                        "error" in genResult ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-800 border border-emerald-200"
-                    }`}>
-                        {"error" in genResult
-                            ? <p className="flex items-center gap-2"><AlertCircle size={14} /> {genResult.error}</p>
-                            : <>
-                                <p className="flex items-center gap-2 font-medium">
-                                    <Check size={14} />
-                                    {genResult.created > 0 && `${genResult.created} nových předpisů vytvořeno`}
-                                    {genResult.created > 0 && genResult.updated > 0 && ", "}
-                                    {genResult.updated > 0 && `${genResult.updated} aktualizováno`}
-                                </p>
-                                <p className="text-xs text-emerald-700 mt-1">
-                                    Přihlášky v tabulce níže mají nyní přiřazeny Cnnn kódy a stav Čeká na platbu. Můžete odeslat e-maily.
-                                </p>
-                              </>
-                        }
-                    </div>
-                )}
-            </div>
-
-            {/* Odeslání e-mailů */}
-            <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
-                <div className="flex items-start gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800">Odeslat e-maily s předpisy</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                            Odešle každé přihlášce e-mail s částkou k úhradě, platebními údaji a QR kódem.
-                            Přihlášky bez předpisu nebo se stavem Zrušeno jsou přeskočeny.
-                        </p>
-                        {!settlement.registrations.some(r => r.existingPrescription) && (
-                            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                <AlertCircle size={12} /> Nejprve vygenerujte předpisy plateb.
-                            </p>
-                        )}
-                    </div>
-                    <Button
                         onClick={handleSendEmails}
-                        disabled={sending || !settlement.registrations.some(r => r.existingPrescription)}
+                        disabled={sending || !hasRegistrations}
                         variant="outline"
                         className="shrink-0">
                         {sending ? <><Loader2 size={14} className="animate-spin mr-1.5" />Odesílám…</> : "Odeslat e-maily"}
