@@ -190,6 +190,13 @@ function ExpenseAllocationRow({
 
             {method === "per_registration" && expanded && (
                 <div className="mt-3 ml-1 space-y-3">
+                    {/* Souhrn výběru */}
+                    <p className="text-xs text-gray-500 tabular-nums">
+                        {totalChecked > 0
+                            ? <>{totalChecked} {totalChecked === 1 ? "osoba" : totalChecked < 5 ? "osoby" : "osob"} · <span className="font-medium text-gray-700">{fmtCzk(ppCost)}/os.</span></>
+                            : <span className="text-gray-400">Nikdo není vybrán</span>}
+                    </p>
+
                     {registrations.map(reg => {
                         const persons = getPersonsForAlloc(reg);
                         const checkedCount = persons.filter(p => checkedPersons.has(p.key)).length;
@@ -204,7 +211,7 @@ function ExpenseAllocationRow({
                                         {checkedCount > 0 ? fmtCzk(ppCost * checkedCount) : <span className="text-gray-300">—</span>}
                                     </span>
                                 </div>
-                                {/* Osoby jako klikatelné chipy */}
+                                {/* Osoby jako klikatelné chipy — cena je stejná pro všechny, zobrazena nahoře */}
                                 <div className="flex flex-wrap gap-1.5">
                                     {persons.map(p => {
                                         const isIn = checkedPersons.has(p.key);
@@ -223,9 +230,6 @@ function ExpenseAllocationRow({
                                                     ? <Check size={11} strokeWidth={2.5} className="text-emerald-600 shrink-0" />
                                                     : <X size={11} strokeWidth={2.5} className="text-gray-300 shrink-0" />}
                                                 {p.fullName}
-                                                {isIn && ppCost > 0 && (
-                                                    <span className="text-emerald-600 font-normal tabular-nums">{fmtCzk(ppCost)}</span>
-                                                )}
                                             </button>
                                         );
                                     })}
