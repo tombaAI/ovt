@@ -363,7 +363,13 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
             setGenResult(null);
             const res = await generateEventPrescriptions(eventId);
             setGenResult(res);
-            if (!("error" in res)) load(); // reload po generování předpisů je OK — deliberate action
+            if (!("error" in res)) {
+                // Tichý refresh bez spinneru — zobrazí nové Cnnn kódy a stavové badges v tabulce
+                getEventSettlement(eventId).then(s => {
+                    setSettlement(s);
+                    setSubsidyTotal(s.subsidyTotal);
+                });
+            }
         });
     }
 
@@ -487,10 +493,16 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
                 <div className="flex items-start gap-4 flex-wrap">
                     <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800">Vygenerovat předpisy plateb</p>
+                        <p className="text-sm font-semibold text-gray-800">
+                            {settlement.registrations.some(r => r.existingPrescription)
+                                ? "Přegenerovat předpisy plateb"
+                                : "Vygenerovat předpisy plateb"}
+                        </p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            Vytvoří nebo přepíše předpisy pro všechny přihlášky. Splatnost: 7 dní. Účet: 351416278/0300.
-                            Existující kód předpisu (Cnnn) zůstane zachován — změní se jen výše platby.
+                            Přiřadí každé přihlášce platební kód C&#123;nnn&#125;, částku a splatnost (7 dní).
+                            Po vygenerování lze odeslat e-maily s platebními údaji a QR kódem.
+                            {settlement.registrations.some(r => r.existingPrescription) &&
+                                " Existující kódy Cnnn zůstanou — změní se jen výše platby."}
                         </p>
                         {!hasRegistrations && (
                             <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
@@ -502,16 +514,30 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                         onClick={handleGenerate}
                         disabled={generating || !canGenerate}
                         className="shrink-0">
-                        {generating ? <><Loader2 size={14} className="animate-spin mr-1.5" />Generuji…</> : "Vygenerovat předpisy"}
+                        {generating
+                            ? <><Loader2 size={14} className="animate-spin mr-1.5" />Generuji…</>
+                            : settlement.registrations.some(r => r.existingPrescription)
+                                ? "Přegenerovat"
+                                : "Vygenerovat předpisy"}
                     </Button>
                 </div>
                 {genResult && (
-                    <div className={`mt-3 flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
-                        "error" in genResult ? "bg-red-50 text-red-600" : "bg-green-50 text-green-700"
+                    <div className={`mt-3 text-sm px-3 py-2 rounded-lg ${
+                        "error" in genResult ? "bg-red-50 text-red-600" : "bg-emerald-50 text-emerald-800 border border-emerald-200"
                     }`}>
                         {"error" in genResult
-                            ? <><AlertCircle size={14} /> {genResult.error}</>
-                            : <><Check size={14} /> Hotovo — vytvořeno: {genResult.created}, aktualizováno: {genResult.updated}</>
+                            ? <p className="flex items-center gap-2"><AlertCircle size={14} /> {genResult.error}</p>
+                            : <>
+                                <p className="flex items-center gap-2 font-medium">
+                                    <Check size={14} />
+                                    {genResult.created > 0 && `${genResult.created} nových předpisů vytvořeno`}
+                                    {genResult.created > 0 && genResult.updated > 0 && ", "}
+                                    {genResult.updated > 0 && `${genResult.updated} aktualizováno`}
+                                </p>
+                                <p className="text-xs text-emerald-700 mt-1">
+                                    Přihlášky v tabulce níže mají nyní přiřazeny Cnnn kódy a stav Čeká na platbu. Můžete odeslat e-maily.
+                                </p>
+                              </>
                         }
                     </div>
                 )}
