@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Separator } from "@/components/ui/separator";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter
 } from "@/components/ui/dialog";
@@ -335,7 +336,7 @@ function TodoSection({ currentNote, onSave }: {
 
     return (
         <div className={[
-            "rounded-xl border px-4 py-3 mb-4 space-y-2",
+            "rounded-xl border px-4 py-3 space-y-2",
             currentNote ? "border-orange-200 bg-orange-50/40" : "",
         ].join(" ")}>
             <p className="text-sm font-semibold text-gray-700">Úkol k řešení</p>
@@ -367,7 +368,7 @@ function SensitiveDataSection({ member }: { member: MemberWithFlags }) {
     const toggle = useCallback(() => setVisible(v => !v), []);
 
     return (
-        <div className="rounded-xl border px-4 py-3 mb-4">
+        <div className="rounded-xl border px-4 py-3">
             <button
                 onClick={toggle}
                 className="flex items-center gap-2 w-full text-left"
@@ -392,6 +393,11 @@ function SensitiveDataSection({ member }: { member: MemberWithFlags }) {
     );
 }
 
+// ── Dot badge pro tab trigger ─────────────────────────────────────────────────
+function Dot({ color }: { color: string }) {
+    return <span className={`ml-1.5 inline-block w-1.5 h-1.5 rounded-full ${color} align-middle`} />;
+}
+
 // ── Main detail sheet ─────────────────────────────────────────────────────────
 interface Props {
     open: boolean;
@@ -404,9 +410,7 @@ interface Props {
 }
 
 export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId, currentYearDiscounts, onMemberUpdated }: Props) {
-    const [showHistory, setShowHistory] = useState(false);
-    const [showContribHistory, setShowContribHistory] = useState(false);
-    const [showEventHistory, setShowEventHistory] = useState(false);
+    const [showAudit, setShowAudit]         = useState(false);
     const [discountDialogOpen, setDiscountDialogOpen] = useState(false);
     const [terminateDialogOpen, setTerminateDialogOpen] = useState(false);
     const [committeePending, startCommitteeTransition] = useTransition();
@@ -418,7 +422,6 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
     const [activeField, setActiveField] = useState<string | null>(null);
     const [tjDiffs, setTjDiffs] = useState<Record<string, string | null>>({});
 
-    // Reset optimistického stavu při přepnutí na jiného člena
     useEffect(() => { setOptCommittee(null); setOptTom(null); }, [member?.id]);
 
     const [state, formAction, isPending] = useActionState<MemberFormState, FormData>(saveMember, null);
@@ -427,9 +430,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
     }, [state, onOpenChange, onMemberUpdated]);
 
     useEffect(() => {
-        setShowHistory(false);
-        setShowContribHistory(false);
-        setShowEventHistory(false);
+        setShowAudit(false);
         setActiveField(null);
         setTjDiffs({});
         if (member?.hasTjDiffs) {
@@ -489,7 +490,7 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                 >
                     {isEdit && member ? (
                         <>
-                            <SheetHeader className="px-0 pt-5 pb-4 mb-2">
+                            <SheetHeader className="px-0 pt-5 pb-3">
                                 <div className="flex items-start justify-between gap-2">
                                     <SheetTitle className="text-lg leading-tight">{member.firstName} {member.lastName}</SheetTitle>
                                     {isTerminated && (
@@ -498,181 +499,186 @@ export function MemberSheet({ open, onOpenChange, member, selectedYear, periodId
                                 </div>
                             </SheetHeader>
 
-                            {/* Ukončení členství — info box */}
                             {isTerminated && (
-                                <div className="rounded-xl border border-red-200 bg-red-50/40 px-4 py-3 mb-4 text-sm space-y-1">
+                                <div className="rounded-xl border border-red-200 bg-red-50/40 px-4 py-3 mb-3 text-sm space-y-1">
                                     <p className="font-semibold text-red-700">Členství ukončeno</p>
                                     <p className="text-gray-600">Datum: <span className="font-medium">{fmtDateShort(member.memberTo)}</span></p>
                                     {member.memberToNote && <p className="text-gray-500 text-xs">{member.memberToNote}</p>}
                                 </div>
                             )}
 
-                            {/* Inline edit fields */}
-                            <div className="rounded-xl border px-4 mb-4">
-                                <InlineField label="Jméno" value={member.firstName} fieldId="firstName" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
-                                <InlineField label="Příjmení" value={member.lastName} fieldId="lastName" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")} tjValue={tjDiffs["lastName"]} onTjAccept={tjAcceptor("lastName")} />
-                                <InlineField label="Přezdívka" value={member.nickname} placeholder="(žádná)" fieldId="nickname" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")} tjValue={tjDiffs["nickname"]} onTjAccept={tjAcceptor("nickname")} />
-                                <InlineField label="Login" value={member.userLogin} placeholder="(nezadáno)" fieldId="userLogin" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
-                                <InlineField label="E-mail" value={member.email} type="email" fieldId="email" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} tjValue={tjDiffs["email"]} onTjAccept={tjAcceptor("email")} />
-                                <InlineField label="Telefon" value={member.phone} type="tel" fieldId="phone" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")} tjValue={tjDiffs["phone"]} onTjAccept={tjAcceptor("phone")} />
-                                <InlineField label="Pohlaví" value={member.gender} placeholder="(nezadáno)" fieldId="gender" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")} tjValue={tjDiffs["gender"]} onTjAccept={tjAcceptor("gender")} />
-                                <InlineField label="Adresa" value={member.address} placeholder="(nezadáno)" fieldId="address" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")} tjValue={tjDiffs["address"]} onTjAccept={tjAcceptor("address")} />
-                                <InlineField label="Číslo účtu" value={member.bankAccountNumber} placeholder="(nezadáno)" fieldId="bankAccountNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankAccountNumber")} />
-                                <InlineField label="Kód banky" value={member.bankCode} placeholder="(nezadáno)" fieldId="bankCode" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankCode")} />
-                                <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
-                                <InlineField label="Číslo ČSK" value={member.cskNumber ?? null} fieldId="cskNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} tjValue={tjDiffs["cskNumber"]} onTjAccept={tjAcceptor("cskNumber")} />
-                                <InlineField label="Poznámka" value={member.note} placeholder="(žádná)" fieldId="note" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
-                                <InlineField label="Člen od" value={member.memberFrom} type="date" fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} />
-                            </div>
+                            {/* ── Záložky ── */}
+                            {/* key={member.id} resetuje aktivní záložku při přepnutí na jiného člena */}
+                            <Tabs key={member.id} defaultValue="basic" className="mt-1">
+                                <TabsList className="w-full grid grid-cols-4 mb-4">
+                                    <TabsTrigger value="basic">Základní</TabsTrigger>
+                                    <TabsTrigger value="finance">
+                                        Finance
+                                        {!member.hasContrib && <Dot color="bg-amber-400" />}
+                                    </TabsTrigger>
+                                    <TabsTrigger value="events">Akce</TabsTrigger>
+                                    <TabsTrigger value="admin">
+                                        Správa
+                                        {member.todoNote && <Dot color="bg-orange-500" />}
+                                        {member.hasTjDiffs && <Dot color="bg-sky-500" />}
+                                    </TabsTrigger>
+                                </TabsList>
 
-                            {/* Citlivé údaje — skryté za očíčkem */}
-                            <SensitiveDataSection member={member} />
+                                {/* ── Záložka: Základní ── */}
+                                <TabsContent value="basic" className="space-y-4 mt-0">
+                                    <div className="rounded-xl border px-4">
+                                        <InlineField label="Jméno" value={member.firstName} fieldId="firstName" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("firstName")} tjValue={tjDiffs["firstName"]} onTjAccept={tjAcceptor("firstName")} />
+                                        <InlineField label="Příjmení" value={member.lastName} fieldId="lastName" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("lastName")} tjValue={tjDiffs["lastName"]} onTjAccept={tjAcceptor("lastName")} />
+                                        <InlineField label="Přezdívka" value={member.nickname} placeholder="(žádná)" fieldId="nickname" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("nickname")} tjValue={tjDiffs["nickname"]} onTjAccept={tjAcceptor("nickname")} />
+                                        <InlineField label="Login" value={member.userLogin} placeholder="(nezadáno)" fieldId="userLogin" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("userLogin")} />
+                                        <InlineField label="E-mail" value={member.email} type="email" fieldId="email" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("email")} tjValue={tjDiffs["email"]} onTjAccept={tjAcceptor("email")} />
+                                        <InlineField label="Telefon" value={member.phone} type="tel" fieldId="phone" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("phone")} tjValue={tjDiffs["phone"]} onTjAccept={tjAcceptor("phone")} />
+                                        <InlineField label="Pohlaví" value={member.gender} placeholder="(nezadáno)" fieldId="gender" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("gender")} tjValue={tjDiffs["gender"]} onTjAccept={tjAcceptor("gender")} />
+                                        <InlineField label="Adresa" value={member.address} placeholder="(nezadáno)" fieldId="address" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("address")} tjValue={tjDiffs["address"]} onTjAccept={tjAcceptor("address")} />
+                                        <InlineField label="Číslo účtu" value={member.bankAccountNumber} placeholder="(nezadáno)" fieldId="bankAccountNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankAccountNumber")} />
+                                        <InlineField label="Kód banky" value={member.bankCode} placeholder="(nezadáno)" fieldId="bankCode" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("bankCode")} />
+                                        <InlineField label="Var. symbol" value={member.variableSymbol?.toString() ?? null} type="number" fieldId="variableSymbol" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("variableSymbol")} />
+                                        <InlineField label="Číslo ČSK" value={member.cskNumber ?? null} fieldId="cskNumber" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("cskNumber")} tjValue={tjDiffs["cskNumber"]} onTjAccept={tjAcceptor("cskNumber")} />
+                                        <InlineField label="Poznámka" value={member.note} placeholder="(žádná)" fieldId="note" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("note")} />
+                                        <InlineField label="Člen od" value={member.memberFrom} type="date" fieldId="memberFrom" activeField={activeField} onActiveFieldChange={setActiveField} onSave={fieldSaver("memberFrom")} />
+                                    </div>
+                                    <SensitiveDataSection member={member} />
+                                </TabsContent>
 
-                            {/* Todo */}
-                            <TodoSection
-                                currentNote={member.todoNote}
-                                onSave={async (note) => {
-                                    const r = await setMemberTodo(member.id, note);
-                                    if ("success" in r) onMemberUpdated();
-                                }}
-                            />
+                                {/* ── Záložka: Finance ── */}
+                                <TabsContent value="finance" className="space-y-4 mt-0">
+                                    {/* Nastavení příspěvků pro aktuální rok */}
+                                    {member.hasContrib ? (
+                                        <div className="rounded-xl border px-4 py-3 space-y-3">
+                                            <p className="text-sm font-semibold text-gray-700">Příspěvky {selectedYear} — nastavení</p>
+                                            <div className="flex items-center gap-2">
+                                                <Checkbox id="chk-committee"
+                                                    checked={optCommittee ?? member.isCommittee}
+                                                    disabled={committeePending}
+                                                    onCheckedChange={v => { setOptCommittee(Boolean(v)); startCommitteeTransition(async () => { await toggleCommittee(Boolean(v)); }); }} />
+                                                <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
+                                                    Člen výboru
+                                                    {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.committee} Kč)</span>}
+                                                </Label>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <Checkbox id="chk-tom"
+                                                    checked={optTom ?? member.isTom}
+                                                    disabled={tomPending}
+                                                    onCheckedChange={v => { setOptTom(Boolean(v)); startTomTransition(async () => { await toggleTom(Boolean(v)); }); }} />
+                                                <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
+                                                    Vedoucí TOM
+                                                    {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.tom} Kč)</span>}
+                                                </Label>
+                                            </div>
+                                            {toggleError && <p className="text-xs text-red-600">{toggleError}</p>}
+                                            <Separator />
+                                            <div className="flex items-center justify-between">
+                                                <div>
+                                                    <p className="text-sm">Individuální sleva</p>
+                                                    {member.discountIndividual
+                                                        ? <p className="text-sm font-semibold text-purple-700">
+                                                            −{Math.abs(member.discountIndividual)} Kč
+                                                        </p>
+                                                        : <p className="text-sm text-gray-400">Žádná</p>
+                                                    }
+                                                </div>
+                                                <button
+                                                    onClick={() => setDiscountDialogOpen(true)}
+                                                    className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2">
+                                                    {member.discountIndividual ? "Upravit" : "Nastavit"}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    ) : (
+                                        <div className="rounded-xl border border-amber-200 bg-amber-50/40 px-4 py-3 text-sm text-amber-700">
+                                            Člen nemá předpis příspěvků pro rok {selectedYear}.
+                                        </div>
+                                    )}
 
-                            {/* Provedena revize */}
-                            <div className="flex items-center gap-2 rounded-xl border px-4 py-3 mb-4">
-                                <Checkbox
-                                    id="chk-reviewed"
-                                    checked={member.membershipReviewed}
-                                    disabled={reviewedPending}
-                                    onCheckedChange={v => {
-                                        startReviewedTransition(async () => {
-                                            const r = await setMemberReviewed(member.id, Boolean(v));
+                                    {/* Přehled příspěvků po rocích s platbami a bilancí */}
+                                    <div className="rounded-xl border px-4 py-3">
+                                        <p className="text-sm font-semibold text-gray-700 mb-3">Přehled příspěvků a plateb</p>
+                                        <ContributionHistory memberId={member.id} />
+                                    </div>
+                                </TabsContent>
+
+                                {/* ── Záložka: Akce ── */}
+                                <TabsContent value="events" className="mt-0">
+                                    <div className="rounded-xl border px-4 py-3">
+                                        <p className="text-sm font-semibold text-gray-700 mb-3">Přihlášky na akce</p>
+                                        <EventHistory memberId={member.id} />
+                                    </div>
+                                </TabsContent>
+
+                                {/* ── Záložka: Správa ── */}
+                                <TabsContent value="admin" className="space-y-4 mt-0">
+                                    {/* Todo */}
+                                    <TodoSection
+                                        currentNote={member.todoNote}
+                                        onSave={async (note) => {
+                                            const r = await setMemberTodo(member.id, note);
                                             if ("success" in r) onMemberUpdated();
-                                        });
-                                    }}
-                                />
-                                <Label htmlFor="chk-reviewed" className="cursor-pointer text-sm font-medium">
-                                    Provedena revize
-                                </Label>
-                            </div>
+                                        }}
+                                    />
 
-                            {/* Current year flags */}
-                            {member.hasContrib && (
-                                <div className="rounded-xl border px-4 py-3 mb-4 space-y-3">
-                                    <p className="text-sm font-semibold text-gray-700">
-                                        Příspěvky {selectedYear}
-                                    </p>
-
-                                    <div className="flex items-center gap-2">
-                                        <Checkbox id="chk-committee"
-                                            checked={optCommittee ?? member.isCommittee}
-                                            disabled={committeePending}
-                                            onCheckedChange={v => { setOptCommittee(Boolean(v)); startCommitteeTransition(async () => { await toggleCommittee(Boolean(v)); }); }} />
-                                        <Label htmlFor="chk-committee" className="cursor-pointer text-sm">
-                                            Člen výboru
-                                            {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.committee} Kč)</span>}
+                                    {/* Revize */}
+                                    <div className="flex items-center gap-2 rounded-xl border px-4 py-3">
+                                        <Checkbox
+                                            id="chk-reviewed"
+                                            checked={member.membershipReviewed}
+                                            disabled={reviewedPending}
+                                            onCheckedChange={v => {
+                                                startReviewedTransition(async () => {
+                                                    const r = await setMemberReviewed(member.id, Boolean(v));
+                                                    if ("success" in r) onMemberUpdated();
+                                                });
+                                            }}
+                                        />
+                                        <Label htmlFor="chk-reviewed" className="cursor-pointer text-sm font-medium">
+                                            Provedena revize
                                         </Label>
                                     </div>
 
-                                    <div className="flex items-center gap-2">
-                                        <Checkbox id="chk-tom"
-                                            checked={optTom ?? member.isTom}
-                                            disabled={tomPending}
-                                            onCheckedChange={v => { setOptTom(Boolean(v)); startTomTransition(async () => { await toggleTom(Boolean(v)); }); }} />
-                                        <Label htmlFor="chk-tom" className="cursor-pointer text-sm">
-                                            Vedoucí TOM
-                                            {currentYearDiscounts && <span className="text-gray-400 font-normal ml-1">(−{currentYearDiscounts.tom} Kč)</span>}
-                                        </Label>
-                                    </div>
-
-                                    {toggleError && <p className="text-xs text-red-600">{toggleError}</p>}
-
-                                    <Separator />
-
-                                    <div className="flex items-center justify-between">
-                                        <div>
-                                            <p className="text-sm">Individuální sleva</p>
-                                            {member.discountIndividual
-                                                ? <p className="text-sm font-semibold text-purple-700">
-                                                    −{Math.abs(member.discountIndividual)} Kč
-                                                </p>
-                                                : <p className="text-sm text-gray-400">Žádná</p>
-                                            }
+                                    {/* Ukončit členství */}
+                                    {!isTerminated && (
+                                        <div className="rounded-xl border px-4 py-3">
+                                            <Button
+                                                variant="outline"
+                                                size="sm"
+                                                onClick={() => setTerminateDialogOpen(true)}
+                                                className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
+                                                Ukončit členství…
+                                            </Button>
                                         </div>
+                                    )}
+
+                                    {/* TJ diffs */}
+                                    {member.hasTjDiffs && (
+                                        <div className="rounded-xl border border-sky-200 bg-sky-50/30 px-4 py-3">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <p className="text-sm font-medium text-sky-700">Nepřijaté změny ze synchronizace TJ</p>
+                                                <a href="/dashboard/imports/members-tj"
+                                                    className="text-xs text-sky-600 hover:underline">
+                                                    Otevřít import →
+                                                </a>
+                                            </div>
+                                            <TjDiffsSection memberId={member.id} onApplied={onMemberUpdated} />
+                                        </div>
+                                    )}
+
+                                    {/* Audit history */}
+                                    <div className="rounded-xl border px-4 py-3">
                                         <button
-                                            onClick={() => setDiscountDialogOpen(true)}
-                                            className="text-xs text-blue-600 hover:text-blue-800 underline underline-offset-2">
-                                            {member.discountIndividual ? "Upravit" : "Nastavit"}
+                                            onClick={() => setShowAudit(v => !v)}
+                                            className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left">
+                                            <span>{showAudit ? "▾" : "▸"}</span>
+                                            Historie změn
                                         </button>
+                                        {showAudit && <div className="mt-3"><AuditHistory memberId={member.id} /></div>}
                                     </div>
-                                </div>
-                            )}
-
-                            {/* Příspěvky po rocích */}
-                            <Separator className="mb-4" />
-                            <div className="mb-4">
-                                <button
-                                    onClick={() => setShowContribHistory(v => !v)}
-                                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left mb-2">
-                                    <span>{showContribHistory ? "▾" : "▸"}</span>
-                                    Příspěvky po rocích
-                                </button>
-                                {showContribHistory && <ContributionHistory memberId={member.id} />}
-                            </div>
-
-                            {/* Přihlášky na akce */}
-                            <Separator className="mb-4" />
-                            <div className="mb-4">
-                                <button
-                                    onClick={() => setShowEventHistory(v => !v)}
-                                    className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left mb-2">
-                                    <span>{showEventHistory ? "▾" : "▸"}</span>
-                                    Přihlášky na akce
-                                </button>
-                                {showEventHistory && <EventHistory memberId={member.id} />}
-                            </div>
-
-                            {/* Ukončit členství */}
-                            {!isTerminated && (
-                                <>
-                                    <Separator className="mb-4" />
-                                    <div className="mb-4">
-                                        <Button
-                                            variant="outline"
-                                            size="sm"
-                                            onClick={() => setTerminateDialogOpen(true)}
-                                            className="text-red-600 border-red-200 hover:bg-red-50 hover:text-red-700">
-                                            Ukončit členství…
-                                        </Button>
-                                    </div>
-                                </>
-                            )}
-
-                            {/* TJ diffs */}
-                            {member.hasTjDiffs && (
-                                <>
-                                    <Separator className="mb-4" />
-                                    <div className="mb-4">
-                                        <div className="flex items-center justify-between">
-                                            <p className="text-sm font-medium text-sky-700">Nepřijaté změny ze synchronizace TJ</p>
-                                            <a href="/dashboard/imports/members-tj"
-                                                className="text-xs text-sky-600 hover:underline">
-                                                Otevřít import →
-                                            </a>
-                                        </div>
-                                        <TjDiffsSection memberId={member.id} onApplied={onMemberUpdated} />
-                                    </div>
-                                </>
-                            )}
-
-                            {/* Audit history */}
-                            <Separator className="mb-4" />
-                            <button
-                                onClick={() => setShowHistory(v => !v)}
-                                className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left">
-                                <span>{showHistory ? "▾" : "▸"}</span>
-                                Historie změn
-                            </button>
-                            {showHistory && <div className="mt-3"><AuditHistory memberId={member.id} /></div>}
+                                </TabsContent>
+                            </Tabs>
                         </>
                     ) : (
                         /* ── Create new member ── */
