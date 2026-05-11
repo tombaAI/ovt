@@ -359,6 +359,24 @@ async function createPrescriptionForRegistration(
     return code;
 }
 
+/** Přegeneruje předpisy (přepočítá částky) bez odeslání e-mailů. */
+export async function regeneratePrescriptions(
+    eventId: number,
+): Promise<{ error: string } | { created: number; updated: number }> {
+    try {
+        const db = getDb();
+        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        if (!event) return { error: "Akce nenalezena" };
+        const settlement = await getEventSettlement(eventId);
+        const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return result;
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při přegenerování předpisů" };
+    }
+}
+
 /**
  * Interní helper: přepočítá a uloží částky do všech existujících předpisů.
  * Přihlášky bez předpisu dostanou nový kód a nový záznam.

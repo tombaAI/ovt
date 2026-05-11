@@ -11,6 +11,7 @@ import {
     updateExpenseAllocationMethod,
     setExpenseRegistrationAllocations,
     sendEventSettlementEmails,
+    regeneratePrescriptions,
 } from "@/lib/actions/event-settlement";
 import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
 
@@ -333,8 +334,9 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
     const [settlement, setSettlement] = useState<EventSettlement | null>(null);
     const [loading, setLoading] = useState(true);
     const [subsidyTotal, setSubsidyTotal] = useState(0);
-    const [sending, startSend] = useTransition();
-    const [sendResult, setSendResult] = useState<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string } | null>(null);
+    const [sending, startSend]         = useTransition();
+    const [regenerating, startRegen]   = useTransition();
+    const [sendResult, setSendResult]  = useState<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string } | null>(null);
 
     function load() {
         setLoading(true);
@@ -373,7 +375,14 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
         });
     }
 
-function handleSendEmails() {
+    function handleRegenerate() {
+        startRegen(async () => {
+            await regeneratePrescriptions(eventId);
+            load();
+        });
+    }
+
+    function handleSendEmails() {
         startSend(async () => {
             setSendResult(null);
             const res = await sendEventSettlementEmails(eventId);
@@ -415,14 +424,26 @@ function handleSendEmails() {
 
             {/* Varování: pending předpis nesedí → nutné přegenerovat */}
             {stalePending && (
-                <div className="rounded-xl border-2 border-orange-400 bg-orange-50 px-4 py-3 space-y-1">
-                    <p className="text-sm font-semibold text-orange-800 flex items-center gap-2">
-                        <AlertCircle size={16} /> Předpisy nesedí s aktuálními daty
-                    </p>
-                    <p className="text-xs text-orange-700">
-                        Změnily se náklady nebo dotace. Je potřeba přegenerovat předpisy před dalším odesíláním e-mailů.
-                        Kód předpisu (C{settlement.registrations.find(r => r.existingPrescription?.status === "pending")?.existingPrescription?.prescriptionCode ?? "nnn"}) zůstane zachován, změní se jen výše platby.
-                    </p>
+                <div className="rounded-xl border-2 border-orange-400 bg-orange-50 px-4 py-3 space-y-2">
+                    <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                            <p className="text-sm font-semibold text-orange-800 flex items-center gap-2">
+                                <AlertCircle size={16} /> Předpisy nesedí s aktuálními daty
+                            </p>
+                            <p className="text-xs text-orange-700">
+                                Změnily se náklady nebo dotace. Přegenerujte předpisy — kód (C{settlement.registrations.find(r => r.existingPrescription?.status === "pending")?.existingPrescription?.prescriptionCode ?? "nnn"}) zůstane zachován, změní se jen výše.
+                            </p>
+                        </div>
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={handleRegenerate}
+                            disabled={regenerating}
+                            className="shrink-0 border-orange-400 text-orange-700 hover:bg-orange-100"
+                        >
+                            {regenerating ? <><Loader2 size={13} className="animate-spin mr-1" />Přegenerovávám…</> : "Přegenerovat předpisy"}
+                        </Button>
+                    </div>
                 </div>
             )}
 
