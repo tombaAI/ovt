@@ -21,6 +21,7 @@ import {
     setMemberTodo, setMemberReviewed,
     type AuditEntry,
 } from "@/lib/actions/members";
+import { ContributionHistory, EventHistory } from "../member-history";
 import { getMemberTjDiffs, updateMemberFieldFromTj } from "@/lib/actions/sync";
 import { FIELD_LABELS } from "@/lib/member-fields";
 import type { MemberWithFlags } from "../page";
@@ -232,6 +233,8 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
     const [tjDiffs, setTjDiffs] = useState<Record<string, string | null>>({});
     const [terminateOpen, setTerminateOpen] = useState(false);
     const [auditOpen, setAuditOpen] = useState(false);
+    const [showContribHistory, setShowContribHistory] = useState(false);
+    const [showEventHistory, setShowEventHistory] = useState(false);
     const [committeePending, startCommitteeT] = useTransition();
     const [tomPending, startTomT] = useTransition();
     const [reviewedPending, startReviewedT] = useTransition();
@@ -477,6 +480,32 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                             Provedena revize
                         </Label>
                     </div>
+                </div>
+
+                {/* ── Příspěvky po rocích ── */}
+                <div className="max-w-2xl mx-auto mt-4">
+                    <Separator className="mb-4" />
+                    <button
+                        onClick={() => setShowContribHistory(v => !v)}
+                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left mb-2"
+                    >
+                        <span>{showContribHistory ? "▾" : "▸"}</span>
+                        Příspěvky po rocích
+                    </button>
+                    {showContribHistory && <ContributionHistory memberId={member.id} />}
+                </div>
+
+                {/* ── Přihlášky na akce ── */}
+                <div className="max-w-2xl mx-auto mt-4">
+                    <Separator className="mb-4" />
+                    <button
+                        onClick={() => setShowEventHistory(v => !v)}
+                        className="flex items-center gap-1.5 text-sm text-gray-500 hover:text-gray-800 font-medium w-full text-left mb-2"
+                    >
+                        <span>{showEventHistory ? "▾" : "▸"}</span>
+                        Přihlášky na akce
+                    </button>
+                    {showEventHistory && <EventHistory memberId={member.id} />}
                 </div>
 
             </div>
