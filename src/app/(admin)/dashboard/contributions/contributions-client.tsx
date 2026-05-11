@@ -45,8 +45,8 @@ const PROCESS_FILTERS: { key: FilterKey; label: string }[] = [
 
 const STATUS_BADGE: Record<ContribRow["status"], { label: string; cls: string }> = {
     paid:      { label: "V pořádku",   cls: "bg-[#327600]/10 text-[#327600] border-0"      },
-    overpaid:  { label: "Více",        cls: "bg-orange-100 text-orange-700 border-0"        },
-    underpaid: { label: "Méně",        cls: "bg-red-100 text-red-700 border-0"              },
+    overpaid:  { label: "Přeplatek",   cls: "bg-orange-100 text-orange-700 border-0"        },
+    underpaid: { label: "Nedoplatek",  cls: "bg-red-100 text-red-700 border-0"              },
     unpaid:    { label: "Nezaplaceno", cls: "bg-red-50 text-red-600 border border-red-200"  },
 };
 

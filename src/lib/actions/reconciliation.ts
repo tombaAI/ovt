@@ -64,8 +64,8 @@ const dec = (v: number): string => v.toFixed(2);
  * Logika:
  *  1. VS musí jednoznačně odpovídat jednomu členu.
  *  2. Člen musí mít předpis pro rok platby.
- *  3. Zbývající nezaplacená částka = amount platby → auto-confirm.
- *  4. Jinak (VS sedí, ale částka nesedí) → suggested.
+ *  3. amount ≤ remaining → auto-confirm (přesná i částečná platba; nedoplatek se zobrazí v příspěvcích).
+ *  4. amount > remaining nebo předpis plně uhrazen → suggested (admin rozhodne o přeplatku).
  */
 async function autoMatchLedgerEntry(
     db:        ReturnType<typeof getDb>,
@@ -117,10 +117,9 @@ async function autoMatchLedgerEntry(
     const alreadyAllocated = Number(allocResult?.allocated ?? 0);
     const remaining = amountTotal - alreadyAllocated;
 
-    if (remaining <= 0) return; // předpis je již plně uhrazen
-
-    if (amount === remaining) {
-        // Přesná shoda → auto-confirm
+    // Přesná nebo částečná platba (amount ≤ remaining > 0) → auto-confirm
+    // Člen se zobrazí v příspěvcích se správným stavem (zaplaceno / nedoplatek)
+    if (remaining > 0 && amount <= remaining) {
         await db.insert(paymentAllocations).values({
             ledgerId,
             contribId,
@@ -135,12 +134,13 @@ async function autoMatchLedgerEntry(
             .set({ reconciliationStatus: "confirmed", updatedAt: new Date() })
             .where(eq(paymentLedger.id, ledgerId));
     } else {
-        // VS sedí, ale částka nesedí → suggested (admin rozhodne)
+        // Přeplatek (amount > remaining) nebo předpis plně uhrazen (remaining ≤ 0)
+        // → suggested; admin rozhodne ručně
         await db.insert(paymentAllocations).values({
             ledgerId,
             contribId,
             memberId,
-            amount:      dec(amount),   // celá platba jako návrh, admin upraví pokud potřeba
+            amount:      dec(amount),
             isSuggested: true,
             createdBy,
         });
@@ -365,6 +365,10 @@ export async function runAutoMatchAll(): Promise<{ matched: number; suggested: n
     //    - VS odpovídá přesně jednomu členu
     //    - člen má předpis pro rok platby
     //    - předpis má amount_total
+    //
+    //    Akce:
+    //    - amount ≤ remaining > 0 → confirmed (přesná i částečná platba → stav nedoplatek/zaplaceno)
+    //    - amount > remaining nebo remaining ≤ 0 → suggested (přeplatek vyžaduje admin)
     const candidates = await db.execute<{
         ledger_id:   number;
         member_id:   number;
@@ -415,7 +419,6 @@ export async function runAutoMatchAll(): Promise<{ matched: number; suggested: n
             JOIN contribs c ON c.member_id = um.member_id
               AND c.year = EXTRACT(YEAR FROM u.paid_at)
             LEFT JOIN confirmed_paid cp2 ON cp2.contrib_id = c.contrib_id
-            WHERE c.amount_total - coalesce(cp2.paid, 0) > 0
         )
         SELECT
             ledger_id,
@@ -423,7 +426,10 @@ export async function runAutoMatchAll(): Promise<{ matched: number; suggested: n
             contrib_id,
             amount::text,
             remaining::text,
-            CASE WHEN abs(amount - remaining) < 0.001 THEN 'confirmed' ELSE 'suggested' END AS action
+            CASE
+                WHEN remaining > 0 AND amount <= remaining THEN 'confirmed'
+                ELSE 'suggested'
+            END AS action
         FROM candidates
     `);
 
