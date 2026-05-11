@@ -883,6 +883,10 @@ export type ForeignWaterRegistrationDetail = {
         messageForRecipient: string;
         qrCodeUrl: string;
         status: EventPaymentPrescriptionStatus;
+        matchedAmount: number | null;
+        isPaidInFull: boolean;
+        remainderAmount: number | null;
+        remainderQrCodeUrl: string | null;
     };
 };
 
@@ -1012,6 +1016,7 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             paymentAccount: eventPaymentPrescriptions.bankAccount,
             paymentVariableSymbol: eventPaymentPrescriptions.variableSymbol,
             paymentAmount: eventPaymentPrescriptions.amount,
+            paymentMatchedAmount: eventPaymentPrescriptions.matchedAmount,
             paymentMessageForRecipient: eventPaymentPrescriptions.messageForRecipient,
             paymentStatus: eventPaymentPrescriptions.status,
         })
@@ -1058,12 +1063,27 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             }));
 
     const amount = Number(row.paymentAmount);
+    const matchedAmount = row.paymentMatchedAmount !== null ? Number(row.paymentMatchedAmount) : null;
+    const isPaymentReceived = row.paymentStatus === "matched" || row.paymentStatus === "paid";
+    const isPaidInFull = isPaymentReceived && matchedAmount !== null && matchedAmount >= amount;
+    const remainderAmount = isPaymentReceived && matchedAmount !== null && matchedAmount < amount
+        ? Math.round((amount - matchedAmount) * 100) / 100
+        : null;
+
     const qrCodeUrl = buildForeignWaterPayliboQrUrl({
         amount,
         variableSymbol: row.paymentVariableSymbol,
         bankAccount: row.paymentAccount,
         messageForRecipient: row.paymentMessageForRecipient,
     });
+    const remainderQrCodeUrl = remainderAmount !== null
+        ? buildForeignWaterPayliboQrUrl({
+            amount: remainderAmount,
+            variableSymbol: row.paymentVariableSymbol,
+            bankAccount: row.paymentAccount,
+            messageForRecipient: row.paymentMessageForRecipient,
+        })
+        : null;
 
     return {
         registrationId: row.registrationId,
@@ -1099,6 +1119,10 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             messageForRecipient: row.paymentMessageForRecipient,
             qrCodeUrl,
             status: row.paymentStatus,
+            matchedAmount,
+            isPaidInFull,
+            remainderAmount,
+            remainderQrCodeUrl,
         },
     };
 }

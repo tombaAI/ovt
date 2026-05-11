@@ -2,9 +2,17 @@ import { put, del } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, members, people } from "@/db/schema";
+import { eventExpenses, events, members, people } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import { eq } from "drizzle-orm";
+
+async function assertNotPrescribed(db: ReturnType<typeof getDb>, eventId: number): Promise<NextResponse | null> {
+    const [row] = await db.select({ billingStatus: events.billingStatus }).from(events).where(eq(events.id, eventId));
+    if (row?.billingStatus === "prescribed") {
+        return NextResponse.json({ error: "Vyúčtování je uzamčeno — nejdřív odemkněte" }, { status: 409 });
+    }
+    return null;
+}
 
 const ALLOWED_MIME = new Set([
     "image/jpeg", "image/png", "image/webp", "image/heic",
@@ -107,6 +115,10 @@ export async function POST(
             return NextResponse.json({ error: "Neplatné ID akce" }, { status: 400 });
         }
 
+        const db = getDb();
+        const blocked = await assertNotPrescribed(db, eventId);
+        if (blocked) return blocked;
+
         const formData = await request.formData();
         const statusRaw = String(formData.get("status") ?? "final");
         const status = (["draft", "unconfirmed", "final"] as const).includes(statusRaw as "draft" | "unconfirmed" | "final")
@@ -133,7 +145,6 @@ export async function POST(
             if (!isNaN(parsed) && parsed > 0) amount = parsed;
         }
 
-        const db = getDb();
         const reimbursement = await resolveReimbursementTarget(db, reimbursementPersonIdRaw, reimbursementMemberIdRaw);
         if ("error" in reimbursement) return reimbursement.error;
         const { reimbursementPersonId, reimbursementMemberId } = reimbursement.value;
@@ -202,6 +213,10 @@ export async function PATCH(
             return NextResponse.json({ error: "Neplatné ID akce" }, { status: 400 });
         }
 
+        const db = getDb();
+        const blocked = await assertNotPrescribed(db, eventId);
+        if (blocked) return blocked;
+
         const body = await request.json() as {
             expenseId?: unknown;
             amount?: unknown;
@@ -237,7 +252,6 @@ export async function PATCH(
             return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
         }
 
-        const db = getDb();
         const [row] = await db.select({ id: eventExpenses.id, eventId: eventExpenses.eventId })
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
@@ -287,6 +301,9 @@ export async function DELETE(
         const eventId = Number(id);
 
         const db = getDb();
+        const blocked = await assertNotPrescribed(db, eventId);
+        if (blocked) return blocked;
+
         const [row] = await db.select().from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
 

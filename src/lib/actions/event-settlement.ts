@@ -247,11 +247,81 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
     return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses, registrations: registrationRows, grandTotal, expensesSum };
 }
 
+// ── Billing status helpers ────────────────────────────────────────────────────
+
+async function getBillingStatus(db: ReturnType<typeof getDb>, eventId: number): Promise<"draft" | "prescribed" | null> {
+    const [row] = await db.select({ billingStatus: events.billingStatus }).from(events).where(eq(events.id, eventId));
+    return (row?.billingStatus as "draft" | "prescribed") ?? null;
+}
+
+/** Uzamkne billing: vygeneruje předpisy a přepne stav na 'prescribed'. */
+export async function lockBilling(eventId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        if (!event) return { error: "Akce nenalezena" };
+
+        const settlement = await getEventSettlement(eventId);
+        await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
+
+        await db.update(events)
+            .set({ billingStatus: "prescribed", updatedAt: new Date() })
+            .where(eq(events.id, eventId));
+
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při uzamčení vyúčtování" };
+    }
+}
+
+/**
+ * Odemkne billing: přepne stav zpět na 'draft'.
+ * Pending předpisy smaže, paid/matched zachová (admin dostane varování).
+ */
+export async function unlockBilling(eventId: number): Promise<{ success: true; deletedPrescriptions: number } | { error: string }> {
+    try {
+        const db = getDb();
+
+        // Smazat pouze pending předpisy (ne zaplacené/spárované)
+        const regIds = (await db
+            .select({ id: eventRegistrations.id })
+            .from(eventRegistrations)
+            .where(and(eq(eventRegistrations.eventId, eventId), isNull(eventRegistrations.cancelledAt)))
+        ).map(r => r.id);
+
+        let deletedPrescriptions = 0;
+        if (regIds.length > 0) {
+            const result = await db
+                .delete(eventPaymentPrescriptions)
+                .where(and(
+                    inArray(eventPaymentPrescriptions.registrationId, regIds),
+                    eq(eventPaymentPrescriptions.status, "pending"),
+                ))
+                .returning({ id: eventPaymentPrescriptions.id });
+            deletedPrescriptions = result.length;
+        }
+
+        await db.update(events)
+            .set({ billingStatus: "draft", updatedAt: new Date() })
+            .where(eq(events.id, eventId));
+
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true, deletedPrescriptions };
+    } catch (e) {
+        console.error(e);
+        return { error: "Chyba při odemknutí vyúčtování" };
+    }
+}
+
 // ── Dotace akce ───────────────────────────────────────────────────────────────
 
 export async function updateEventSubsidy(eventId: number, subsidyPerMember: number | null): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
+        if (await getBillingStatus(db, eventId) === "prescribed")
+            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
         await db.update(events)
             .set({ subsidyPerMember: subsidyPerMember !== null ? String(subsidyPerMember) : null, updatedAt: new Date() })
             .where(eq(events.id, eventId));
@@ -270,19 +340,20 @@ export async function updateExpenseAllocationMethod(
 ): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
+        const [exp] = await db.select({ eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
+        if (!exp) return { error: "Náklad nenalezen" };
+        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+
         await db.update(eventExpenses)
             .set({ allocationMethod: method })
             .where(eq(eventExpenses.id, expenseId));
 
         if (method === "split_all") {
-            // Smazat případné ruční alokace
             await db.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
         }
 
-        // Revalidace přes eventId
-        const [exp] = await db.select({ eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
-        if (exp) revalidatePath(`/dashboard/events/${exp.eventId}`);
-
+        revalidatePath(`/dashboard/events/${exp.eventId}`);
         return { success: true };
     } catch {
         return { error: "Nepodařilo se uložit způsob rozdělení" };
@@ -298,9 +369,12 @@ export async function setExpenseRegistrationAllocations(
     try {
         const db = getDb();
 
-        // Ověření, že součet sedí k částce nákladu
         const [exp] = await db.select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
+        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+
+        // Ověření, že součet sedí k částce nákladu
 
         const expenseAmount = parseFloat(exp.amount);
         const allocSum = allocations.reduce((s, a) => s + a.amount, 0);

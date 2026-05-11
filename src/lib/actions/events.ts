@@ -28,6 +28,7 @@ export type EventRow = {
     leaderName: string | null;
     leaderCskNumber: string | null;
     status: EventStatus;
+    billingStatus: "draft" | "prescribed";
     description: string | null;
     externalUrl: string | null;
     source: EventSource;
@@ -77,6 +78,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             leaderName: members.fullName,
             leaderCskNumber: members.cskNumber,
             status: events.status,
+            billingStatus: events.billingStatus,
             description: events.description,
             externalUrl: events.externalUrl,
             source: events.source,
@@ -150,6 +152,7 @@ export async function getEventById(id: number): Promise<EventRow | null> {
             leaderName: members.fullName,
             leaderCskNumber: members.cskNumber,
             status: events.status,
+            billingStatus: events.billingStatus,
             description: events.description,
             externalUrl: events.externalUrl,
             source: events.source,

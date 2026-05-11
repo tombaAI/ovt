@@ -1,4 +1,5 @@
 import Image from "next/image";
+import { CheckCircle2 } from "lucide-react";
 import { notFound } from "next/navigation";
 import { getForeignWaterRegistrationByToken } from "@/lib/actions/event-registrations";
 import { ForeignWaterRegistrationActions } from "./registration-actions";
@@ -114,47 +115,120 @@ export default async function ForeignWaterRegistrationDetailPage({
                         <section className="rounded-xl border bg-white p-5 shadow-sm space-y-4">
                             <h2 className="text-sm font-semibold text-gray-700">Platební údaje k záloze</h2>
 
-                            <div className="flex flex-col items-start gap-4 sm:flex-row">
-                                <Image
-                                    src={detail.payment.qrCodeUrl}
-                                    alt="QR kód platby"
-                                    width={200}
-                                    height={200}
-                                    unoptimized
-                                    className="shrink-0 rounded-lg border border-gray-200 bg-white p-1.5"
-                                />
-
-                                <div className="grid gap-3 text-sm sm:grid-cols-2">
-                                    <div>
-                                        <p className="text-xs text-gray-400">Číslo předpisu</p>
-                                        <p className="font-mono font-semibold text-gray-800">C{detail.payment.codeLabel}</p>
+                            {detail.payment.isPaidInFull ? (
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3 rounded-xl border border-[#c6e3b0] bg-[#f0fae7] px-5 py-4">
+                                        <CheckCircle2 className="shrink-0 text-[#327600]" size={36} strokeWidth={2} />
+                                        <div>
+                                            <p className="font-bold text-[#244217]">Záloha uhrazena</p>
+                                            <p className="text-sm text-[#3f5534]">Zaplaceno {fmtAmount(detail.payment.matchedAmount!)}</p>
+                                        </div>
                                     </div>
-                                    <div>
-                                        <p className="text-xs text-gray-400">Číslo účtu</p>
-                                        <p className="font-mono font-semibold text-gray-800">{detail.payment.bankAccount}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-gray-400">Variabilní symbol</p>
-                                        <p className="font-mono font-semibold text-gray-800">{detail.payment.variableSymbol}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-gray-400">Stav platby</p>
-                                        <p className="font-semibold text-gray-800">{PAYMENT_STATUS_LABELS[detail.payment.status] ?? detail.payment.status}</p>
-                                    </div>
-                                    <div>
-                                        <p className="text-xs text-gray-400">Cena za osobu</p>
-                                        <p className="font-semibold text-gray-800">{fmtAmount(detail.payment.amountPerPerson)}</p>
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                        <p className="text-xs text-gray-400">Částka k úhradě</p>
-                                        <p className="text-lg font-semibold text-[#327600]">{fmtAmount(detail.payment.amount)}</p>
-                                    </div>
-                                    <div className="sm:col-span-2">
-                                        <p className="text-xs text-gray-400">Zpráva pro příjemce</p>
-                                        <p className="break-words text-sm text-gray-700">{detail.payment.messageForRecipient}</p>
+                                    <div className="grid gap-3 text-sm sm:grid-cols-2">
+                                        <div>
+                                            <p className="text-xs text-gray-400">Číslo předpisu</p>
+                                            <p className="font-mono font-semibold text-gray-800">C{detail.payment.codeLabel}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Číslo účtu</p>
+                                            <p className="font-mono font-semibold text-gray-800">{detail.payment.bankAccount}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Variabilní symbol</p>
+                                            <p className="font-mono font-semibold text-gray-800">{detail.payment.variableSymbol}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Celková záloha</p>
+                                            <p className="font-semibold text-gray-800">{fmtAmount(detail.payment.amount)}</p>
+                                        </div>
                                     </div>
                                 </div>
-                            </div>
+                            ) : detail.payment.remainderAmount !== null ? (
+                                <div className="space-y-4">
+                                    <div className="rounded-xl border border-[#fde68a] bg-[#fffbeb] px-5 py-4 text-sm space-y-1">
+                                        <p className="font-semibold text-[#92400e]">Část zálohy zaplacena</p>
+                                        <p className="text-[#78350f]">Zaplaceno: {fmtAmount(detail.payment.matchedAmount!)} z {fmtAmount(detail.payment.amount)}</p>
+                                        <p className="font-semibold text-[#92400e]">Doplatek: {fmtAmount(detail.payment.remainderAmount)}</p>
+                                    </div>
+                                    <div className="flex flex-col items-start gap-4 sm:flex-row">
+                                        <Image
+                                            src={detail.payment.remainderQrCodeUrl!}
+                                            alt="QR kód doplatku"
+                                            width={200}
+                                            height={200}
+                                            unoptimized
+                                            className="shrink-0 rounded-lg border border-gray-200 bg-white p-1.5"
+                                        />
+                                        <div className="grid gap-3 text-sm sm:grid-cols-2">
+                                            <div>
+                                                <p className="text-xs text-gray-400">Číslo předpisu</p>
+                                                <p className="font-mono font-semibold text-gray-800">C{detail.payment.codeLabel}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-400">Číslo účtu</p>
+                                                <p className="font-mono font-semibold text-gray-800">{detail.payment.bankAccount}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-400">Variabilní symbol</p>
+                                                <p className="font-mono font-semibold text-gray-800">{detail.payment.variableSymbol}</p>
+                                            </div>
+                                            <div>
+                                                <p className="text-xs text-gray-400">Cena za osobu</p>
+                                                <p className="font-semibold text-gray-800">{fmtAmount(detail.payment.amountPerPerson)}</p>
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <p className="text-xs text-gray-400">Doplatek k úhradě</p>
+                                                <p className="text-lg font-semibold text-[#327600]">{fmtAmount(detail.payment.remainderAmount)}</p>
+                                            </div>
+                                            <div className="sm:col-span-2">
+                                                <p className="text-xs text-gray-400">Zpráva pro příjemce</p>
+                                                <p className="break-words text-sm text-gray-700">{detail.payment.messageForRecipient}</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            ) : (
+                                <div className="flex flex-col items-start gap-4 sm:flex-row">
+                                    <Image
+                                        src={detail.payment.qrCodeUrl}
+                                        alt="QR kód platby"
+                                        width={200}
+                                        height={200}
+                                        unoptimized
+                                        className="shrink-0 rounded-lg border border-gray-200 bg-white p-1.5"
+                                    />
+                                    <div className="grid gap-3 text-sm sm:grid-cols-2">
+                                        <div>
+                                            <p className="text-xs text-gray-400">Číslo předpisu</p>
+                                            <p className="font-mono font-semibold text-gray-800">C{detail.payment.codeLabel}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Číslo účtu</p>
+                                            <p className="font-mono font-semibold text-gray-800">{detail.payment.bankAccount}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Variabilní symbol</p>
+                                            <p className="font-mono font-semibold text-gray-800">{detail.payment.variableSymbol}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Stav platby</p>
+                                            <p className="font-semibold text-gray-800">{PAYMENT_STATUS_LABELS[detail.payment.status] ?? detail.payment.status}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-xs text-gray-400">Cena za osobu</p>
+                                            <p className="font-semibold text-gray-800">{fmtAmount(detail.payment.amountPerPerson)}</p>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <p className="text-xs text-gray-400">Částka k úhradě</p>
+                                            <p className="text-lg font-semibold text-[#327600]">{fmtAmount(detail.payment.amount)}</p>
+                                        </div>
+                                        <div className="sm:col-span-2">
+                                            <p className="text-xs text-gray-400">Zpráva pro příjemce</p>
+                                            <p className="break-words text-sm text-gray-700">{detail.payment.messageForRecipient}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </section>
 
                         <ForeignWaterRegistrationActions

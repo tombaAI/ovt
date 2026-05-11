@@ -11,7 +11,8 @@ import {
     updateExpenseAllocationMethod,
     setExpenseRegistrationAllocations,
     sendEventSettlementEmails,
-    regeneratePrescriptions,
+    lockBilling,
+    unlockBilling,
 } from "@/lib/actions/event-settlement";
 import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
 
@@ -30,8 +31,8 @@ function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount:
 
 // ── Subsidy section ───────────────────────────────────────────────────────────
 
-function SubsidyField({ eventId, value, totalMemberParticipants, onChange }: {
-    eventId: number; value: number; totalMemberParticipants: number; onChange: (v: number) => void;
+function SubsidyField({ eventId, value, totalMemberParticipants, onChange, disabled }: {
+    eventId: number; value: number; totalMemberParticipants: number; onChange: (v: number) => void; disabled?: boolean;
 }) {
     const [editing, setEditing] = useState(false);
     const [draft, setDraft] = useState(String(value));
@@ -49,8 +50,9 @@ function SubsidyField({ eventId, value, totalMemberParticipants, onChange }: {
     if (!editing) {
         return (
             <div>
-                <button onClick={() => { setDraft(String(value)); setEditing(true); }}
-                    className="text-sm font-medium text-gray-900 hover:text-emerald-700 transition-colors">
+                <button onClick={() => { if (!disabled) { setDraft(String(value)); setEditing(true); } }}
+                    disabled={disabled}
+                    className={["text-sm font-medium transition-colors", disabled ? "text-gray-400 cursor-not-allowed" : "text-gray-900 hover:text-emerald-700"].join(" ")}>
                     {value > 0 ? fmtCzk(value) : <span className="text-gray-400 italic">Nezadána</span>}
                 </button>
                 {value > 0 && totalMemberParticipants > 0 && (
@@ -97,10 +99,12 @@ function ExpenseAllocationRow({
     expense,
     registrations,
     onAllocationsChanged,
+    disabled,
 }: {
     expense: EventSettlement["finalExpenses"][0];
     registrations: SettlementRegistrationRow[];
     onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[]) => void;
+    disabled?: boolean;
 }) {
     const [expanded, setExpanded] = useState(false);
     const [method, setMethod] = useState<"split_all" | "per_registration">(expense.allocationMethod);
@@ -137,13 +141,12 @@ function ExpenseAllocationRow({
     }
 
     function handleTogglePerson(key: string) {
+        if (disabled) return;
         const newCp = new Set(checkedPersons);
         if (newCp.has(key)) newCp.delete(key); else newCp.add(key);
         setCheckedPersons(newCp);
         const newAllocs = calcAmountsFor(newCp);
-        // Okamžitý přepočet přehledu plateb v parent komponentě
         onAllocationsChanged?.(expense.id, newAllocs);
-        // Debounced save do DB
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
             const res = await setExpenseRegistrationAllocations(expense.id, newAllocs);
@@ -152,6 +155,7 @@ function ExpenseAllocationRow({
     }
 
     function handleMethodChange(newMethod: "split_all" | "per_registration") {
+        if (disabled) return;
         startMethodSave(async () => {
             const res = await updateExpenseAllocationMethod(expense.id, newMethod);
             if ("error" in res) { setSaveError(res.error); return; }
@@ -176,13 +180,13 @@ function ExpenseAllocationRow({
                 <div className="shrink-0 flex items-center gap-1.5">
                     <button
                         onClick={() => handleMethodChange("split_all")}
-                        disabled={methodSaving}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                        disabled={methodSaving || disabled}
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
                         Rovnoměrně na každého
                     </button>
                     <button
                         onClick={() => handleMethodChange("per_registration")}
-                        disabled={methodSaving}
+                        disabled={methodSaving || disabled}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
                         Jen někteří účastníci
                     </button>
@@ -330,12 +334,16 @@ function recomputeSettlement(s: EventSettlement, newSubsidyTotal: number): Event
 
 // ── Main tab component ────────────────────────────────────────────────────────
 
-export function EventSettlementTab({ eventId }: { eventId: number }) {
+export function EventSettlementTab({ eventId, billingStatus: initialBillingStatus }: { eventId: number; billingStatus: "draft" | "prescribed" }) {
     const [settlement, setSettlement] = useState<EventSettlement | null>(null);
     const [loading, setLoading] = useState(true);
     const [subsidyTotal, setSubsidyTotal] = useState(0);
-    const [sending, startSend]         = useTransition();
-    const [regenerating, startRegen]   = useTransition();
+    const [billingStatus, setBillingStatus] = useState(initialBillingStatus);
+    const [sending, startSend]     = useTransition();
+    const [locking, startLock]     = useTransition();
+    const [unlocking, startUnlock] = useTransition();
+    const [lockError, setLockError] = useState<string | null>(null);
+    const [unlockInfo, setUnlockInfo] = useState<string | null>(null);
     const [sendResult, setSendResult]  = useState<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string } | null>(null);
 
     function load() {
@@ -375,9 +383,23 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
         });
     }
 
-    function handleRegenerate() {
-        startRegen(async () => {
-            await regeneratePrescriptions(eventId);
+    function handleLock() {
+        setLockError(null);
+        startLock(async () => {
+            const res = await lockBilling(eventId);
+            if ("error" in res) { setLockError(res.error); return; }
+            setBillingStatus("prescribed");
+            load();
+        });
+    }
+
+    function handleUnlock() {
+        setUnlockInfo(null);
+        startUnlock(async () => {
+            const res = await unlockBilling(eventId);
+            if ("error" in res) { setLockError(res.error); return; }
+            setBillingStatus("draft");
+            setUnlockInfo(`Odemčeno. Smazáno ${res.deletedPrescriptions} pending předpisů.`);
             load();
         });
     }
@@ -405,54 +427,53 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
 
     const hasExpenses = settlement.finalExpenses.length > 0;
     const hasRegistrations = settlement.registrations.length > 0;
-
-    // Varování: předpis pending nesedí s aktuálními daty → je potřeba přegenerovat
-    const stalePending = settlement.registrations.some(r =>
-        r.existingPrescription &&
-        r.existingPrescription.status === "pending" &&
-        Math.abs(r.existingPrescription.amount - r.totalAmount) > 0.01
-    );
-    // Informace (ne varování): zaplacený/spárovaný předpis se liší od výpočtu — historicky v pořádku
-    const stalePaid = settlement.registrations.some(r =>
-        r.existingPrescription &&
-        (r.existingPrescription.status === "matched" || r.existingPrescription.status === "paid") &&
-        Math.abs(r.existingPrescription.amount - r.totalAmount) > 0.01
-    );
+    const isPrescribed = billingStatus === "prescribed";
 
     return (
         <div className="space-y-5">
 
-            {/* Varování: pending předpis nesedí → nutné přegenerovat */}
-            {stalePending && (
-                <div className="rounded-xl border-2 border-orange-400 bg-orange-50 px-4 py-3 space-y-2">
-                    <div className="flex items-start justify-between gap-3">
-                        <div className="space-y-1">
-                            <p className="text-sm font-semibold text-orange-800 flex items-center gap-2">
-                                <AlertCircle size={16} /> Předpisy nesedí s aktuálními daty
+            {/* ── Stavová hlavička ── */}
+            <div className={[
+                "rounded-xl border px-4 py-3 flex items-center justify-between gap-3 flex-wrap",
+                isPrescribed ? "border-[#327600]/30 bg-[#327600]/5" : "border-blue-200 bg-blue-50/50",
+            ].join(" ")}>
+                <div>
+                    {isPrescribed ? (
+                        <>
+                            <p className="text-sm font-semibold text-[#327600] flex items-center gap-1.5">
+                                <Check size={15} /> Náklady uzamčeny — předpisy vygenerovány
                             </p>
-                            <p className="text-xs text-orange-700">
-                                Změnily se náklady nebo dotace. Přegenerujte předpisy — kód (C{settlement.registrations.find(r => r.existingPrescription?.status === "pending")?.existingPrescription?.prescriptionCode ?? "nnn"}) zůstane zachován, změní se jen výše.
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                Náklady ani dotaci není možné měnit. Pro úpravu nejdřív odemkněte.
                             </p>
-                        </div>
-                        <Button
-                            size="sm"
-                            variant="outline"
-                            onClick={handleRegenerate}
-                            disabled={regenerating}
-                            className="shrink-0 border-orange-400 text-orange-700 hover:bg-orange-100"
-                        >
-                            {regenerating ? <><Loader2 size={13} className="animate-spin mr-1" />Přegenerovávám…</> : "Přegenerovat předpisy"}
+                        </>
+                    ) : (
+                        <>
+                            <p className="text-sm font-semibold text-blue-700">Příprava vyúčtování</p>
+                            <p className="text-xs text-gray-500 mt-0.5">
+                                Upravte náklady a dotaci. Až bude vše připraveno, vygenerujte předpisy — náklady se pak uzamknou.
+                            </p>
+                        </>
+                    )}
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                    {lockError && <p className="text-xs text-red-600">{lockError}</p>}
+                    {unlockInfo && <p className="text-xs text-gray-500">{unlockInfo}</p>}
+                    {isPrescribed ? (
+                        <Button size="sm" variant="outline"
+                            onClick={handleUnlock} disabled={unlocking}
+                            className="border-gray-300 text-gray-600 hover:bg-gray-100">
+                            {unlocking ? <><Loader2 size={13} className="animate-spin mr-1" />Odemykám…</> : "🔓 Odemknout a upravit"}
                         </Button>
-                    </div>
+                    ) : (
+                        <Button size="sm"
+                            onClick={handleLock} disabled={locking || !hasRegistrations || !hasExpenses}
+                            className="bg-[#327600] hover:bg-[#2a6400] text-white">
+                            {locking ? <><Loader2 size={13} className="animate-spin mr-1" />Generuji…</> : "Vygenerovat předpisy →"}
+                        </Button>
+                    )}
                 </div>
-            )}
-
-            {/* Informace: zaplacené předpisy se lišily od výpočtu — historicky OK */}
-            {!stalePending && stalePaid && (
-                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
-                    Zaplacené předpisy se drobně liší od aktuálního výpočtu — platba proběhla za původní částku, vše je v pořádku.
-                </div>
-            )}
+            </div>
 
             {/* Dotace */}
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-3">
@@ -464,6 +485,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                             value={subsidyTotal}
                             totalMemberParticipants={settlement.totalMemberParticipants}
                             onChange={handleSubsidyChange}
+                            disabled={isPrescribed}
                         />
                     </div>
                     {subsidyTotal > 0 && (
@@ -493,6 +515,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                             expense={exp}
                             registrations={settlement.registrations}
                             onAllocationsChanged={handleAllocationsChanged}
+                            disabled={isPrescribed}
                         />
                     ))
                 )}
@@ -517,15 +540,19 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                 )}
             </div>
 
-            {/* Odeslání e-mailů — přepočítá a uzamkne částky, odešle e-maily s platebními údaji */}
+            {/* Odeslání e-mailů — jen v prescribed fázi */}
             <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
                 <div className="flex items-start gap-4 flex-wrap">
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-semibold text-gray-800">Odeslat e-maily s předpisy</p>
                         <p className="text-xs text-gray-500 mt-0.5">
-                            Přepočítá aktuální částky, přiřadí platební kódy a odešle každé přihlášce e-mail
-                            s částkou k úhradě, platebními údaji a QR kódem.
+                            Odešle každé přihlášce e-mail s částkou k úhradě, platebními údaji a QR kódem.
                         </p>
+                        {!isPrescribed && (
+                            <p className="text-xs text-gray-400 mt-1">
+                                Nejdřív vygenerujte předpisy (tlačítko výše).
+                            </p>
+                        )}
                         {!hasRegistrations && (
                             <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
                                 <AlertCircle size={12} /> Žádné přihlášky — přidejte účastníky v záložce Přihlášky.
@@ -534,7 +561,7 @@ export function EventSettlementTab({ eventId }: { eventId: number }) {
                     </div>
                     <Button
                         onClick={handleSendEmails}
-                        disabled={sending || !hasRegistrations}
+                        disabled={sending || !hasRegistrations || !isPrescribed}
                         variant="outline"
                         className="shrink-0">
                         {sending ? <><Loader2 size={14} className="animate-spin mr-1.5" />Odesílám…</> : "Odeslat e-maily"}

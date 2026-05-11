@@ -1472,6 +1472,7 @@ function ExpenseItem({
     onPersonCreated,
     onDeleted,
     onUpdated,
+    locked,
 }: {
     expense: EventExpenseRow;
     eventId: number;
@@ -1480,6 +1481,7 @@ function ExpenseItem({
     onPersonCreated: (person: PersonOption) => void;
     onDeleted: () => void;
     onUpdated: () => void;
+    locked?: boolean;
 }) {
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
@@ -1604,16 +1606,20 @@ function ExpenseItem({
                         {isUnconfirmed ? "Potvrdit" : "Zpracovat"}
                     </button>
                 ) : null}
-                <button onClick={() => needsAction ? setProcessing(true) : setEditing(true)}
-                    className="text-gray-300 hover:text-gray-600 transition-colors"
-                    title="Upravit">
-                    <Pencil size={15} />
-                </button>
-                <button onClick={handleDelete} disabled={deleting}
-                    className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
-                    title="Smazat doklad">
-                    <Trash2 size={15} />
-                </button>
+                {!locked && (
+                    <button onClick={() => needsAction ? setProcessing(true) : setEditing(true)}
+                        className="text-gray-300 hover:text-gray-600 transition-colors"
+                        title="Upravit">
+                        <Pencil size={15} />
+                    </button>
+                )}
+                {!locked && (
+                    <button onClick={handleDelete} disabled={deleting}
+                        className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
+                        title="Smazat doklad">
+                        <Trash2 size={15} />
+                    </button>
+                )}
             </div>
 
             <DraftProcessDialog
@@ -1996,12 +2002,15 @@ export function EventExpensesTab({
     eventName,
     leaderName,
     leaderCskNumber,
+    billingStatus,
 }: {
     eventId: number;
     eventName: string;
     leaderName: string | null;
     leaderCskNumber: string | null;
+    billingStatus: "draft" | "prescribed";
 }) {
+    const isPrescribed = billingStatus === "prescribed";
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -2036,13 +2045,21 @@ export function EventExpensesTab({
 
     return (
         <div className="space-y-4">
-            <AddExpenseForm
-                eventId={eventId}
-                personOptions={personOptions}
-                peopleLoaded={peopleLoaded}
-                onPersonCreated={handlePersonCreated}
-                onAdded={load}
-            />
+            {isPrescribed && (
+                <div className="rounded-xl border border-[#327600]/30 bg-[#327600]/5 px-4 py-3 flex items-center gap-2 text-sm text-[#327600]">
+                    <span>🔒</span>
+                    <span>Náklady jsou uzamčeny — předpisy byly vygenerovány. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
+                </div>
+            )}
+            {!isPrescribed && (
+                <AddExpenseForm
+                    eventId={eventId}
+                    personOptions={personOptions}
+                    peopleLoaded={peopleLoaded}
+                    onPersonCreated={handlePersonCreated}
+                    onAdded={load}
+                />
+            )}
 
             {loading && <p className="text-sm text-gray-400 py-4 text-center">Načítám doklady…</p>}
             {error && <p className="text-sm text-red-500 py-4">{error}</p>}
@@ -2063,6 +2080,7 @@ export function EventExpensesTab({
                                     onPersonCreated={handlePersonCreated}
                                     onDeleted={load}
                                     onUpdated={load}
+                                    locked={isPrescribed}
                                 />
                             ))}
                         </div>

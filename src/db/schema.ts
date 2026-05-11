@@ -377,6 +377,9 @@ export type EventType = typeof eventTypeEnum[number];
 export const eventStatusEnum = ["planned", "confirmed", "cancelled", "completed"] as const;
 export type EventStatus = typeof eventStatusEnum[number];
 
+export const eventBillingStatusEnum = ["draft", "prescribed"] as const;
+export type EventBillingStatus = typeof eventBillingStatusEnum[number];
+
 export const eventSourceEnum = ["manual", "google_calendar", "kanoe_rss"] as const;
 export type EventSource = typeof eventSourceEnum[number];
 
@@ -405,6 +408,7 @@ export const events = appSchema.table(
         gcalSyncedAt: timestamp("gcal_synced_at", { withTimezone: true }),
         note: text("note"),
         subsidyPerMember: numeric("subsidy_per_member", { precision: 10, scale: 2 }),
+        billingStatus: text("billing_status", { enum: eventBillingStatusEnum }).notNull().default("draft"),
         createdBy: text("created_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),

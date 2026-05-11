@@ -1198,12 +1198,13 @@ export function EventDetailClient({ event }: Props) {
                             eventName={event.name}
                             leaderName={event.leaderName}
                             leaderCskNumber={event.leaderCskNumber}
+                            billingStatus={event.billingStatus}
                         />
                     </TabsContent>
 
                     {/* ── Tab: Vyúčtování ── */}
                     <TabsContent value="settlement" className="mt-0">
-                        <EventSettlementTab eventId={event.id} />
+                        <EventSettlementTab eventId={event.id} billingStatus={event.billingStatus} />
                     </TabsContent>
                 </Tabs>
 
