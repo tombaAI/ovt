@@ -1,8 +1,12 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { members, people, memberContributions, contributionPeriods, auditLog, payments } from "@/db/schema";
-import { eq, and, ne, sql, desc } from "drizzle-orm";
+import {
+    members, people, memberContributions, contributionPeriods, auditLog,
+    paymentAllocations, paymentLedger,
+    eventRegistrationParticipants, eventRegistrations, events, eventPaymentPrescriptions,
+} from "@/db/schema";
+import { eq, and, ne, sql, desc, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { getSelectedYear } from "@/lib/actions/year";
@@ -481,11 +485,22 @@ export async function terminateMembership(
 
 // ── getMemberHistory — contribution overview per year of membership ───────────
 
+export type PaymentEntry = {
+    id: number;
+    amount: number;
+    paidAt: string | null;
+    note: string | null;
+    sourceType: string;
+    isSuggested: boolean;
+};
+
 export type MemberYearRecord = {
     year: number;
     hasContrib: boolean;
     amountTotal: number | null;
     paidTotal: number;
+    contribId: number | null;
+    payments: PaymentEntry[];
 };
 
 export async function getMemberHistory(memberId: number): Promise<MemberYearRecord[]> {
@@ -500,7 +515,6 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
     const fromYear = parseInt((member.memberFrom as unknown as string).slice(0, 4));
     const toYear = member.memberTo ? parseInt((member.memberTo as unknown as string).slice(0, 4)) : null;
 
-    // All contribution periods within the member's active years
     const allPeriods = await db
         .select({ id: contributionPeriods.id, year: contributionPeriods.year })
         .from(contributionPeriods);
@@ -511,31 +525,118 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
 
     if (relevantPeriods.length === 0) return [];
 
-    // Contributions for this member with payment totals
     const contribs = await db
         .select({
+            id: memberContributions.id,
             periodId: memberContributions.periodId,
             amountTotal: memberContributions.amountTotal,
-            paidTotal: sql<number>`coalesce(sum(${payments.amount}), 0)`,
         })
         .from(memberContributions)
-        .leftJoin(payments, eq(payments.contribId, memberContributions.id))
-        .where(eq(memberContributions.memberId, memberId))
-        .groupBy(memberContributions.id, memberContributions.periodId, memberContributions.amountTotal);
+        .where(eq(memberContributions.memberId, memberId));
+
+    const contribIds = contribs.map(c => c.id);
+
+    const allPayments = contribIds.length > 0
+        ? await db
+            .select({
+                id: paymentAllocations.id,
+                contribId: paymentAllocations.contribId,
+                amount: paymentAllocations.amount,
+                note: paymentAllocations.note,
+                isSuggested: paymentAllocations.isSuggested,
+                paidAt: paymentLedger.paidAt,
+                sourceType: paymentLedger.sourceType,
+            })
+            .from(paymentAllocations)
+            .innerJoin(paymentLedger, eq(paymentLedger.id, paymentAllocations.ledgerId))
+            .where(inArray(paymentAllocations.contribId, contribIds))
+            .orderBy(paymentLedger.paidAt)
+        : [];
+
+    const paymentsByContrib = new Map<number, PaymentEntry[]>();
+    for (const p of allPayments) {
+        const list = paymentsByContrib.get(p.contribId) ?? [];
+        list.push({
+            id: p.id,
+            amount: Number(p.amount),
+            paidAt: p.paidAt as string | null,
+            note: p.note,
+            sourceType: p.sourceType,
+            isSuggested: p.isSuggested,
+        });
+        paymentsByContrib.set(p.contribId, list);
+    }
 
     const contribMap = new Map(contribs.map(c => [c.periodId, c]));
 
     return relevantPeriods
         .map(p => {
             const contrib = contribMap.get(p.id);
+            const contribPayments = contrib ? (paymentsByContrib.get(contrib.id) ?? []) : [];
+            const paidTotal = contribPayments.reduce((s, x) => s + x.amount, 0);
             return {
                 year: p.year,
                 hasContrib: Boolean(contrib),
                 amountTotal: contrib?.amountTotal ?? null,
-                paidTotal: contrib ? Number(contrib.paidTotal) : 0,
+                paidTotal,
+                contribId: contrib?.id ?? null,
+                payments: contribPayments,
             };
         })
         .sort((a, b) => b.year - a.year);
+}
+
+// ── getMemberEventRegistrations ───────────────────────────────────────────────
+
+export type MemberEventReg = {
+    registrationId: number;
+    eventId: number;
+    eventName: string;
+    eventType: string;
+    year: number;
+    dateFrom: string | null;
+    dateTo: string | null;
+    personsCount: number;
+    personsNames: string | null;
+    cancelledAt: Date | null;
+    prescriptionAmount: number | null;
+    prescriptionStatus: string | null;
+    prescriptionDue: string | null;
+};
+
+export async function getMemberEventRegistrations(memberId: number): Promise<MemberEventReg[]> {
+    const db = getDb();
+
+    const rows = await db
+        .select({
+            registrationId: eventRegistrations.id,
+            eventId: events.id,
+            eventName: events.name,
+            eventType: events.eventType,
+            year: events.year,
+            dateFrom: events.dateFrom,
+            dateTo: events.dateTo,
+            personsCount: eventRegistrations.personsCount,
+            personsNames: eventRegistrations.personsNames,
+            cancelledAt: eventRegistrations.cancelledAt,
+            prescriptionAmount: eventPaymentPrescriptions.amount,
+            prescriptionStatus: eventPaymentPrescriptions.status,
+            prescriptionDue: eventPaymentPrescriptions.paymentDue,
+        })
+        .from(eventRegistrationParticipants)
+        .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
+        .innerJoin(events, eq(events.id, eventRegistrations.eventId))
+        .leftJoin(eventPaymentPrescriptions, eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id))
+        .where(eq(eventRegistrationParticipants.memberId, memberId))
+        .orderBy(desc(events.dateFrom));
+
+    return rows.map(r => ({
+        ...r,
+        prescriptionAmount: r.prescriptionAmount !== null ? Number(r.prescriptionAmount) : null,
+        dateFrom: r.dateFrom as string | null,
+        dateTo: r.dateTo as string | null,
+        prescriptionDue: r.prescriptionDue as string | null,
+    }));
 }
 
 // ── setMemberTodo ─────────────────────────────────────────────────────────────
