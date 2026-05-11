@@ -765,6 +765,11 @@ export async function submitForeignWaterRegistration(
             throw new Error("Nepodařilo se vygenerovat číslo předpisu.");
         }
 
+        // Kód uložit trvale na přihlášku — předpis ho jen přebírá
+        await tx.update(eventRegistrations)
+            .set({ prescriptionCode: code })
+            .where(eq(eventRegistrations.id, registration.id));
+
         const messageForRecipient = buildForeignWaterPaymentMessage(code, fullName);
 
         await tx.insert(eventPaymentPrescriptions).values({

@@ -416,9 +416,23 @@ async function createPrescriptionForRegistration(
     lastName: string,
     eventName: string,
 ): Promise<number> {
-    const seqResult = await tx.execute(sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`);
-    const code = (seqResult as unknown as { code: number }[])[0]?.code;
-    if (!code) throw new Error("Nepodařilo se získat kód předpisu");
+    // Kód přihlášky je trvalý — použijeme existující, nebo alokujeme nový a uložíme na přihlášku.
+    const [reg] = await tx
+        .select({ prescriptionCode: eventRegistrations.prescriptionCode })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.id, registrationId));
+
+    let code = reg?.prescriptionCode ?? null;
+    if (!code) {
+        const seqResult = await tx.execute(sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`);
+        code = (seqResult as unknown as { code: number }[])[0]?.code ?? null;
+        if (!code) throw new Error("Nepodařilo se získat kód předpisu");
+        // Uložit kód na přihlášku trvale
+        await tx.update(eventRegistrations)
+            .set({ prescriptionCode: code })
+            .where(eq(eventRegistrations.id, registrationId));
+    }
+
     await tx.insert(eventPaymentPrescriptions).values({
         eventId,
         registrationId,
