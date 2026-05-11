@@ -397,35 +397,39 @@ function handleSendEmails() {
     const hasExpenses = settlement.finalExpenses.length > 0;
     const hasRegistrations = settlement.registrations.length > 0;
 
-    // Varování: předpisy nesedí s aktuálními daty
-    const prescriptionsStale = settlement.registrations.some(r =>
+    // Varování: předpis pending nesedí s aktuálními daty → je potřeba přegenerovat
+    const stalePending = settlement.registrations.some(r =>
         r.existingPrescription &&
-        r.existingPrescription.status !== "cancelled" &&
+        r.existingPrescription.status === "pending" &&
         Math.abs(r.existingPrescription.amount - r.totalAmount) > 0.01
     );
-    const hasPaidOrMatched = settlement.registrations.some(r =>
+    // Informace (ne varování): zaplacený/spárovaný předpis se liší od výpočtu — historicky v pořádku
+    const stalePaid = settlement.registrations.some(r =>
         r.existingPrescription &&
-        (r.existingPrescription.status === "matched" || r.existingPrescription.status === "paid")
+        (r.existingPrescription.status === "matched" || r.existingPrescription.status === "paid") &&
+        Math.abs(r.existingPrescription.amount - r.totalAmount) > 0.01
     );
 
     return (
         <div className="space-y-5">
 
-            {/* Varování o zastaralých předpisech */}
-            {prescriptionsStale && (
+            {/* Varování: pending předpis nesedí → nutné přegenerovat */}
+            {stalePending && (
                 <div className="rounded-xl border-2 border-orange-400 bg-orange-50 px-4 py-3 space-y-1">
                     <p className="text-sm font-semibold text-orange-800 flex items-center gap-2">
                         <AlertCircle size={16} /> Předpisy nesedí s aktuálními daty
                     </p>
                     <p className="text-xs text-orange-700">
                         Změnily se náklady nebo dotace. Je potřeba přegenerovat předpisy před dalším odesíláním e-mailů.
-                        Kód předpisu (C{settlement.registrations.find(r => r.existingPrescription)?.existingPrescription?.prescriptionCode ?? "nnn"}) zůstane zachován, změní se jen výše platby.
+                        Kód předpisu (C{settlement.registrations.find(r => r.existingPrescription?.status === "pending")?.existingPrescription?.prescriptionCode ?? "nnn"}) zůstane zachován, změní se jen výše platby.
                     </p>
-                    {hasPaidOrMatched && (
-                        <p className="text-xs font-semibold text-red-700 flex items-center gap-1">
-                            <AlertCircle size={12} /> Pozor: u některých předpisů již proběhla nebo je spárována platba — zkontrolujte ručně.
-                        </p>
-                    )}
+                </div>
+            )}
+
+            {/* Informace: zaplacené předpisy se lišily od výpočtu — historicky OK */}
+            {!stalePending && stalePaid && (
+                <div className="rounded-xl border border-gray-200 bg-gray-50 px-4 py-3 text-xs text-gray-500">
+                    Zaplacené předpisy se drobně liší od aktuálního výpočtu — platba proběhla za původní částku, vše je v pořádku.
                 </div>
             )}
 
