@@ -760,3 +760,66 @@ export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]>
         changedAt: r.changedAt,
     }));
 }
+
+// ── getMemberTjPayments — přehled TJ transakcí kde člen figuruje ─────────────
+
+export type MemberTjPayment = {
+    tjTransactionId: number;
+    docDate: string;
+    docNumber: string;
+    description: string;
+    txAmount: number;          // celková výše TJ transakce (credit pole)
+    allocatedToMember: number; // součet alokací k tomuto členovi
+    allocatedTotal: number;    // součet všech alokací z této transakce
+    unallocated: number;       // txAmount - allocatedTotal
+};
+
+export async function getMemberTjPayments(memberId: number): Promise<MemberTjPayment[]> {
+    const db = getDb();
+
+    // Najdi TJ transakce kde člen figuruje v nějaké alokaci
+    const rows = await db.execute<{
+        tj_transaction_id: number;
+        doc_date: string;
+        doc_number: string;
+        description: string;
+        tx_amount: string;
+        allocated_to_member: string;
+        allocated_total: string;
+    }>(sql`
+        SELECT
+            tjt.id                                                        AS tj_transaction_id,
+            tjt.doc_date::text                                            AS doc_date,
+            tjt.doc_number                                                AS doc_number,
+            tjt.description                                               AS description,
+            GREATEST(tjt.credit, tjt.debit)::text                        AS tx_amount,
+            SUM(CASE WHEN tjfa.member_id = ${memberId} THEN tjfa.amount ELSE 0 END)::text
+                                                                          AS allocated_to_member,
+            SUM(tjfa.amount)::text                                        AS allocated_total
+        FROM app.import_fin_tj_transactions tjt
+        JOIN app.import_fin_tj_allocations tjfa ON tjfa.tj_transaction_id = tjt.id
+        WHERE tjt.id IN (
+            SELECT DISTINCT tj_transaction_id
+            FROM app.import_fin_tj_allocations
+            WHERE member_id = ${memberId}
+        )
+        GROUP BY tjt.id, tjt.doc_date, tjt.doc_number, tjt.description, tjt.credit, tjt.debit
+        ORDER BY tjt.doc_date DESC
+    `);
+
+    return rows.map(r => {
+        const txAmount          = Number(r.tx_amount);
+        const allocatedToMember = Number(r.allocated_to_member);
+        const allocatedTotal    = Number(r.allocated_total);
+        return {
+            tjTransactionId:  r.tj_transaction_id,
+            docDate:          r.doc_date,
+            docNumber:        r.doc_number,
+            description:      r.description,
+            txAmount,
+            allocatedToMember,
+            allocatedTotal,
+            unallocated: Math.max(0, txAmount - allocatedTotal),
+        };
+    });
+}

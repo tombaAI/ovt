@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import {
-    getMemberHistory, getMemberEventRegistrations,
-    type MemberYearRecord, type MemberEventReg,
+    getMemberHistory, getMemberEventRegistrations, getMemberTjPayments,
+    type MemberYearRecord, type MemberEventReg, type MemberTjPayment,
 } from "@/lib/actions/members";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -243,6 +243,68 @@ export function EventHistory({ memberId }: { memberId: number }) {
                     </div>
                 );
             })}
+        </div>
+    );
+}
+
+// ── TjPaymentsTable — přehled TJ transakcí s plnou výší a alokací ────────────
+
+export function TjPaymentsTable({ memberId }: { memberId: number }) {
+    const [rows, setRows] = useState<MemberTjPayment[] | null>(null);
+
+    useEffect(() => {
+        getMemberTjPayments(memberId).then(setRows);
+    }, [memberId]);
+
+    if (!rows) return <p className="text-xs text-gray-400 py-2">Načítám…</p>;
+    if (rows.length === 0) return null; // žádné TJ transakce → skrýt sekci
+
+    const hasAnyGap = rows.some(r => r.unallocated > 0.005);
+
+    return (
+        <div className="rounded-xl border overflow-hidden">
+            <div className="flex items-center justify-between px-4 py-2 bg-gray-50 border-b">
+                <span className="text-sm font-semibold text-gray-800">Platby na TJ účtu</span>
+                {hasAnyGap && (
+                    <span className="text-xs font-semibold text-orange-600">
+                        ⚠ část plateb ještě není přiřazena k předpisům
+                    </span>
+                )}
+            </div>
+            <table className="w-full text-xs">
+                <thead>
+                    <tr className="border-b text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                        <th className="text-left px-4 py-1.5 w-24">Datum</th>
+                        <th className="text-left px-2 py-1.5">Popis transakce</th>
+                        <th className="text-right px-4 py-1.5 w-28">Celkem</th>
+                        <th className="text-right px-4 py-1.5 w-28">Připsáno</th>
+                        <th className="text-right px-4 py-1.5 w-28">Nerozepsáno</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {rows.map(r => {
+                        const gap = r.unallocated > 0.005;
+                        return (
+                            <tr key={r.tjTransactionId} className={["border-b last:border-0", gap ? "bg-orange-50/40" : ""].join(" ")}>
+                                <td className="px-4 py-2 text-gray-500 whitespace-nowrap">{fmtDateShort(r.docDate)}</td>
+                                <td className="px-2 py-2 text-gray-700 max-w-[200px]">
+                                    <span className="truncate block">{r.description}</span>
+                                    <span className="text-gray-400 text-[10px]">{r.docNumber}</span>
+                                </td>
+                                <td className="px-4 py-2 text-right font-mono font-semibold text-gray-800 whitespace-nowrap">
+                                    {r.txAmount.toLocaleString("cs-CZ")} Kč
+                                </td>
+                                <td className="px-4 py-2 text-right font-mono text-green-700 whitespace-nowrap">
+                                    {r.allocatedToMember.toLocaleString("cs-CZ")} Kč
+                                </td>
+                                <td className={["px-4 py-2 text-right font-mono font-semibold whitespace-nowrap", gap ? "text-orange-600" : "text-gray-400"].join(" ")}>
+                                    {gap ? `${r.unallocated.toLocaleString("cs-CZ")} Kč` : "—"}
+                                </td>
+                            </tr>
+                        );
+                    })}
+                </tbody>
+            </table>
         </div>
     );
 }
