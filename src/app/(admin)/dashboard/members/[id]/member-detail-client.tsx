@@ -22,7 +22,7 @@ import {
     setMemberTodo, setMemberReviewed,
     type AuditEntry,
 } from "@/lib/actions/members";
-import { ContributionHistory, EventHistory, TjPaymentsTable } from "../member-history";
+import { FinancialLedger, EventHistory } from "../member-history";
 import { getMemberTjDiffs, updateMemberFieldFromTj } from "@/lib/actions/sync";
 import { FIELD_LABELS } from "@/lib/member-fields";
 import type { MemberWithFlags } from "../page";
@@ -498,14 +498,8 @@ export function MemberDetailClient({ member: initialMember, selectedYear, period
                             )}
                         </div>
 
-                        {/* Přehled příspěvků a plateb po rocích */}
-                        <div className="rounded-xl border px-4 py-3">
-                            <p className="text-sm font-semibold text-gray-700 mb-3">Přehled příspěvků a plateb</p>
-                            <ContributionHistory memberId={member.id} />
-                        </div>
-
-                        {/* Platby přijaté na TJ účtu — ukazuje plnou výši transakcí */}
-                        <TjPaymentsTable memberId={member.id} />
+                        {/* Finanční přehled — má dáti / dal za každý rok */}
+                        <FinancialLedger memberId={member.id} />
                     </TabsContent>
 
                     {/* ── Akce ── */}

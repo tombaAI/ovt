@@ -3,7 +3,9 @@
 import { useEffect, useState } from "react";
 import {
     getMemberHistory, getMemberEventRegistrations, getMemberTjPayments,
+    getMemberFinancialLedger,
     type MemberYearRecord, type MemberEventReg, type MemberTjPayment,
+    type FinancialYear,
 } from "@/lib/actions/members";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -305,6 +307,111 @@ export function TjPaymentsTable({ memberId }: { memberId: number }) {
                     })}
                 </tbody>
             </table>
+        </div>
+    );
+}
+
+// ── FinancialLedger — unified finanční přehled (má dáti / dal) ────────────────
+
+const SOURCE_ICON: Record<string, string> = {
+    contribution_prescription: "📋",
+    event_prescription:        "🎯",
+    tj_finance:                "🏛",
+    fio_bank:                  "🏦",
+    cash:                      "💵",
+    file_import:               "📥",
+};
+
+export function FinancialLedger({ memberId }: { memberId: number }) {
+    const [years, setYears] = useState<FinancialYear[] | null>(null);
+
+    useEffect(() => {
+        getMemberFinancialLedger(memberId).then(setYears);
+    }, [memberId]);
+
+    if (!years) return <p className="text-xs text-gray-400 py-4">Načítám…</p>;
+    if (years.length === 0) return <p className="text-xs text-gray-400 py-4">Žádné finanční záznamy</p>;
+
+    return (
+        <div className="space-y-5">
+            {years.map(y => {
+                const isOverpaid  = y.balance > 0.005;
+                const isUnderpaid = y.balance < -0.005;
+                const isBalanced  = !isOverpaid && !isUnderpaid;
+
+                return (
+                    <div key={y.year} className="rounded-xl border overflow-hidden">
+                        {/* Záhlaví roku */}
+                        <div className="flex items-center justify-between px-4 py-2.5 bg-gray-50 border-b">
+                            <span className="text-sm font-bold text-gray-900">{y.year}</span>
+                            <div className="flex items-center gap-3 text-xs">
+                                <span className="text-gray-500">
+                                    Má dáti <span className="font-semibold text-gray-800">{y.totalDebit.toLocaleString("cs-CZ")} Kč</span>
+                                </span>
+                                <span className="text-gray-300">|</span>
+                                <span className="text-gray-500">
+                                    Dal <span className="font-semibold text-gray-800">{y.totalCredit.toLocaleString("cs-CZ")} Kč</span>
+                                </span>
+                                <span className="text-gray-300">|</span>
+                                {isBalanced  && <span className="font-semibold text-[#327600]">✓ Vyrovnáno</span>}
+                                {isOverpaid  && <span className="font-semibold text-orange-600">Přeplatek {y.balance.toLocaleString("cs-CZ")} Kč</span>}
+                                {isUnderpaid && <span className="font-semibold text-red-600">Nedoplatek {Math.abs(y.balance).toLocaleString("cs-CZ")} Kč</span>}
+                            </div>
+                        </div>
+
+                        {/* Řádky */}
+                        <table className="w-full text-xs">
+                            <thead>
+                                <tr className="border-b text-[10px] font-semibold text-gray-400 uppercase tracking-wide">
+                                    <th className="text-left px-4 py-1.5 w-24">Datum</th>
+                                    <th className="text-left px-2 py-1.5">Popis</th>
+                                    <th className="text-right px-4 py-1.5 w-28 text-red-500">Má dáti</th>
+                                    <th className="text-right px-4 py-1.5 w-28 text-green-600">Dal</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {y.lines.map((line, i) => {
+                                    const isDebit  = line.debit  !== null;
+                                    const isCredit = line.credit !== null;
+                                    return (
+                                        <tr key={i} className={[
+                                            "border-b last:border-0",
+                                            isDebit  ? "bg-red-50/20"   : "",
+                                            isCredit ? "bg-green-50/20" : "",
+                                        ].join(" ")}>
+                                            <td className="px-4 py-2 text-gray-400 whitespace-nowrap font-mono">
+                                                {line.date ? fmtDateShort(line.date) : "—"}
+                                            </td>
+                                            <td className="px-2 py-2 text-gray-700">
+                                                <span className="mr-1">{SOURCE_ICON[line.sourceType] ?? ""}</span>
+                                                {line.description}
+                                            </td>
+                                            <td className="px-4 py-2 text-right font-mono font-semibold text-red-600 whitespace-nowrap">
+                                                {isDebit ? `${line.debit!.toLocaleString("cs-CZ")} Kč` : ""}
+                                            </td>
+                                            <td className="px-4 py-2 text-right font-mono font-semibold text-green-700 whitespace-nowrap">
+                                                {isCredit ? `${line.credit!.toLocaleString("cs-CZ")} Kč` : ""}
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
+
+                                {/* Součet */}
+                                <tr className="bg-gray-50 border-t-2 border-gray-200">
+                                    <td className="px-4 py-2" />
+                                    <td className="px-2 py-2 text-gray-500 font-semibold text-xs">Celkem</td>
+                                    <td className="px-4 py-2 text-right font-mono font-bold text-gray-800 whitespace-nowrap">
+                                        {y.totalDebit.toLocaleString("cs-CZ")} Kč
+                                    </td>
+                                    <td className="px-4 py-2 text-right font-mono font-bold text-gray-800 whitespace-nowrap">
+                                        {y.totalCredit.toLocaleString("cs-CZ")} Kč
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                );
+            })}
         </div>
     );
 }

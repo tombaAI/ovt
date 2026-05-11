@@ -761,6 +761,192 @@ export async function getMemberAuditLog(memberId: number): Promise<AuditEntry[]>
     }));
 }
 
+// ── getMemberFinancialLedger — unified finanční přehled člena po rocích ───────
+
+export type FinancialLine = {
+    date: string | null;
+    description: string;
+    debit: number | null;
+    credit: number | null;
+    sourceType: string;
+};
+
+export type FinancialYear = {
+    year: number;
+    lines: FinancialLine[];
+    totalDebit: number;
+    totalCredit: number;
+    balance: number;
+};
+
+export async function getMemberFinancialLedger(memberId: number): Promise<FinancialYear[]> {
+    const db = getDb();
+    const yearMap = new Map<number, FinancialLine[]>();
+
+    function linesFor(year: number): FinancialLine[] {
+        if (!yearMap.has(year)) yearMap.set(year, []);
+        return yearMap.get(year)!;
+    }
+
+    // 1. Předpisy příspěvků (Má dáti)
+    const contribRows = await db
+        .select({
+            year:              contributionPeriods.year,
+            dueDate:           contributionPeriods.dueDate,
+            amountTotal:       memberContributions.amountTotal,
+            amountBase:        memberContributions.amountBase,
+            amountBoat1:       memberContributions.amountBoat1,
+            amountBoat2:       memberContributions.amountBoat2,
+            amountBoat3:       memberContributions.amountBoat3,
+            discountCommittee: memberContributions.discountCommittee,
+            discountTom:       memberContributions.discountTom,
+            discountIndividual:memberContributions.discountIndividual,
+            brigadeSurcharge:  memberContributions.brigadeSurcharge,
+        })
+        .from(memberContributions)
+        .innerJoin(contributionPeriods, eq(memberContributions.periodId, contributionPeriods.id))
+        .where(eq(memberContributions.memberId, memberId));
+
+    for (const r of contribRows) {
+        if (!r.amountTotal) continue;
+        const parts: string[] = [];
+        if (r.amountBase)          parts.push(`základ ${r.amountBase.toLocaleString("cs-CZ")} Kč`);
+        if (r.amountBoat1)         parts.push(`loď ${r.amountBoat1.toLocaleString("cs-CZ")} Kč`);
+        if (r.amountBoat2)         parts.push(`2. loď ${r.amountBoat2.toLocaleString("cs-CZ")} Kč`);
+        if (r.amountBoat3)         parts.push(`3. loď ${r.amountBoat3.toLocaleString("cs-CZ")} Kč`);
+        if (r.brigadeSurcharge && r.brigadeSurcharge > 0)
+                                   parts.push(`brigáda +${r.brigadeSurcharge.toLocaleString("cs-CZ")} Kč`);
+        if (r.discountCommittee)   parts.push(`výbor −${Math.abs(r.discountCommittee).toLocaleString("cs-CZ")} Kč`);
+        if (r.discountTom)         parts.push(`TOM −${Math.abs(r.discountTom).toLocaleString("cs-CZ")} Kč`);
+        if (r.discountIndividual)  parts.push(`ind. sleva −${Math.abs(r.discountIndividual).toLocaleString("cs-CZ")} Kč`);
+        const desc = parts.length > 0 ? `Předpis příspěvků (${parts.join(", ")})` : "Předpis příspěvků";
+        linesFor(r.year).push({
+            date: r.dueDate as string | null,
+            description: desc,
+            debit: r.amountTotal,
+            credit: null,
+            sourceType: "contribution_prescription",
+        });
+    }
+
+    // 2. Předpisy plateb za akce (Má dáti)
+    const eventPrescRows = await db
+        .select({
+            year:   events.year,
+            name:   events.name,
+            due:    eventPaymentPrescriptions.paymentDue,
+            amount: eventPaymentPrescriptions.amount,
+            cancelled: eventRegistrations.cancelledAt,
+        })
+        .from(eventRegistrationParticipants)
+        .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
+        .innerJoin(events, eq(events.id, eventRegistrations.eventId))
+        .innerJoin(eventPaymentPrescriptions, eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id))
+        .where(eq(eventRegistrationParticipants.memberId, memberId));
+
+    for (const r of eventPrescRows) {
+        if (r.cancelled) continue;
+        const amount = Number(r.amount);
+        if (!amount) continue;
+        linesFor(r.year).push({
+            date: r.due as string | null,
+            description: `Předpis akce: ${r.name}`,
+            debit: amount,
+            credit: null,
+            sourceType: "event_prescription",
+        });
+    }
+
+    // 3. Platby z TJ Finance (Dal) — celá výše TJ transakce
+    const tjRows = await db.execute<{
+        doc_date: string;
+        doc_number: string;
+        description: string;
+        tx_amount: string;
+    }>(sql`
+        SELECT
+            tjt.doc_date::text                                     AS doc_date,
+            tjt.doc_number                                         AS doc_number,
+            tjt.description                                        AS description,
+            GREATEST(tjt.credit, tjt.debit)::text                 AS tx_amount
+        FROM app.import_fin_tj_transactions tjt
+        WHERE tjt.id IN (
+            SELECT DISTINCT tj_transaction_id
+            FROM app.import_fin_tj_allocations
+            WHERE member_id = ${memberId}
+        )
+        ORDER BY tjt.doc_date
+    `);
+
+    for (const r of tjRows) {
+        const year = parseInt(r.doc_date.slice(0, 4), 10);
+        const amount = Number(r.tx_amount);
+        if (!amount) continue;
+        linesFor(year).push({
+            date: r.doc_date,
+            description: `Platba Finance TJ (${r.doc_number})`,
+            debit: null,
+            credit: amount,
+            sourceType: "tj_finance",
+        });
+    }
+
+    // 4. Ostatní potvrzené platby — Fio, hotovost, soubor (Dal)
+    const otherPayRows = await db.execute<{
+        paid_at: string | null;
+        source_type: string;
+        amount: string;
+        note: string | null;
+    }>(sql`
+        SELECT
+            pl.paid_at::text  AS paid_at,
+            pl.source_type    AS source_type,
+            pa.amount::text   AS amount,
+            pa.note           AS note
+        FROM app.payment_allocations pa
+        JOIN app.payment_ledger pl ON pl.id = pa.ledger_id
+        JOIN app.member_contributions mc ON mc.id = pa.contrib_id
+        WHERE mc.member_id = ${memberId}
+          AND pl.source_type != 'tj_finance'
+          AND pl.reconciliation_status = 'confirmed'
+        ORDER BY pl.paid_at
+    `);
+
+    for (const r of otherPayRows) {
+        const year = r.paid_at ? parseInt(r.paid_at.slice(0, 4), 10) : null;
+        if (!year) continue;
+        const amount = Number(r.amount);
+        if (!amount) continue;
+        const srcLabel = r.source_type === "fio_bank" ? "Fio banka"
+            : r.source_type === "cash"        ? "Hotovost"
+            : r.source_type === "file_import" ? "Bankovní soubor"
+            : r.source_type;
+        const desc = r.note ? `${srcLabel} — ${r.note}` : srcLabel;
+        linesFor(year).push({
+            date: r.paid_at,
+            description: desc,
+            debit: null,
+            credit: amount,
+            sourceType: r.source_type,
+        });
+    }
+
+    // Sestavení výsledku
+    const result: FinancialYear[] = [];
+    for (const [year, lines] of yearMap.entries()) {
+        lines.sort((a, b) => {
+            if (!a.date && !b.date) return 0;
+            if (!a.date) return 1;
+            if (!b.date) return -1;
+            return a.date.localeCompare(b.date);
+        });
+        const totalDebit  = lines.reduce((s, l) => s + (l.debit  ?? 0), 0);
+        const totalCredit = lines.reduce((s, l) => s + (l.credit ?? 0), 0);
+        result.push({ year, lines, totalDebit, totalCredit, balance: totalCredit - totalDebit });
+    }
+    return result.sort((a, b) => b.year - a.year);
+}
+
 // ── getMemberTjPayments — přehled TJ transakcí kde člen figuruje ─────────────
 
 export type MemberTjPayment = {
