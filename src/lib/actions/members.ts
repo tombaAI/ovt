@@ -497,10 +497,21 @@ export type PaymentEntry = {
 export type MemberYearRecord = {
     year: number;
     hasContrib: boolean;
+    // Předpis — celková částka a komponenty pro popis
     amountTotal: number | null;
+    amountBase: number | null;
+    amountBoat1: number | null;
+    amountBoat2: number | null;
+    amountBoat3: number | null;
+    discountCommittee: number | null;
+    discountTom: number | null;
+    discountIndividual: number | null;
+    brigadeSurcharge: number | null;
+    dueDate: string | null;      // datum splatnosti z periody
     paidTotal: number;
     contribId: number | null;
-    payments: PaymentEntry[];
+    payments: PaymentEntry[];    // pouze confirmed
+    pendingPayments: PaymentEntry[]; // suggested — čekají na potvrzení
 };
 
 export async function getMemberHistory(memberId: number): Promise<MemberYearRecord[]> {
@@ -516,7 +527,7 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
     const toYear = member.memberTo ? parseInt((member.memberTo as unknown as string).slice(0, 4)) : null;
 
     const allPeriods = await db
-        .select({ id: contributionPeriods.id, year: contributionPeriods.year })
+        .select({ id: contributionPeriods.id, year: contributionPeriods.year, dueDate: contributionPeriods.dueDate })
         .from(contributionPeriods);
 
     const relevantPeriods = allPeriods.filter(p =>
@@ -530,6 +541,14 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
             id: memberContributions.id,
             periodId: memberContributions.periodId,
             amountTotal: memberContributions.amountTotal,
+            amountBase: memberContributions.amountBase,
+            amountBoat1: memberContributions.amountBoat1,
+            amountBoat2: memberContributions.amountBoat2,
+            amountBoat3: memberContributions.amountBoat3,
+            discountCommittee: memberContributions.discountCommittee,
+            discountTom: memberContributions.discountTom,
+            discountIndividual: memberContributions.discountIndividual,
+            brigadeSurcharge: memberContributions.brigadeSurcharge,
         })
         .from(memberContributions)
         .where(eq(memberContributions.memberId, memberId));
@@ -546,6 +565,7 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
                 isSuggested: paymentAllocations.isSuggested,
                 paidAt: paymentLedger.paidAt,
                 sourceType: paymentLedger.sourceType,
+                reconciliationStatus: paymentLedger.reconciliationStatus,
             })
             .from(paymentAllocations)
             .innerJoin(paymentLedger, eq(paymentLedger.id, paymentAllocations.ledgerId))
@@ -553,18 +573,27 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
             .orderBy(paymentLedger.paidAt)
         : [];
 
-    const paymentsByContrib = new Map<number, PaymentEntry[]>();
+    const confirmedByContrib = new Map<number, PaymentEntry[]>();
+    const pendingByContrib   = new Map<number, PaymentEntry[]>();
+
     for (const p of allPayments) {
-        const list = paymentsByContrib.get(p.contribId) ?? [];
-        list.push({
+        const entry: PaymentEntry = {
             id: p.id,
             amount: Number(p.amount),
             paidAt: p.paidAt as string | null,
             note: p.note,
             sourceType: p.sourceType,
             isSuggested: p.isSuggested,
-        });
-        paymentsByContrib.set(p.contribId, list);
+        };
+        if (p.reconciliationStatus === "confirmed") {
+            const list = confirmedByContrib.get(p.contribId) ?? [];
+            list.push(entry);
+            confirmedByContrib.set(p.contribId, list);
+        } else {
+            const list = pendingByContrib.get(p.contribId) ?? [];
+            list.push(entry);
+            pendingByContrib.set(p.contribId, list);
+        }
     }
 
     const contribMap = new Map(contribs.map(c => [c.periodId, c]));
@@ -572,15 +601,26 @@ export async function getMemberHistory(memberId: number): Promise<MemberYearReco
     return relevantPeriods
         .map(p => {
             const contrib = contribMap.get(p.id);
-            const contribPayments = contrib ? (paymentsByContrib.get(contrib.id) ?? []) : [];
-            const paidTotal = contribPayments.reduce((s, x) => s + x.amount, 0);
+            const payments        = contrib ? (confirmedByContrib.get(contrib.id) ?? []) : [];
+            const pendingPayments = contrib ? (pendingByContrib.get(contrib.id)   ?? []) : [];
+            const paidTotal = payments.reduce((s, x) => s + x.amount, 0);
             return {
                 year: p.year,
                 hasContrib: Boolean(contrib),
-                amountTotal: contrib?.amountTotal ?? null,
+                amountTotal:       contrib?.amountTotal       ?? null,
+                amountBase:        contrib?.amountBase        ?? null,
+                amountBoat1:       contrib?.amountBoat1       ?? null,
+                amountBoat2:       contrib?.amountBoat2       ?? null,
+                amountBoat3:       contrib?.amountBoat3       ?? null,
+                discountCommittee: contrib?.discountCommittee ?? null,
+                discountTom:       contrib?.discountTom       ?? null,
+                discountIndividual:contrib?.discountIndividual?? null,
+                brigadeSurcharge:  contrib?.brigadeSurcharge  ?? null,
+                dueDate: p.dueDate as string | null,
                 paidTotal,
                 contribId: contrib?.id ?? null,
-                payments: contribPayments,
+                payments,
+                pendingPayments,
             };
         })
         .sort((a, b) => b.year - a.year);
