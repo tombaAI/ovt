@@ -43,9 +43,10 @@ const STATUS_BADGE = {
 } as const;
 
 const SOURCE_LABELS: Record<string, string> = {
-    fio_bank: "Fio banka",
+    fio_bank:    "Fio banka",
     file_import: "Soubor",
-    cash: "Hotovost",
+    cash:        "Hotovost",
+    tj_finance:  "Finance TJ",
 };
 
 function formatAmount(value: number): string {

@@ -47,15 +47,17 @@ const STATUS_BADGE: Record<ReconciliationStatus, string> = {
 };
 
 const SOURCE_LABELS: Record<string, string> = {
-    fio_bank: "Fio banka",
+    fio_bank:   "Fio banka",
     file_import: "Soubor",
-    cash: "Hotovost",
+    cash:        "Hotovost",
+    tj_finance:  "Finance TJ",
 };
 
 const SOURCE_BADGE: Record<string, string> = {
-    fio_bank: "bg-violet-100 text-violet-700 border-violet-200",
+    fio_bank:    "bg-violet-100 text-violet-700 border-violet-200",
     file_import: "bg-sky-100 text-sky-700 border-sky-200",
-    cash: "bg-orange-100 text-orange-700 border-orange-200",
+    cash:        "bg-orange-100 text-orange-700 border-orange-200",
+    tj_finance:  "bg-emerald-100 text-emerald-700 border-emerald-200",
 };
 
 const STATUS_ORDER: Record<ReconciliationStatus, number> = {
@@ -287,11 +289,12 @@ export function PaymentsOverviewClient({
         }
 
         return {
-            all: rowsForSourceCounts.length,
-            fio_bank: rowsForSourceCounts.filter(row => row.sourceType === "fio_bank").length,
+            all:         rowsForSourceCounts.length,
+            fio_bank:    rowsForSourceCounts.filter(row => row.sourceType === "fio_bank").length,
             file_import: rowsForSourceCounts.filter(row => row.sourceType === "file_import").length,
-            cash: rowsForSourceCounts.filter(row => row.sourceType === "cash").length,
-            profiles: Array.from(profiles.values()).sort((left, right) => left.name.localeCompare(right.name, "cs")),
+            cash:        rowsForSourceCounts.filter(row => row.sourceType === "cash").length,
+            tj_finance:  rowsForSourceCounts.filter(row => row.sourceType === "tj_finance").length,
+            profiles:    Array.from(profiles.values()).sort((left, right) => left.name.localeCompare(right.name, "cs")),
         };
     }, [rowsForSourceCounts]);
 
@@ -570,6 +573,9 @@ export function PaymentsOverviewClient({
                                                 </SelectItem>
                                             ))}
                                             <SelectItem value="cash">Hotovost ({sourceCounts.cash})</SelectItem>
+                                            {sourceCounts.tj_finance > 0 && (
+                                                <SelectItem value="tj_finance">Finance TJ ({sourceCounts.tj_finance})</SelectItem>
+                                            )}
                                         </SelectContent>
                                     </Select>
                                 </div>

@@ -555,11 +555,13 @@ const SOURCE_BADGE: Record<string, string> = {
     fio_bank:    "bg-violet-100 text-violet-700 border-violet-200",
     file_import: "bg-sky-100 text-sky-700 border-sky-200",
     cash:        "bg-orange-100 text-orange-700 border-orange-200",
+    tj_finance:  "bg-emerald-100 text-emerald-700 border-emerald-200",
 };
 const SOURCE_LABEL: Record<string, string> = {
     fio_bank:    "Fio",
     file_import: "Banka",
     cash:        "Hotovost",
+    tj_finance:  "Finance TJ",
 };
 
 function PaymentRow({ payment, onDelete, delPending }: {

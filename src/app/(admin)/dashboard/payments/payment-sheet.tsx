@@ -35,6 +35,7 @@ const SOURCE_LABELS: Record<string, string> = {
     fio_bank:    "Fio banka",
     file_import: "Bankovní soubor",
     cash:        "Hotovost",
+    tj_finance:  "Finance TJ",
 };
 
 function formatAmount(amount: number) {
