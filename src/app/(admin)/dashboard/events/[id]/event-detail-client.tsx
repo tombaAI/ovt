@@ -868,10 +868,11 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
         </div>
     );
 
-    const totalPersons = rows.reduce((s, r) => s + r.personsCount, 0);
-    const totalAmount = rows.reduce((s, r) => s + r.paymentAmount, 0);
-    const paidCount = rows.filter(r => r.paymentStatus === "paid").length;
-    const unresolvedCount = rows.filter(r => r.paymentStatus === "pending" || r.paymentStatus === "matched").length;
+    const activeRows = rows.filter(r => !r.cancelledAt);
+    const totalPersons = activeRows.reduce((s, r) => s + r.personsCount, 0);
+    const totalAmount = activeRows.reduce((s, r) => s + r.paymentAmount, 0);
+    const paidCount = activeRows.filter(r => r.paymentStatus === "paid").length;
+    const unresolvedCount = activeRows.filter(r => r.paymentStatus === "pending" || r.paymentStatus === "matched").length;
 
     const summaryCards = [
         {
