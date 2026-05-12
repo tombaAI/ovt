@@ -191,7 +191,12 @@ function ExpenseAllocationRow({
                         <span className="hidden sm:inline">Jen někteří účastníci</span>
                     </button>
                     {method === "per_registration" && (
-                        <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
+                        <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 transition-colors">
+                            {!expanded && totalChecked > 0 && (
+                                <span className="text-xs text-gray-500 tabular-nums">
+                                    {totalChecked} {totalChecked === 1 ? "osoba" : totalChecked < 5 ? "osoby" : "osob"} · <span className="font-medium text-gray-600">{fmtCzk(ppCost)}/os.</span>
+                                </span>
+                            )}
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                     )}
