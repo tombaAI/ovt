@@ -172,12 +172,10 @@ function ExpenseAllocationRow({
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
-            <div className="flex items-start gap-3">
-                <div className="flex-1 min-w-0">
-                    <p className="text-sm font-medium text-gray-800 truncate">{expense.purposeText ?? "—"}</p>
-                </div>
+            <p className="text-sm font-medium text-gray-800 mb-1.5">{expense.purposeText ?? "—"}</p>
+            <div className="flex items-center gap-3">
                 <div className="shrink-0 text-sm font-semibold text-gray-900 tabular-nums">{fmtCzk(expense.amount)}</div>
-                <div className="shrink-0 flex items-center gap-1.5">
+                <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                         onClick={() => handleMethodChange("split_all")}
                         disabled={methodSaving || disabled}
