@@ -173,9 +173,19 @@ function ExpenseAllocationRow({
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
-            <p className="text-sm font-medium text-gray-800 mb-1.5">{expense.purposeText ?? "—"}</p>
-            <div className="flex items-center gap-3">
-                <div className="shrink-0 text-sm font-semibold text-gray-900 tabular-nums">{fmtCzk(expense.amount)}</div>
+            <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-4 gap-y-1">
+                {/* Řádek 1: částka celkem + název */}
+                <div className="text-sm font-semibold text-gray-900 tabular-nums whitespace-nowrap text-right">
+                    {fmtCzk(expense.amount)}
+                </div>
+                <p className="text-sm font-medium text-gray-800">{expense.purposeText ?? "—"}</p>
+
+                {/* Řádek 2: per osoba + tlačítka */}
+                <div className="text-xs text-gray-400 tabular-nums whitespace-nowrap text-right">
+                    {totalChecked > 0
+                        ? <>{fmtCzk(ppCost)}/os. · {totalChecked}&nbsp;os.</>
+                        : "—"}
+                </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                         onClick={() => handleMethodChange("split_all")}
@@ -187,17 +197,12 @@ function ExpenseAllocationRow({
                     <button
                         onClick={() => handleMethodChange("per_registration")}
                         disabled={methodSaving || disabled}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
+                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
                         <span className="sm:hidden">Jen někdo</span>
                         <span className="hidden sm:inline">Jen někteří účastníci</span>
                     </button>
                     {method === "per_registration" && (
-                        <button onClick={() => setExpanded(v => !v)} className="flex items-center gap-1.5 text-gray-400 hover:text-gray-600 transition-colors">
-                            {!expanded && totalChecked > 0 && (
-                                <span className="text-xs text-gray-500 tabular-nums">
-                                    {totalChecked} {totalChecked === 1 ? "osoba" : totalChecked < 5 ? "osoby" : "osob"} · <span className="font-medium text-gray-600">{fmtCzk(ppCost)}/os.</span>
-                                </span>
-                            )}
+                        <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                     )}
@@ -205,19 +210,19 @@ function ExpenseAllocationRow({
             </div>
 
             {method === "per_registration" && expanded && (
-                <div className="mt-3 ml-1 space-y-3">
-                    {/* Souhrn výběru */}
-                    <p className="text-xs text-gray-500 tabular-nums">
-                        {totalChecked > 0
-                            ? <>{totalChecked} {totalChecked === 1 ? "osoba" : totalChecked < 5 ? "osoby" : "osob"} · <span className="font-medium text-gray-700">{fmtCzk(ppCost)}/os.</span></>
-                            : <span className="text-gray-400">Nikdo není vybrán</span>}
-                    </p>
-
-                    {registrations.map(reg => {
-                        const persons = getPersonsForAlloc(reg);
-                        return (
-                            <div key={reg.registrationId} className="flex flex-wrap gap-1.5">
-                                {persons.map(p => {
+                <div className="grid grid-cols-[auto_1fr] gap-x-4 mt-2">
+                    <div /> {/* zarovnání pod levý sloupec */}
+                    <div className="space-y-3">
+                        <p className="text-xs text-gray-400 tabular-nums">
+                            {totalChecked > 0
+                                ? <>{totalChecked} {totalChecked === 1 ? "osoba" : totalChecked < 5 ? "osoby" : "osob"} · <span className="font-medium text-gray-600">{fmtCzk(ppCost)}/os.</span></>
+                                : <span className="text-gray-400">Nikdo není vybrán</span>}
+                        </p>
+                        {registrations.map(reg => {
+                            const persons = getPersonsForAlloc(reg);
+                            return (
+                                <div key={reg.registrationId} className="flex flex-wrap gap-1.5">
+                                    {persons.map(p => {
                                         const isIn = checkedPersons.has(p.key);
                                         return (
                                             <button
@@ -237,10 +242,11 @@ function ExpenseAllocationRow({
                                             </button>
                                         );
                                     })}
-                            </div>
-                        );
-                    })}
-                    {saveError && <p className="text-xs text-red-500 pt-1">{saveError}</p>}
+                                </div>
+                            );
+                        })}
+                        {saveError && <p className="text-xs text-red-500">{saveError}</p>}
+                    </div>
                 </div>
             )}
             {saveError && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{saveError}</p>}
