@@ -280,7 +280,18 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg }: { rows: Settle
                                 {reg.personsCount}
                                 {reg.memberCount > 0 && <span className="text-xs text-emerald-600 ml-1">({reg.memberCount} čl.)</span>}
                             </td>
-                            <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">{fmtCzk(reg.expensesTotal)}</td>
+                            <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
+                                {fmtCzk(reg.expensesTotal)}
+                                {(hasPerReg || reg.expenses.length > 1) && (
+                                    <div className="mt-0.5 space-y-0.5">
+                                        {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => (
+                                            <p key={e.expenseId} className="text-[11px] text-gray-400 tabular-nums">
+                                                {e.purposeText ?? "—"}: {fmtCzk(e.allocatedAmount)}
+                                            </p>
+                                        ))}
+                                    </div>
+                                )}
+                            </td>
                             <td className="py-2 pr-3 text-right text-emerald-600 tabular-nums">
                                 {reg.subsidy > 0 ? `−${fmtCzk(reg.subsidy)}` : "—"}
                             </td>
