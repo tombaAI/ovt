@@ -180,13 +180,15 @@ function ExpenseAllocationRow({
                         onClick={() => handleMethodChange("split_all")}
                         disabled={methodSaving || disabled}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
-                        Rovnoměrně na každého
+                        <span className="sm:hidden">Rovnoměrně</span>
+                        <span className="hidden sm:inline">Rovnoměrně na každého</span>
                     </button>
                     <button
                         onClick={() => handleMethodChange("per_registration")}
                         disabled={methodSaving || disabled}
                         className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"}`}>
-                        Jen někteří účastníci
+                        <span className="sm:hidden">Jen někdo</span>
+                        <span className="hidden sm:inline">Jen někteří účastníci</span>
                     </button>
                     {method === "per_registration" && (
                         <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
