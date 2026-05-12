@@ -14,9 +14,8 @@ function fmtDate(iso: string): string {
     return `${Number(d)}. ${Number(m)}. ${y}`;
 }
 
-function buildPayliboUrl(amount: number, prescriptionCode: number, variableSymbol: string, bankAccount: string, eventName: string): string {
+function buildPayliboUrl(amount: number, variableSymbol: string, bankAccount: string, message: string): string {
     const [accountNumber, bankCode] = bankAccount.split("/");
-    const message = encodeURIComponent(`C${prescriptionCode} ${eventName}`);
     return (
         `https://api.paylibo.com/paylibo/generator/czech/image` +
         `?accountNumber=${accountNumber}` +
@@ -24,7 +23,7 @@ function buildPayliboUrl(amount: number, prescriptionCode: number, variableSymbo
         `&amount=${amount}` +
         `&currency=CZK` +
         `&vs=${variableSymbol}` +
-        `&message=${message}` +
+        `&message=${encodeURIComponent(message)}` +
         `&size=200`
     );
 }
@@ -57,7 +56,8 @@ export function buildEventSettlementEmail(
     data: EventSettlementEmailData,
 ): { subject: string; html: string } {
     const subject = `Předpis platby — ${data.eventName}`;
-    const qrUrl = buildPayliboUrl(data.amount, data.prescriptionCode, data.variableSymbol, data.bankAccount, data.eventName);
+    const paymentMessage = `C${data.prescriptionCode} ${data.firstName} ${data.lastName} akce ${data.eventName}`;
+    const qrUrl = buildPayliboUrl(data.amount, data.variableSymbol, data.bankAccount, paymentMessage);
     const [accountNumber, bankCode] = data.bankAccount.split("/");
 
     // Řádky účastníků
@@ -137,7 +137,7 @@ export function buildEventSettlementEmail(
         </td></tr>
         ${tableRow("Číslo účtu", `${accountNumber}/${bankCode}`)}
         ${tableRow("Variabilní symbol", data.variableSymbol)}
-        ${tableRow("Zpráva pro příjemce", `C${data.prescriptionCode} ${data.firstName} ${data.lastName}`)}
+        ${tableRow("Zpráva pro příjemce", paymentMessage)}
         ${data.paymentDue ? tableRow("Splatnost", fmtDate(data.paymentDue), "#b45309") : ""}
       </table>
 

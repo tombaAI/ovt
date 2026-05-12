@@ -662,7 +662,7 @@ export async function sendEventSettlementEmails(
                 amount: p.amount,
                 bankAccount: EVENT_BANK_ACCOUNT,
                 paymentDue: p.paymentDue,
-                unitPrice: settlement.unitPrice,
+                unitPrice: reg.personsCount > 0 ? Math.round(reg.expensesTotal / reg.personsCount) : 0,
                 participants: reg.participants.map(pt => ({
                     fullName: pt.fullName,
                     isMember: pt.memberId !== null,
