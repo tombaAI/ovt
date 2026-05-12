@@ -869,7 +869,9 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
     );
 
     const activeRows = rows.filter(r => !r.cancelledAt);
+    const cancelledRows = rows.filter(r => !!r.cancelledAt);
     const totalPersons = activeRows.reduce((s, r) => s + r.personsCount, 0);
+    const cancelledPersons = cancelledRows.reduce((s, r) => s + r.personsCount, 0);
     const totalAmount = activeRows.reduce((s, r) => s + r.paymentAmount, 0);
     const paidCount = activeRows.filter(r => r.paymentStatus === "paid").length;
     const unresolvedCount = activeRows.filter(r => r.paymentStatus === "pending" || r.paymentStatus === "matched").length;
@@ -877,15 +879,17 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
     const summaryCards = [
         {
             label: "Přihlášky",
-            value: rows.length,
-            suffix: rows.length === 1 ? "záznam" : rows.length < 5 ? "záznamy" : "záznamů",
+            value: activeRows.length,
+            suffix: activeRows.length === 1 ? "záznam" : activeRows.length < 5 ? "záznamy" : "záznamů",
             tone: "text-slate-700 bg-white/80 border-slate-200",
+            subtext: cancelledRows.length > 0 ? `${cancelledRows.length} zrušeno` : undefined,
         },
         {
             label: "Účastníci",
             value: totalPersons,
             suffix: totalPersons === 1 ? "osoba" : totalPersons < 5 ? "osoby" : "osob",
             tone: "text-blue-700 bg-blue-50/80 border-blue-100",
+            subtext: cancelledPersons > 0 ? `${cancelledPersons} zrušeno` : undefined,
         },
         {
             label: "Zaplaceno",
@@ -899,7 +903,7 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
             suffix: unresolvedCount === 1 ? "položka" : unresolvedCount < 5 ? "položky" : "položek",
             tone: "text-amber-700 bg-amber-50/90 border-amber-100",
         },
-    ] as const;
+    ];
 
     return (
         <div className="space-y-4">
@@ -926,6 +930,9 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
                             <p className="mt-1 text-lg font-semibold tabular-nums">
                                 {card.value} <span className="text-xs font-medium opacity-80">{card.suffix}</span>
                             </p>
+                            {"subtext" in card && card.subtext && (
+                                <p className="text-[11px] opacity-50 mt-0.5">{card.subtext}</p>
+                            )}
                         </div>
                     ))}
                 </div>
