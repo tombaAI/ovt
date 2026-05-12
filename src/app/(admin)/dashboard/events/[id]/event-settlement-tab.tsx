@@ -4,7 +4,8 @@ import { useState, useEffect, useTransition, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle, X } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle, X, Info } from "lucide-react";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     getEventSettlement,
     updateEventSubsidy,
@@ -281,16 +282,31 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg }: { rows: Settle
                                 {reg.memberCount > 0 && <span className="text-xs text-emerald-600 ml-1">({reg.memberCount} čl.)</span>}
                             </td>
                             <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
-                                {fmtCzk(reg.expensesTotal)}
-                                {(hasPerReg || reg.expenses.length > 1) && (
-                                    <div className="mt-0.5 space-y-0.5">
-                                        {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => (
-                                            <p key={e.expenseId} className="text-[11px] text-gray-400 tabular-nums">
-                                                {e.purposeText ?? "—"}: {fmtCzk(e.allocatedAmount)}
-                                            </p>
-                                        ))}
-                                    </div>
-                                )}
+                                <div className="inline-flex items-center justify-end gap-1">
+                                    {fmtCzk(reg.expensesTotal)}
+                                    {(hasPerReg || reg.expenses.length > 1) && (
+                                        <Popover>
+                                            <PopoverTrigger asChild>
+                                                <button className="text-gray-300 hover:text-gray-500 transition-colors shrink-0">
+                                                    <Info size={13} />
+                                                </button>
+                                            </PopoverTrigger>
+                                            <PopoverContent side="left" align="start" className="w-56 p-3 text-xs space-y-1.5">
+                                                <p className="font-semibold text-gray-700 mb-2">Rozpad ceny akce</p>
+                                                {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => (
+                                                    <div key={e.expenseId} className="flex justify-between gap-3 text-gray-600">
+                                                        <span className="truncate">{e.purposeText ?? "—"}</span>
+                                                        <span className="tabular-nums font-medium shrink-0">{fmtCzk(e.allocatedAmount)}</span>
+                                                    </div>
+                                                ))}
+                                                <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
+                                                    <span>Celkem</span>
+                                                    <span className="tabular-nums">{fmtCzk(reg.expensesTotal)}</span>
+                                                </div>
+                                            </PopoverContent>
+                                        </Popover>
+                                    )}
+                                </div>
                             </td>
                             <td className="py-2 pr-3 text-right text-emerald-600 tabular-nums">
                                 {reg.subsidy > 0 ? `−${fmtCzk(reg.subsidy)}` : "—"}
