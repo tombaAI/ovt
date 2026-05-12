@@ -945,6 +945,12 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
 
 export function EventDetailClient({ event }: Props) {
     const router = useRouter();
+    const [activeTab, setActiveTab] = useState<string>(() => {
+        if (typeof window !== "undefined") {
+            return sessionStorage.getItem(`event-${event.id}-tab`) ?? "detail";
+        }
+        return "detail";
+    });
     const [activeField, setActiveField] = useState<string | null>(null);
     const [diff, setDiff] = useState<GcalDiffResult | null>(null);
     const [syncing, setSyncing] = useState(false);
@@ -1065,7 +1071,7 @@ export function EventDetailClient({ event }: Props) {
                 </div>
 
                 {/* ── Tabs ── */}
-                <Tabs defaultValue="detail" className="gap-3">
+                <Tabs value={activeTab} onValueChange={tab => { setActiveTab(tab); sessionStorage.setItem(`event-${event.id}-tab`, tab); }} className="gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
                         <TabsList className="mb-0 !grid w-full !h-auto grid-cols-4 gap-1.5 bg-transparent p-0">
                             <TabsTrigger value="detail"

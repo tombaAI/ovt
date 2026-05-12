@@ -508,7 +508,11 @@ function ImageCropModal({ srcUrl, originalName, onDone, onCancel, suggestedCrop,
 
     return (
         <Dialog open onOpenChange={open => { if (!open) onCancel(); }}>
-            <DialogContent className="max-w-2xl w-full p-0 gap-0 overflow-hidden">
+            <DialogContent
+                className="max-w-2xl w-full p-0 gap-0 overflow-hidden"
+                onPointerDownOutside={e => e.preventDefault()}
+                onInteractOutside={e => e.preventDefault()}
+            >
                 <DialogHeader className="px-5 pt-4 pb-3 border-b">
                     <DialogTitle className="flex items-center gap-2 text-base">
                         <CropIcon size={16} className="text-gray-500" />
