@@ -297,14 +297,26 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg }: { rows: Settle
                                                     <Info size={13} />
                                                 </button>
                                             </PopoverTrigger>
-                                            <PopoverContent side="left" align="start" className="w-56 p-3 text-xs space-y-1.5">
-                                                <p className="font-semibold text-gray-700 mb-2">Rozpad ceny akce</p>
-                                                {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => (
-                                                    <div key={e.expenseId} className="flex justify-between gap-3 text-gray-600">
-                                                        <span className="truncate">{e.purposeText ?? "—"}</span>
-                                                        <span className="tabular-nums font-medium shrink-0">{fmtCzk(e.allocatedAmount)}</span>
-                                                    </div>
-                                                ))}
+                                            <PopoverContent side="left" align="start" className="w-64 p-3 text-xs space-y-2">
+                                                <p className="font-semibold text-gray-700">Rozpad ceny akce</p>
+                                                {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => {
+                                                    const unitPrice = e.allocationMethod === "split_all" && reg.personsCount > 1
+                                                        ? e.allocatedAmount / reg.personsCount
+                                                        : null;
+                                                    return (
+                                                        <div key={e.expenseId} className="space-y-0.5">
+                                                            <div className="flex justify-between gap-3 text-gray-700">
+                                                                <span className="truncate font-medium">{e.purposeText ?? "—"}</span>
+                                                                <span className="tabular-nums shrink-0">{fmtCzk(e.allocatedAmount)}</span>
+                                                            </div>
+                                                            {unitPrice !== null && (
+                                                                <p className="text-gray-400 tabular-nums">
+                                                                    {fmtCzk(unitPrice)}/os. × {reg.personsCount} os.
+                                                                </p>
+                                                            )}
+                                                        </div>
+                                                    );
+                                                })}
                                                 <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
                                                     <span>Celkem</span>
                                                     <span className="tabular-nums">{fmtCzk(reg.expensesTotal)}</span>
