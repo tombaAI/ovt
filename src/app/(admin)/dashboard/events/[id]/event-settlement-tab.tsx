@@ -529,7 +529,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
             const res = await unlockBilling(eventId);
             if ("error" in res) { setLockError(res.error); return; }
             setBillingStatus("draft");
-            setUnlockInfo(`Odemčeno. Smazáno ${res.deletedPrescriptions} pending předpisů.`);
+            setUnlockInfo("Odemčeno. Předpisy plateb zůstaly zachovány.");
             load();
         });
     }

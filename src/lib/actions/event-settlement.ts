@@ -279,37 +279,20 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
 
 /**
  * Odemkne billing: přepne stav zpět na 'draft'.
- * Pending předpisy smaže, paid/matched zachová (admin dostane varování).
+ * Předpisy plateb se NIKDY nemažou — zálohy z přihlášek musí zůstat platné
+ * bez ohledu na stav nákladů. Při dalším lockBilling upsertPrescriptionAmounts
+ * existující předpisy aktualizuje (nepřepisuje kód, jen částku a splatnost).
  */
 export async function unlockBilling(eventId: number): Promise<{ success: true; deletedPrescriptions: number } | { error: string }> {
     try {
         const db = getDb();
-
-        // Smazat pouze pending předpisy (ne zaplacené/spárované)
-        const regIds = (await db
-            .select({ id: eventRegistrations.id })
-            .from(eventRegistrations)
-            .where(and(eq(eventRegistrations.eventId, eventId), isNull(eventRegistrations.cancelledAt)))
-        ).map(r => r.id);
-
-        let deletedPrescriptions = 0;
-        if (regIds.length > 0) {
-            const result = await db
-                .delete(eventPaymentPrescriptions)
-                .where(and(
-                    inArray(eventPaymentPrescriptions.registrationId, regIds),
-                    eq(eventPaymentPrescriptions.status, "pending"),
-                ))
-                .returning({ id: eventPaymentPrescriptions.id });
-            deletedPrescriptions = result.length;
-        }
 
         await db.update(events)
             .set({ billingStatus: "draft", updatedAt: new Date() })
             .where(eq(events.id, eventId));
 
         revalidatePath(`/dashboard/events/${eventId}`);
-        return { success: true, deletedPrescriptions };
+        return { success: true, deletedPrescriptions: 0 };
     } catch (e) {
         console.error(e);
         return { error: "Chyba při odemknutí vyúčtování" };
