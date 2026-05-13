@@ -485,7 +485,8 @@ export type SubmitForeignWaterRegistrationInput = {
     phone: string;
     firstName: string;
     lastName: string;
-    additionalPersons: string[];
+    primaryIsMember: boolean;
+    additionalPersons: Array<{ name: string; isMember: boolean }>;
     transportInfo: string;
 };
 
@@ -521,13 +522,22 @@ type ForeignWaterRegistrationSubmitTxResult = {
     publicToken: string;
 };
 
-function buildParticipantInsertRows(registrationId: number, participantNames: string[]) {
-    return participantNames.map((fullName, index) => ({
+type ParticipantData = { fullName: string; isMember: boolean };
+
+function buildParticipantInsertRows(registrationId: number, participants: ParticipantData[]) {
+    return participants.map((p, index) => ({
         registrationId,
         participantOrder: index + 1,
-        fullName,
+        fullName: p.fullName,
         isPrimary: index === 0,
+        isMember: p.isMember,
     }));
+}
+
+function normalizePersonList(persons: Array<{ name: string; isMember: boolean }>): ParticipantData[] {
+    return persons
+        .map((p) => ({ fullName: normalizeText(p.name), isMember: p.isMember }))
+        .filter((p) => p.fullName);
 }
 
 export async function submitForeignWaterRegistration(
@@ -538,9 +548,13 @@ export async function submitForeignWaterRegistration(
     const firstName = normalizeText(input.firstName);
     const lastName = normalizeText(input.lastName);
     const fullName = normalizeText(`${firstName} ${lastName}`);
-    const additionalPersons = normalizeNameList(input.additionalPersons ?? []);
-    const participantNames = [fullName, ...additionalPersons];
-    const personsCount = participantNames.length;
+    const primaryIsMember = input.primaryIsMember ?? false;
+    const allParticipants: ParticipantData[] = [
+        { fullName, isMember: primaryIsMember },
+        ...normalizePersonList(input.additionalPersons ?? []),
+    ];
+    const personsCount = allParticipants.length;
+    const participantNames = allParticipants.map((p) => p.fullName);
     const transportInfo = normalizeText(input.transportInfo);
     const amount = personsCount * FOREIGN_WATER_AMOUNT_PER_PERSON;
 
@@ -634,7 +648,7 @@ export async function submitForeignWaterRegistration(
 
             await tx
                 .insert(eventRegistrationParticipants)
-                .values(buildParticipantInsertRows(registration.id, participantNames));
+                .values(buildParticipantInsertRows(registration.id, allParticipants));
 
             const messageForRecipient = buildForeignWaterPaymentMessage(existing.code, fullName);
 
@@ -753,7 +767,7 @@ export async function submitForeignWaterRegistration(
 
         await tx
             .insert(eventRegistrationParticipants)
-            .values(buildParticipantInsertRows(registration.id, participantNames));
+            .values(buildParticipantInsertRows(registration.id, allParticipants));
 
         const seqResult = await tx.execute(
             sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`,
@@ -857,6 +871,7 @@ export type ForeignWaterRegistrationParticipant = {
     participantOrder: number;
     fullName: string;
     isPrimary: boolean;
+    isMember: boolean;
     memberId?: number | null;
     memberName?: string | null;
 };
@@ -1049,6 +1064,7 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             participantOrder: eventRegistrationParticipants.participantOrder,
             fullName: eventRegistrationParticipants.fullName,
             isPrimary: eventRegistrationParticipants.isPrimary,
+            isMember: eventRegistrationParticipants.isMember,
         })
         .from(eventRegistrationParticipants)
         .where(eq(eventRegistrationParticipants.registrationId, row.registrationId))
@@ -1059,12 +1075,14 @@ export async function getForeignWaterRegistrationByToken(token: string): Promise
             participantOrder: Number(participant.participantOrder),
             fullName: participant.fullName,
             isPrimary: participant.isPrimary,
+            isMember: participant.isMember,
         }))
         : parseParticipantNames(row.personsNames, normalizeText(`${row.firstName} ${row.lastName}`))
             .map((fullName, index) => ({
                 participantOrder: index + 1,
                 fullName,
                 isPrimary: index === 0,
+                isMember: false,
             }));
 
     const amount = Number(row.paymentAmount);
@@ -1198,6 +1216,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
                 participantOrder: eventRegistrationParticipants.participantOrder,
                 fullName: eventRegistrationParticipants.fullName,
                 isPrimary: eventRegistrationParticipants.isPrimary,
+                isMember: eventRegistrationParticipants.isMember,
                 memberId: eventRegistrationParticipants.memberId,
                 memberName: members.fullName,
             })
@@ -1218,6 +1237,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             participantOrder: Number(participantRow.participantOrder),
             fullName: participantRow.fullName,
             isPrimary: participantRow.isPrimary,
+            isMember: participantRow.isMember,
             memberId: participantRow.memberId,
             memberName: participantRow.memberName,
         });
@@ -1232,6 +1252,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             participantOrder: index + 1,
             fullName,
             isPrimary: index === 0,
+            isMember: false,
         }));
 
         const participants = participantsByRegistration.get(row.registrationId) ?? fallbackParticipants;

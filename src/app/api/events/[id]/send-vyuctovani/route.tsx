@@ -1,9 +1,9 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { asc, eq } from "drizzle-orm";
+import { asc, desc, eq } from "drizzle-orm";
 import * as iconv from "iconv-lite";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { eventExpenses, events, members, people } from "@/db/schema";
+import { eventExpenses, events, eventTreasurerApprovalLog, members, people } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
@@ -200,6 +200,14 @@ export async function POST(
         { status: 400 },
       );
     }
+
+    // Načti poslední schválení hospodáře pro zobrazení v mailu
+    const [latestApproval] = await db
+      .select({ changedBy: eventTreasurerApprovalLog.changedBy, changedAt: eventTreasurerApprovalLog.changedAt })
+      .from(eventTreasurerApprovalLog)
+      .where(eq(eventTreasurerApprovalLog.eventId, eventId))
+      .orderBy(desc(eventTreasurerApprovalLog.changedAt))
+      .limit(1);
 
     const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
     const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
@@ -476,7 +484,24 @@ export async function POST(
         </tfoot>
       </table>
 
-      <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;">Děkuji,<br/>Tomáš Bauer<br/>Hospodář oddílu OVT</p>
+      <!-- Podpisy: připravil + schválil -->
+      <table width="100%" cellpadding="0" cellspacing="0"
+             style="border:1px solid #e5e7eb;border-radius:8px;margin:8px 0 0;background:#f9fafb;">
+        <tr>
+          <td style="padding:10px 16px;border-right:1px solid #e5e7eb;width:50%;vertical-align:top;">
+            <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;">Připravil</p>
+            <p style="margin:0;font-size:13px;color:#374151;font-weight:600;">${escapeHtml(event.leaderName ?? "—")}</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Vedoucí akce</p>
+          </td>
+          <td style="padding:10px 16px;vertical-align:top;">
+            <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;">Schválil</p>
+            ${latestApproval ? `
+            <p style="margin:0;font-size:13px;color:#374151;font-weight:600;">${escapeHtml(latestApproval.changedBy)}</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Hospodář oddílu &mdash; ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(latestApproval.changedAt))}</p>
+            ` : `<p style="margin:0;font-size:13px;color:#9ca3af;font-style:italic;">—</p>`}
+          </td>
+        </tr>
+      </table>
     </td>
   </tr>
 
