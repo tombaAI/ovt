@@ -31,6 +31,7 @@ import { removeParticipantFromRegistration, cancelAdminRegistration } from "@/li
 
 interface Props {
     event: EventRow;
+    isTreasurer: boolean;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -957,7 +958,7 @@ function RegistrationsTab({ eventId, billingStatus }: { eventId: number; billing
 
 // ── Main component ────────────────────────────────────────────────────────────
 
-export function EventDetailClient({ event }: Props) {
+export function EventDetailClient({ event, isTreasurer }: Props) {
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<string>(() => {
         if (typeof window !== "undefined") {
@@ -1219,6 +1220,8 @@ export function EventDetailClient({ event }: Props) {
                             leaderName={event.leaderName}
                             leaderCskNumber={event.leaderCskNumber}
                             billingStatus={event.billingStatus}
+                            treasurerApproved={event.treasurerApproved}
+                            isTreasurer={isTreasurer}
                         />
                     </TabsContent>
 

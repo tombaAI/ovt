@@ -6,6 +6,7 @@ import { auth } from "@/auth";
 import { eventExpenses, events, members, people } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
+import { logVyuctovaniSend } from "@/lib/actions/events";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -172,6 +173,7 @@ export async function POST(
       .select({
         id: events.id,
         name: events.name,
+        billingStatus: events.billingStatus,
         leaderName: members.fullName,
         leaderEmail: members.email,
       })
@@ -182,6 +184,13 @@ export async function POST(
 
     if (!event) {
       return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+    }
+
+    if (event.billingStatus !== "prescribed") {
+      return NextResponse.json(
+        { error: "Vyúčtování nelze odeslat — náklady nejsou uzamčeny. Nejdřív vygenerujte předpisy v záložce Vyúčtování." },
+        { status: 400 },
+      );
     }
 
     const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
@@ -503,6 +512,13 @@ export async function POST(
     if (error) {
       return NextResponse.json({ error: error.message }, { status: 502 });
     }
+
+    await logVyuctovaniSend(
+      eventId,
+      session.user.email!,
+      recipients,
+      settings.testTo ?? null,
+    );
 
     return NextResponse.json({
       success: true,

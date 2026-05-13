@@ -409,6 +409,7 @@ export const events = appSchema.table(
         note: text("note"),
         subsidyPerMember: numeric("subsidy_per_member", { precision: 10, scale: 2 }),
         billingStatus: text("billing_status", { enum: eventBillingStatusEnum }).notNull().default("draft"),
+        treasurerApproved: boolean("treasurer_approved").notNull().default(false),
         createdBy: text("created_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -755,6 +756,19 @@ export const importFinTjAllocations = appSchema.table(
 );
 
 // ── System tables ────────────────────────────────────────────────────────────
+
+export const eventVyuctovaniSends = appSchema.table(
+    "event_vyuctovani_sends",
+    {
+        id:          serial("id").primaryKey(),
+        eventId:     integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+        sentAt:      timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+        sentBy:      text("sent_by").notNull(),
+        recipients:  text("recipients").array().notNull().default(drizzleSql`'{}'`),
+        testTo:      text("test_to"),
+    },
+    (t) => [index("event_vyuctovani_sends_event_idx").on(t.eventId)],
+);
 
 export const eventSettlementEmailSends = appSchema.table(
     "event_settlement_email_sends",

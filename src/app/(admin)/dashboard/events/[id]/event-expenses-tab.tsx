@@ -10,8 +10,10 @@ import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
 import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
+import { setTreasurerApproval, getVyuctovaniEmailLog, type VyuctovaniSendEntry } from "@/lib/actions/events";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
+import { Mail, Check } from "lucide-react";
 
 const CATEGORIES = expenseCategoryEnum as readonly ExpenseCategory[];
 const MAX_PX = 1600;
@@ -2007,12 +2009,16 @@ export function EventExpensesTab({
     leaderName,
     leaderCskNumber,
     billingStatus,
+    treasurerApproved: initialTreasurerApproved,
+    isTreasurer,
 }: {
     eventId: number;
     eventName: string;
     leaderName: string | null;
     leaderCskNumber: string | null;
     billingStatus: "draft" | "prescribed";
+    treasurerApproved: boolean;
+    isTreasurer: boolean;
 }) {
     const isPrescribed = billingStatus === "prescribed";
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
@@ -2020,6 +2026,9 @@ export function EventExpensesTab({
     const [error, setError] = useState<string | null>(null);
     const [personOptions, setPersonOptions] = useState<PersonOption[]>([]);
     const [peopleLoaded, setPeopleLoaded] = useState(false);
+    const [treasurerApproved, setTreasurerApproved] = useState(initialTreasurerApproved);
+    const [approvalSaving, setApprovalSaving] = useState(false);
+    const [sendLog, setSendLog] = useState<VyuctovaniSendEntry[]>([]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -2040,6 +2049,16 @@ export function EventExpensesTab({
             .then(people => setPersonOptions(people))
             .finally(() => setPeopleLoaded(true));
     }, []);
+    useEffect(() => {
+        if (isPrescribed) getVyuctovaniEmailLog(eventId).then(setSendLog);
+    }, [eventId, isPrescribed]);
+
+    async function handleTreasurerApproval(checked: boolean) {
+        setApprovalSaving(true);
+        const res = await setTreasurerApproval(eventId, checked);
+        if (!("error" in res)) setTreasurerApproved(checked);
+        setApprovalSaving(false);
+    }
 
     function handlePersonCreated(person: PersonOption) {
         setPersonOptions(prev => [...prev, person].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs")));
@@ -2047,12 +2066,70 @@ export function EventExpensesTab({
 
     const total = expenses?.reduce((s, e) => s + Number(e.amount), 0) ?? 0;
 
+    const fmtDateTime = (d: Date) =>
+        new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
+
     return (
         <div className="space-y-4">
             {isPrescribed && (
-                <div className="rounded-xl border border-[#327600]/30 bg-[#327600]/5 px-4 py-3 flex items-center gap-2 text-sm text-[#327600]">
-                    <span>🔒</span>
-                    <span>Náklady jsou uzamčeny — předpisy byly vygenerovány. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
+                <div className="rounded-xl border border-[#327600]/30 bg-[#327600]/5 px-4 py-4 space-y-4">
+                    {/* Status řádek */}
+                    <p className="text-sm text-[#327600] flex items-center gap-2">
+                        <span>🔒</span>
+                        <span>Náklady jsou uzamčeny — předpisy byly vygenerovány. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
+                    </p>
+
+                    {/* Souhlas hospodáře */}
+                    <label className={`flex items-center gap-3 cursor-${isTreasurer ? "pointer" : "default"}`}>
+                        <div className="relative shrink-0">
+                            <input
+                                type="checkbox"
+                                checked={treasurerApproved}
+                                disabled={!isTreasurer || approvalSaving}
+                                onChange={e => handleTreasurerApproval(e.target.checked)}
+                                className="sr-only"
+                            />
+                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                treasurerApproved
+                                    ? "bg-[#327600] border-[#327600]"
+                                    : "bg-white border-gray-300"
+                            } ${!isTreasurer ? "opacity-60" : ""}`}>
+                                {treasurerApproved && <Check size={12} strokeWidth={3} className="text-white" />}
+                            </div>
+                        </div>
+                        <span className="text-sm text-gray-700">
+                            Hospodář zkontroloval a souhlasí s vyúčtováním
+                            {!isTreasurer && <span className="text-xs text-gray-400 ml-1">(pouze hospodář)</span>}
+                        </span>
+                        {approvalSaving && <span className="text-xs text-gray-400">Ukládám…</span>}
+                    </label>
+
+                    {/* Vyúčtování akce — tlačítka */}
+                    <div className="border-t border-[#327600]/10 pt-3">
+                        <EventExpenseActions
+                            eventId={eventId}
+                            expenses={expenses ?? []}
+                            onSent={() => getVyuctovaniEmailLog(eventId).then(setSendLog)}
+                        />
+                    </div>
+
+                    {/* Log odeslaných vyúčtování */}
+                    {sendLog.length > 0 && (
+                        <div className="border-t border-[#327600]/10 pt-3 space-y-1.5">
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Historie odeslaných vyúčtování</p>
+                            {sendLog.map(entry => (
+                                <div key={entry.id} className="flex items-start gap-2 text-xs text-gray-500">
+                                    <Mail size={11} className="mt-0.5 shrink-0 text-gray-300" />
+                                    <span>
+                                        <span className="text-gray-700 font-medium">{entry.recipients.join(", ") || "—"}</span>
+                                        {" · "}{fmtDateTime(entry.sentAt)}
+                                        {" · "}{entry.sentBy}
+                                        {entry.testTo && <span className="text-amber-600 ml-1" title={`Testovací → ${entry.testTo}`}>· TEST → {entry.testTo}</span>}
+                                    </span>
+                                </div>
+                            ))}
+                        </div>
+                    )}
                 </div>
             )}
             {!isPrescribed && (
@@ -2102,11 +2179,6 @@ export function EventExpensesTab({
                     )}
                 </>
             )}
-
-            <EventExpenseActions
-                eventId={eventId}
-                expenses={expenses ?? []}
-            />
 
             <AutoCropPoc />
             <AutoRotatePoc />

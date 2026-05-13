@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { events, members, auditLog } from "@/db/schema";
+import { events, members, auditLog, eventVyuctovaniSends } from "@/db/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
@@ -29,6 +29,7 @@ export type EventRow = {
     leaderCskNumber: string | null;
     status: EventStatus;
     billingStatus: "draft" | "prescribed";
+    treasurerApproved: boolean;
     description: string | null;
     externalUrl: string | null;
     source: EventSource;
@@ -79,6 +80,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             leaderCskNumber: members.cskNumber,
             status: events.status,
             billingStatus: events.billingStatus,
+            treasurerApproved: events.treasurerApproved,
             description: events.description,
             externalUrl: events.externalUrl,
             source: events.source,
@@ -153,6 +155,7 @@ export async function getEventById(id: number): Promise<EventRow | null> {
             leaderCskNumber: members.cskNumber,
             status: events.status,
             billingStatus: events.billingStatus,
+            treasurerApproved: events.treasurerApproved,
             description: events.description,
             externalUrl: events.externalUrl,
             source: events.source,
@@ -739,4 +742,64 @@ export async function acceptGcalField(id: number, field: string, gcalValue: stri
     }).onConflictDoNothing();
 
     revalidatePath("/dashboard/events");
+}
+
+// ── Souhlas hospodáře ─────────────────────────────────────────────────────────
+
+export async function setTreasurerApproval(
+    eventId: number,
+    approved: boolean,
+): Promise<{ success: true } | { error: string }> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
+    if (!treasurerEmail || session.user.email.toLowerCase() !== treasurerEmail) {
+        return { error: "Nemáte oprávnění hospodáře." };
+    }
+
+    try {
+        const db = getDb();
+        await db.update(events).set({ treasurerApproved: approved }).where(eq(events.id, eventId));
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Nepodařilo se uložit." };
+    }
+}
+
+// ── Log odeslaných vyúčtování ─────────────────────────────────────────────────
+
+export type VyuctovaniSendEntry = {
+    id: number;
+    sentAt: Date;
+    sentBy: string;
+    recipients: string[];
+    testTo: string | null;
+};
+
+export async function getVyuctovaniEmailLog(eventId: number): Promise<VyuctovaniSendEntry[]> {
+    const db = getDb();
+    const rows = await db
+        .select()
+        .from(eventVyuctovaniSends)
+        .where(eq(eventVyuctovaniSends.eventId, eventId))
+        .orderBy(desc(eventVyuctovaniSends.sentAt));
+    return rows.map(r => ({
+        id: r.id,
+        sentAt: r.sentAt,
+        sentBy: r.sentBy,
+        recipients: r.recipients ?? [],
+        testTo: r.testTo ?? null,
+    }));
+}
+
+export async function logVyuctovaniSend(
+    eventId: number,
+    sentBy: string,
+    recipients: string[],
+    testTo: string | null,
+): Promise<void> {
+    const db = getDb();
+    await db.insert(eventVyuctovaniSends).values({ eventId, sentBy, recipients, testTo });
 }
