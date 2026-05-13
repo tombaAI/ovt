@@ -1227,7 +1227,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
 
                     {/* ── Tab: Vyúčtování ── */}
                     <TabsContent value="settlement" className="mt-0">
-                        <EventSettlementTab eventId={event.id} billingStatus={event.billingStatus} />
+                        <EventSettlementTab eventId={event.id} billingStatus={event.billingStatus} treasurerApproved={event.treasurerApproved} />
                     </TabsContent>
                 </Tabs>
 

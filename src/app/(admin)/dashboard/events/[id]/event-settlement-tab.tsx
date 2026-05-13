@@ -310,11 +310,12 @@ function ExpenseAllocationRow({
 
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, onSendEmail }: {
+function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail }: {
     rows: SettlementRegistrationRow[];
     unitPrice: number;
     hasPerReg: boolean;
     isPrescribed: boolean;
+    treasurerApproved: boolean;
     onSendEmail: (registrationId: number, name: string) => void;
 }) {
     return (
@@ -398,7 +399,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, on
                                             matchedAmount={reg.existingPrescription.matchedAmount}
                                         />
                                     ) : <span className="text-xs text-gray-400">—</span>}
-                                    {isPrescribed && reg.existingPrescription && reg.existingPrescription.status !== "cancelled" && (
+                                    {isPrescribed && treasurerApproved && reg.existingPrescription && reg.existingPrescription.status !== "cancelled" && (
                                         <button
                                             onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
                                             title="Odeslat předpis e-mailem"
@@ -454,11 +455,12 @@ function recomputeSettlement(s: EventSettlement, newSubsidyTotal: number): Event
 
 // ── Main tab component ────────────────────────────────────────────────────────
 
-export function EventSettlementTab({ eventId, billingStatus: initialBillingStatus }: { eventId: number; billingStatus: "draft" | "prescribed" }) {
+export function EventSettlementTab({ eventId, billingStatus: initialBillingStatus, treasurerApproved: initialTreasurerApproved }: { eventId: number; billingStatus: "draft" | "prescribed"; treasurerApproved: boolean }) {
     const [settlement, setSettlement] = useState<EventSettlement | null>(null);
     const [loading, setLoading] = useState(true);
     const [subsidyTotal, setSubsidyTotal] = useState(0);
     const [billingStatus, setBillingStatus] = useState(initialBillingStatus);
+    const [treasurerApproved] = useState(initialTreasurerApproved);
     const [locking, startLock]     = useTransition();
     const [unlocking, startUnlock] = useTransition();
     const [sending, startSend]     = useTransition();
@@ -620,7 +622,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                                 </Button>
                                 <Button size="sm" variant="outline"
                                     onClick={() => { setSendFeedback(null); setBatchModalOpen(true); }}
-                                    disabled={!hasRegistrations}
+                                    disabled={!hasRegistrations || !treasurerApproved}
                                     className="border-[#327600]/40 text-[#327600] hover:bg-[#327600]/5 gap-1.5">
                                     <Mail size={13} /> Rozeslat maily
                                 </Button>
@@ -634,6 +636,11 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                         )}
                     </div>
                 </div>
+
+                {/* Blokující hláška bez souhlasu hospodáře */}
+                {isPrescribed && !treasurerApproved && (
+                    <p className="mt-2 text-xs text-red-600">Předpisy nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním.</p>
+                )}
 
                 {/* Feedback po odeslání */}
                 {sendFeedback && (
@@ -736,6 +743,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                         unitPrice={settlement.unitPrice}
                         hasPerReg={settlement.finalExpenses.some(e => e.allocationMethod === "per_registration")}
                         isPrescribed={isPrescribed}
+                        treasurerApproved={treasurerApproved}
                         onSendEmail={(id, name) => { setSendFeedback(null); setIndividualTarget({ registrationId: id, name }); }}
                     />
                 )}
