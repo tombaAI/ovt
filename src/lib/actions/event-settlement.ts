@@ -723,8 +723,9 @@ export async function sendEventSettlementEmails(
 
     try {
         const db = getDb();
-        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        const [event] = await db.select({ name: events.name, treasurerApproved: events.treasurerApproved }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
+        if (!event.treasurerApproved) return { error: "Předpisy nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním." };
 
         const settlement = await getEventSettlement(eventId);
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
@@ -792,8 +793,9 @@ export async function sendSingleRegistrationEmail(
         if (reg.cancelledAt) return { error: "Přihláška je zrušena" };
         if (await getBillingStatus(db, reg.eventId) !== "prescribed") return { error: "Náklady nejsou uzamčeny — nejdříve vygenerujte předpisy." };
 
-        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, reg.eventId));
+        const [event] = await db.select({ name: events.name, treasurerApproved: events.treasurerApproved }).from(events).where(eq(events.id, reg.eventId));
         if (!event) return { error: "Akce nenalezena" };
+        if (!event.treasurerApproved) return { error: "Předpis nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním." };
 
         const settlement = await getEventSettlement(reg.eventId);
         const regRow = settlement.registrations.find(r => r.registrationId === registrationId);

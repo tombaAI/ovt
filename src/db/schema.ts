@@ -757,6 +757,18 @@ export const importFinTjAllocations = appSchema.table(
 
 // ── System tables ────────────────────────────────────────────────────────────
 
+export const eventTreasurerApprovalLog = appSchema.table(
+    "event_treasurer_approval_log",
+    {
+        id:        serial("id").primaryKey(),
+        eventId:   integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+        action:    text("action", { enum: ["approved", "revoked"] as const }).notNull(),
+        changedBy: text("changed_by").notNull(),
+        changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
+    },
+    (t) => [index("event_treasurer_approval_log_event_idx").on(t.eventId)],
+);
+
 export const eventVyuctovaniSends = appSchema.table(
     "event_vyuctovani_sends",
     {

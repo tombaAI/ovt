@@ -174,6 +174,7 @@ export async function POST(
         id: events.id,
         name: events.name,
         billingStatus: events.billingStatus,
+        treasurerApproved: events.treasurerApproved,
         leaderName: members.fullName,
         leaderEmail: members.email,
       })
@@ -189,6 +190,13 @@ export async function POST(
     if (event.billingStatus !== "prescribed") {
       return NextResponse.json(
         { error: "Vyúčtování nelze odeslat — náklady nejsou uzamčeny. Nejdřív vygenerujte předpisy v záložce Vyúčtování." },
+        { status: 400 },
+      );
+    }
+
+    if (!event.treasurerApproved) {
+      return NextResponse.json(
+        { error: "Vyúčtování nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním." },
         { status: 400 },
       );
     }

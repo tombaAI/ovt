@@ -10,7 +10,7 @@ import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
 import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
-import { setTreasurerApproval, getVyuctovaniEmailLog, type VyuctovaniSendEntry } from "@/lib/actions/events";
+import { setTreasurerApproval, getVyuctovaniActivityLog, type VyuctovaniActivity } from "@/lib/actions/events";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
 import { Mail, Check } from "lucide-react";
@@ -2028,7 +2028,7 @@ export function EventExpensesTab({
     const [peopleLoaded, setPeopleLoaded] = useState(false);
     const [treasurerApproved, setTreasurerApproved] = useState(initialTreasurerApproved);
     const [approvalSaving, setApprovalSaving] = useState(false);
-    const [sendLog, setSendLog] = useState<VyuctovaniSendEntry[]>([]);
+    const [activityLog, setActivityLog] = useState<VyuctovaniActivity[]>([]);
 
     const load = useCallback(async () => {
         setLoading(true);
@@ -2050,13 +2050,16 @@ export function EventExpensesTab({
             .finally(() => setPeopleLoaded(true));
     }, []);
     useEffect(() => {
-        if (isPrescribed) getVyuctovaniEmailLog(eventId).then(setSendLog);
+        if (isPrescribed) getVyuctovaniActivityLog(eventId).then(setActivityLog);
     }, [eventId, isPrescribed]);
 
     async function handleTreasurerApproval(checked: boolean) {
         setApprovalSaving(true);
         const res = await setTreasurerApproval(eventId, checked);
-        if (!("error" in res)) setTreasurerApproved(checked);
+        if (!("error" in res)) {
+            setTreasurerApproved(checked);
+            getVyuctovaniActivityLog(eventId).then(setActivityLog);
+        }
         setApprovalSaving(false);
     }
 
@@ -2109,22 +2112,36 @@ export function EventExpensesTab({
                         <EventExpenseActions
                             eventId={eventId}
                             expenses={expenses ?? []}
-                            onSent={() => getVyuctovaniEmailLog(eventId).then(setSendLog)}
+                            onSent={() => getVyuctovaniActivityLog(eventId).then(setActivityLog)}
                         />
                     </div>
 
                     {/* Log odeslaných vyúčtování */}
-                    {sendLog.length > 0 && (
+                    {activityLog.length > 0 && (
                         <div className="border-t border-[#327600]/10 pt-3 space-y-1.5">
-                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Historie odeslaných vyúčtování</p>
-                            {sendLog.map(entry => (
-                                <div key={entry.id} className="flex items-start gap-2 text-xs text-gray-500">
-                                    <Mail size={11} className="mt-0.5 shrink-0 text-gray-300" />
+                            <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Historie vyúčtování</p>
+                            {activityLog.map(entry => (
+                                <div key={`${entry.kind}-${entry.id}`} className="flex items-start gap-2 text-xs text-gray-500">
+                                    {entry.kind === "approval" ? (
+                                        <Check size={11} className={`mt-0.5 shrink-0 ${entry.action === "approved" ? "text-[#327600]" : "text-red-400"}`} />
+                                    ) : (
+                                        <Mail size={11} className="mt-0.5 shrink-0 text-gray-300" />
+                                    )}
                                     <span>
-                                        <span className="text-gray-700 font-medium">{entry.recipients.join(", ") || "—"}</span>
-                                        {" · "}{fmtDateTime(entry.sentAt)}
-                                        {" · "}{entry.sentBy}
-                                        {entry.testTo && <span className="text-amber-600 ml-1" title={`Testovací → ${entry.testTo}`}>· TEST → {entry.testTo}</span>}
+                                        {entry.kind === "approval" ? (
+                                            <>
+                                                <span className={`font-medium ${entry.action === "approved" ? "text-[#327600]" : "text-red-600"}`}>
+                                                    {entry.action === "approved" ? "Hospodář udělil souhlas" : "Hospodář odvolal souhlas"}
+                                                </span>
+                                                {" · "}{fmtDateTime(entry.at)}{" · "}{entry.changedBy}
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-gray-700 font-medium">Odesláno: {entry.recipients.join(", ") || "—"}</span>
+                                                {" · "}{fmtDateTime(entry.at)}{" · "}{entry.sentBy}
+                                                {entry.testTo && <span className="text-amber-600 ml-1">· TEST → {entry.testTo}</span>}
+                                            </>
+                                        )}
                                     </span>
                                 </div>
                             ))}

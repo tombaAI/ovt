@@ -1,7 +1,7 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { events, members, auditLog, eventVyuctovaniSends } from "@/db/schema";
+import { events, members, auditLog, eventVyuctovaniSends, eventTreasurerApprovalLog } from "@/db/schema";
 import { eq, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
@@ -760,7 +760,14 @@ export async function setTreasurerApproval(
 
     try {
         const db = getDb();
-        await db.update(events).set({ treasurerApproved: approved }).where(eq(events.id, eventId));
+        await db.transaction(async tx => {
+            await tx.update(events).set({ treasurerApproved: approved }).where(eq(events.id, eventId));
+            await tx.insert(eventTreasurerApprovalLog).values({
+                eventId,
+                action: approved ? "approved" : "revoked",
+                changedBy: session.user!.email!,
+            });
+        });
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch {
@@ -768,30 +775,40 @@ export async function setTreasurerApproval(
     }
 }
 
-// ── Log odeslaných vyúčtování ─────────────────────────────────────────────────
+// ── Sjednocený activity log (souhlasy + odeslaná vyúčtování) ──────────────────
 
-export type VyuctovaniSendEntry = {
-    id: number;
-    sentAt: Date;
-    sentBy: string;
-    recipients: string[];
-    testTo: string | null;
-};
+export type VyuctovaniActivity =
+    | { kind: "approval"; id: number; action: "approved" | "revoked"; changedBy: string; at: Date }
+    | { kind: "send"; id: number; sentBy: string; recipients: string[]; testTo: string | null; at: Date };
 
-export async function getVyuctovaniEmailLog(eventId: number): Promise<VyuctovaniSendEntry[]> {
+export async function getVyuctovaniActivityLog(eventId: number): Promise<VyuctovaniActivity[]> {
     const db = getDb();
-    const rows = await db
-        .select()
-        .from(eventVyuctovaniSends)
-        .where(eq(eventVyuctovaniSends.eventId, eventId))
-        .orderBy(desc(eventVyuctovaniSends.sentAt));
-    return rows.map(r => ({
-        id: r.id,
-        sentAt: r.sentAt,
-        sentBy: r.sentBy,
-        recipients: r.recipients ?? [],
-        testTo: r.testTo ?? null,
-    }));
+    const [approvals, sends] = await Promise.all([
+        db.select().from(eventTreasurerApprovalLog)
+            .where(eq(eventTreasurerApprovalLog.eventId, eventId)),
+        db.select().from(eventVyuctovaniSends)
+            .where(eq(eventVyuctovaniSends.eventId, eventId)),
+    ]);
+
+    const activities: VyuctovaniActivity[] = [
+        ...approvals.map(r => ({
+            kind: "approval" as const,
+            id: r.id,
+            action: r.action as "approved" | "revoked",
+            changedBy: r.changedBy,
+            at: r.changedAt,
+        })),
+        ...sends.map(r => ({
+            kind: "send" as const,
+            id: r.id,
+            sentBy: r.sentBy,
+            recipients: r.recipients ?? [],
+            testTo: r.testTo ?? null,
+            at: r.sentAt,
+        })),
+    ];
+
+    return activities.sort((a, b) => b.at.getTime() - a.at.getTime());
 }
 
 export async function logVyuctovaniSend(
@@ -803,3 +820,6 @@ export async function logVyuctovaniSend(
     const db = getDb();
     await db.insert(eventVyuctovaniSends).values({ eventId, sentBy, recipients, testTo });
 }
+
+// Ponecháno pro zpětnou kompatibilitu se settlement tabem
+export type VyuctovaniSendEntry = Extract<VyuctovaniActivity, { kind: "send" }>;
