@@ -135,8 +135,10 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
             .where(inArray(importFinTjTransactions.docNumber, docNumbers));
         const existingMap = new Map(existingRows.map(r => [r.docNumber, r]));
 
-        // Rozdělit na nové a existující
-        const newTxs = parsed.transactions.filter(tx => !existingMap.has(tx.docNumber));
+        // Rozdělit na nové a existující.
+        // Jeden doklad může pokrývat více řádků (účtů) — do master tabulky vkládáme jen první výskyt per docNumber.
+        const newTxsAll = parsed.transactions.filter(tx => !existingMap.has(tx.docNumber));
+        const newTxs = [...new Map(newTxsAll.map(tx => [tx.docNumber, tx])).values()];
 
         // Batch insert nových transakcí do master listu
         const newTxIdMap = new Map<string, number>(); // docNumber → id
