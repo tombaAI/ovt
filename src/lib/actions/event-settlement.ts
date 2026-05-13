@@ -522,6 +522,8 @@ export async function addAdminEventRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
+        if (await getBillingStatus(db, eventId) === "prescribed") return { error: "Nelze přidávat přihlášky — náklady jsou uzamčeny." };
+
         const publicToken = randomBytes(24).toString("hex");
 
         const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
@@ -570,8 +572,10 @@ export async function updateAdminRegistration(
 ): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
-        await db.update(eventRegistrations).set(input).where(eq(eventRegistrations.id, registrationId));
         const [reg] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+        if (!reg) return { error: "Přihláška nenalezena" };
+        if (await getBillingStatus(db, reg.eventId) === "prescribed") return { error: "Nelze měnit přihlášky — náklady jsou uzamčeny." };
+        await db.update(eventRegistrations).set(input).where(eq(eventRegistrations.id, registrationId));
         if (reg) revalidatePath(`/dashboard/events/${reg.eventId}`);
         return { success: true };
     } catch {
@@ -585,6 +589,14 @@ export async function linkParticipantToMember(
 ): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
+        const [pRow] = await db
+            .select({ registrationId: eventRegistrationParticipants.registrationId })
+            .from(eventRegistrationParticipants)
+            .where(eq(eventRegistrationParticipants.id, participantId));
+        if (pRow) {
+            const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
+            if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+        }
         await db.update(eventRegistrationParticipants)
             .set({ memberId, personId: null })
             .where(eq(eventRegistrationParticipants.id, participantId));
@@ -709,6 +721,10 @@ export async function addParticipantToRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
+        const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+        if (!regRow) return { error: "Přihláška nenalezena" };
+        if (await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze přidávat účastníky — náklady jsou uzamčeny." };
+
         let eventId: number | null = null;
 
         await db.transaction(async tx => {
@@ -750,6 +766,14 @@ export async function removeParticipantFromRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
+        const [pRow] = await db
+            .select({ registrationId: eventRegistrationParticipants.registrationId })
+            .from(eventRegistrationParticipants)
+            .where(eq(eventRegistrationParticipants.id, participantId));
+        if (!pRow) return { error: "Účastník nenalezen" };
+        const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
+        if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze odebírat účastníky — náklady jsou uzamčeny." };
+
         let eventId: number | null = null;
 
         await db.transaction(async tx => {
@@ -806,6 +830,7 @@ export async function cancelAdminRegistration(
 
             if (!reg) throw new Error("Přihláška nenalezena");
             if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
+            if (await getBillingStatus(db, reg.eventId) === "prescribed") throw new Error("Nelze zrušit přihlášku — náklady jsou uzamčeny.");
 
             eventId = reg.eventId;
 

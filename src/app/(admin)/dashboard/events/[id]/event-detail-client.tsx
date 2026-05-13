@@ -658,7 +658,7 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
 
 // ── Karta přihlášky ───────────────────────────────────────────────────────────
 
-function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRefresh: () => void }) {
+function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean }) {
     const [removingId, setRemovingId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
@@ -771,7 +771,7 @@ function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRe
                                         kontakt
                                     </span>
                                 )}
-                                {p.memberId ? (
+                                {!isPrescribed && (p.memberId ? (
                                     <button
                                         onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, registrationId: r.registrationId })}
                                         title={`Člen: ${p.memberName}`}
@@ -785,8 +785,8 @@ function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRe
                                         className="text-gray-300 hover:text-emerald-500 transition-colors">
                                         <UserCheck size={11} />
                                     </button>
-                                ) : null}
-                                {!isCancelled && p.id && (
+                                ) : null)}
+                                {!isCancelled && !isPrescribed && p.id && (
                                     <button
                                         onClick={() => handleRemove(p.id!, p.fullName)}
                                         disabled={removingId === p.id}
@@ -798,7 +798,7 @@ function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRe
                             </div>
                         ))}
                     </div>
-                    {!isCancelled && (
+                    {!isCancelled && !isPrescribed && (
                         <button onClick={() => setAddParticipantOpen(true)}
                             className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 transition-colors mt-1">
                             <UserPlus size={12} /> Přidat účastníka
@@ -806,7 +806,7 @@ function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRe
                     )}
                 </div>
 
-                {!isCancelled && (
+                {!isCancelled && !isPrescribed && (
                     <div className="flex justify-end pt-1">
                         <button onClick={handleCancel} disabled={cancelling}
                             className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
@@ -837,7 +837,7 @@ function RegistrationCard({ r, onRefresh }: { r: EventRegistrationAdminRow; onRe
     );
 }
 
-function RegistrationsTab({ eventId }: { eventId: number }) {
+function RegistrationsTab({ eventId, billingStatus }: { eventId: number; billingStatus: string }) {
     const [rows, setRows] = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -856,13 +856,17 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
     if (loading) return <p className="text-sm text-gray-400 py-8 text-center">Načítám přihlášky…</p>;
     if (error) return <p className="text-sm text-red-500 py-4">{error}</p>;
 
+    const isPrescribed = billingStatus === "prescribed";
+
     if (!rows || rows.length === 0) return (
         <div className="space-y-3">
-            <div className="flex justify-end">
-                <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="text-xs h-8 gap-1.5">
-                    + Přidat přihlášku
-                </Button>
-            </div>
+            {!isPrescribed && (
+                <div className="flex justify-end">
+                    <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="text-xs h-8 gap-1.5">
+                        + Přidat přihlášku
+                    </Button>
+                </div>
+            )}
             <p className="text-sm text-gray-400 py-8 text-center">Žádné přihlášky</p>
             <AddRegistrationDialog eventId={eventId} open={addOpen} onClose={() => setAddOpen(false)} onAdded={load} />
         </div>
@@ -907,11 +911,13 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-end">
-                <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="text-xs h-8 gap-1.5">
-                    + Přidat přihlášku
-                </Button>
-            </div>
+            {!isPrescribed && (
+                <div className="flex justify-end">
+                    <Button size="sm" variant="outline" onClick={() => setAddOpen(true)} className="text-xs h-8 gap-1.5">
+                        + Přidat přihlášku
+                    </Button>
+                </div>
+            )}
             <div className="rounded-2xl border border-emerald-100 bg-gradient-to-br from-emerald-50 via-white to-sky-50 p-4 sm:p-5">
                 <div className="flex items-center justify-between gap-3 flex-wrap">
                     <div>
@@ -942,7 +948,7 @@ function RegistrationsTab({ eventId }: { eventId: number }) {
 
             <div className="space-y-3">
                 {rows.map(r => (
-                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} />
+                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} />
                 ))}
             </div>
         </div>
@@ -1202,7 +1208,7 @@ export function EventDetailClient({ event }: Props) {
 
                     {/* ── Tab: Přihlášky ── */}
                     <TabsContent value="registrations" className="mt-0">
-                        <RegistrationsTab eventId={event.id} />
+                        <RegistrationsTab eventId={event.id} billingStatus={event.billingStatus} />
                     </TabsContent>
 
                     {/* ── Tab: Náklady ── */}
