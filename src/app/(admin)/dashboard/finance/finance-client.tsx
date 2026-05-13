@@ -360,10 +360,10 @@ export function FinanceClient({
         <div className="space-y-4">
             <h1 className="text-2xl font-semibold text-gray-900">Finance</h1>
 
-            <Tabs defaultValue={initialTab === "finance-tj" ? "finance-tj" : "platby"}>
+            <Tabs defaultValue={initialTab === "platby" ? "platby" : "finance-tj"}>
                 <TabsList>
-                    <TabsTrigger value="platby">Platby</TabsTrigger>
                     <TabsTrigger value="finance-tj">Finance TJ</TabsTrigger>
+                    <TabsTrigger value="platby">Platby z bank</TabsTrigger>
                 </TabsList>
 
                 <TabsContent value="platby" className="mt-4">

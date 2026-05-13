@@ -68,7 +68,7 @@ export default async function FinancePage({
                     ? Number(params.profileId)
                     : null
             }
-            initialTab={(params.tab as string) ?? "platby"}
+            initialTab={(params.tab as string) ?? "finance-tj"}
         />
     );
 }
