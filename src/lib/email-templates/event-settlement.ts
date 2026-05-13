@@ -43,13 +43,14 @@ export type EventSettlementEmailData = {
     eventName:        string;
     prescriptionCode: number;
     variableSymbol:   string;
-    amount:           number;
+    amount:           number;  // doplatek (settlement) = totalAmount − depositAmount
     bankAccount:      string;
     paymentDue:       string | null;
     unitPrice:        number;
     participants:     { fullName: string; isMember: boolean }[];
     memberCount:      number;
     subsidy:          number;
+    depositAmount?:   number;  // záloha, která již byla vyměřena při přihlášce (informativně)
     message?:         string;
     senderName?:      string;
     senderEmail?:     string;
@@ -81,6 +82,14 @@ export function buildEventSettlementEmail(
             Dotace OVT Bohemians${data.memberCount > 1 ? ` (${data.memberCount} členové)` : ""}
           </td>
           <td style="padding:8px 0;font-size:13px;font-weight:600;text-align:right;color:#15803d;white-space:nowrap;">−${fmt(data.subsidy)}</td>
+        </tr>` : "";
+
+    const depositRow = (data.depositAmount ?? 0) > 0 ? `
+        <tr>
+          <td colspan="2" style="padding:8px 8px 8px 0;font-size:13px;color:#6b7280;">
+            Záloha z přihlášky
+          </td>
+          <td style="padding:8px 0;font-size:13px;font-weight:600;text-align:right;color:#6b7280;white-space:nowrap;">−${fmt(data.depositAmount!)}</td>
         </tr>` : "";
 
     const html = `<!DOCTYPE html>
@@ -136,9 +145,10 @@ export function buildEventSettlementEmail(
         </tr>
         ${participantRows}
         ${subsidyRow}
+        ${depositRow}
         <tr><td colspan="3" style="padding:10px 0 0;border-top:2px solid #e5e7eb;"></td></tr>
         <tr>
-          <td colspan="2" style="font-size:15px;font-weight:700;color:#111827;">Celkem k úhradě</td>
+          <td colspan="2" style="font-size:15px;font-weight:700;color:#111827;">Doplatek k úhradě</td>
           <td style="font-size:18px;font-weight:700;color:#327600;text-align:right;white-space:nowrap;">${fmt(data.amount)}</td>
         </tr>
       </table>

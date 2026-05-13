@@ -783,6 +783,7 @@ export async function submitForeignWaterRegistration(
         await tx.insert(eventPaymentPrescriptions).values({
             eventId: event.id,
             registrationId: registration.id,
+            type: "deposit",
             prescriptionCode: code,
             bankAccount: FOREIGN_WATER_BANK_ACCOUNT,
             variableSymbol: FOREIGN_WATER_VARIABLE_SYMBOL,
@@ -1196,7 +1197,10 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         .from(eventRegistrations)
         .leftJoin(
             eventPaymentPrescriptions,
-            eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
+            and(
+                eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
+                eq(eventPaymentPrescriptions.type, "deposit"),
+            ),
         )
         .where(eq(eventRegistrations.eventId, eventId))
         .orderBy(desc(eventRegistrations.createdAt));

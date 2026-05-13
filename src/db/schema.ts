@@ -472,12 +472,16 @@ export const eventRegistrationParticipants = appSchema.table(
 export const eventPaymentPrescriptionStatusEnum = ["pending", "matched", "paid", "cancelled"] as const;
 export type EventPaymentPrescriptionStatus = typeof eventPaymentPrescriptionStatusEnum[number];
 
+export const eventPaymentPrescriptionTypeEnum = ["deposit", "settlement"] as const;
+export type EventPaymentPrescriptionType = typeof eventPaymentPrescriptionTypeEnum[number];
+
 export const eventPaymentPrescriptions = appSchema.table(
     "event_payment_prescriptions",
     {
         id: serial("id").primaryKey(),
         eventId: integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
-        registrationId: integer("registration_id").notNull().unique().references(() => eventRegistrations.id, { onDelete: "cascade" }),
+        registrationId: integer("registration_id").notNull().references(() => eventRegistrations.id, { onDelete: "cascade" }),
+        type: text("type", { enum: eventPaymentPrescriptionTypeEnum }).notNull().default("settlement"),
         prescriptionCode: integer("prescription_code").notNull().unique(),
         bankAccount: text("bank_account").notNull(),
         variableSymbol: text("variable_symbol").notNull(),
@@ -496,6 +500,7 @@ export const eventPaymentPrescriptions = appSchema.table(
         index("event_payment_prescriptions_event_idx").on(t.eventId),
         index("event_payment_prescriptions_status_idx").on(t.status),
         index("event_payment_prescriptions_ledger_idx").on(t.matchedLedgerId),
+        uniqueIndex("event_payment_prescriptions_reg_type_uq").on(t.registrationId, t.type),
     ]
 );
 

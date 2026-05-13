@@ -39,6 +39,17 @@ export type SettlementExpenseRow = {
     allocatedAmount: number; // pro tuto přihlášku
 };
 
+export type PrescriptionInfo = {
+    id: number;
+    prescriptionCode: number;
+    variableSymbol: string;
+    bankAccount: string;
+    status: string;
+    amount: number;
+    matchedAmount: number | null;
+    paymentDue: string | null;
+};
+
 export type SettlementRegistrationRow = {
     registrationId: number;
     firstName: string;
@@ -51,15 +62,10 @@ export type SettlementRegistrationRow = {
     expensesTotal: number;
     subsidy: number;
     totalAmount: number;
-    existingPrescription: {
-        id: number;
-        prescriptionCode: number;
-        variableSymbol: string;
-        status: string;
-        amount: number;
-        matchedAmount: number | null;
-        paymentDue: string | null;
-    } | null;
+    /** Záloha — předpis platby vytvořený při podání přihlášky. Množství je fixní, billing ho nemění. */
+    depositPrescription: PrescriptionInfo | null;
+    /** Doplatek — předpis platby vytvořený při lockBilling. Částka = totalAmount − depositAmount. */
+    settlementPrescription: PrescriptionInfo | null;
 };
 
 export type EventSettlement = {
@@ -146,13 +152,15 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             .where(inArray(eventRegistrationParticipants.registrationId, regIds))
         : [];
 
-    // Existující předpisy
+    // Existující předpisy — načítáme oba typy (deposit + settlement)
     const prescriptions = regIds.length > 0
         ? await db
             .select({
                 id: eventPaymentPrescriptions.id,
                 registrationId: eventPaymentPrescriptions.registrationId,
+                type: eventPaymentPrescriptions.type,
                 prescriptionCode: eventPaymentPrescriptions.prescriptionCode,
+                bankAccount: eventPaymentPrescriptions.bankAccount,
                 variableSymbol: eventPaymentPrescriptions.variableSymbol,
                 status: eventPaymentPrescriptions.status,
                 amount: eventPaymentPrescriptions.amount,
@@ -217,7 +225,21 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             : 0;
         const totalAmount = Math.max(0, expensesTotal - subsidy);
 
-        const prescription = prescriptions.find(p => p.registrationId === reg.id) ?? null;
+        const regPrescriptions = prescriptions.filter(p => p.registrationId === reg.id);
+        const depositRaw = regPrescriptions.find(p => p.type === "deposit") ?? null;
+        const settlementRaw = regPrescriptions.find(p => p.type === "settlement") ?? null;
+
+        const toPrescriptionInfo = (p: typeof depositRaw): PrescriptionInfo | null =>
+            p ? {
+                id: p.id,
+                prescriptionCode: p.prescriptionCode,
+                bankAccount: p.bankAccount,
+                variableSymbol: p.variableSymbol,
+                status: p.status,
+                amount: parseFloat(p.amount),
+                matchedAmount: p.matchedAmount ? parseFloat(p.matchedAmount) : null,
+                paymentDue: p.paymentDue,
+            } : null;
 
         return {
             registrationId: reg.id,
@@ -231,15 +253,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             expensesTotal,
             subsidy,
             totalAmount,
-            existingPrescription: prescription ? {
-                id: prescription.id,
-                prescriptionCode: prescription.prescriptionCode,
-                variableSymbol: prescription.variableSymbol,
-                status: prescription.status,
-                amount: parseFloat(prescription.amount),
-                matchedAmount: prescription.matchedAmount ? parseFloat(prescription.matchedAmount) : null,
-                paymentDue: prescription.paymentDue,
-            } : null,
+            depositPrescription: toPrescriptionInfo(depositRaw),
+            settlementPrescription: toPrescriptionInfo(settlementRaw),
         };
     });
 
@@ -389,10 +404,11 @@ const EVENT_BANK_ACCOUNT = "351416278/0300";
 const EVENT_VS = "20702"; // oddíl OVT v rámci TJ Bohemians — stejný VS jako u záloh za zahraniční akce
 
 /**
- * Interní helper: vytvoří předpis pro jednu přihlášku s kódem Cnnn a prázdnou částkou.
- * Voláme hned při vzniku přihlášky — kód je trvalý, částka se spočítá při odeslání e-mailů.
+ * Interní helper: vytvoří settlement (doplatek) předpis s amount=0 jako placeholder.
+ * Volá se při vzniku admin přihlášky nebo při lockBilling pro přihlášky bez settlement předpisu.
+ * Kód se alokuje vždy nový ze sekvence — settlement se nesmaže (od opravy unlockBilling).
  */
-async function createPrescriptionForRegistration(
+async function createSettlementPrescription(
     tx: Parameters<Parameters<ReturnType<typeof getDb>["transaction"]>[0]>[0],
     eventId: number,
     registrationId: number,
@@ -400,26 +416,14 @@ async function createPrescriptionForRegistration(
     lastName: string,
     eventName: string,
 ): Promise<number> {
-    // Kód přihlášky je trvalý — použijeme existující, nebo alokujeme nový a uložíme na přihlášku.
-    const [reg] = await tx
-        .select({ prescriptionCode: eventRegistrations.prescriptionCode })
-        .from(eventRegistrations)
-        .where(eq(eventRegistrations.id, registrationId));
-
-    let code = reg?.prescriptionCode ?? null;
-    if (!code) {
-        const seqResult = await tx.execute(sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`);
-        code = (seqResult as unknown as { code: number }[])[0]?.code ?? null;
-        if (!code) throw new Error("Nepodařilo se získat kód předpisu");
-        // Uložit kód na přihlášku trvale
-        await tx.update(eventRegistrations)
-            .set({ prescriptionCode: code })
-            .where(eq(eventRegistrations.id, registrationId));
-    }
+    const seqResult = await tx.execute(sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`);
+    const code = (seqResult as unknown as { code: number }[])[0]?.code ?? null;
+    if (!code) throw new Error("Nepodařilo se získat kód settlement předpisu");
 
     await tx.insert(eventPaymentPrescriptions).values({
         eventId,
         registrationId,
+        type: "settlement",
         prescriptionCode: code,
         bankAccount: EVENT_BANK_ACCOUNT,
         variableSymbol: EVENT_VS,
@@ -450,9 +454,9 @@ export async function regeneratePrescriptions(
 }
 
 /**
- * Interní helper: přepočítá a uloží částky do všech existujících předpisů.
- * Přihlášky bez předpisu dostanou nový kód a nový záznam.
- * Vrací počty pro informaci calleru.
+ * Interní helper: vytvoří nebo aktualizuje settlement (doplatek) předpisy.
+ * Deposit předpisy (zálohy) se NIKDY nemění — jejich částka je fixní od přihlášky.
+ * Settlement částka = max(0, totalAmount − depositAmount).
  */
 async function upsertPrescriptionAmounts(
     eventId: number,
@@ -467,14 +471,24 @@ async function upsertPrescriptionAmounts(
 
     await db.transaction(async tx => {
         for (const reg of settlement.registrations) {
-            const amount = String(reg.totalAmount);
-            if (reg.existingPrescription) {
+            // Záloha je fixní — od ní odečteme, abychom dostali doplatek
+            const depositAmount = reg.depositPrescription?.amount ?? 0;
+            const settlementAmount = String(Math.max(0, reg.totalAmount - depositAmount));
+
+            if (reg.settlementPrescription) {
                 await tx.update(eventPaymentPrescriptions)
-                    .set({ amount, paymentDue: paymentDueStr, updatedAt: new Date() })
-                    .where(eq(eventPaymentPrescriptions.id, reg.existingPrescription.id));
+                    .set({ amount: settlementAmount, paymentDue: paymentDueStr, updatedAt: new Date() })
+                    .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
                 updated++;
             } else {
-                await createPrescriptionForRegistration(tx, eventId, reg.registrationId, reg.firstName, reg.lastName, eventName);
+                await createSettlementPrescription(tx, eventId, reg.registrationId, reg.firstName, reg.lastName, eventName);
+                // Při prvním vytvoření nastavíme správnou částku a splatnost
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ amount: settlementAmount, paymentDue: paymentDueStr })
+                    .where(and(
+                        eq(eventPaymentPrescriptions.registrationId, reg.registrationId),
+                        eq(eventPaymentPrescriptions.type, "settlement"),
+                    ));
                 created++;
             }
         }
@@ -537,8 +551,8 @@ export async function addAdminEventRegistration(
                 });
             }
 
-            // Přihláška dostane trvalý kód Cnnn hned při vzniku
-            await createPrescriptionForRegistration(tx, eventId, reg.id, input.firstName, input.lastName, event.name);
+            // Přihláška dostane settlement předpis hned při vzniku (amount=0, přepočítá se při lockBilling)
+            await createSettlementPrescription(tx, eventId, reg.id, input.firstName, input.lastName, event.name);
 
             return reg.id;
         });
@@ -673,7 +687,8 @@ function buildSettlementEmailPayload(
     senderName: string | undefined,
     senderEmail: string | undefined,
 ) {
-    const p = reg.existingPrescription!;
+    // E-mail s vyúčtováním odesíláme pro settlement (doplatek) předpis
+    const p = reg.settlementPrescription!;
     return buildEventSettlementEmail({
         firstName: reg.firstName,
         lastName: reg.lastName,
@@ -682,12 +697,13 @@ function buildSettlementEmailPayload(
         prescriptionCode: p.prescriptionCode,
         variableSymbol: p.variableSymbol,
         amount: p.amount,
-        bankAccount: EVENT_BANK_ACCOUNT,
+        bankAccount: p.bankAccount,
         paymentDue: p.paymentDue,
         unitPrice: reg.personsCount > 0 ? Math.round(reg.expensesTotal / reg.personsCount) : 0,
         participants: reg.participants.map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null })),
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
+        depositAmount: reg.depositPrescription?.amount ?? 0,
         message: message || undefined,
         senderName,
         senderEmail,
@@ -722,7 +738,7 @@ export async function sendEventSettlementEmails(
         const senderEmail = session.user.email;
 
         for (const reg of freshSettlement.registrations) {
-            const p = reg.existingPrescription;
+            const p = reg.settlementPrescription;
             if (!p || p.status === "cancelled") { skipped++; continue; }
 
             const to = emailSettings.testTo ?? reg.email;
@@ -783,7 +799,7 @@ export async function sendSingleRegistrationEmail(
         const settlement = await getEventSettlement(reg.eventId);
         const regRow = settlement.registrations.find(r => r.registrationId === registrationId);
         if (!regRow) return { error: "Přihláška není ve vyúčtování" };
-        if (!regRow.existingPrescription) return { error: "Přihláška nemá předpis platby" };
+        if (!regRow.settlementPrescription) return { error: "Přihláška nemá doplatek předpis — nejdříve uzamkněte náklady." };
 
         const to = emailSettings.testTo ?? regRow.email;
         const senderName = session.user.name ?? undefined;

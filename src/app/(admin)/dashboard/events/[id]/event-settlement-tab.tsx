@@ -340,8 +340,11 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                             <td className="py-2 pr-3">
                                 <p className="font-medium text-gray-800">{reg.firstName} {reg.lastName}</p>
                                 <p className="text-xs text-gray-400">{reg.email}</p>
-                                {reg.existingPrescription && (
-                                    <p className="text-xs font-mono text-gray-500 mt-0.5">C{reg.existingPrescription.prescriptionCode}</p>
+                                {reg.depositPrescription && (
+                                    <p className="text-xs font-mono text-gray-400 mt-0.5">záloha C{reg.depositPrescription.prescriptionCode}</p>
+                                )}
+                                {reg.settlementPrescription && (
+                                    <p className="text-xs font-mono text-gray-500 mt-0">doplatek C{reg.settlementPrescription.prescriptionCode}</p>
                                 )}
                             </td>
                             <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
@@ -392,21 +395,31 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                             </td>
                             <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.totalAmount)}</td>
                             <td className="py-2 text-right">
-                                <div className="inline-flex items-center justify-end gap-2">
-                                    {reg.existingPrescription ? (
-                                        <StatusBadge
-                                            status={reg.existingPrescription.status}
-                                            matchedAmount={reg.existingPrescription.matchedAmount}
-                                        />
-                                    ) : <span className="text-xs text-gray-400">—</span>}
-                                    {isPrescribed && treasurerApproved && reg.existingPrescription && reg.existingPrescription.status !== "cancelled" && (
-                                        <button
-                                            onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
-                                            title="Odeslat předpis e-mailem"
-                                            className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
-                                            <Mail size={13} />
-                                        </button>
+                                <div className="flex flex-col items-end gap-1">
+                                    {reg.depositPrescription && (
+                                        <div className="flex items-center gap-1">
+                                            <span className="text-xs text-gray-400">záloha</span>
+                                            <StatusBadge status={reg.depositPrescription.status} matchedAmount={reg.depositPrescription.matchedAmount} />
+                                        </div>
                                     )}
+                                    <div className="inline-flex items-center gap-1">
+                                        {(reg.depositPrescription || reg.settlementPrescription) && (
+                                            <span className="text-xs text-gray-400">doplatek</span>
+                                        )}
+                                        {reg.settlementPrescription ? (
+                                            <StatusBadge status={reg.settlementPrescription.status} matchedAmount={reg.settlementPrescription.matchedAmount} />
+                                        ) : (
+                                            <span className="text-xs text-gray-400">—</span>
+                                        )}
+                                        {isPrescribed && treasurerApproved && reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled" && (
+                                            <button
+                                                onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
+                                                title="Odeslat doplatek e-mailem"
+                                                className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
+                                                <Mail size={13} />
+                                            </button>
+                                        )}
+                                    </div>
                                 </div>
                             </td>
                         </tr>
