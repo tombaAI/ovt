@@ -458,6 +458,7 @@ export const eventRegistrationParticipants = appSchema.table(
         participantOrder: smallint("participant_order").notNull(),
         fullName: text("full_name").notNull(),
         isPrimary: boolean("is_primary").notNull().default(false),
+        isMember: boolean("is_member").notNull().default(false),
         memberId: integer("member_id").references(() => members.id, { onDelete: "set null" }),
         personId: integer("person_id").references(() => people.id, { onDelete: "set null" }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

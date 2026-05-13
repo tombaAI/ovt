@@ -32,12 +32,6 @@ function normalizeText(value: string): string {
     return value.replace(/\s+/g, " ").trim();
 }
 
-function normalizeNameList(values: string[]): string[] {
-    return values
-        .map((value) => normalizeText(value))
-        .filter(Boolean);
-}
-
 function formatForeignWaterCode(code: number): string {
     return String(code).padStart(3, "0");
 }

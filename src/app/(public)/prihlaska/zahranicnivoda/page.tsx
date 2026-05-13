@@ -38,9 +38,10 @@ export default async function ForeignWaterRegistrationPage({
             lastName: detail.registrant.lastName,
             email: detail.registrant.email,
             phone: detail.registrant.phone ?? "",
+            primaryIsMember: detail.participants.find((p) => p.isPrimary)?.isMember ?? false,
             additionalPersons: detail.participants
                 .filter((participant) => !participant.isPrimary)
-                .map((participant) => participant.fullName),
+                .map((participant) => ({ name: participant.fullName, isMember: participant.isMember })),
             transportInfo: detail.transportInfo ?? "",
         };
     }

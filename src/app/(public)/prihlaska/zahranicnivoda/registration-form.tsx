@@ -10,6 +10,8 @@ import {
 
 type SuccessResult = Extract<SubmitForeignWaterRegistrationResult, { success: true }>;
 
+type PersonRow = { name: string; isMember: boolean };
+
 export type ForeignWaterRegistrationFormPrefill = {
     registrationId: number;
     registrationToken: string;
@@ -17,7 +19,8 @@ export type ForeignWaterRegistrationFormPrefill = {
     lastName: string;
     email: string;
     phone: string;
-    additionalPersons: string[];
+    primaryIsMember: boolean;
+    additionalPersons: PersonRow[];
     transportInfo: string;
 };
 
@@ -50,18 +53,53 @@ function normalizeText(value: string): string {
     return value.replace(/\s+/g, " ").trim();
 }
 
-function withSingleTrailingRow(values: string[]): string[] {
+function withSingleTrailingRow(values: PersonRow[]): PersonRow[] {
     const next = [...values];
 
-    while (next.length > 1 && !next[next.length - 1].trim() && !next[next.length - 2].trim()) {
+    while (next.length > 1 && !next[next.length - 1].name.trim() && !next[next.length - 2].name.trim()) {
         next.pop();
     }
 
-    if (next.length < MAX_PERSONS - 1 && next.every((item) => item.trim().length > 0)) {
-        next.push("");
+    if (next.length < MAX_PERSONS - 1 && next.every((item) => item.name.trim().length > 0)) {
+        next.push({ name: "", isMember: false });
     }
 
     return next;
+}
+
+function MemberToggle({
+    value,
+    onChange,
+}: {
+    value: boolean;
+    onChange: (v: boolean) => void;
+}) {
+    return (
+        <div className="flex rounded-lg border border-[#cfddc4] overflow-hidden text-xs shrink-0">
+            <button
+                type="button"
+                onClick={() => onChange(true)}
+                className={`px-3 py-2 transition-colors ${
+                    value
+                        ? "bg-[#327600] text-white font-semibold"
+                        : "bg-white text-[#4b5b43] hover:bg-[#f5faf1]"
+                }`}
+            >
+                Člen
+            </button>
+            <button
+                type="button"
+                onClick={() => onChange(false)}
+                className={`px-3 py-2 border-l border-[#cfddc4] transition-colors ${
+                    !value
+                        ? "bg-[#4b5b43] text-white font-semibold"
+                        : "bg-white text-[#4b5b43] hover:bg-[#f5faf1]"
+                }`}
+            >
+                Nečlen
+            </button>
+        </div>
+    );
 }
 
 export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
@@ -69,7 +107,10 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
     const [phone, setPhone] = useState(prefill?.phone ?? "");
     const [firstName, setFirstName] = useState(prefill?.firstName ?? "");
     const [lastName, setLastName] = useState(prefill?.lastName ?? "");
-    const [additionalPersonsRows, setAdditionalPersonsRows] = useState<string[]>(() => withSingleTrailingRow(prefill?.additionalPersons ?? []));
+    const [primaryIsMember, setPrimaryIsMember] = useState(prefill?.primaryIsMember ?? false);
+    const [additionalPersonsRows, setAdditionalPersonsRows] = useState<PersonRow[]>(() =>
+        withSingleTrailingRow(prefill?.additionalPersons ?? []),
+    );
     const [transportInfo, setTransportInfo] = useState(prefill?.transportInfo ?? "");
     const [error, setError] = useState<string | null>(null);
     const [success, setSuccess] = useState<SuccessResult | null>(null);
@@ -83,7 +124,10 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
     }, [context.event]);
 
     const additionalPersons = useMemo(
-        () => additionalPersonsRows.map((row) => normalizeText(row)).filter(Boolean),
+        () =>
+            additionalPersonsRows
+                .filter((row) => normalizeText(row.name))
+                .map((row) => ({ name: normalizeText(row.name), isMember: row.isMember })),
         [additionalPersonsRows],
     );
 
@@ -93,8 +137,8 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
     );
 
     const participantNames = useMemo(() => {
-        if (!mainPerson) return additionalPersons;
-        return [mainPerson, ...additionalPersons];
+        if (!mainPerson) return additionalPersons.map((p) => p.name);
+        return [mainPerson, ...additionalPersons.map((p) => p.name)];
     }, [mainPerson, additionalPersons]);
 
     async function copyMessage(message: string) {
@@ -107,11 +151,12 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
         setTimeout(() => setCopyLabel("Kopírovat zprávu"), 2000);
     }
 
-    function onAdditionalPersonChange(index: number, value: string) {
+    function onAdditionalPersonChange(index: number, field: "name" | "isMember", value: string | boolean) {
         setAdditionalPersonsRows((current) => {
-            const next = [...current];
-            next[index] = value;
-            return withSingleTrailingRow(next);
+            const next = current.map((row, i) =>
+                i === index ? { ...row, [field]: value } : row,
+            );
+            return field === "name" ? withSingleTrailingRow(next) : next;
         });
     }
 
@@ -131,6 +176,7 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
                 phone,
                 firstName,
                 lastName,
+                primaryIsMember,
                 additionalPersons,
                 transportInfo,
             });
@@ -142,7 +188,9 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
 
             setSuccess(result);
             setIsEditMode(false);
-            setAdditionalPersonsRows(withSingleTrailingRow(additionalPersons));
+            setAdditionalPersonsRows(
+                withSingleTrailingRow(additionalPersons),
+            );
         });
     }
 
@@ -231,19 +279,29 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
                                 <p className="text-xs text-[#4b5b43]">Počet osob: {participantNames.length}</p>
                             </div>
 
-                            <div className="rounded-lg border border-[#dbe9d0] bg-[#f8fcf5] px-3 py-2.5 text-sm text-[#314328]">
-                                {mainPerson || "(nejdřív vyplň jméno a příjmení)"}
+                            {/* Řádek 1 — hlavní přihlašující */}
+                            <div className="flex items-center gap-2">
+                                <div className="flex-1 rounded-lg border border-[#dbe9d0] bg-[#f8fcf5] px-3 py-2.5 text-sm text-[#314328]">
+                                    {mainPerson || "(nejdřív vyplň jméno a příjmení)"}
+                                </div>
+                                <MemberToggle value={primaryIsMember} onChange={setPrimaryIsMember} />
                             </div>
 
-                            {additionalPersonsRows.map((rowValue, index) => (
-                                <input
-                                    key={index}
-                                    type="text"
-                                    value={rowValue}
-                                    onChange={(e) => onAdditionalPersonChange(index, e.target.value)}
-                                    className="w-full rounded-lg border border-[#cfddc4] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#82b965]"
-                                    placeholder={`Další osoba ${index + 2}`}
-                                />
+                            {/* Řádky 2+ — další osoby */}
+                            {additionalPersonsRows.map((row, index) => (
+                                <div key={index} className="flex items-center gap-2">
+                                    <input
+                                        type="text"
+                                        value={row.name}
+                                        onChange={(e) => onAdditionalPersonChange(index, "name", e.target.value)}
+                                        className="flex-1 rounded-lg border border-[#cfddc4] px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-[#82b965]"
+                                        placeholder={`Další osoba ${index + 2}`}
+                                    />
+                                    <MemberToggle
+                                        value={row.isMember}
+                                        onChange={(v) => onAdditionalPersonChange(index, "isMember", v)}
+                                    />
+                                </div>
                             ))}
 
                             <p className="text-xs text-[#63735a]">
@@ -307,8 +365,21 @@ export function ForeignWaterRegistrationForm({ context, prefill }: Props) {
                             <div className="sm:col-span-2">
                                 <p className="font-semibold">Seznam osob:</p>
                                 <ul className="mt-1 space-y-0.5 text-[#3f5534]">
-                                    {participantNames.map((name, idx) => (
-                                        <li key={`${name}-${idx}`}>{name}</li>
+                                    <li key="primary" className="flex items-center gap-1.5">
+                                        {mainPerson}
+                                        {primaryIsMember
+                                            ? <span className="text-[10px] font-medium text-[#327600] border border-[#c2dda9] bg-[#f0f9e8] rounded px-1.5 py-0.5">člen</span>
+                                            : <span className="text-[10px] font-medium text-[#6b7280] border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">nečlen</span>
+                                        }
+                                    </li>
+                                    {additionalPersons.map((person, idx) => (
+                                        <li key={idx} className="flex items-center gap-1.5">
+                                            {person.name}
+                                            {person.isMember
+                                                ? <span className="text-[10px] font-medium text-[#327600] border border-[#c2dda9] bg-[#f0f9e8] rounded px-1.5 py-0.5">člen</span>
+                                                : <span className="text-[10px] font-medium text-[#6b7280] border border-gray-200 bg-gray-50 rounded px-1.5 py-0.5">nečlen</span>
+                                            }
+                                        </li>
                                     ))}
                                 </ul>
                             </div>
