@@ -2113,6 +2113,7 @@ export function EventExpensesTab({
                             eventId={eventId}
                             expenses={expenses ?? []}
                             onSent={() => getVyuctovaniActivityLog(eventId).then(setActivityLog)}
+                            treasurerApproved={treasurerApproved}
                         />
                     </div>
 

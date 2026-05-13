@@ -698,17 +698,19 @@ export function EventExpenseActions({
   eventId,
   expenses,
   onSent,
+  treasurerApproved,
 }: {
   eventId: number;
   expenses: ExpenseRow[];
   onSent?: () => void;
+  treasurerApproved: boolean;
 }) {
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
   const blockingIssues = computeBlockingIssues(expenses);
-  const canSend = expenses.length > 0 && blockingIssues.length === 0;
+  const canSend = expenses.length > 0 && blockingIssues.length === 0 && treasurerApproved;
 
   async function handleSendSettlement() {
     setSending(true);
@@ -766,6 +768,10 @@ export function EventExpenseActions({
             {blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
         </div>
+      )}
+
+      {!treasurerApproved && !sendMessage && (
+        <p className="text-xs text-red-600">Vyúčtování nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním.</p>
       )}
 
       {sendMessage && <p className="text-xs text-green-700">{sendMessage}</p>}
