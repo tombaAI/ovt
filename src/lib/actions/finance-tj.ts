@@ -127,21 +127,21 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
             })
             .returning({ id: importFinTjImports.id });
 
-        // Batch lookup existujících transakcí podle doc_number
+        // Batch lookup existujících transakcí podle doc_number.
+        // Klíč mapy je "docNumber:accountCode" — jeden doklad může mít více řádků s různými účty.
         const docNumbers = parsed.transactions.map(tx => tx.docNumber);
         const existingRows = await db
             .select()
             .from(importFinTjTransactions)
             .where(inArray(importFinTjTransactions.docNumber, docNumbers));
-        const existingMap = new Map(existingRows.map(r => [r.docNumber, r]));
+        const txKey = (docNumber: string, accountCode: string) => `${docNumber}:${accountCode}`;
+        const existingMap = new Map(existingRows.map(r => [txKey(r.docNumber, r.accountCode), r]));
 
-        // Rozdělit na nové a existující.
-        // Jeden doklad může pokrývat více řádků (účtů) — do master tabulky vkládáme jen první výskyt per docNumber.
-        const newTxsAll = parsed.transactions.filter(tx => !existingMap.has(tx.docNumber));
-        const newTxs = [...new Map(newTxsAll.map(tx => [tx.docNumber, tx])).values()];
+        // Rozdělit na nové a existující (klíč = docNumber + accountCode)
+        const newTxs = parsed.transactions.filter(tx => !existingMap.has(txKey(tx.docNumber, tx.accountCode)));
 
         // Batch insert nových transakcí do master listu
-        const newTxIdMap = new Map<string, number>(); // docNumber → id
+        const newTxIdMap = new Map<string, number>(); // "docNumber:accountCode" → id
         if (newTxs.length > 0) {
             const inserted = await db
                 .insert(importFinTjTransactions)
@@ -156,8 +156,8 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
                     debit:       tx.debit.toFixed(2),
                     credit:      tx.credit.toFixed(2),
                 })))
-                .returning({ id: importFinTjTransactions.id, docNumber: importFinTjTransactions.docNumber });
-            for (const row of inserted) newTxIdMap.set(row.docNumber, row.id);
+                .returning({ id: importFinTjTransactions.id, docNumber: importFinTjTransactions.docNumber, accountCode: importFinTjTransactions.accountCode });
+            for (const row of inserted) newTxIdMap.set(txKey(row.docNumber, row.accountCode), row.id);
         }
 
         // Sestavit rekonciliační log pro každý řádek importu
@@ -165,7 +165,7 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
         let added = 0, matched = 0, conflicts = 0;
 
         for (const tx of parsed.transactions) {
-            const existing = existingMap.get(tx.docNumber);
+            const existing = existingMap.get(txKey(tx.docNumber, tx.accountCode));
             const base = {
                 importId:    importRow.id,
                 docNumber:   tx.docNumber,
@@ -189,12 +189,12 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
 
                 const status = diff.length === 0 ? "matched" as const : "conflict" as const;
                 if (status === "matched") matched++; else conflicts++;
-                console.log(`[finance-tj]   ${tx.docNumber}: ${status}${diff.length ? ` (${diff.join(", ")})` : ""}`);
+                console.log(`[finance-tj]   ${tx.docNumber}/${tx.accountCode}: ${status}${diff.length ? ` (${diff.join(", ")})` : ""}`);
                 lines.push({ ...base, transactionId: existing.id, status, conflictFields: diff });
             } else {
                 added++;
-                console.log(`[finance-tj]   ${tx.docNumber}: added`);
-                lines.push({ ...base, transactionId: newTxIdMap.get(tx.docNumber), status: "added", conflictFields: [] });
+                console.log(`[finance-tj]   ${tx.docNumber}/${tx.accountCode}: added`);
+                lines.push({ ...base, transactionId: newTxIdMap.get(txKey(tx.docNumber, tx.accountCode)), status: "added", conflictFields: [] });
             }
         }
 

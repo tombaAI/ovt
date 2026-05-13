@@ -619,7 +619,7 @@ export const importFinTjImports = appSchema.table("import_fin_tj_imports", {
 
 /**
  * Jednotlivé transakce z výsledovky TJ.
- * Idempotentní přes doc_number (číslo dokladu je unikátní v účetnictví TJ).
+ * Idempotentní přes (doc_number, account_code) — jeden doklad může pokrývat více účtů.
  */
 export const importFinTjTransactions = appSchema.table(
     "import_fin_tj_transactions",
@@ -627,7 +627,7 @@ export const importFinTjTransactions = appSchema.table(
         id: serial("id").primaryKey(),
         importId: integer("import_id").notNull().references(() => importFinTjImports.id, { onDelete: "cascade" }),
         docDate: date("doc_date").notNull(),
-        docNumber: text("doc_number").notNull().unique(),
+        docNumber: text("doc_number").notNull(),
         sourceCode: text("source_code").notNull(),   // IN, BV, FP, FV, ...
         description: text("description").notNull(),   // firma + text z PDF
         accountCode: text("account_code").notNull(),
@@ -639,6 +639,7 @@ export const importFinTjTransactions = appSchema.table(
     (t) => [
         index("import_fin_tj_tx_import_idx").on(t.importId),
         index("import_fin_tj_tx_date_idx").on(t.docDate),
+        uniqueIndex("import_fin_tj_tx_doc_account_idx").on(t.docNumber, t.accountCode),
     ]
 );
 
