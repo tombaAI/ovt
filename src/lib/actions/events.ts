@@ -765,7 +765,7 @@ export async function setTreasurerApproval(
             await tx.insert(eventTreasurerApprovalLog).values({
                 eventId,
                 action: approved ? "approved" : "revoked",
-                changedBy: session.user!.email!,
+                changedBy: session.user!.name?.trim() || session.user!.email!,
             });
         });
         revalidatePath(`/dashboard/events/${eventId}`);

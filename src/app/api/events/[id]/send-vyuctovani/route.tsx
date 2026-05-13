@@ -497,7 +497,7 @@ export async function POST(
             <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;">Schválil</p>
             ${latestApproval ? `
             <p style="margin:0;font-size:13px;color:#374151;font-weight:600;">${escapeHtml(latestApproval.changedBy)}</p>
-            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Hospodář oddílu &mdash; ${new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(latestApproval.changedAt))}</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Hospodář oddílu</p>
             ` : `<p style="margin:0;font-size:13px;color:#9ca3af;font-style:italic;">—</p>`}
           </td>
         </tr>
