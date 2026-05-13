@@ -645,6 +645,7 @@ export type EmailSendLogEntry = {
     message: string | null;
     registrationId: number | null;
     registrationName: string | null;
+    testTo: string | null;
 };
 
 export async function getEventSettlementEmailLog(eventId: number): Promise<EmailSendLogEntry[]> {
@@ -659,6 +660,7 @@ export async function getEventSettlementEmailLog(eventId: number): Promise<Email
             failedCount: eventSettlementEmailSends.failedCount,
             message: eventSettlementEmailSends.message,
             registrationId: eventSettlementEmailSends.registrationId,
+            testTo: eventSettlementEmailSends.testTo,
             firstName: eventRegistrations.firstName,
             lastName: eventRegistrations.lastName,
         })
@@ -677,6 +679,7 @@ export async function getEventSettlementEmailLog(eventId: number): Promise<Email
         message: r.message,
         registrationId: r.registrationId ?? null,
         registrationName: r.firstName ? `${r.firstName} ${r.lastName}` : null,
+        testTo: r.testTo ?? null,
     }));
 }
 
@@ -760,6 +763,7 @@ export async function sendEventSettlementEmails(
             failedCount: failed.length,
             message: opts?.message || null,
             registrationId: null,
+            testTo: emailSettings.testTo ?? null,
         });
 
         return { sent, skipped, failed };
@@ -812,6 +816,7 @@ export async function sendSingleRegistrationEmail(
             failedCount: 0,
             message: opts?.message || null,
             registrationId,
+            testTo: emailSettings.testTo ?? null,
         });
 
         revalidatePath(`/dashboard/events/${reg.eventId}`);

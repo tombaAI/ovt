@@ -768,6 +768,7 @@ export const eventSettlementEmailSends = appSchema.table(
         failedCount:    integer("failed_count").notNull().default(0),
         message:        text("message"),
         registrationId: integer("registration_id").references(() => eventRegistrations.id, { onDelete: "set null" }),
+        testTo:         text("test_to"),
     },
     (t) => [index("event_settlement_email_sends_event_idx").on(t.eventId)],
 );

@@ -656,6 +656,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                                     {" · "}{fmtDateTime(entry.sentAt)}
                                     {" · "}{entry.sentBy}
                                     {entry.failedCount > 0 && <span className="text-red-500 ml-1">({entry.failedCount} selhalo)</span>}
+                                    {entry.testTo && <span className="text-amber-600 ml-1" title={`Testovací odesílání → ${entry.testTo}`}>· TEST → {entry.testTo}</span>}
                                     {entry.message && <span className="text-gray-400 ml-1 italic" title={entry.message}>· zpráva</span>}
                                 </span>
                             </div>

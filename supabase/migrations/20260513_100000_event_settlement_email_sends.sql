@@ -10,7 +10,8 @@ CREATE TABLE app.event_settlement_email_sends (
     skipped_count   integer NOT NULL DEFAULT 0,
     failed_count    integer NOT NULL DEFAULT 0,
     message         text,
-    registration_id integer REFERENCES app.event_registrations(id) ON DELETE SET NULL
+    registration_id integer REFERENCES app.event_registrations(id) ON DELETE SET NULL,
+    test_to         text
 );
 
 CREATE INDEX event_settlement_email_sends_event_idx ON app.event_settlement_email_sends(event_id);
