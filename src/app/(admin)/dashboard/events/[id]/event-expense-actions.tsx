@@ -10,7 +10,7 @@ import { Textarea } from "@/components/ui/textarea";
 import {
   normalizeText,
   parseNumberInput,
-} from "@/app/(admin)/dashboard/forms/form-helpers";
+} from "@/lib/form-helpers";
 import {
   EXPENSE_CATEGORY_LABELS,
   expenseCategoryEnum,
@@ -697,9 +697,11 @@ function computeBlockingIssues(expenses: ExpenseRow[]): string[] {
 export function EventExpenseActions({
   eventId,
   expenses,
+  onSent,
 }: {
   eventId: number;
   expenses: ExpenseRow[];
+  onSent?: () => void;
 }) {
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
@@ -729,6 +731,7 @@ export function EventExpenseActions({
 
       const recipientList = payload.recipients?.join(", ") ?? "";
       setSendMessage(`Vyúčtování odesláno na: ${recipientList} (${payload.attachmentCount ?? 0} příloh).`);
+      onSent?.();
     } catch (error) {
       setSendError(error instanceof Error ? error.message : "Odeslání selhalo.");
     } finally {
@@ -737,14 +740,10 @@ export function EventExpenseActions({
   }
 
   return (
-    <div className="rounded-xl border bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-4 space-y-3">
-      <div>
-        <h3 className="text-sm font-semibold text-gray-900">Vyúčtování akce</h3>
-        <p className="mt-1 text-xs text-gray-500">
-          Odeslání pošle vedoucímu akce a hospodáři TJ Bohemians všechny doklady a CSV k proplacení.
-        </p>
-      </div>
-
+    <div className="space-y-2">
+      <p className="text-xs text-gray-500">
+        Odeslání pošle vedoucímu akce a hospodáři TJ Bohemians všechny doklady a CSV k proplacení.
+      </p>
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm" variant="outline">
           <a href={`/api/events/${eventId}/vyuctovani`}>

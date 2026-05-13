@@ -8,15 +8,21 @@ const NAV_ITEMS: { href: string; label: string; exact?: boolean }[] = [
     { href: "/dashboard", label: "Přehled", exact: true },
     { href: "/dashboard/members", label: "Členové" },
     { href: "/dashboard/contributions", label: "Příspěvky" },
-    { href: "/dashboard/payments", label: "Platby" },
-    { href: "/dashboard/forms", label: "Vyúčtování" },
     { href: "/dashboard/events", label: "Kalendář" },
+    { href: "/dashboard/finance", label: "Finance" },
     { href: "/dashboard/brigades", label: "Brigády" },
     { href: "/dashboard/boats", label: "Lodě" },
-    { href: "/dashboard/finance", label: "Finance z TJ" },
-    { href: "/dashboard/imports", label: "Import dat" },
     { href: "/dashboard/informace", label: "Informace" },
+    { href: "/dashboard/imports", label: "Import dat" },
 ];
+
+function isNavActive(pathname: string, href: string, exact?: boolean): boolean {
+    if (exact) return pathname === href;
+    if (pathname.startsWith(href)) return true;
+    // Platby jsou nyní součástí Finance
+    if (href === "/dashboard/finance" && pathname.startsWith("/dashboard/payments")) return true;
+    return false;
+}
 
 export function NavLinks() {
     const pathname = usePathname();
@@ -24,7 +30,7 @@ export function NavLinks() {
     return (
         <>
             {NAV_ITEMS.map(({ href, label, exact }) => {
-                const isActive = exact ? pathname === href : pathname.startsWith(href);
+                const isActive = isNavActive(pathname, href, exact);
                 return (
                     <Link
                         key={href}

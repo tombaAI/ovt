@@ -14,17 +14,32 @@ import { ImportHospodareniDialog } from "./import-hospodareni-dialog";
 import { ImportHistory } from "./import-history";
 import { StavUctuTab } from "./stav-uctu-tab";
 import { AllocDialog } from "./alloc-dialog";
+import { PaymentsOverviewClient } from "../payments/payments-overview-client";
 import type { FinanceTjImport, FinanceTjTransaction, HospodareniWithReconciliation, StavUctuData, ContribOption } from "@/lib/actions/finance-tj";
 import { deleteSuspectTjTransaction, dismissSuspectTjTransaction } from "@/lib/actions/finance-tj";
+import type { MemberOption, PaymentRow } from "../payments/data";
 import { FileText, Link2, AlertTriangle, Trash2, X } from "lucide-react";
 
 interface Props {
-    imports:      FinanceTjImport[];
-    transactions: FinanceTjTransaction[];
-    hospodareni:  HospodareniWithReconciliation[];
-    stavUctu:     StavUctuData;
-    allocSums:    Record<number, number>;   // txId → součet alokací
-    contribs:     ContribOption[];          // všechny předpisy pro dialog
+    imports:          FinanceTjImport[];
+    transactions:     FinanceTjTransaction[];
+    hospodareni:      HospodareniWithReconciliation[];
+    stavUctu:         StavUctuData;
+    allocSums:        Record<number, number>;
+    contribs:         ContribOption[];
+    paymentRows:      PaymentRow[];
+    memberOptions:    MemberOption[];
+    yearMode:         number | "all";
+    selectedYear:     number;
+    initialStatus:    string;
+    initialSource:    string;
+    initialQ:         string;
+    initialSort:      string;
+    initialSortDir:   string;
+    initialWithoutVs: string;
+    initialMemberId:  number | null;
+    initialProfileId: number | null;
+    initialTab:       string;
 }
 
 const SOURCE_LABELS: Record<string, string> = {
@@ -274,16 +289,22 @@ function TransactionsTable({
     );
 }
 
-// ── Hlavní klient ─────────────────────────────────────────────────────────────
+// ── Finance TJ sekce ─────────────────────────────────────────────────────────
 
-export function FinanceClient({ imports, transactions, hospodareni, stavUctu, allocSums, contribs }: Props) {
+function FinanceTjSection({ imports, transactions, hospodareni, stavUctu, allocSums, contribs }: {
+    imports:      FinanceTjImport[];
+    transactions: FinanceTjTransaction[];
+    hospodareni:  HospodareniWithReconciliation[];
+    stavUctu:     StavUctuData;
+    allocSums:    Record<number, number>;
+    contribs:     ContribOption[];
+}) {
     const conflictCount = imports.reduce((s, i) => s + i.conflictCount, 0);
     const suspectCount  = transactions.filter(tx => tx.isSuspect).length;
 
     return (
         <div className="space-y-4">
             <div className="flex items-center justify-between gap-3 flex-wrap">
-                <h1 className="text-2xl font-semibold text-gray-900">Finance z TJ</h1>
                 <div className="flex items-center gap-2">
                     <ImportHospodareniDialog />
                     <ImportDialog />
@@ -321,6 +342,56 @@ export function FinanceClient({ imports, transactions, hospodareni, stavUctu, al
 
                 <TabsContent value="historie" className="mt-4">
                     <ImportHistory imports={imports} hospodareni={hospodareni} />
+                </TabsContent>
+            </Tabs>
+        </div>
+    );
+}
+
+// ── Hlavní klient ─────────────────────────────────────────────────────────────
+
+export function FinanceClient({
+    imports, transactions, hospodareni, stavUctu, allocSums, contribs,
+    paymentRows, memberOptions, yearMode, selectedYear,
+    initialStatus, initialSource, initialQ, initialSort, initialSortDir,
+    initialWithoutVs, initialMemberId, initialProfileId, initialTab,
+}: Props) {
+    return (
+        <div className="space-y-4">
+            <h1 className="text-2xl font-semibold text-gray-900">Finance</h1>
+
+            <Tabs defaultValue={initialTab === "finance-tj" ? "finance-tj" : "platby"}>
+                <TabsList>
+                    <TabsTrigger value="platby">Platby</TabsTrigger>
+                    <TabsTrigger value="finance-tj">Finance TJ</TabsTrigger>
+                </TabsList>
+
+                <TabsContent value="platby" className="mt-4">
+                    <PaymentsOverviewClient
+                        rows={paymentRows}
+                        memberOptions={memberOptions}
+                        yearMode={yearMode}
+                        selectedYear={selectedYear}
+                        initialStatus={initialStatus}
+                        initialSource={initialSource}
+                        initialProfileId={initialProfileId}
+                        initialQ={initialQ}
+                        initialMemberId={initialMemberId}
+                        initialSort={initialSort}
+                        initialSortDir={initialSortDir}
+                        initialWithoutVs={initialWithoutVs}
+                    />
+                </TabsContent>
+
+                <TabsContent value="finance-tj" className="mt-4">
+                    <FinanceTjSection
+                        imports={imports}
+                        transactions={transactions}
+                        hospodareni={hospodareni}
+                        stavUctu={stavUctu}
+                        allocSums={allocSums}
+                        contribs={contribs}
+                    />
                 </TabsContent>
             </Tabs>
         </div>

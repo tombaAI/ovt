@@ -3,37 +3,45 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
-import { Users, CreditCard, Wallet, MoreHorizontal } from "lucide-react";
+import { Users, Calendar, Wallet, MoreHorizontal } from "lucide-react";
 import { useState } from "react";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 
 const PRIMARY_ITEMS = [
     { href: "/dashboard/members", label: "Členové", icon: Users },
-    { href: "/dashboard/contributions", label: "Příspěvky", icon: CreditCard },
-    { href: "/dashboard/payments", label: "Platby", icon: Wallet },
+    { href: "/dashboard/events", label: "Kalendář", icon: Calendar },
+    { href: "/dashboard/finance", label: "Finance", icon: Wallet },
 ] as const;
 
 const MORE_ITEMS = [
-    { href: "/dashboard/forms", label: "Vyúčtování" },
-    { href: "/dashboard/boats", label: "Lodě" },
+    { href: "/dashboard", label: "Přehled" },
+    { href: "/dashboard/contributions", label: "Příspěvky" },
     { href: "/dashboard/brigades", label: "Brigády" },
-    { href: "/dashboard/events", label: "Kalendář" },
-    { href: "/dashboard/finance", label: "Finance z TJ" },
-    { href: "/dashboard/imports", label: "Import dat" },
+    { href: "/dashboard/boats", label: "Lodě" },
     { href: "/dashboard/informace", label: "Informace" },
+    { href: "/dashboard/imports", label: "Import dat" },
 ] as const;
+
+function isPrimaryActive(pathname: string, href: string): boolean {
+    if (pathname.startsWith(href)) return true;
+    // Platby jsou součástí Finance
+    if (href === "/dashboard/finance" && pathname.startsWith("/dashboard/payments")) return true;
+    return false;
+}
 
 export function MobileNav() {
     const pathname = usePathname();
     const [moreOpen, setMoreOpen] = useState(false);
 
-    const isMoreActive = MORE_ITEMS.some(item => pathname.startsWith(item.href));
+    const isMoreActive = MORE_ITEMS.some(item =>
+        item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)
+    );
 
     return (
         <>
             <nav className="md:hidden fixed bottom-0 inset-x-0 z-40 bg-[#26272b] border-t border-white/10 flex safe-bottom">
                 {PRIMARY_ITEMS.map(({ href, label, icon: Icon }) => {
-                    const active = pathname.startsWith(href);
+                    const active = isPrimaryActive(pathname, href);
                     return (
                         <Link key={href} href={href}
                             className={cn(
@@ -64,7 +72,7 @@ export function MobileNav() {
                         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
                         <div className="grid grid-cols-3 gap-1">
                             {MORE_ITEMS.map(({ href, label }) => {
-                                const active = pathname.startsWith(href);
+                                const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
                                 return (
                                     <Link key={href} href={href}
                                         onClick={() => setMoreOpen(false)}
