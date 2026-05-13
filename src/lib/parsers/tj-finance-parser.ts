@@ -59,7 +59,7 @@ const FILTER_TO_RE   = /Datum\s*<=\s*(\d{2}\.\d{2}\.\d{4})/;
  *
  * Skupiny: 1=debet, 2=docNumber, 3=firma(optional), 4=kredit, 5=source, 6=date, 7=description
  */
-const TX_RE = /(\d+(?:\s\d{3})*,\d{2})(\S+)\s+([\s\S]*?)(\d+(?:\s\d{3})*,\d{2})([A-Z]{2,4})(\d{2}\.\d{2}\.\d{4})\s+([\s\S]*?)(?=\d+(?:\s\d{3})*,\d{2}\S|\d{6}\s+\S|Náklady|Výnosy|Hospodářský|Tisk vybraných|$)/g;
+const TX_RE = /(\d+(?:\s\d{3})*,\d{2})(\S+)\s+([\s\S]*?)(\d+(?:\s\d{3})*,\d{2})([A-Z]{2,4})(\d{2}\.\d{2}\.\d{4})\s+([\s\S]*?)(?=\d+(?:\s\d{3})*,\d{2}\S|\d{6}\s+\S|Náklady|Výnosy|Hospodářský|Tisk vybraných záznamů:|$)/g;
 
 /**
  * Zachytí 6ciferné kódy účtů s názvy: "518018 Interní nájmy "

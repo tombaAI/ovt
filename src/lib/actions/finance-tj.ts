@@ -83,8 +83,17 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
         console.log(`[finance-tj] PDF buffer: ${buffer.byteLength} bytes, soubor: ${file.name}`);
 
         const { extractText } = await import("unpdf");
-        const { text, totalPages } = await extractText(new Uint8Array(buffer), { mergePages: true });
-        const fullText = Array.isArray(text) ? text.join("\n") : text;
+        const { text, totalPages } = await extractText(new Uint8Array(buffer), { mergePages: false });
+        const pages = Array.isArray(text) ? text : [text];
+        // Záhlaví každé stránky PDF obsahuje "Tisk vybraných záznamů" (bez dvojtečky).
+        // Pro stránky 2+ odstraníme záhlaví, aby nepřekážela parsování transakcí.
+        const PAGE_HEADER_LABEL = "Tisk vybraných záznamů";
+        const processedPages = pages.map((page, idx) => {
+            if (idx === 0) return page;
+            const headerEnd = page.indexOf(PAGE_HEADER_LABEL);
+            return headerEnd >= 0 ? page.slice(headerEnd + PAGE_HEADER_LABEL.length) : page;
+        });
+        const fullText = processedPages.join("\n");
         console.log(`[finance-tj] PDF extrahován: ${totalPages} stran, ${fullText.length} znaků`);
         console.log(`[finance-tj] První 500 znaků:\n${fullText.slice(0, 500)}`);
 
