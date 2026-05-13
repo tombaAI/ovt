@@ -4,7 +4,9 @@ import { useState, useEffect, useTransition, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, Loader2, Check, AlertCircle, X, Info } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
+import { ChevronDown, ChevronRight, Loader2, Check, X, Info, Mail } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     getEventSettlement,
@@ -12,10 +14,12 @@ import {
     updateExpenseAllocationMethod,
     setExpenseRegistrationAllocations,
     sendEventSettlementEmails,
+    sendSingleRegistrationEmail,
     lockBilling,
     unlockBilling,
+    getEventSettlementEmailLog,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, EmailSendLogEntry } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,11 +27,61 @@ function fmtCzk(amount: number) {
     return new Intl.NumberFormat("cs-CZ", { style: "decimal", maximumFractionDigits: 0 }).format(amount) + " Kč";
 }
 
+function fmtDateTime(d: Date) {
+    return new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
+}
+
 function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount: number | null }) {
     if (status === "paid") return <Badge className="bg-green-100 text-green-700 border-0 text-xs">Zaplaceno</Badge>;
     if (status === "matched") return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Spárováno ({fmtCzk(matchedAmount ?? 0)})</Badge>;
     if (status === "cancelled") return <Badge className="bg-gray-100 text-gray-500 border-0 text-xs">Zrušeno</Badge>;
     return <Badge className="bg-amber-100 text-amber-700 border-0 text-xs">Čeká na platbu</Badge>;
+}
+
+// ── Modal pro odeslání mailů ──────────────────────────────────────────────────
+
+function SendEmailModal({ open, title, description, onSend, onSkip, onClose, sending }: {
+    open: boolean;
+    title: string;
+    description?: string;
+    onSend: (message: string) => void;
+    onSkip?: () => void;
+    onClose: () => void;
+    sending: boolean;
+}) {
+    const [message, setMessage] = useState("");
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v && !sending) onClose(); }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                </DialogHeader>
+                {description && <p className="text-sm text-gray-500 -mt-1">{description}</p>}
+                <div className="space-y-2">
+                    <p className="text-xs font-medium text-gray-700">Zpráva přihlášeným <span className="text-gray-400 font-normal">(volitelné)</span></p>
+                    <Textarea
+                        placeholder="Např. platbu prosím do konce května, díky…"
+                        value={message}
+                        onChange={e => setMessage(e.target.value)}
+                        rows={4}
+                        className="resize-none text-sm"
+                        disabled={sending}
+                    />
+                    <p className="text-xs text-gray-400">Zpráva se zobrazí v e-mailu před platebními údaji.</p>
+                </div>
+                <DialogFooter className="gap-2">
+                    {onSkip && (
+                        <Button variant="ghost" size="sm" onClick={onSkip} disabled={sending} className="text-gray-500">
+                            Přeskočit
+                        </Button>
+                    )}
+                    <Button size="sm" onClick={() => onSend(message)} disabled={sending} className="bg-[#327600] hover:bg-[#2a6400] text-white">
+                        {sending ? <><Loader2 size={13} className="animate-spin mr-1.5" />Odesílám…</> : "Odeslat e-maily"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
 }
 
 // ── Subsidy section ───────────────────────────────────────────────────────────
@@ -256,7 +310,13 @@ function ExpenseAllocationRow({
 
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationSummaryTable({ rows, unitPrice, hasPerReg }: { rows: SettlementRegistrationRow[]; unitPrice: number; hasPerReg: boolean }) {
+function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, onSendEmail }: {
+    rows: SettlementRegistrationRow[];
+    unitPrice: number;
+    hasPerReg: boolean;
+    isPrescribed: boolean;
+    onSendEmail: (registrationId: number, name: string) => void;
+}) {
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -331,12 +391,22 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg }: { rows: Settle
                             </td>
                             <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.totalAmount)}</td>
                             <td className="py-2 text-right">
-                                {reg.existingPrescription ? (
-                                    <StatusBadge
-                                        status={reg.existingPrescription.status}
-                                        matchedAmount={reg.existingPrescription.matchedAmount}
-                                    />
-                                ) : <span className="text-xs text-gray-400">—</span>}
+                                <div className="inline-flex items-center justify-end gap-2">
+                                    {reg.existingPrescription ? (
+                                        <StatusBadge
+                                            status={reg.existingPrescription.status}
+                                            matchedAmount={reg.existingPrescription.matchedAmount}
+                                        />
+                                    ) : <span className="text-xs text-gray-400">—</span>}
+                                    {isPrescribed && reg.existingPrescription && reg.existingPrescription.status !== "cancelled" && (
+                                        <button
+                                            onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
+                                            title="Odeslat předpis e-mailem"
+                                            className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
+                                            <Mail size={13} />
+                                        </button>
+                                    )}
+                                </div>
                             </td>
                         </tr>
                     ))}
@@ -389,12 +459,15 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
     const [loading, setLoading] = useState(true);
     const [subsidyTotal, setSubsidyTotal] = useState(0);
     const [billingStatus, setBillingStatus] = useState(initialBillingStatus);
-    const [sending, startSend]     = useTransition();
     const [locking, startLock]     = useTransition();
     const [unlocking, startUnlock] = useTransition();
+    const [sending, startSend]     = useTransition();
     const [lockError, setLockError] = useState<string | null>(null);
     const [unlockInfo, setUnlockInfo] = useState<string | null>(null);
-    const [sendResult, setSendResult]  = useState<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string } | null>(null);
+    const [emailLog, setEmailLog] = useState<EmailSendLogEntry[]>([]);
+    const [batchModalOpen, setBatchModalOpen] = useState(false);
+    const [individualTarget, setIndividualTarget] = useState<{ registrationId: number; name: string } | null>(null);
+    const [sendFeedback, setSendFeedback] = useState<string | null>(null);
 
     function load() {
         setLoading(true);
@@ -403,8 +476,12 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
             .finally(() => setLoading(false));
     }
 
+    function loadLog() {
+        getEventSettlementEmailLog(eventId).then(setEmailLog);
+    }
+
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    useEffect(() => { load(); }, [eventId]);
+    useEffect(() => { load(); loadLog(); }, [eventId]);
 
     function handleSubsidyChange(newSubsidy: number) {
         setSubsidyTotal(newSubsidy);
@@ -440,6 +517,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
             if ("error" in res) { setLockError(res.error); return; }
             setBillingStatus("prescribed");
             load();
+            setBatchModalOpen(true);
         });
     }
 
@@ -454,11 +532,33 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
         });
     }
 
-    function handleSendEmails() {
+    function handleSendBatch(message: string) {
         startSend(async () => {
-            setSendResult(null);
-            const res = await sendEventSettlementEmails(eventId);
-            setSendResult(res);
+            setSendFeedback(null);
+            const res = await sendEventSettlementEmails(eventId, { message: message || undefined });
+            setBatchModalOpen(false);
+            if ("error" in res) {
+                setSendFeedback(`Chyba: ${res.error}`);
+            } else {
+                setSendFeedback(`Odesláno ${res.sent} e-mailů${res.skipped > 0 ? `, přeskočeno ${res.skipped}` : ""}${res.failed.length > 0 ? `, ${res.failed.length} selhalo` : ""}.`);
+                loadLog();
+            }
+        });
+    }
+
+    function handleSendIndividual(message: string) {
+        if (!individualTarget) return;
+        const { registrationId, name } = individualTarget;
+        startSend(async () => {
+            setSendFeedback(null);
+            const res = await sendSingleRegistrationEmail(registrationId, { message: message || undefined });
+            setIndividualTarget(null);
+            if ("error" in res) {
+                setSendFeedback(`Chyba (${name}): ${res.error}`);
+            } else {
+                setSendFeedback(`E-mail odeslán: ${name}.`);
+                loadLog();
+            }
         });
     }
 
@@ -484,45 +584,84 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
 
             {/* ── Stavová hlavička ── */}
             <div className={[
-                "rounded-xl border px-4 py-3 flex items-center justify-between gap-3 flex-wrap",
+                "rounded-xl border px-4 py-3",
                 isPrescribed ? "border-[#327600]/30 bg-[#327600]/5" : "border-blue-200 bg-blue-50/50",
             ].join(" ")}>
-                <div>
-                    {isPrescribed ? (
-                        <>
-                            <p className="text-sm font-semibold text-[#327600] flex items-center gap-1.5">
-                                <Check size={15} /> Náklady uzamčeny — předpisy vygenerovány
-                            </p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                                Náklady ani dotaci není možné měnit. Pro úpravu nejdřív odemkněte.
-                            </p>
-                        </>
-                    ) : (
-                        <>
-                            <p className="text-sm font-semibold text-blue-700">Příprava vyúčtování</p>
-                            <p className="text-xs text-gray-500 mt-0.5">
-                                Upravte náklady a dotaci. Až bude vše připraveno, vygenerujte předpisy — náklady se pak uzamknou.
-                            </p>
-                        </>
-                    )}
+                {/* Řádek: stav + tlačítka */}
+                <div className="flex items-center justify-between gap-3 flex-wrap">
+                    <div>
+                        {isPrescribed ? (
+                            <>
+                                <p className="text-sm font-semibold text-[#327600] flex items-center gap-1.5">
+                                    <Check size={15} /> Náklady uzamčeny — předpisy vygenerovány
+                                </p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    Náklady ani dotaci není možné měnit. Pro úpravu nejdřív odemkněte.
+                                </p>
+                            </>
+                        ) : (
+                            <>
+                                <p className="text-sm font-semibold text-blue-700">Příprava vyúčtování</p>
+                                <p className="text-xs text-gray-500 mt-0.5">
+                                    Upravte náklady a dotaci. Až bude vše připraveno, vygenerujte předpisy — náklady se pak uzamknou.
+                                </p>
+                            </>
+                        )}
+                    </div>
+                    <div className="flex items-center gap-2 shrink-0 flex-wrap">
+                        {lockError && <p className="text-xs text-red-600">{lockError}</p>}
+                        {unlockInfo && <p className="text-xs text-gray-500">{unlockInfo}</p>}
+                        {isPrescribed ? (
+                            <>
+                                <Button size="sm" variant="outline"
+                                    onClick={handleUnlock} disabled={unlocking}
+                                    className="border-gray-300 text-gray-600 hover:bg-gray-100">
+                                    {unlocking ? <><Loader2 size={13} className="animate-spin mr-1" />Odemykám…</> : "🔓 Odemknout a upravit"}
+                                </Button>
+                                <Button size="sm" variant="outline"
+                                    onClick={() => { setSendFeedback(null); setBatchModalOpen(true); }}
+                                    disabled={!hasRegistrations}
+                                    className="border-[#327600]/40 text-[#327600] hover:bg-[#327600]/5 gap-1.5">
+                                    <Mail size={13} /> Rozeslat maily
+                                </Button>
+                            </>
+                        ) : (
+                            <Button size="sm"
+                                onClick={handleLock} disabled={locking || !hasRegistrations || !hasExpenses}
+                                className="bg-[#327600] hover:bg-[#2a6400] text-white">
+                                {locking ? <><Loader2 size={13} className="animate-spin mr-1" />Generuji…</> : "Vygenerovat předpisy →"}
+                            </Button>
+                        )}
+                    </div>
                 </div>
-                <div className="flex items-center gap-2 shrink-0">
-                    {lockError && <p className="text-xs text-red-600">{lockError}</p>}
-                    {unlockInfo && <p className="text-xs text-gray-500">{unlockInfo}</p>}
-                    {isPrescribed ? (
-                        <Button size="sm" variant="outline"
-                            onClick={handleUnlock} disabled={unlocking}
-                            className="border-gray-300 text-gray-600 hover:bg-gray-100">
-                            {unlocking ? <><Loader2 size={13} className="animate-spin mr-1" />Odemykám…</> : "🔓 Odemknout a upravit"}
-                        </Button>
-                    ) : (
-                        <Button size="sm"
-                            onClick={handleLock} disabled={locking || !hasRegistrations || !hasExpenses}
-                            className="bg-[#327600] hover:bg-[#2a6400] text-white">
-                            {locking ? <><Loader2 size={13} className="animate-spin mr-1" />Generuji…</> : "Vygenerovat předpisy →"}
-                        </Button>
-                    )}
-                </div>
+
+                {/* Feedback po odeslání */}
+                {sendFeedback && (
+                    <p className="mt-2 text-xs text-gray-600 bg-white/70 rounded-lg px-3 py-1.5 border border-gray-100">{sendFeedback}</p>
+                )}
+
+                {/* Log odeslaných mailů */}
+                {isPrescribed && emailLog.length > 0 && (
+                    <div className="mt-3 border-t border-[#327600]/10 pt-3 space-y-1.5">
+                        <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400">Historie odeslaných e-mailů</p>
+                        {emailLog.map(entry => (
+                            <div key={entry.id} className="flex items-start gap-2 text-xs text-gray-500">
+                                <Mail size={11} className="mt-0.5 shrink-0 text-gray-300" />
+                                <span>
+                                    <span className="text-gray-700 font-medium">
+                                        {entry.registrationId
+                                            ? entry.registrationName ?? "Individuální"
+                                            : `${entry.sentCount} přihlášek`}
+                                    </span>
+                                    {" · "}{fmtDateTime(entry.sentAt)}
+                                    {" · "}{entry.sentBy}
+                                    {entry.failedCount > 0 && <span className="text-red-500 ml-1">({entry.failedCount} selhalo)</span>}
+                                    {entry.message && <span className="text-gray-400 ml-1 italic" title={entry.message}>· zpráva</span>}
+                                </span>
+                            </div>
+                        ))}
+                    </div>
+                )}
             </div>
 
             {/* Dotace */}
@@ -586,66 +725,29 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                         rows={settlement.registrations}
                         unitPrice={settlement.unitPrice}
                         hasPerReg={settlement.finalExpenses.some(e => e.allocationMethod === "per_registration")}
+                        isPrescribed={isPrescribed}
+                        onSendEmail={(id, name) => { setSendFeedback(null); setIndividualTarget({ registrationId: id, name }); }}
                     />
                 )}
             </div>
 
-            {/* Odeslání e-mailů — jen v prescribed fázi */}
-            <div className="rounded-xl border border-gray-200 bg-white px-4 py-4">
-                <div className="flex items-start gap-4 flex-wrap">
-                    <div className="flex-1 min-w-0">
-                        <p className="text-sm font-semibold text-gray-800">Odeslat e-maily s předpisy</p>
-                        <p className="text-xs text-gray-500 mt-0.5">
-                            Odešle každé přihlášce e-mail s částkou k úhradě, platebními údaji a QR kódem.
-                        </p>
-                        {!isPrescribed && (
-                            <p className="text-xs text-gray-400 mt-1">
-                                Nejdřív vygenerujte předpisy (tlačítko výše).
-                            </p>
-                        )}
-                        {!hasRegistrations && (
-                            <p className="text-xs text-amber-600 mt-1 flex items-center gap-1">
-                                <AlertCircle size={12} /> Žádné přihlášky — přidejte účastníky v záložce Přihlášky.
-                            </p>
-                        )}
-                    </div>
-                    <Button
-                        onClick={handleSendEmails}
-                        disabled={sending || !hasRegistrations || !isPrescribed}
-                        variant="outline"
-                        className="shrink-0">
-                        {sending ? <><Loader2 size={14} className="animate-spin mr-1.5" />Odesílám…</> : "Odeslat e-maily"}
-                    </Button>
-                </div>
-                {sendResult && (
-                    <div className="mt-3 space-y-2">
-                        <div className={`flex items-center gap-2 text-sm px-3 py-2 rounded-lg ${
-                            "error" in sendResult
-                                ? "bg-red-50 text-red-600"
-                                : sendResult.failed.length > 0
-                                    ? "bg-amber-50 text-amber-700"
-                                    : "bg-green-50 text-green-700"
-                        }`}>
-                            {"error" in sendResult
-                                ? <><AlertCircle size={14} /> {sendResult.error}</>
-                                : sendResult.failed.length > 0
-                                    ? <><AlertCircle size={14} /> Odesláno: {sendResult.sent}{sendResult.skipped > 0 ? `, přeskočeno: ${sendResult.skipped}` : ""} — <strong>{sendResult.failed.length} se nepodařilo odeslat</strong></>
-                                    : <><Check size={14} /> Odesláno: {sendResult.sent} e-mailů{sendResult.skipped > 0 ? `, přeskočeno: ${sendResult.skipped}` : ""}</>
-                            }
-                        </div>
-                        {"failed" in sendResult && sendResult.failed.length > 0 && (
-                            <div className="rounded-lg border border-red-200 bg-red-50 px-3 py-2 text-xs space-y-1">
-                                <p className="font-semibold text-red-700">Neodeslané e-maily:</p>
-                                {sendResult.failed.map((f, i) => (
-                                    <p key={i} className="text-red-600">
-                                        <span className="font-medium">{f.name}</span> ({f.email}) — {f.error}
-                                    </p>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
-            </div>
+            {/* Modaly pro odesílání mailů */}
+            <SendEmailModal
+                open={batchModalOpen}
+                title="Rozeslat e-maily s předpisy"
+                description={`Odešle e-mail každé přihlášce (${settlement.registrations.length} přihlášek).`}
+                onSend={handleSendBatch}
+                onSkip={() => setBatchModalOpen(false)}
+                onClose={() => setBatchModalOpen(false)}
+                sending={sending}
+            />
+            <SendEmailModal
+                open={!!individualTarget}
+                title={`Odeslat předpis: ${individualTarget?.name ?? ""}`}
+                onSend={handleSendIndividual}
+                onClose={() => setIndividualTarget(null)}
+                sending={sending}
+            />
 
         </div>
     );

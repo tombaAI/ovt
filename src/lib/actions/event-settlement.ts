@@ -9,6 +9,7 @@ import {
     eventRegistrations,
     eventRegistrationParticipants,
     eventPaymentPrescriptions,
+    eventSettlementEmailSends,
     members,
     people,
     auditLog,
@@ -634,28 +635,104 @@ export async function getPeopleForSettlement() {
 
 // ── Odeslání e-mailů s předpisy ───────────────────────────────────────────────
 
+export type EmailSendLogEntry = {
+    id: number;
+    sentAt: Date;
+    sentBy: string;
+    sentCount: number;
+    skippedCount: number;
+    failedCount: number;
+    message: string | null;
+    registrationId: number | null;
+    registrationName: string | null;
+};
+
+export async function getEventSettlementEmailLog(eventId: number): Promise<EmailSendLogEntry[]> {
+    const db = getDb();
+    const rows = await db
+        .select({
+            id: eventSettlementEmailSends.id,
+            sentAt: eventSettlementEmailSends.sentAt,
+            sentBy: eventSettlementEmailSends.sentBy,
+            sentCount: eventSettlementEmailSends.sentCount,
+            skippedCount: eventSettlementEmailSends.skippedCount,
+            failedCount: eventSettlementEmailSends.failedCount,
+            message: eventSettlementEmailSends.message,
+            registrationId: eventSettlementEmailSends.registrationId,
+            firstName: eventRegistrations.firstName,
+            lastName: eventRegistrations.lastName,
+        })
+        .from(eventSettlementEmailSends)
+        .leftJoin(eventRegistrations, eq(eventSettlementEmailSends.registrationId, eventRegistrations.id))
+        .where(eq(eventSettlementEmailSends.eventId, eventId))
+        .orderBy(sql`${eventSettlementEmailSends.sentAt} DESC`);
+
+    return rows.map(r => ({
+        id: r.id,
+        sentAt: r.sentAt,
+        sentBy: r.sentBy,
+        sentCount: r.sentCount,
+        skippedCount: r.skippedCount,
+        failedCount: r.failedCount,
+        message: r.message,
+        registrationId: r.registrationId ?? null,
+        registrationName: r.firstName ? `${r.firstName} ${r.lastName}` : null,
+    }));
+}
+
+function buildSettlementEmailPayload(
+    reg: SettlementRegistrationRow,
+    eventName: string,
+    message: string | undefined,
+    senderName: string | undefined,
+    senderEmail: string | undefined,
+) {
+    const p = reg.existingPrescription!;
+    return buildEventSettlementEmail({
+        firstName: reg.firstName,
+        lastName: reg.lastName,
+        email: reg.email,
+        eventName,
+        prescriptionCode: p.prescriptionCode,
+        variableSymbol: p.variableSymbol,
+        amount: p.amount,
+        bankAccount: EVENT_BANK_ACCOUNT,
+        paymentDue: p.paymentDue,
+        unitPrice: reg.personsCount > 0 ? Math.round(reg.expensesTotal / reg.personsCount) : 0,
+        participants: reg.participants.map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null })),
+        memberCount: reg.memberCount,
+        subsidy: reg.subsidy,
+        message: message || undefined,
+        senderName,
+        senderEmail,
+    });
+}
+
 export async function sendEventSettlementEmails(
     eventId: number,
+    opts?: { message?: string },
 ): Promise<{ sent: number; skipped: number; failed: { name: string; email: string; error: string }[] } | { error: string }> {
     const emailSettings = getEmailSettings();
     if (!emailSettings.configured) return { error: "E-mail není nakonfigurován (chybí RESEND_API_KEY)" };
+
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
 
     try {
         const db = getDb();
         const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
 
-        // Přepočítej a ulož aktuální částky do předpisů (+ vytvoř chybějící)
         const settlement = await getEventSettlement(eventId);
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
-
-        // Načti čerstvý stav po upsert
         const freshSettlement = await getEventSettlement(eventId);
 
         const resend = getResendClient();
         let sent = 0;
         let skipped = 0;
         const failed: { name: string; email: string; error: string }[] = [];
+        const senderName = session.user.name ?? undefined;
+        const senderEmail = session.user.email;
 
         for (const reg of freshSettlement.registrations) {
             const p = reg.existingPrescription;
@@ -663,50 +740,84 @@ export async function sendEventSettlementEmails(
 
             const to = emailSettings.testTo ?? reg.email;
             const fullName = `${reg.firstName} ${reg.lastName}`;
-
-            const { subject, html } = buildEventSettlementEmail({
-                firstName: reg.firstName,
-                lastName: reg.lastName,
-                email: reg.email,
-                eventName: event.name,
-                prescriptionCode: p.prescriptionCode,
-                variableSymbol: p.variableSymbol,
-                amount: p.amount,
-                bankAccount: EVENT_BANK_ACCOUNT,
-                paymentDue: p.paymentDue,
-                unitPrice: reg.personsCount > 0 ? Math.round(reg.expensesTotal / reg.personsCount) : 0,
-                participants: reg.participants.map(pt => ({
-                    fullName: pt.fullName,
-                    isMember: pt.memberId !== null,
-                })),
-                memberCount: reg.memberCount,
-                subsidy: reg.subsidy,
-            });
+            const { subject, html } = buildSettlementEmailPayload(reg, event.name, opts?.message, senderName, senderEmail);
 
             try {
-                const result = await resend.emails.send({
-                    from: emailSettings.from,
-                    to,
-                    replyTo: emailSettings.replyTo,
-                    subject,
-                    html,
-                });
-                if (result.error) {
-                    failed.push({ name: fullName, email: to, error: result.error.message });
-                } else {
-                    sent++;
-                }
+                const result = await resend.emails.send({ from: emailSettings.from, to, replyTo: emailSettings.replyTo, subject, html });
+                if (result.error) { failed.push({ name: fullName, email: to, error: result.error.message }); }
+                else { sent++; }
             } catch (e) {
                 failed.push({ name: fullName, email: to, error: e instanceof Error ? e.message : "Neznámá chyba" });
             }
-
-            // max. 4 maily za vteřinu — Resend limit je 5/s
             await new Promise(r => setTimeout(r, 250));
         }
+
+        await db.insert(eventSettlementEmailSends).values({
+            eventId,
+            sentBy: senderEmail,
+            sentCount: sent,
+            skippedCount: skipped,
+            failedCount: failed.length,
+            message: opts?.message || null,
+            registrationId: null,
+        });
 
         return { sent, skipped, failed };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Chyba při odesílání e-mailů" };
+    }
+}
+
+export async function sendSingleRegistrationEmail(
+    registrationId: number,
+    opts?: { message?: string },
+): Promise<{ success: true } | { error: string }> {
+    const emailSettings = getEmailSettings();
+    if (!emailSettings.configured) return { error: "E-mail není nakonfigurován (chybí RESEND_API_KEY)" };
+
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+    try {
+        const db = getDb();
+
+        const [reg] = await db
+            .select({ eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
+            .from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+        if (!reg) return { error: "Přihláška nenalezena" };
+        if (reg.cancelledAt) return { error: "Přihláška je zrušena" };
+        if (await getBillingStatus(db, reg.eventId) !== "prescribed") return { error: "Náklady nejsou uzamčeny — nejdříve vygenerujte předpisy." };
+
+        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, reg.eventId));
+        if (!event) return { error: "Akce nenalezena" };
+
+        const settlement = await getEventSettlement(reg.eventId);
+        const regRow = settlement.registrations.find(r => r.registrationId === registrationId);
+        if (!regRow) return { error: "Přihláška není ve vyúčtování" };
+        if (!regRow.existingPrescription) return { error: "Přihláška nemá předpis platby" };
+
+        const to = emailSettings.testTo ?? regRow.email;
+        const senderName = session.user.name ?? undefined;
+        const senderEmail = session.user.email;
+        const { subject, html } = buildSettlementEmailPayload(regRow, event.name, opts?.message, senderName, senderEmail);
+
+        const result = await getResendClient().emails.send({ from: emailSettings.from, to, replyTo: emailSettings.replyTo, subject, html });
+        if (result.error) return { error: result.error.message };
+
+        await db.insert(eventSettlementEmailSends).values({
+            eventId: reg.eventId,
+            sentBy: senderEmail,
+            sentCount: 1,
+            skippedCount: 0,
+            failedCount: 0,
+            message: opts?.message || null,
+            registrationId,
+        });
+
+        revalidatePath(`/dashboard/events/${reg.eventId}`);
+        return { success: true };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Chyba při odesílání e-mailu" };
     }
 }
 

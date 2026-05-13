@@ -756,6 +756,22 @@ export const importFinTjAllocations = appSchema.table(
 
 // ── System tables ────────────────────────────────────────────────────────────
 
+export const eventSettlementEmailSends = appSchema.table(
+    "event_settlement_email_sends",
+    {
+        id:             serial("id").primaryKey(),
+        eventId:        integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
+        sentAt:         timestamp("sent_at", { withTimezone: true }).notNull().defaultNow(),
+        sentBy:         text("sent_by").notNull(),
+        sentCount:      integer("sent_count").notNull().default(0),
+        skippedCount:   integer("skipped_count").notNull().default(0),
+        failedCount:    integer("failed_count").notNull().default(0),
+        message:        text("message"),
+        registrationId: integer("registration_id").references(() => eventRegistrations.id, { onDelete: "set null" }),
+    },
+    (t) => [index("event_settlement_email_sends_event_idx").on(t.eventId)],
+);
+
 export const mailEvents = appSchema.table(
     "mail_events",
     {

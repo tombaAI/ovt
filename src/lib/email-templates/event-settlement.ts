@@ -50,6 +50,9 @@ export type EventSettlementEmailData = {
     participants:     { fullName: string; isMember: boolean }[];
     memberCount:      number;
     subsidy:          number;
+    message?:         string;
+    senderName?:      string;
+    senderEmail?:     string;
 };
 
 export function buildEventSettlementEmail(
@@ -104,6 +107,19 @@ export function buildEventSettlementEmail(
         zasíláme ti předpis platby za akci <strong>${data.eventName}</strong>.
         Prosíme tě o uhrazení níže uvedené částky.
       </p>
+
+      ${data.message ? `
+      <!-- Zpráva vedoucího -->
+      <table width="100%" cellpadding="0" cellspacing="0"
+             style="border-left:3px solid #327600;padding:0 0 0 16px;margin-bottom:24px;">
+        <tr><td>
+          <p style="margin:0 0 8px;font-size:14px;color:#374151;line-height:1.6;white-space:pre-wrap;">${data.message.replace(/</g, "&lt;").replace(/>/g, "&gt;")}</p>
+          ${data.senderName || data.senderEmail ? `
+          <p style="margin:0;font-size:12px;color:#9ca3af;">
+            ${data.senderName ?? ""}${data.senderName && data.senderEmail ? " · " : ""}${data.senderEmail ? `<a href="mailto:${data.senderEmail}" style="color:#327600;">${data.senderEmail}</a>` : ""}
+          </p>` : ""}
+        </td></tr>
+      </table>` : ""}
 
       <!-- Přihlášení účastníci -->
       <table width="100%" cellpadding="0" cellspacing="0"
