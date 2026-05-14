@@ -63,9 +63,10 @@ const TX_RE = /(\d+(?:\s\d{3})*,\d{2})(\S+)\s+([\s\S]*?)(\d+(?:\s\d{3})*,\d{2})(
 
 /**
  * Zachytí 6ciferné kódy účtů s názvy: "518018 Interní nájmy "
- * (shoduje se jak s headery, tak s mezisoučty — oba mají stejný kód i název)
+ * Názvy účtů mohou obsahovat čárky (např. "Nájmy TVZ tělocvičny,bazény"),
+ * proto čárky z exclusion listu vyjmuty.
  */
-const ACCOUNT_CODE_RE = /\b(\d{6})\s+([^\d,\n][^0-9,\n]{1,60}?)(?=\s*\d)/g;
+const ACCOUNT_CODE_RE = /\b(\d{6})\s+([^\d\n][^0-9\n]{1,60}?)(?=\s*\d)/g;
 
 // ── Hlavní parser ─────────────────────────────────────────────────────────────
 

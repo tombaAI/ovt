@@ -127,9 +127,22 @@ export async function importTjFinancePdf(formData: FormData): Promise<ImportResu
             })
             .returning({ id: importFinTjImports.id });
 
+        // Smaž záznamy s prázdným account_code — vznikly při importu se starým parserem,
+        // který neuměl extrahovat účty s čárkami v názvu (např. "Nájmy TVZ tělocvičny,bazény").
+        const docNumbers = parsed.transactions.map(tx => tx.docNumber);
+        const orphanDocNumbers = [...new Set(
+            parsed.transactions.filter(tx => tx.accountCode !== "").map(tx => tx.docNumber)
+        )];
+        if (orphanDocNumbers.length > 0) {
+            await db.delete(importFinTjTransactions)
+                .where(and(
+                    inArray(importFinTjTransactions.docNumber, orphanDocNumbers),
+                    eq(importFinTjTransactions.accountCode, ""),
+                ));
+        }
+
         // Batch lookup existujících transakcí podle doc_number.
         // Klíč mapy je "docNumber:accountCode" — jeden doklad může mít více řádků s různými účty.
-        const docNumbers = parsed.transactions.map(tx => tx.docNumber);
         const existingRows = await db
             .select()
             .from(importFinTjTransactions)
