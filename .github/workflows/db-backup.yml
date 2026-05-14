@@ -4,9 +4,6 @@ on:
   schedule:
     - cron: '0 2 * * *'  # každý den 02:00 UTC (04:00 Praha)
   workflow_dispatch:       # ruční spuštění z GitHub UI
-  push:
-    branches: [main]
-    paths: ['.github/workflows/db-backup.yml']
 
 jobs:
   backup:
