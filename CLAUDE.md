@@ -10,9 +10,44 @@ See `zadani/popis_zadani_1.txt` for the full product spec (in Czech).
 
 ## Workflow
 
-**Every completed task ends with `git commit` + `git push` to `main`.** Vercel auto-deploys from main, the user checks the result in the browser immediately. Never leave finished work uncommitted.
+### Větve a prostředí
 
-SQL migrations (`supabase/migrations/`) are applied manually by the user via Neon SQL Editor — always tell the user which file to run and what it does.
+| Větev | Prostředí | URL | Databáze |
+|---|---|---|---|
+| `staging` | Preview (Vercel) | `ovt-git-staging-tombaais-projects.vercel.app` | Neon branch `staging` |
+| `main` | Production (Vercel) | `is.ovtbohemians.cz` | Neon branch `main` |
+
+**Výchozí pracovní větev je `staging`.** Každý úkol (oprava, nová funkce, změna) se vyvíjí na `staging` a do produkce se dostává výhradně přes PR.
+
+### Pravidla pro AI asistenty
+
+1. **"Udělej X" = práce na větvi `staging`**, vždy zakončená `git commit` + `git push origin staging`.
+2. **Nikdy přímo necommitovat na `main`** — produkce se aktualizuje pouze mergem PR `staging → main`.
+3. **Každý dokončený úkol musí být commitnutý a pushnutý** — nenechávat rozdělanou práci bez commitu.
+4. Staging URL s modrou hlavičkou (`NEXT_PUBLIC_APP_ENV=staging`) slouží k ověření změn před mergem.
+
+### Vývojový cyklus
+
+```
+1. git checkout staging           # vždy začínat na staging
+2. (vyvíjíš, editujeme soubory)
+3. git commit + git push origin staging
+4. ověření na ovt-git-staging-tombaais-projects.vercel.app
+5. PR: staging → main             # po schválení uživatelem
+6. merge → Vercel nasadí produkci + GHA spustí DB migrace
+```
+
+### DB migrace
+
+Soubory v `supabase/migrations/` jsou **viditelné v PR diff** — uživatel v PR schválí přesný SQL před mergem.
+
+Po mergi do `main` GitHub Action `db-migrate.yml` automaticky spustí nové `.sql` soubory přes `psql` na produkční databázi. **Už není třeba říkat uživateli, aby migraci spustil ručně** — děje se to samo.
+
+Při změně schématu na staging:
+- Uprav `src/db/schema.ts`
+- Vytvoř migrační soubor `supabase/migrations/YYYYMMDD_HHMMSS_popis.sql` s odpovídajícím SQL
+- Spusť `npm run db:push` pro aplikaci změn na staging DB
+- Commitni oba soubory spolu
 
 ## Commands
 
@@ -156,7 +191,9 @@ All tables live in the `app` schema. Schema defined in `src/db/schema.ts`.
 
 ### Migration files (supabase/migrations/)
 
-Applied in order via Neon SQL Editor. Never apply the drop-payment-columns migration until verifying the ledger V1 system works correctly in production.
+New migrations are committed to the branch, reviewed in PR diff, and **automatically applied to production by `db-migrate.yml` GHA on merge to `main`**. Never apply migrations manually to production — GHA handles it.
+
+Never apply the drop-payment-columns migration (`20260405_210000_drop_payment_columns.sql`) until verifying the ledger V1 system works correctly in production.
 
 ## Server action conventions
 
@@ -218,7 +255,23 @@ FIO_API_TOKEN         # Fio Bank API token
 APP_BASE_URL          # override base URL (default: http://localhost:3000)
 ```
 
+Staging-only (Vercel Preview environment):
+```
+NEXT_PUBLIC_APP_ENV=staging   # zobrazí modrou hlavičku + staging banner
+AUTH_URL                      # staging Vercel URL (pro správný OAuth callback)
+DATABASE_URL                  # Neon staging branch connection string
+FIO_API_TOKEN                 # vynechat — nezatahovat real bankovní data do staging DB
+```
+
 See `.env.example` for the full list with Czech comments.
+
+## GitHub Actions workflows
+
+| Workflow | Trigger | Co dělá |
+|---|---|---|
+| `db-backup.yml` | Každý den 02:00 UTC + manuálně | `pg_dump` → GitHub Artifact, retence 90 dní |
+| `db-migrate.yml` | Push do `main` (jen pokud přibyly `.sql` soubory) | Spustí nové migrace z `supabase/migrations/` přes `psql` |
+| `import-members-tj.yml` | `repository_dispatch` | Webhook pro import členů TJ |
 
 ## Feature map
 
