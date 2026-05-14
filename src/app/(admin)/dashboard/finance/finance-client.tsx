@@ -299,7 +299,9 @@ function FinanceTjSection({ imports, transactions, hospodareni, stavUctu, allocS
     allocSums:    Record<number, number>;
     contribs:     ContribOption[];
 }) {
-    const conflictCount = imports.reduce((s, i) => s + i.conflictCount, 0);
+    // Konflikty zobrazujeme jen z posledního importu — starší jsou historický záznam, ne akční položka.
+    const latestImport = imports[0] ?? null;
+    const conflictCount = latestImport?.conflictCount ?? 0;
     const suspectCount  = transactions.filter(tx => tx.isSuspect).length;
 
     return (
