@@ -1,0 +1,41 @@
+name: DB migrace při nasazení
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'supabase/migrations/**.sql'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2  # nutné pro porovnání s rodičovským commitem
+
+      - name: Nainstalovat PostgreSQL client
+        run: sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Spustit nové migrace
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          # Soubory přidané v tomto commitu (nové migrace)
+          NEW_FILES=$(git diff --name-only --diff-filter=A HEAD~1 HEAD -- 'supabase/migrations/*.sql' | sort)
+
+          if [ -z "$NEW_FILES" ]; then
+            echo "Žádné nové migrační soubory — přeskakuji."
+            exit 0
+          fi
+
+          echo "Nalezené migrace:"
+          echo "$NEW_FILES"
+          echo "---"
+
+          while IFS= read -r file; do
+            echo "▶ Aplikuji: $file"
+            psql "$DATABASE_URL" -f "$file"
+            echo "✓ Hotovo: $file"
+          done <<< "$NEW_FILES"
