@@ -27,6 +27,8 @@ jobs:
             --format=plain \
             --no-owner \
             --no-acl \
+            --clean \
+            --if-exists \
             | gzip > "ovt-backup-${{ steps.date.outputs.date }}.sql.gz"
 
       - name: Nahrát zálohu jako artifact
