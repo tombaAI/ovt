@@ -1,0 +1,37 @@
+name: Záloha databáze
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # každý den 02:00 UTC (04:00 Praha)
+  workflow_dispatch:       # ruční spuštění z GitHub UI
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Nastavit datum
+        id: date
+        run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
+
+      - name: Nainstalovat PostgreSQL client
+        run: sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Záloha databáze (pg_dump)
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          pg_dump "$DATABASE_URL" \
+            --schema=app \
+            --no-password \
+            --format=plain \
+            --no-owner \
+            --no-acl \
+            | gzip > "ovt-backup-${{ steps.date.outputs.date }}.sql.gz"
+
+      - name: Nahrát zálohu jako artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ steps.date.outputs.date }}
+          path: ovt-backup-*.sql.gz
+          retention-days: 90
