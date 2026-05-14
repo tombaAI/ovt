@@ -14,13 +14,19 @@ jobs:
         id: date
         run: echo "date=$(date +%Y-%m-%d)" >> $GITHUB_OUTPUT
 
-      - name: Nainstalovat PostgreSQL client
-        run: sudo apt-get install -y --no-install-recommends postgresql-client
+      - name: Nainstalovat PostgreSQL 17 client
+        run: |
+          sudo apt-get install -y --no-install-recommends \
+            postgresql-common \
+            gnupg
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends postgresql-client-17
 
       - name: Záloha databáze (pg_dump)
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
         run: |
+          set -o pipefail
           pg_dump "$DATABASE_URL" \
             --schema=app \
             --no-password \
@@ -32,8 +38,9 @@ jobs:
             | gzip > "ovt-backup-${{ steps.date.outputs.date }}.sql.gz"
 
       - name: Nahrát zálohu jako artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v5
         with:
           name: db-backup-${{ steps.date.outputs.date }}
           path: ovt-backup-*.sql.gz
           retention-days: 90
+          if-no-files-found: error
