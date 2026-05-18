@@ -4,6 +4,21 @@ import { useState, useEffect, useTransition, useCallback, useRef, KeyboardEvent,
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Bold, Italic, Link, ImageIcon, List, Heading2 } from "lucide-react";
+import type { Components } from "react-markdown";
+
+const BLOB_ORIGIN = /^https:\/\/[^/]+\.blob\.vercel-storage\.com\//;
+
+function blobSrc(src: string) {
+    return BLOB_ORIGIN.test(src) ? `/api/blob-file?url=${encodeURIComponent(src)}` : src;
+}
+
+const mdComponents: Components = {
+    img: (props) => {
+        const src = typeof props.src === "string" ? blobSrc(props.src) : "";
+        // eslint-disable-next-line @next/next/no-img-element
+        return <img src={src} alt={props.alt ?? ""} className="max-w-full rounded" />;
+    },
+};
 import {
     Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
@@ -517,7 +532,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                             <div className="flex-1 overflow-y-auto p-5">
                                 {content ? (
                                     <div className="md-content">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{content}</ReactMarkdown>
                                     </div>
                                 ) : (
                                     <p className="text-gray-300 text-sm italic">Náhled se zobrazí zde…</p>
@@ -529,7 +544,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                     <div className="flex-1 overflow-y-auto p-6">
                         {content ? (
                             <div className="md-content max-w-2xl">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{content}</ReactMarkdown>
                             </div>
                         ) : (
                             <p className="text-gray-400 text-sm italic">Žádný obsah</p>
@@ -569,7 +584,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                                                 </div>
                                                 {expandedVersionId === v.id && (
                                                     <div className="mt-2 rounded-lg bg-gray-50 border p-3 md-content text-xs">
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{v.content}</ReactMarkdown>
+                                                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{v.content}</ReactMarkdown>
                                                     </div>
                                                 )}
                                             </div>

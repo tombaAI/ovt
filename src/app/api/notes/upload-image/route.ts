@@ -28,7 +28,7 @@ export async function POST(request: NextRequest) {
     const safeName = `notes/images/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
 
     const blob = await put(safeName, file, {
-        access: "public",
+        access: "private",
         contentType: file.type,
     });
 
