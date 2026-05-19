@@ -1,5 +1,5 @@
-import { HamerakClient } from "./hamerak-client";
+import { HamerakTabs } from "./hamerak-tabs";
 
 export default function HamerakPage() {
-    return <HamerakClient />;
+    return <HamerakTabs />;
 }
