@@ -72,19 +72,22 @@ const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { c
     },
 };
 
+// 2026 odhady přepočítány z dat skutečnosti 2022+2024 (lineární trend + inflace)
+// Velké změny: bus −22k (skutečnost ~101k, ne 132k), chatky −13k (skutečnost 45-50k)
+// Výrazné nárůsty: permice_tisk +5k (2024 skočilo na 10k), hrnky +2k, vodohospo +3k
 const DEFAULT_COSTS: CostRow[] = [
-    { id: "bus",          label: "Bus Jan Kukla",             amount: 132000 },
-    { id: "chatky",       label: "Ubytování chatky",          amount: 62700 },
-    { id: "vodohospo",    label: "Vodohospodářství (rybáři)", amount: 19000 },
-    { id: "hrnky",        label: "Hrnky potisk",              amount: 7700 },
-    { id: "permice_tisk", label: "Permice tisk",              amount: 6600 },
-    { id: "pivo",         label: "Pivo Kamenice",             amount: 5000 },
-    { id: "benzin",       label: "Benzín / obslužná vozidla", amount: 6300 },
+    { id: "bus",          label: "Bus Jan Kukla",             amount: 110000 },
+    { id: "chatky",       label: "Ubytování chatky",          amount: 50000 },
+    { id: "vodohospo",    label: "Vodohospodářství (rybáři)", amount: 22000 },
+    { id: "hrnky",        label: "Hrnky potisk",              amount: 10000 },
+    { id: "permice_tisk", label: "Permice tisk",              amount: 11000 },
+    { id: "pivo",         label: "Pivo Kamenice",             amount: 3500 },
+    { id: "benzin",       label: "Benzín / obslužná vozidla", amount: 5000 },
     { id: "priprava",     label: "Přípravné práce",           amount: 8000 },
-    { id: "mistni",       label: "Místní poplatky",           amount: 5000 },
-    { id: "material",     label: "Materiál (pytle, folie…)",  amount: 4700 },
+    { id: "mistni",       label: "Místní poplatky",           amount: 4500 },
+    { id: "material",     label: "Materiál (pytle, folie…)",  amount: 6000 },
     { id: "postovne",     label: "Poštovné",                  amount: 1100 },
-    { id: "ostatni",      label: "Ostatní",                   amount: 5000 },
+    { id: "ostatni",      label: "Ostatní",                   amount: 5500 },
 ];
 
 // Historické náklady po položkách — zdroj: Vyúčtování Hamerák 2022 + Rozpočet_H22 + Vyúčtování 2024
