@@ -87,28 +87,32 @@ const DEFAULT_COSTS: CostRow[] = [
     { id: "ostatni",      label: "Ostatní",                   amount: 5000 },
 ];
 
-// Historické náklady po položkách — doplnit ze skutečných výsledků
-// Celkové součty: 2022 = 205 500 Kč, 2024 = 237 500 Kč
+// Historické náklady po položkách — zdroj: OVT Hamerák vyúčtování.xlsx + Rozpočet_Hamerák_plán_2024.xlsx
+// Celkové součty ze skutečnosti: 2022 = 219 221 Kč (vč. kelímků 17 726), 2024 = 210 212 Kč
+// benzin = obslužná vozidla + cesty příprava; mistni = Boček + Hrázný + Feit (louka Dvoreček)
+// material = materiál náklady + materiál branky + materiál příprava
+// ostatni = občerstvení; kelímky nákup 2022 (17 726 Kč) je mimo tuto kalkulačku — jedná se o příjem v jiných letech
 const COST_HISTORY: Record<string, { r2022: number | null; r2024: number | null }> = {
-    bus:          { r2022: null, r2024: null },
-    chatky:       { r2022: null, r2024: null },
-    vodohospo:    { r2022: null, r2024: null },
-    hrnky:        { r2022: null, r2024: null },
-    permice_tisk: { r2022: null, r2024: null },
-    pivo:         { r2022: null, r2024: null },
-    benzin:       { r2022: null, r2024: null },
-    priprava:     { r2022: null, r2024: null },
-    mistni:       { r2022: null, r2024: null },
-    material:     { r2022: null, r2024: null },
-    postovne:     { r2022: null, r2024: null },
-    ostatni:      { r2022: null, r2024: null },
+    bus:          { r2022: 102000, r2024: 100600 },
+    chatky:       { r2022: 50100,  r2024: 45600  },
+    vodohospo:    { r2022: 14520,  r2024: 18150  },
+    hrnky:        { r2022: 6500,   r2024: 8442   },
+    permice_tisk: { r2022: 6000,   r2024: 10000  },
+    pivo:         { r2022: 4000,   r2024: 3000   },
+    benzin:       { r2022: 4535,   r2024: 4265   },
+    priprava:     { r2022: null,   r2024: null   },
+    mistni:       { r2022: 4000,   r2024: 4200   },
+    material:     { r2022: 3258,   r2024: 6980   },
+    postovne:     { r2022: null,   r2024: 1020   },
+    ostatni:      { r2022: 3005,   r2024: 6755   },
 };
 
+// Skutečné hodnoty z Excel (vyúčtování.xlsx): 2022 naklady vč. kelímků, 2024 = skutečnost (ne plán 237 350)
 const HISTORY = [
     { rok: 2021, prijmy: 211180, naklady: 198600, zavornici: 256 },
-    { rok: 2022, prijmy: 243860, naklady: 205500, zavornici: 274 },
+    { rok: 2022, prijmy: 243860, naklady: 219221, zavornici: 274 },
     { rok: 2023, prijmy: 94075,  naklady: 169519, zavornici: null },
-    { rok: 2024, prijmy: 218250, naklady: 237500, zavornici: 253 },
+    { rok: 2024, prijmy: 218250, naklady: 210212, zavornici: 253 },
 ];
 
 const SCENARIO_LABELS: Record<Exclude<Scenario, "custom">, string> = {
@@ -423,8 +427,8 @@ export function HamerakClient() {
                                 </tr>
                                 <tr className="border-t-2 bg-muted/40">
                                     <td className="px-4 py-3 font-semibold text-sm">Celkem náklady</td>
-                                    <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums">{fmt(205500)}</td>
-                                    <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums">{fmt(237500)}</td>
+                                    <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums">{fmt(219221)}</td>
+                                    <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums">{fmt(210212)}</td>
                                     <td className="px-2 py-3 text-right font-bold text-red-600 tabular-nums text-sm">{fmt(totalCosts)}</td>
                                     <td colSpan={2} />
                                 </tr>
