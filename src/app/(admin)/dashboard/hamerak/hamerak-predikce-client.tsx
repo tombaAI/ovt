@@ -2,7 +2,7 @@
 
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
-import { ComposedChart, Line, Bar, BarChart, XAxis, YAxis, CartesianGrid, ReferenceLine, Legend } from "recharts";
+import { ComposedChart, LineChart, Line, XAxis, YAxis, CartesianGrid, ReferenceLine, Legend } from "recharts";
 import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
 import { Droplets, AlertTriangle, ExternalLink, Calendar, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -47,21 +47,21 @@ const cpvSezony = [
 ];
 
 // ===== REVENUE DATA PO DNE (ze skutečných prodejů) =====
-const revData = [
-    { rok: "2019", splNE: 18, splSO: 7,  splVIK: 17, permNE: 13, permSO: 10, permVIK: 26 },
-    { rok: "2021", splNE: 16, splSO: 14, splVIK: 21, permNE: 11, permSO: 17, permVIK: 41 },
-    { rok: "2022", splNE: 16, splSO: 10, splVIK: 14, permNE: 12, permSO: 18, permVIK: 32 },
-    { rok: "2024", splNE: 19, splSO: 9,  splVIK: 13, permNE: 13, permSO: 20, permVIK: 29 },
+// Počty lidí po kategoriích (ze SUMA sekce Excelu)
+const poctyLineData = [
+    { rok: "2019", splVIK: 142, splSO: 90,  splNE: 226, permVIK: 216, permSO: 120, permNE: 133 },
+    { rok: "2021", splVIK: 138, splSO: 143, splNE: 138, permVIK: 205, permSO: 112, permNE:  74 },
+    { rok: "2022", splVIK:  86, splSO:  81, splNE: 114, permVIK: 147, permSO: 111, permNE:  73 },
+    { rok: "2024", splVIK:  64, splSO:  62, splNE: 125, permVIK: 124, permSO: 116, permNE:  78 },
 ];
 
-// Trend 2022→2024: NE roste (+10%/+7%), SO stabilní, VIK klesá (−26%/−16%)
-const poctyTrend = [
-    { kat: "Splutí VIK",   r19: 142, r22: 86,  r24: 64,  trend22_24: -26, pozn: "strmý pokles −55% za 5 let" },
-    { kat: "Splutí SO",    r19: 90,  r22: 81,  r24: 62,  trend22_24: -23, pozn: "mírný pokles" },
-    { kat: "Splutí NE",    r19: 226, r22: 114, r24: 125, trend22_24: +10, pozn: "↑ ROSTE 2022→2024! Counter-trend" },
-    { kat: "Permice VIK",  r19: 216, r22: 147, r24: 124, trend22_24: -16, pozn: "pokles; zahrnuje autobus VIK" },
-    { kat: "Permice SO",   r19: 120, r22: 111, r24: 116, trend22_24:  +5, pozn: "NEJSTABILNĚJŠÍ: ±3% za 5 let" },
-    { kat: "Permice NE",   r19: 133, r22: 73,  r24: 78,  trend22_24:  +7, pozn: "↑ roste 2022→2024" },
+// Příjmy = počet × cena (Kč). Ceny: 2019→120/80/80/120/80/100, 2021→150/100/120/200/150/150,
+// 2022→160/120/140/220/160/160, 2024→200/150/150/230/170/170
+const revLineData = [
+    { rok: "2019", splVIK: 17040, splSO:  7200, splNE: 18080, permVIK: 25920, permSO:  9600, permNE: 13300 },
+    { rok: "2021", splVIK: 20700, splSO: 14300, splNE: 16560, permVIK: 41000, permSO: 16800, permNE: 11100 },
+    { rok: "2022", splVIK: 13760, splSO:  9720, splNE: 15960, permVIK: 32340, permSO: 17760, permNE: 11680 },
+    { rok: "2024", splVIK: 12800, splSO:  9300, splNE: 18750, permVIK: 28520, permSO: 19720, permNE: 13260 },
 ];
 
 const predikce2026 = [
@@ -94,13 +94,14 @@ const zavodConfig = {
     trend:  { label: "Lineární trend", color: "hsl(220 15% 65%)" },
 } satisfies ChartConfig;
 
-const revConfig = {
-    splNE:   { label: "Splutí NE",   color: "hsl(199 80% 42%)" },
-    splSO:   { label: "Splutí SO",   color: "hsl(199 55% 58%)" },
-    splVIK:  { label: "Splutí VIK",  color: "hsl(199 40% 72%)" },
-    permNE:  { label: "Permice NE",  color: "hsl(142 60% 38%)" },
-    permSO:  { label: "Permice SO",  color: "hsl(142 45% 52%)" },
-    permVIK: { label: "Permice VIK", color: "hsl(142 35% 66%)" },
+// Splutí = solid, Permice (autobus) = dashed — vizuálně odlišeno strokeDasharray
+const lineConfig = {
+    splNE:   { label: "Splutí NE (cestovky)",      color: "hsl(199 90% 35%)" },
+    splSO:   { label: "Splutí SO",                  color: "hsl(199 65% 50%)" },
+    splVIK:  { label: "Splutí VIK",                 color: "hsl(199 45% 65%)" },
+    permNE:  { label: "Permice NE (autobus NE)",    color: "hsl(142 65% 32%)" },
+    permSO:  { label: "Permice SO (autobus SO)",    color: "hsl(142 50% 45%)" },
+    permVIK: { label: "Permice VIK (autobus VIK)",  color: "hsl(142 38% 57%)" },
 } satisfies ChartConfig;
 
 const zavodData = [
@@ -350,72 +351,89 @@ export function HamerakPredikce() {
                 </CardContent>
             </Card>
 
-            {/* ===== REVENUE KATEGORIE ===== */}
+            {/* ===== TRENDY KATEGORIÍ ===== */}
             <Card>
                 <CardHeader className="pb-2">
                     <CardTitle className="text-base flex items-center gap-2">
                         <Users size={15} className="text-primary" />
-                        Trendy kategorií příjmů — NE/SO/VIK
+                        Trendy kategorií — počty lidí a příjmy
                     </CardTitle>
                     <p className="text-xs text-muted-foreground">
-                        Z pohledu příjmů jsou klíčové: nedělní splutí+permice (21%), sobotní (19%), víkendoví (27%), závod (33%).
-                        <strong className="text-green-700 ml-1">Neděle a SO rostou 2022→2024, VIK klesá.</strong>
+                        Plné čáry = Splutí (dolů řekou). Přerušované = Permice = <strong>autobus k startu</strong>.
+                        Závodník má splutí VIK zahrnuté ve startovném — není třeba brát zvlášť.
                     </p>
                 </CardHeader>
                 <CardContent className="space-y-4">
-                    {/* Revenue bar chart */}
-                    <ChartContainer config={revConfig} className="h-52">
-                        <BarChart data={revData} margin={{ top: 8, right: 16, left: 0, bottom: 0 }}>
-                            <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                            <XAxis dataKey="rok" tick={{ fontSize: 12 }} />
-                            <YAxis tick={{ fontSize: 12 }} width={36} tickFormatter={v => `${v}k`} />
-                            <ChartTooltip content={<ChartTooltipContent formatter={(v) => [`${v}k Kč`]} />} />
-                            <Legend wrapperStyle={{ fontSize: 10 }} />
-                            <Bar dataKey="splNE"  name="Splutí NE"   stackId="ne"  fill="var(--color-splNE)"  />
-                            <Bar dataKey="permNE" name="Permice NE"  stackId="ne"  fill="var(--color-permNE)" radius={[3,3,0,0]} />
-                            <Bar dataKey="splSO"  name="Splutí SO"   stackId="so"  fill="var(--color-splSO)"  />
-                            <Bar dataKey="permSO" name="Permice SO"  stackId="so"  fill="var(--color-permSO)" radius={[3,3,0,0]} />
-                            <Bar dataKey="splVIK" name="Splutí VIK"  stackId="vik" fill="var(--color-splVIK)" />
-                            <Bar dataKey="permVIK" name="Permice VIK" stackId="vik" fill="var(--color-permVIK)" radius={[3,3,0,0]} />
-                        </BarChart>
-                    </ChartContainer>
+                    {/* Dva grafy vedle sebe */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        {/* Počty */}
+                        <div>
+                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+                                Počty (osoby)
+                            </div>
+                            <ChartContainer config={lineConfig} className="h-52">
+                                <LineChart data={poctyLineData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="rok" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} width={32} />
+                                    <ChartTooltip content={<ChartTooltipContent formatter={(v, n) => [`${v} osob`, n as string]} />} />
+                                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                                    <Line type="monotone" dataKey="splNE"   name="Splutí NE"  stroke="var(--color-splNE)"   strokeWidth={2.5} dot={{ r: 4 }} />
+                                    <Line type="monotone" dataKey="splSO"   name="Splutí SO"  stroke="var(--color-splSO)"   strokeWidth={2} dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="splVIK"  name="Splutí VIK" stroke="var(--color-splVIK)"  strokeWidth={2} dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="permNE"  name="Permice NE" stroke="var(--color-permNE)"  strokeWidth={2.5} dot={{ r: 4 }} strokeDasharray="5 3" />
+                                    <Line type="monotone" dataKey="permSO"  name="Permice SO" stroke="var(--color-permSO)"  strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 3" />
+                                    <Line type="monotone" dataKey="permVIK" name="Permice VIK" stroke="var(--color-permVIK)" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 3" />
+                                </LineChart>
+                            </ChartContainer>
+                        </div>
+                        {/* Příjmy */}
+                        <div>
+                            <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+                                Příjmy (Kč = počet × cena)
+                            </div>
+                            <ChartContainer config={lineConfig} className="h-52">
+                                <LineChart data={revLineData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="rok" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} width={40}
+                                        tickFormatter={v => `${Math.round(v / 1000)}k`} />
+                                    <ChartTooltip content={<ChartTooltipContent
+                                        formatter={(v, n) => [
+                                            `${Number(v).toLocaleString("cs-CZ")} Kč`,
+                                            n as string,
+                                        ]} />} />
+                                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                                    <Line type="monotone" dataKey="splNE"   name="Splutí NE"  stroke="var(--color-splNE)"   strokeWidth={2.5} dot={{ r: 4 }} />
+                                    <Line type="monotone" dataKey="splSO"   name="Splutí SO"  stroke="var(--color-splSO)"   strokeWidth={2} dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="splVIK"  name="Splutí VIK" stroke="var(--color-splVIK)"  strokeWidth={2} dot={{ r: 3 }} />
+                                    <Line type="monotone" dataKey="permNE"  name="Permice NE" stroke="var(--color-permNE)"  strokeWidth={2.5} dot={{ r: 4 }} strokeDasharray="5 3" />
+                                    <Line type="monotone" dataKey="permSO"  name="Permice SO" stroke="var(--color-permSO)"  strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 3" />
+                                    <Line type="monotone" dataKey="permVIK" name="Permice VIK" stroke="var(--color-permVIK)" strokeWidth={2} dot={{ r: 3 }} strokeDasharray="5 3" />
+                                </LineChart>
+                            </ChartContainer>
+                        </div>
+                    </div>
 
-                    {/* Tabulka trendů */}
-                    <table className="w-full text-xs">
-                        <thead>
-                            <tr className="border-b bg-muted/40 text-muted-foreground">
-                                <th className="text-left px-3 py-1.5">Kategorie</th>
-                                <th className="text-right px-2 py-1.5">2019</th>
-                                <th className="text-right px-2 py-1.5">2022</th>
-                                <th className="text-right px-2 py-1.5">2024</th>
-                                <th className="text-right px-3 py-1.5">2022→2024</th>
-                                <th className="text-left px-3 py-1.5 hidden md:table-cell">Poznámka</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {poctyTrend.map(r => (
-                                <tr key={r.kat} className={cn("border-b last:border-0", r.trend22_24 > 0 ? "bg-green-50/50" : "")}>
-                                    <td className="px-3 py-1.5 font-medium">{r.kat}</td>
-                                    <td className="px-2 py-1.5 text-right tabular-nums text-muted-foreground">{r.r19}</td>
-                                    <td className="px-2 py-1.5 text-right tabular-nums">{r.r22}</td>
-                                    <td className="px-2 py-1.5 text-right tabular-nums font-semibold">{r.r24}</td>
-                                    <td className={cn("px-3 py-1.5 text-right font-bold tabular-nums",
-                                        r.trend22_24 > 0 ? "text-green-600" : r.trend22_24 > -20 ? "text-orange-600" : "text-red-600")}>
-                                        {r.trend22_24 > 0 ? "+" : ""}{r.trend22_24} %
-                                    </td>
-                                    <td className="px-3 py-1.5 text-muted-foreground hidden md:table-cell">{r.pozn}</td>
-                                </tr>
-                            ))}
-                        </tbody>
-                    </table>
-                    <div className="rounded bg-primary/5 border border-primary/20 p-3 text-xs space-y-1">
-                        <div className="font-semibold">Klíčové závěry pro plánování příjmů 2026:</div>
-                        <ul className="list-disc list-inside space-y-0.5 text-muted-foreground">
-                            <li><strong>Permice SO (~111)</strong> — plánovat jako jistotu. ±3 % za 5 let, nezávislé na počasí.</li>
-                            <li><strong>Splutí NE a Permice NE</strong> — kontra-trend: rostly 2022→2024 (+10/+7 %). Lidi &quot;downgradujú&quot; z VIK na denní lístky. Plánovat ~125 splutí NE a ~80 permice NE.</li>
-                            <li><strong>Splutí VIK</strong> — nejrizikovější kategorie: −55 % za 5 let. Plánovat konzervativně (~50).</li>
-                            <li><strong>Permice VIK (autobus)</strong> — klesá −16 % za 2 roky. S bounce efektem 2026: plánovat ~100–110.</li>
-                        </ul>
+                    {/* Vysvětlení kategorií + závěry */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                        <div className="rounded border p-3 space-y-1.5">
+                            <div className="font-semibold">Jak fungují kategorie</div>
+                            <ul className="space-y-1 text-muted-foreground">
+                                <li><strong>Splutí</strong> = jízda dolů řekou (páteční/sobotní/nedělní start)</li>
+                                <li><strong>Permice = autobus k startu.</strong> Kdo chce nahoru i dolů: potřebuje splutí (dolů) + permici (autobus nahoru). Kdo je závodník: startovné zahrnuje splutí VIK → permici nebere.</li>
+                                <li><strong>Oddílový autobus:</strong> členové oddílu jedou svým busem → permici neberou → permice VIK klesá rychleji než skutečná účast.</li>
+                            </ul>
+                        </div>
+                        <div className="rounded border p-3 space-y-1.5">
+                            <div className="font-semibold">Klíčové trendy pro plánování 2026</div>
+                            <ul className="space-y-1 text-muted-foreground">
+                                <li><strong className="text-green-700">Splutí NE roste</strong> (+10 % 2022→2024): přijíždí cestovky. Není to majorita, ale čísla rostou — plánovat ~130.</li>
+                                <li><strong className="text-green-700">Permice SO stabilní</strong> (±3 % za 5 let): jistý základ ~112.</li>
+                                <li><strong className="text-red-600">Splutí VIK klesá</strong> −55 % za 5 let: víkendoví lidi ubývají. Plánovat konzervativně ~50.</li>
+                                <li><strong className="text-orange-600">Permice VIK klesá</strong> −16 %: oddíly jedou vlastním busem. S bounce 2026: plánovat ~100.</li>
+                            </ul>
+                        </div>
                     </div>
                 </CardContent>
             </Card>
