@@ -47,6 +47,15 @@ const cpvSezony = [
 ];
 
 // ===== REVENUE DATA PO DNE (ze skutečných prodejů) =====
+// Penetrace autobusů = permice / (závod + splutí); NE = permNE/splNE (nejčistší)
+// VIK = permVIK / (splVIK + závod)  — zahrnuje závodníky jako jmenovatel
+const penetraceData = [
+    { rok: "2019", celkova: 62, ne: 59, vik: 49 },
+    { rok: "2021", celkova: 58, ne: 54, vik: 52 },
+    { rok: "2022", celkova: 60, ne: 64, vik: 41 },
+    { rok: "2024", celkova: 63, ne: 62, vik: 39 },
+];
+
 // Počty lidí po kategoriích (ze SUMA sekce Excelu)
 const poctyLineData = [
     { rok: "2019", splVIK: 142, splSO: 90,  splNE: 226, permVIK: 216, permSO: 120, permNE: 133 },
@@ -92,6 +101,12 @@ const faktory = [
 const zavodConfig = {
     actual: { label: "Skutečnost",     color: "hsl(142 60% 38%)" },
     trend:  { label: "Lineární trend", color: "hsl(220 15% 65%)" },
+} satisfies ChartConfig;
+
+const penetraceConfig = {
+    celkova: { label: "Celková penetrace",  color: "hsl(220 70% 45%)" },
+    ne:      { label: "NE penetrace",       color: "hsl(199 80% 38%)" },
+    vik:     { label: "VIK penetrace",      color: "hsl(142 55% 40%)" },
 } satisfies ChartConfig;
 
 // Splutí = solid, Permice (autobus) = dashed — vizuálně odlišeno strokeDasharray
@@ -415,23 +430,55 @@ export function HamerakPredikce() {
                         </div>
                     </div>
 
+                    {/* Penetrace autobusů */}
+                    <div>
+                        <div className="text-xs font-semibold text-muted-foreground uppercase tracking-wide mb-2 px-1">
+                            Penetrace autobusů — permice / vodáci (%)
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <ChartContainer config={penetraceConfig} className="h-40">
+                                <LineChart data={penetraceData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                                    <XAxis dataKey="rok" tick={{ fontSize: 11 }} />
+                                    <YAxis tick={{ fontSize: 11 }} width={32} domain={[30, 80]}
+                                        tickFormatter={v => `${v}%`} />
+                                    <ChartTooltip content={<ChartTooltipContent
+                                        formatter={(v, n) => [`${v} %`, n as string]} />} />
+                                    <Legend wrapperStyle={{ fontSize: 10 }} />
+                                    <Line type="monotone" dataKey="celkova" name="Celková" stroke="var(--color-celkova)" strokeWidth={2} dot={{ r: 4 }} />
+                                    <Line type="monotone" dataKey="ne"      name="NE (čistá)"  stroke="var(--color-ne)"      strokeWidth={2} dot={{ r: 4 }} />
+                                    <Line type="monotone" dataKey="vik"     name="VIK (závod+spl)" stroke="var(--color-vik)" strokeWidth={2} dot={{ r: 4 }} strokeDasharray="5 3" />
+                                </LineChart>
+                            </ChartContainer>
+                            <div className="text-xs space-y-2 self-center">
+                                <div className="font-semibold">Interpretace penetrace</div>
+                                <ul className="space-y-1.5 text-muted-foreground">
+                                    <li><strong className="text-blue-600">Celková penetrace roste</strong> (62→63 %): lidi bez vlastní dopravy tvoří větší podíl — ti s oddílovým busem ubývají rychleji.</li>
+                                    <li><strong className="text-blue-500">NE penetrace roste</strong> (59→62 %): nedělní návštěvníci (cestovky, individuálové) jsou bez auta → bus berou víc.</li>
+                                    <li><strong className="text-green-600">VIK penetrace klesá</strong> (49→39 %): víkendoví přijíždějí čím dál tím víc vlastní dopravou (oddíly s busem). Počet autobusů klesá.</li>
+                                    <li className="text-muted-foreground italic">Nevíme: jedou cestovky s naším busem, nebo vlastním? Pokud vlastním = jejich lidi se v penetraci neprojeví.</li>
+                                </ul>
+                            </div>
+                        </div>
+                    </div>
+
                     {/* Vysvětlení kategorií + závěry */}
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
                         <div className="rounded border p-3 space-y-1.5">
                             <div className="font-semibold">Jak fungují kategorie</div>
                             <ul className="space-y-1 text-muted-foreground">
-                                <li><strong>Splutí</strong> = jízda dolů řekou (páteční/sobotní/nedělní start)</li>
-                                <li><strong>Permice = autobus k startu.</strong> Kdo chce nahoru i dolů: potřebuje splutí (dolů) + permici (autobus nahoru). Kdo je závodník: startovné zahrnuje splutí VIK → permici nebere.</li>
-                                <li><strong>Oddílový autobus:</strong> členové oddílu jedou svým busem → permici neberou → permice VIK klesá rychleji než skutečná účast.</li>
+                                <li><strong>Splutí / Závod</strong> = jízda dolů řekou.</li>
+                                <li><strong>Permice = autobus nahoru k startu.</strong> Závodník má závod = jízda dolů; autobus zpět k autu musí koupit zvlášť → závodníci typicky permici berou.</li>
+                                <li><strong>Výjimka:</strong> oddíl s vlastním busem → členové nepotřebují naší permici, jen splutí/závod → permice VIK klesá rychleji než počet vodáků.</li>
                             </ul>
                         </div>
                         <div className="rounded border p-3 space-y-1.5">
                             <div className="font-semibold">Klíčové trendy pro plánování 2026</div>
                             <ul className="space-y-1 text-muted-foreground">
-                                <li><strong className="text-green-700">Splutí NE roste</strong> (+10 % 2022→2024): přijíždí cestovky. Není to majorita, ale čísla rostou — plánovat ~130.</li>
+                                <li><strong className="text-green-700">Splutí NE roste</strong> (+10 % 2022→2024): přijíždí cestovky — plánovat ~130.</li>
                                 <li><strong className="text-green-700">Permice SO stabilní</strong> (±3 % za 5 let): jistý základ ~112.</li>
-                                <li><strong className="text-red-600">Splutí VIK klesá</strong> −55 % za 5 let: víkendoví lidi ubývají. Plánovat konzervativně ~50.</li>
-                                <li><strong className="text-orange-600">Permice VIK klesá</strong> −16 %: oddíly jedou vlastním busem. S bounce 2026: plánovat ~100.</li>
+                                <li><strong className="text-red-600">Splutí VIK klesá</strong> −55 % za 5 let: plánovat konzervativně ~50.</li>
+                                <li><strong className="text-orange-600">Permice VIK klesá</strong> −16 %: oddíly jedou vlastním busem. S bounce 2026: ~100.</li>
                             </ul>
                         </div>
                     </div>
