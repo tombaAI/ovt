@@ -18,7 +18,13 @@ export default async function AdminLayout({ children }: { children: ReactNode })
                 <span className="font-bold text-[#82b965] text-base tracking-tight">OVT</span>
                 <span className="text-white/40 font-light hidden sm:inline text-sm">Bohemians</span>
 
-                <div className="flex-1" />
+                <div className="flex-1 flex justify-center">
+                    {isStaging && (
+                        <span className="text-white font-bold tracking-widest text-xs uppercase">
+                            ⚠ TESTOVACÍ STAGING PROSTŘEDÍ ⚠
+                        </span>
+                    )}
+                </div>
 
                 <span className="text-white/50 text-xs hidden md:inline truncate max-w-[180px]">
                     {session?.user?.name ?? session?.user?.email}
@@ -38,13 +44,6 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             <nav className={`hidden md:flex border-t border-white/10 px-2 overflow-x-auto ${isStaging ? "bg-blue-800" : "bg-[#26272b]"}`}>
                 <NavLinks />
             </nav>
-
-            {/* Staging banner */}
-            {isStaging && (
-                <div className="bg-blue-600 text-white text-center py-2 font-bold tracking-widest text-sm uppercase">
-                    ⚠ TESTOVACÍ STAGING PROSTŘEDÍ ⚠
-                </div>
-            )}
 
             {/* Main content — extra bottom padding on mobile for the nav bar */}
             <main className="flex-1 p-4 md:p-6 max-w-7xl w-full mx-auto pb-20 md:pb-6">

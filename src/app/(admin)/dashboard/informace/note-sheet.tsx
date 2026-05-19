@@ -1,8 +1,24 @@
 "use client";
 
-import { useState, useEffect, useTransition, useCallback, useRef, KeyboardEvent } from "react";
+import { useState, useEffect, useTransition, useCallback, useRef, KeyboardEvent, DragEvent, ClipboardEvent } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { Bold, Italic, Link, ImageIcon, List, Heading2 } from "lucide-react";
+import type { Components } from "react-markdown";
+
+const BLOB_ORIGIN = /^https:\/\/[^/]+\.blob\.vercel-storage\.com\//;
+
+function blobSrc(src: string) {
+    return BLOB_ORIGIN.test(src) ? `/api/blob-file?url=${encodeURIComponent(src)}` : src;
+}
+
+const mdComponents: Components = {
+    img: (props) => {
+        const src = typeof props.src === "string" ? blobSrc(props.src) : "";
+        // eslint-disable-next-line @next/next/no-img-element
+        return <img src={src} alt={props.alt ?? ""} className="max-w-full rounded" />;
+    },
+};
 import {
     Sheet, SheetContent, SheetHeader, SheetTitle,
 } from "@/components/ui/sheet";
@@ -165,6 +181,10 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
     const [isEditing, setIsEditing] = useState(false);
     const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
     const [saveError, setSaveError] = useState("");
+    const [isUploading, setIsUploading] = useState(false);
+    const [isDragOver, setIsDragOver] = useState(false);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     const [versionsOpen, setVersionsOpen] = useState(false);
     const [versions, setVersions] = useState<NoteVersionRow[]>([]);
@@ -216,6 +236,82 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
         } else {
             setVersionsOpen(false);
         }
+    }
+
+    function insertAtCursor(before: string, after = "", placeholder = "") {
+        const el = textareaRef.current;
+        if (!el) return;
+        const start = el.selectionStart;
+        const end = el.selectionEnd;
+        const selected = content.slice(start, end) || placeholder;
+        const newContent = content.slice(0, start) + before + selected + after + content.slice(end);
+        setContent(newContent);
+        // Obnoví fokus a umístí kurzor za vložený text
+        requestAnimationFrame(() => {
+            el.focus();
+            const cursor = start + before.length + selected.length + after.length;
+            el.setSelectionRange(cursor, cursor);
+        });
+    }
+
+    async function uploadImage(file: File) {
+        if (isUploading) return;
+        const allowed = new Set(["image/jpeg", "image/png", "image/webp", "image/gif"]);
+        if (!allowed.has(file.type)) {
+            setSaveError("Nepodporovaný formát obrázku (povoleno: JPEG, PNG, WebP, GIF)");
+            return;
+        }
+        if (file.size > 5 * 1024 * 1024) {
+            setSaveError("Obrázek je příliš velký (max 5 MB)");
+            return;
+        }
+        setIsUploading(true);
+        setSaveError("");
+        try {
+            const fd = new FormData();
+            fd.append("image", file);
+            const res = await fetch("/api/notes/upload-image", { method: "POST", body: fd });
+            const data = await res.json() as { url?: string; error?: string };
+            if (!res.ok || !data.url) {
+                setSaveError(data.error ?? "Chyba při uploadu obrázku");
+                return;
+            }
+            const altText = file.name.replace(/\.[^.]+$/, "");
+            insertAtCursor(`![${altText}](${data.url})`);
+        } catch {
+            setSaveError("Chyba při uploadu obrázku");
+        } finally {
+            setIsUploading(false);
+        }
+    }
+
+    function handlePaste(e: ClipboardEvent<HTMLTextAreaElement>) {
+        const items = Array.from(e.clipboardData.items);
+        const imageItem = items.find(i => i.type.startsWith("image/"));
+        if (!imageItem) return;
+        e.preventDefault();
+        const file = imageItem.getAsFile();
+        if (file) uploadImage(file);
+    }
+
+    function handleDragOver(e: DragEvent<HTMLDivElement>) {
+        const hasFiles = Array.from(e.dataTransfer.types).includes("Files");
+        if (!hasFiles) return;
+        e.preventDefault();
+        setIsDragOver(true);
+    }
+
+    function handleDragLeave(e: DragEvent<HTMLDivElement>) {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsDragOver(false);
+        }
+    }
+
+    function handleDrop(e: DragEvent<HTMLDivElement>) {
+        e.preventDefault();
+        setIsDragOver(false);
+        const file = Array.from(e.dataTransfer.files).find(f => f.type.startsWith("image/"));
+        if (file) uploadImage(file);
     }
 
     async function handleSave() {
@@ -358,17 +454,73 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                     )}
                 </SheetHeader>
 
+                {/* Skrytý input pro výběr souboru */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp,image/gif"
+                    className="hidden"
+                    onChange={e => {
+                        const file = e.target.files?.[0];
+                        if (file) uploadImage(file);
+                        e.target.value = "";
+                    }}
+                />
+
                 {/* ── Tělo ── */}
                 {isEditing ? (
                     <div className="flex-1 flex overflow-hidden min-h-0" style={{ minHeight: 0 }}>
-                        <div className="flex-1 flex flex-col border-r min-w-0">
-                            <div className="px-3 py-1.5 bg-gray-50 border-b text-xs text-gray-400 font-medium tracking-wide uppercase">
-                                Markdown
+                        <div
+                            className={["flex-1 flex flex-col border-r min-w-0 transition-colors", isDragOver ? "bg-[#327600]/5 border-[#327600]/40" : ""].join(" ")}
+                            onDragOver={handleDragOver}
+                            onDragLeave={handleDragLeave}
+                            onDrop={handleDrop}
+                        >
+                            {/* Toolbar */}
+                            <div className="px-2 py-1 bg-gray-50 border-b flex items-center gap-0.5">
+                                <span className="text-xs text-gray-400 font-medium tracking-wide uppercase mr-2 pl-1">Markdown</span>
+                                <div className="w-px h-4 bg-gray-200 mx-1" />
+                                {[
+                                    { icon: <Heading2 size={14} />, title: "Nadpis (##)", action: () => insertAtCursor("## ", "", "Nadpis") },
+                                    { icon: <Bold size={14} />, title: "Tučně (**)", action: () => insertAtCursor("**", "**", "tučně") },
+                                    { icon: <Italic size={14} />, title: "Kurzíva (*)", action: () => insertAtCursor("*", "*", "kurzíva") },
+                                    { icon: <Link size={14} />, title: "Odkaz", action: () => insertAtCursor("[", "](https://)", "text odkazu") },
+                                    { icon: <List size={14} />, title: "Seznam", action: () => insertAtCursor("\n- ", "", "položka") },
+                                ].map(({ icon, title, action }) => (
+                                    <button
+                                        key={title}
+                                        type="button"
+                                        title={title}
+                                        onMouseDown={e => { e.preventDefault(); action(); }}
+                                        className="p-1.5 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors"
+                                    >
+                                        {icon}
+                                    </button>
+                                ))}
+                                <div className="w-px h-4 bg-gray-200 mx-1" />
+                                <button
+                                    type="button"
+                                    title="Vložit obrázek"
+                                    onMouseDown={e => { e.preventDefault(); fileInputRef.current?.click(); }}
+                                    disabled={isUploading}
+                                    className="p-1.5 rounded text-gray-500 hover:text-gray-800 hover:bg-gray-200 transition-colors disabled:opacity-40"
+                                >
+                                    {isUploading ? (
+                                        <span className="text-xs text-gray-400 px-1">Nahrávám…</span>
+                                    ) : (
+                                        <ImageIcon size={14} />
+                                    )}
+                                </button>
+                                {isDragOver && (
+                                    <span className="ml-2 text-xs text-[#327600] font-medium">Pusťte obrázek…</span>
+                                )}
                             </div>
                             <textarea
+                                ref={textareaRef}
                                 value={content}
                                 onChange={e => setContent(e.target.value)}
-                                placeholder={"Začněte psát v Markdown formátu…\n\n# Nadpis\n**tučně**, *kurzíva*, `kód`\n- seznam\n1. číslovaný seznam"}
+                                onPaste={handlePaste}
+                                placeholder={"Začněte psát v Markdown formátu…\n\n# Nadpis\n**tučně**, *kurzíva*, `kód`\n- seznam\n1. číslovaný seznam\n\nObrázek: přetáhněte nebo vložte ze schránky"}
                                 className="flex-1 resize-none font-mono text-sm text-gray-800 p-4 outline-none bg-white placeholder:text-gray-300 leading-relaxed"
                                 spellCheck={false}
                             />
@@ -380,7 +532,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                             <div className="flex-1 overflow-y-auto p-5">
                                 {content ? (
                                     <div className="md-content">
-                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{content}</ReactMarkdown>
                                     </div>
                                 ) : (
                                     <p className="text-gray-300 text-sm italic">Náhled se zobrazí zde…</p>
@@ -392,7 +544,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                     <div className="flex-1 overflow-y-auto p-6">
                         {content ? (
                             <div className="md-content max-w-2xl">
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{content}</ReactMarkdown>
+                                <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{content}</ReactMarkdown>
                             </div>
                         ) : (
                             <p className="text-gray-400 text-sm italic">Žádný obsah</p>
@@ -432,7 +584,7 @@ export function NoteSheet({ open, onOpenChange, note, allCategories, includeArch
                                                 </div>
                                                 {expandedVersionId === v.id && (
                                                     <div className="mt-2 rounded-lg bg-gray-50 border p-3 md-content text-xs">
-                                                        <ReactMarkdown remarkPlugins={[remarkGfm]}>{v.content}</ReactMarkdown>
+                                                        <ReactMarkdown remarkPlugins={[remarkGfm]} components={mdComponents}>{v.content}</ReactMarkdown>
                                                     </div>
                                                 )}
                                             </div>

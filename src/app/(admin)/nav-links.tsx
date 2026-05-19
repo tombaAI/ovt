@@ -11,6 +11,7 @@ const NAV_ITEMS: { href: string; label: string; exact?: boolean }[] = [
     { href: "/dashboard/events", label: "Kalendář" },
     { href: "/dashboard/finance", label: "Finance" },
     { href: "/dashboard/brigades", label: "Brigády" },
+    { href: "/dashboard/hamerak", label: "Hamerák" },
     { href: "/dashboard/boats", label: "Lodě" },
     { href: "/dashboard/informace", label: "Informace" },
     { href: "/dashboard/imports", label: "Import dat" },

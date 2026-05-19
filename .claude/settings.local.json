@@ -13,7 +13,13 @@
       "Bash(git commit -m ' *)",
       "Bash(git *)",
       "WebFetch(domain:www.bohemianstj.cz)",
-      "Bash(curl -s \"https://www.stormware.cz/pohoda/datove-rozhrani.aspx\")"
+      "Bash(curl -s \"https://www.stormware.cz/pohoda/datove-rozhrani.aspx\")",
+      "Bash(gh workflow *)",
+      "Bash(gh run *)",
+      "Bash(sed *)",
+      "Bash(gh issue *)",
+      "Bash(gh auth *)",
+      "Bash(gh pr *)"
     ],
     "additionalDirectories": [
       "/Users/ext93895/work/ovt/src/app/(admin)/dashboard/members"
