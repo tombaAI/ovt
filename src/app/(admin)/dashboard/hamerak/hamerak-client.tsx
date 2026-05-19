@@ -5,6 +5,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 type RevenueRow = {
@@ -23,7 +24,6 @@ type CostRow = {
 
 type Scenario = "pessimistic" | "base" | "optimistic" | "custom";
 
-// 2025 defaults: +10 % ceny vs. 2024, počty mírně pod 2024 (base scénář)
 const BASE_REVENUE: RevenueRow[] = [
     { id: "zavod",        label: "Závod",                sublabel: "závodní čísla",  count: 215, price: 220 },
     { id: "spluti_vik",   label: "Splutí VIK",           sublabel: "pátek + neděle", count: 70,  price: 220 },
@@ -61,7 +61,6 @@ const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { c
     },
 };
 
-// Náklady 2025: +7–10 % inflace vs. plán 2024
 const DEFAULT_COSTS: CostRow[] = [
     { id: "bus",          label: "Bus Jan Kukla",              amount: 132000 },
     { id: "chatky",       label: "Ubytování chatky",           amount: 62700 },
@@ -102,6 +101,11 @@ function parseNum(val: string): number {
     return Math.max(0, parseInt(val, 10) || 0);
 }
 
+let uid = 0;
+function nextId(prefix: string) {
+    return `${prefix}_${++uid}_${Date.now()}`;
+}
+
 export function HamerakClient() {
     const [revenue, setRevenue] = useState<RevenueRow[]>(BASE_REVENUE);
     const [costs, setCosts] = useState<CostRow[]>(DEFAULT_COSTS);
@@ -130,18 +134,40 @@ export function HamerakClient() {
         );
     }
 
+    // Revenue mutations
+    function updateRevLabel(id: string, val: string) {
+        setScenario("custom");
+        setRevenue(prev => prev.map(r => r.id === id ? { ...r, label: val } : r));
+    }
     function updateRevCount(id: string, val: number) {
         setScenario("custom");
         setRevenue(prev => prev.map(r => r.id === id ? { ...r, count: val } : r));
     }
-
     function updateRevPrice(id: string, val: number) {
         setScenario("custom");
         setRevenue(prev => prev.map(r => r.id === id ? { ...r, price: val } : r));
     }
+    function addRevRow() {
+        setScenario("custom");
+        setRevenue(prev => [...prev, { id: nextId("rev"), label: "Nová položka", count: 0, price: 0 }]);
+    }
+    function removeRevRow(id: string) {
+        setScenario("custom");
+        setRevenue(prev => prev.filter(r => r.id !== id));
+    }
 
-    function updateCost(id: string, val: number) {
+    // Cost mutations
+    function updateCostLabel(id: string, val: string) {
+        setCosts(prev => prev.map(c => c.id === id ? { ...c, label: val } : c));
+    }
+    function updateCostAmount(id: string, val: number) {
         setCosts(prev => prev.map(c => c.id === id ? { ...c, amount: val } : c));
+    }
+    function addCostRow() {
+        setCosts(prev => [...prev, { id: nextId("cost"), label: "Nová položka", amount: 0 }]);
+    }
+    function removeCostRow(id: string) {
+        setCosts(prev => prev.filter(c => c.id !== id));
     }
 
     return (
@@ -166,9 +192,7 @@ export function HamerakClient() {
                             {SCENARIO_LABELS[s]}
                         </Button>
                     ))}
-                    {scenario === "custom" && (
-                        <Badge variant="secondary">Vlastní</Badge>
-                    )}
+                    {scenario === "custom" && <Badge variant="secondary">Vlastní</Badge>}
                 </div>
             </div>
 
@@ -221,15 +245,21 @@ export function HamerakClient() {
                                     <th className="text-center px-2 py-2 font-medium w-20">Počet</th>
                                     <th className="text-center px-2 py-2 font-medium w-24">Cena</th>
                                     <th className="text-right px-4 py-2 font-medium w-28">Příjem</th>
+                                    <th className="w-8" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {revenue.map(r => (
-                                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                                        <td className="px-4 py-2">
-                                            <div className="font-medium">{r.label}</div>
+                                    <tr key={r.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors group">
+                                        <td className="px-2 py-1.5">
+                                            <Input
+                                                value={r.label}
+                                                onChange={e => updateRevLabel(r.id, e.target.value)}
+                                                className="h-7 text-sm border-transparent hover:border-input focus:border-input bg-transparent"
+                                                placeholder="Název položky"
+                                            />
                                             {r.sublabel && (
-                                                <div className="text-xs text-muted-foreground">{r.sublabel}</div>
+                                                <div className="text-xs text-muted-foreground px-3">{r.sublabel}</div>
                                             )}
                                         </td>
                                         <td className="px-2 py-1.5 text-center">
@@ -254,18 +284,40 @@ export function HamerakClient() {
                                                 min={0}
                                             />
                                         </td>
-                                        <td className="px-4 py-2 text-right font-semibold tabular-nums">
+                                        <td className="px-4 py-2 text-right font-semibold tabular-nums whitespace-nowrap">
                                             {fmt(rowTotal(r))}
+                                        </td>
+                                        <td className="pr-2 py-1.5 text-center">
+                                            <button
+                                                onClick={() => removeRevRow(r.id)}
+                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity p-0.5 rounded"
+                                                title="Smazat řádek"
+                                            >
+                                                <X size={14} />
+                                            </button>
                                         </td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
+                                <tr>
+                                    <td colSpan={5} className="px-4 py-2">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={addRevRow}
+                                            className="h-7 text-xs text-muted-foreground hover:text-foreground w-full justify-start"
+                                        >
+                                            + Přidat řádek
+                                        </Button>
+                                    </td>
+                                </tr>
                                 <tr className="border-t-2 bg-muted/40">
                                     <td colSpan={3} className="px-4 py-3 font-semibold text-sm">Celkem příjmy</td>
                                     <td className="px-4 py-3 text-right font-bold text-green-700 tabular-nums">
                                         {fmt(totalRevenue)}
                                     </td>
+                                    <td />
                                 </tr>
                             </tfoot>
                         </table>
@@ -284,17 +336,25 @@ export function HamerakClient() {
                                     <th className="text-left px-4 py-2 font-medium">Položka</th>
                                     <th className="text-right px-2 py-2 font-medium w-36">Částka (Kč)</th>
                                     <th className="text-right px-4 py-2 font-medium w-12">%</th>
+                                    <th className="w-8" />
                                 </tr>
                             </thead>
                             <tbody>
                                 {costs.map(c => (
-                                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors">
-                                        <td className="px-4 py-2">{c.label}</td>
+                                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors group">
+                                        <td className="px-2 py-1.5">
+                                            <Input
+                                                value={c.label}
+                                                onChange={e => updateCostLabel(c.id, e.target.value)}
+                                                className="h-7 text-sm border-transparent hover:border-input focus:border-input bg-transparent"
+                                                placeholder="Název položky"
+                                            />
+                                        </td>
                                         <td className="px-2 py-1.5">
                                             <Input
                                                 type="number"
                                                 value={c.amount}
-                                                onChange={e => updateCost(c.id, parseNum(e.target.value))}
+                                                onChange={e => updateCostAmount(c.id, parseNum(e.target.value))}
                                                 className="h-7 w-28 text-right text-sm ml-auto"
                                                 min={0}
                                             />
@@ -302,13 +362,34 @@ export function HamerakClient() {
                                         <td className="px-4 py-2 text-right text-muted-foreground text-xs tabular-nums">
                                             {totalCosts > 0 ? Math.round((c.amount / totalCosts) * 100) : 0} %
                                         </td>
+                                        <td className="pr-2 py-1.5 text-center">
+                                            <button
+                                                onClick={() => removeCostRow(c.id)}
+                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity p-0.5 rounded"
+                                                title="Smazat řádek"
+                                            >
+                                                <X size={14} />
+                                            </button>
+                                        </td>
                                     </tr>
                                 ))}
                             </tbody>
                             <tfoot>
+                                <tr>
+                                    <td colSpan={4} className="px-4 py-2">
+                                        <Button
+                                            variant="ghost"
+                                            size="sm"
+                                            onClick={addCostRow}
+                                            className="h-7 text-xs text-muted-foreground hover:text-foreground w-full justify-start"
+                                        >
+                                            + Přidat řádek
+                                        </Button>
+                                    </td>
+                                </tr>
                                 <tr className="border-t-2 bg-muted/40">
                                     <td colSpan={2} className="px-4 py-3 font-semibold text-sm">Celkem náklady</td>
-                                    <td className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">
+                                    <td colSpan={2} className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">
                                         {fmt(totalCosts)}
                                     </td>
                                 </tr>
