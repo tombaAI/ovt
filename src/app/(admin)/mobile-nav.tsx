@@ -17,6 +17,7 @@ const MORE_ITEMS = [
     { href: "/dashboard", label: "Přehled" },
     { href: "/dashboard/contributions", label: "Příspěvky" },
     { href: "/dashboard/brigades", label: "Brigády" },
+    { href: "/dashboard/hamerak", label: "Hamerák" },
     { href: "/dashboard/boats", label: "Lodě" },
     { href: "/dashboard/informace", label: "Informace" },
     { href: "/dashboard/imports", label: "Import dat" },
