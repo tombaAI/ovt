@@ -34,14 +34,13 @@ const BASE_REVENUE: RevenueRow[] = [
     { id: "dotace",       label: "Dotace ČSK",                                        count: null, price: 62000 },
 ];
 
-const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { count?: number; price?: number }>> = {
+const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { count?: number }>> = {
     pessimistic: {
         zavod:       { count: 190 },
         spluti_vik:  { count: 55 },
         spluti_so:   { count: 95 },
         permice_vik: { count: 80 },
         permice_so:  { count: 175 },
-        dotace:      { price: 55000 },
     },
     base: {
         zavod:       { count: 215 },
@@ -49,7 +48,6 @@ const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { c
         spluti_so:   { count: 120 },
         permice_vik: { count: 100 },
         permice_so:  { count: 210 },
-        dotace:      { price: 62000 },
     },
     optimistic: {
         zavod:       { count: 255 },
@@ -57,7 +55,6 @@ const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { c
         spluti_so:   { count: 150 },
         permice_vik: { count: 135 },
         permice_so:  { count: 265 },
-        dotace:      { price: 68000 },
     },
 };
 
@@ -124,12 +121,8 @@ export function HamerakClient() {
         setRevenue(prev =>
             prev.map(r => {
                 const o = overrides[r.id];
-                if (!o) return r;
-                return {
-                    ...r,
-                    ...(o.count !== undefined && r.count !== null ? { count: o.count } : {}),
-                    ...(o.price !== undefined ? { price: o.price } : {}),
-                };
+                if (!o || o.count === undefined || r.count === null) return r;
+                return { ...r, count: o.count };
             })
         );
     }
@@ -173,27 +166,11 @@ export function HamerakClient() {
     return (
         <div className="p-4 md:p-6 max-w-7xl mx-auto space-y-5">
             {/* Hlavička */}
-            <div className="flex flex-wrap items-start justify-between gap-3">
-                <div>
-                    <h1 className="text-2xl font-bold">Hamerák 2026 — Kalkulace plánu</h1>
-                    <p className="text-sm text-muted-foreground mt-0.5">
-                        Interaktivní kalkulačka příjmů a nákladů · ceny +10 % vs. 2024 (2025 byl zrušen — sucho)
-                    </p>
-                </div>
-                <div className="flex items-center gap-2 flex-wrap">
-                    <span className="text-xs text-muted-foreground">Scénář:</span>
-                    {(["pessimistic", "base", "optimistic"] as const).map(s => (
-                        <Button
-                            key={s}
-                            size="sm"
-                            variant={scenario === s ? "default" : "outline"}
-                            onClick={() => applyScenario(s)}
-                        >
-                            {SCENARIO_LABELS[s]}
-                        </Button>
-                    ))}
-                    {scenario === "custom" && <Badge variant="secondary">Vlastní</Badge>}
-                </div>
+            <div>
+                <h1 className="text-2xl font-bold">Hamerák 2026 — Návrh rozpočtu</h1>
+                <p className="text-sm text-muted-foreground mt-0.5">
+                    Interaktivní kalkulačka příjmů a nákladů · plánovaný ročník 2026 · ceny +10 % vs. 2024 (2025 nebyl — sucho)
+                </p>
             </div>
 
             {/* Souhrnná bilance */}
@@ -235,7 +212,24 @@ export function HamerakClient() {
                 {/* Příjmy */}
                 <Card>
                     <CardHeader className="pb-2">
-                        <CardTitle className="text-base">Příjmy</CardTitle>
+                        <div className="flex flex-wrap items-center justify-between gap-2">
+                            <CardTitle className="text-base">Příjmy</CardTitle>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                                <span className="text-xs text-muted-foreground">Scénář počtů:</span>
+                                {(["pessimistic", "base", "optimistic"] as const).map(s => (
+                                    <Button
+                                        key={s}
+                                        size="sm"
+                                        variant={scenario === s ? "default" : "outline"}
+                                        onClick={() => applyScenario(s)}
+                                        className="h-7 text-xs px-2"
+                                    >
+                                        {SCENARIO_LABELS[s]}
+                                    </Button>
+                                ))}
+                                {scenario === "custom" && <Badge variant="secondary">Vlastní</Badge>}
+                            </div>
+                        </div>
                     </CardHeader>
                     <CardContent className="p-0">
                         <table className="w-full text-sm">
@@ -388,9 +382,21 @@ export function HamerakClient() {
                                     </td>
                                 </tr>
                                 <tr className="border-t-2 bg-muted/40">
-                                    <td colSpan={2} className="px-4 py-3 font-semibold text-sm">Celkem náklady</td>
+                                    <td colSpan={2} className="px-4 py-3 font-semibold text-sm">Celkem náklady 2026</td>
                                     <td colSpan={2} className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">
                                         {fmt(totalCosts)}
+                                    </td>
+                                </tr>
+                                <tr className="border-t bg-muted/20">
+                                    <td colSpan={2} className="px-4 py-2 text-xs text-muted-foreground">Skutečné náklady 2024</td>
+                                    <td colSpan={2} className="px-4 py-2 text-right text-xs text-muted-foreground tabular-nums">
+                                        {fmt(237500)}
+                                    </td>
+                                </tr>
+                                <tr className="border-t bg-muted/20">
+                                    <td colSpan={2} className="px-4 py-2 text-xs text-muted-foreground">Skutečné náklady 2022</td>
+                                    <td colSpan={2} className="px-4 py-2 text-right text-xs text-muted-foreground tabular-nums">
+                                        {fmt(205500)}
                                     </td>
                                 </tr>
                             </tfoot>
@@ -433,7 +439,7 @@ export function HamerakClient() {
                                 );
                             })}
                             <tr className="border-t-2 bg-muted/20">
-                                <td className="px-4 py-2 font-bold text-primary">2025 (plán)</td>
+                                <td className="px-4 py-2 font-bold text-primary">2026 (plán)</td>
                                 <td className="px-4 py-2 text-right font-semibold tabular-nums text-green-700">{fmt(totalRevenue)}</td>
                                 <td className="px-4 py-2 text-right font-semibold tabular-nums text-red-600">{fmt(totalCosts)}</td>
                                 <td className={cn("px-4 py-2 text-right font-bold tabular-nums", balance >= 0 ? "text-green-600" : "text-red-600")}>
