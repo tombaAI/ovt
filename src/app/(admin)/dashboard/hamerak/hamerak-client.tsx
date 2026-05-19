@@ -87,11 +87,13 @@ const DEFAULT_COSTS: CostRow[] = [
     { id: "ostatni",      label: "Ostatní",                   amount: 5000 },
 ];
 
-// Historické náklady po položkách — zdroj: OVT Hamerák vyúčtování.xlsx + Rozpočet_Hamerák_plán_2024.xlsx
-// Celkové součty ze skutečnosti: 2022 = 219 221 Kč (vč. kelímků 17 726), 2024 = 210 212 Kč
-// benzin = obslužná vozidla + cesty příprava; mistni = Boček + Hrázný + Feit (louka Dvoreček)
-// material = materiál náklady + materiál branky + materiál příprava
-// ostatni = občerstvení; kelímky nákup 2022 (17 726 Kč) je mimo tuto kalkulačku — jedná se o příjem v jiných letech
+// Historické náklady po položkách — zdroj: Vyúčtování Hamerák 2022 + Rozpočet_H22 + Vyúčtování 2024
+// Celkové součty skutečnost: 2022 = 219 221 Kč (vč. kelímků výroba 17 726!), 2024 = 210 212 Kč
+// benzin    = obslužná vozidla + cesty příprava (cesťáky)
+// mistni    = Boček hráz vstup + Hrázný Fučík + Feit louka Dvoreček
+// material  = materiál náklady (pytle, folie) + materiál branky + materiál příprava
+// priprava  = nelze jednoznačně oddělit od cesťáků v dostupných datech
+// ostatni   = občerstvení (pivo je zvlášť); kelímky nákup 2022 (17 726) je jednorázový náklad mimo tuto tabulku
 const COST_HISTORY: Record<string, { r2022: number | null; r2024: number | null }> = {
     bus:          { r2022: 102000, r2024: 100600 },
     chatky:       { r2022: 50100,  r2024: 45600  },
@@ -107,10 +109,12 @@ const COST_HISTORY: Record<string, { r2022: number | null; r2024: number | null 
     ostatni:      { r2022: 3005,   r2024: 6755   },
 };
 
-// Skutečné hodnoty z Excel (vyúčtování.xlsx): 2022 naklady vč. kelímků, 2024 = skutečnost (ne plán 237 350)
+// Skutečné hodnoty ze 3 Excel souborů (H22_celkovy_vysledek + Rozpočet_H22 + Vyúčtování 2022)
+// 2022 příjmy: vstupenky 153 170 + dotace ČSK 65 000 = 218 250 (původní 243 860 bylo chybně)
+// 2024 náklady: skutečnost 210 212 (původní 237 500 byl plánovaný rozpočet, ne skutečnost)
 const HISTORY = [
     { rok: 2021, prijmy: 211180, naklady: 198600, zavornici: 256 },
-    { rok: 2022, prijmy: 243860, naklady: 219221, zavornici: 274 },
+    { rok: 2022, prijmy: 218250, naklady: 219221, zavornici: 274 },
     { rok: 2023, prijmy: 94075,  naklady: 169519, zavornici: null },
     { rok: 2024, prijmy: 218250, naklady: 210212, zavornici: 253 },
 ];
