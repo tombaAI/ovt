@@ -24,54 +24,85 @@ type CostRow = {
 
 type Scenario = "pessimistic" | "base" | "optimistic" | "custom";
 
+// Predikce 2026 z hamerak-predikce-client: lineární trend + bounce po zrušení 2025
+// závodníci: trendFn(2026)=183 + bounce 30 = 213
+// splutí NE roste (counter-trend, cestovky v neděli), VIK strmě klesá
 const BASE_REVENUE: RevenueRow[] = [
-    { id: "zavod",        label: "Závod",                sublabel: "závodní čísla",  count: 215, price: 220 },
-    { id: "spluti_vik",   label: "Splutí VIK",           sublabel: "pátek + neděle", count: 70,  price: 220 },
-    { id: "spluti_so",    label: "Splutí SO",             sublabel: "sobota",         count: 120, price: 165 },
-    { id: "permice_vik",  label: "Permice VIK",          sublabel: "víkend",         count: 100, price: 250 },
-    { id: "permice_so",   label: "Permice SO",            sublabel: "sobota",         count: 210, price: 210 },
-    { id: "kelimky",      label: "Kelímky / sponzoring",                              count: null, price: 5000 },
-    { id: "dotace",       label: "Dotace ČSK",                                        count: null, price: 62000 },
+    { id: "zavod",        label: "Závod",       sublabel: "závodní čísla",  count: 213, price: 220 },
+    { id: "spluti_vik",   label: "Splutí VIK",  sublabel: "pátek + neděle", count: 35,  price: 220 },
+    { id: "spluti_so",    label: "Splutí SO",   sublabel: "sobota",         count: 60,  price: 165 },
+    { id: "spluti_ne",    label: "Splutí NE",   sublabel: "neděle",         count: 130, price: 165 },
+    { id: "permice_vik",  label: "Permice VIK", sublabel: "víkend",         count: 100, price: 250 },
+    { id: "permice_so",   label: "Permice SO",  sublabel: "sobota",         count: 110, price: 210 },
+    { id: "permice_ne",   label: "Permice NE",  sublabel: "neděle",         count: 80,  price: 185 },
+    { id: "kelimky",      label: "Kelímky",     sublabel: "prodej",         count: null, price: 5000 },
+    { id: "sponzoring",   label: "Sponzoring",  sublabel: "sleva autobus",  count: null, price: 10000 },
+    { id: "dotace",       label: "Dotace ČSK",                              count: null, price: 65000 },
 ];
 
+// Scénáře ovlivňují pouze počty — ceny/fixní položky se nemění
+// Odvozeno z predikce (lineární trend + CI + bounce po zrušení 2025)
 const SCENARIO_OVERRIDES: Record<Exclude<Scenario, "custom">, Record<string, { count?: number }>> = {
     pessimistic: {
-        zavod:       { count: 190 },
-        spluti_vik:  { count: 55 },
-        spluti_so:   { count: 95 },
-        permice_vik: { count: 80 },
-        permice_so:  { count: 175 },
+        zavod:       { count: 168 },  // trend+bounce-25(počasí)-10(28.9.) = 178, konzervativně
+        spluti_vik:  { count: 20 },   // predikce CI min=18
+        spluti_so:   { count: 40 },   // predikce CI min=38
+        spluti_ne:   { count: 95 },   // predikce CI min=95 (roste, ale špatné počasí tlačí)
+        permice_vik: { count: 72 },   // predikce CI min=60 + malý bounce
+        permice_so:  { count: 100 },  // pod predikce stabilní hodnotou 111
+        permice_ne:  { count: 60 },
     },
     base: {
-        zavod:       { count: 215 },
-        spluti_vik:  { count: 70 },
-        spluti_so:   { count: 120 },
-        permice_vik: { count: 100 },
-        permice_so:  { count: 210 },
+        zavod:       { count: 213 },  // trend 183 + bounce 30
+        spluti_vik:  { count: 35 },   // predikce 31 + malý bounce
+        spluti_so:   { count: 60 },   // predikce 59
+        spluti_ne:   { count: 130 },  // predikce 130 (roste, counter-trend)
+        permice_vik: { count: 100 },  // predikce 83 + bounce ~15
+        permice_so:  { count: 110 },  // predikce 111 (nejstabilnější)
+        permice_ne:  { count: 80 },   // trend +7 %/2 roky z 78
     },
     optimistic: {
-        zavod:       { count: 255 },
-        spluti_vik:  { count: 95 },
-        spluti_so:   { count: 150 },
-        permice_vik: { count: 135 },
-        permice_so:  { count: 265 },
+        zavod:       { count: 233 },  // trend+bounce+20(babí léto) = 233
+        spluti_vik:  { count: 50 },   // predikce CI max=44 + bounce
+        spluti_so:   { count: 80 },   // predikce CI max=80
+        spluti_ne:   { count: 165 },  // predikce CI max=165
+        permice_vik: { count: 120 },  // predikce CI max=106 + bounce
+        permice_so:  { count: 125 },  // mírně nad stabilní hodnotu
+        permice_ne:  { count: 100 },
     },
 };
 
 const DEFAULT_COSTS: CostRow[] = [
-    { id: "bus",          label: "Bus Jan Kukla",              amount: 132000 },
-    { id: "chatky",       label: "Ubytování chatky",           amount: 62700 },
-    { id: "vodohospo",    label: "Vodohospodářství (rybáři)",  amount: 19000 },
-    { id: "hrnky",        label: "Hrnky potisk",               amount: 7700 },
-    { id: "permice_tisk", label: "Permice tisk",               amount: 6600 },
-    { id: "pivo",         label: "Pivo Kamenice",              amount: 5000 },
-    { id: "benzin",       label: "Benzín / obslužná vozidla",  amount: 6300 },
-    { id: "priprava",     label: "Přípravné práce",            amount: 8000 },
-    { id: "mistni",       label: "Místní poplatky",            amount: 5000 },
-    { id: "material",     label: "Materiál (pytle, folie…)",   amount: 4700 },
-    { id: "postovne",     label: "Poštovné",                   amount: 1100 },
-    { id: "ostatni",      label: "Ostatní",                    amount: 5000 },
+    { id: "bus",          label: "Bus Jan Kukla",             amount: 132000 },
+    { id: "chatky",       label: "Ubytování chatky",          amount: 62700 },
+    { id: "vodohospo",    label: "Vodohospodářství (rybáři)", amount: 19000 },
+    { id: "hrnky",        label: "Hrnky potisk",              amount: 7700 },
+    { id: "permice_tisk", label: "Permice tisk",              amount: 6600 },
+    { id: "pivo",         label: "Pivo Kamenice",             amount: 5000 },
+    { id: "benzin",       label: "Benzín / obslužná vozidla", amount: 6300 },
+    { id: "priprava",     label: "Přípravné práce",           amount: 8000 },
+    { id: "mistni",       label: "Místní poplatky",           amount: 5000 },
+    { id: "material",     label: "Materiál (pytle, folie…)",  amount: 4700 },
+    { id: "postovne",     label: "Poštovné",                  amount: 1100 },
+    { id: "ostatni",      label: "Ostatní",                   amount: 5000 },
 ];
+
+// Historické náklady po položkách — doplnit ze skutečných výsledků
+// Celkové součty: 2022 = 205 500 Kč, 2024 = 237 500 Kč
+const COST_HISTORY: Record<string, { r2022: number | null; r2024: number | null }> = {
+    bus:          { r2022: null, r2024: null },
+    chatky:       { r2022: null, r2024: null },
+    vodohospo:    { r2022: null, r2024: null },
+    hrnky:        { r2022: null, r2024: null },
+    permice_tisk: { r2022: null, r2024: null },
+    pivo:         { r2022: null, r2024: null },
+    benzin:       { r2022: null, r2024: null },
+    priprava:     { r2022: null, r2024: null },
+    mistni:       { r2022: null, r2024: null },
+    material:     { r2022: null, r2024: null },
+    postovne:     { r2022: null, r2024: null },
+    ostatni:      { r2022: null, r2024: null },
+};
 
 const HISTORY = [
     { rok: 2021, prijmy: 211180, naklady: 198600, zavornici: 256 },
@@ -127,7 +158,6 @@ export function HamerakClient() {
         );
     }
 
-    // Revenue mutations
     function updateRevLabel(id: string, val: string) {
         setScenario("custom");
         setRevenue(prev => prev.map(r => r.id === id ? { ...r, label: val } : r));
@@ -149,7 +179,6 @@ export function HamerakClient() {
         setRevenue(prev => prev.filter(r => r.id !== id));
     }
 
-    // Cost mutations
     function updateCostLabel(id: string, val: string) {
         setCosts(prev => prev.map(c => c.id === id ? { ...c, label: val } : c));
     }
@@ -207,8 +236,8 @@ export function HamerakClient() {
                 </CardContent>
             </Card>
 
-            {/* Příjmy a náklady */}
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+            {/* Příjmy a náklady — pod sebou, aby se vešly sloupce 2022/2024 */}
+            <div className="space-y-5">
                 {/* Příjmy */}
                 <Card>
                     <CardHeader className="pb-2">
@@ -328,49 +357,60 @@ export function HamerakClient() {
                             <thead>
                                 <tr className="border-b bg-muted/40 text-xs text-muted-foreground">
                                     <th className="text-left px-4 py-2 font-medium">Položka</th>
-                                    <th className="text-right px-2 py-2 font-medium w-36">Částka (Kč)</th>
-                                    <th className="text-right px-4 py-2 font-medium w-12">%</th>
+                                    <th className="text-right px-3 py-2 font-medium w-28">2022</th>
+                                    <th className="text-right px-3 py-2 font-medium w-28">2024</th>
+                                    <th className="text-right px-2 py-2 font-medium w-36">2026 (plán)</th>
+                                    <th className="text-right px-4 py-2 font-medium w-10">%</th>
                                     <th className="w-8" />
                                 </tr>
                             </thead>
                             <tbody>
-                                {costs.map(c => (
-                                    <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors group">
-                                        <td className="px-2 py-1.5">
-                                            <Input
-                                                value={c.label}
-                                                onChange={e => updateCostLabel(c.id, e.target.value)}
-                                                className="h-7 text-sm border-transparent hover:border-input focus:border-input bg-transparent"
-                                                placeholder="Název položky"
-                                            />
-                                        </td>
-                                        <td className="px-2 py-1.5">
-                                            <Input
-                                                type="number"
-                                                value={c.amount}
-                                                onChange={e => updateCostAmount(c.id, parseNum(e.target.value))}
-                                                className="h-7 w-28 text-right text-sm ml-auto"
-                                                min={0}
-                                            />
-                                        </td>
-                                        <td className="px-4 py-2 text-right text-muted-foreground text-xs tabular-nums">
-                                            {totalCosts > 0 ? Math.round((c.amount / totalCosts) * 100) : 0} %
-                                        </td>
-                                        <td className="pr-2 py-1.5 text-center">
-                                            <button
-                                                onClick={() => removeCostRow(c.id)}
-                                                className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity p-0.5 rounded"
-                                                title="Smazat řádek"
-                                            >
-                                                <X size={14} />
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
+                                {costs.map(c => {
+                                    const h = COST_HISTORY[c.id];
+                                    return (
+                                        <tr key={c.id} className="border-b last:border-0 hover:bg-muted/20 transition-colors group">
+                                            <td className="px-2 py-1.5">
+                                                <Input
+                                                    value={c.label}
+                                                    onChange={e => updateCostLabel(c.id, e.target.value)}
+                                                    className="h-7 text-sm border-transparent hover:border-input focus:border-input bg-transparent"
+                                                    placeholder="Název položky"
+                                                />
+                                            </td>
+                                            <td className="px-3 py-2 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                                                {h != null && h.r2022 != null ? fmt(h.r2022) : "—"}
+                                            </td>
+                                            <td className="px-3 py-2 text-right text-xs text-muted-foreground tabular-nums whitespace-nowrap">
+                                                {h != null && h.r2024 != null ? fmt(h.r2024) : "—"}
+                                            </td>
+                                            <td className="px-2 py-1.5">
+                                                <Input
+                                                    type="number"
+                                                    value={c.amount}
+                                                    onChange={e => updateCostAmount(c.id, parseNum(e.target.value))}
+                                                    className="h-7 w-28 text-right text-sm ml-auto"
+                                                    min={0}
+                                                />
+                                            </td>
+                                            <td className="px-4 py-2 text-right text-muted-foreground text-xs tabular-nums">
+                                                {totalCosts > 0 ? Math.round((c.amount / totalCosts) * 100) : 0} %
+                                            </td>
+                                            <td className="pr-2 py-1.5 text-center">
+                                                <button
+                                                    onClick={() => removeCostRow(c.id)}
+                                                    className="opacity-0 group-hover:opacity-100 text-muted-foreground hover:text-destructive transition-opacity p-0.5 rounded"
+                                                    title="Smazat řádek"
+                                                >
+                                                    <X size={14} />
+                                                </button>
+                                            </td>
+                                        </tr>
+                                    );
+                                })}
                             </tbody>
                             <tfoot>
                                 <tr>
-                                    <td colSpan={4} className="px-4 py-2">
+                                    <td colSpan={6} className="px-4 py-2">
                                         <Button
                                             variant="ghost"
                                             size="sm"
@@ -382,22 +422,11 @@ export function HamerakClient() {
                                     </td>
                                 </tr>
                                 <tr className="border-t-2 bg-muted/40">
-                                    <td colSpan={2} className="px-4 py-3 font-semibold text-sm">Celkem náklady 2026</td>
-                                    <td colSpan={2} className="px-4 py-3 text-right font-bold text-red-600 tabular-nums text-sm">
-                                        {fmt(totalCosts)}
-                                    </td>
-                                </tr>
-                                <tr className="border-t bg-muted/20">
-                                    <td colSpan={2} className="px-4 py-2 text-xs text-muted-foreground">Skutečné náklady 2024</td>
-                                    <td colSpan={2} className="px-4 py-2 text-right text-xs text-muted-foreground tabular-nums">
-                                        {fmt(237500)}
-                                    </td>
-                                </tr>
-                                <tr className="border-t bg-muted/20">
-                                    <td colSpan={2} className="px-4 py-2 text-xs text-muted-foreground">Skutečné náklady 2022</td>
-                                    <td colSpan={2} className="px-4 py-2 text-right text-xs text-muted-foreground tabular-nums">
-                                        {fmt(205500)}
-                                    </td>
+                                    <td className="px-4 py-3 font-semibold text-sm">Celkem náklady</td>
+                                    <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums">{fmt(205500)}</td>
+                                    <td className="px-3 py-3 text-right text-xs text-muted-foreground tabular-nums">{fmt(237500)}</td>
+                                    <td className="px-2 py-3 text-right font-bold text-red-600 tabular-nums text-sm">{fmt(totalCosts)}</td>
+                                    <td colSpan={2} />
                                 </tr>
                             </tfoot>
                         </table>
