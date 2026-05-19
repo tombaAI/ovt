@@ -175,9 +175,9 @@ export function HamerakClient() {
             {/* Hlavička */}
             <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
-                    <h1 className="text-2xl font-bold">Hamerák 2025 — Kalkulace plánu</h1>
+                    <h1 className="text-2xl font-bold">Hamerák 2026 — Kalkulace plánu</h1>
                     <p className="text-sm text-muted-foreground mt-0.5">
-                        Interaktivní kalkulačka příjmů a nákladů · ceny +10 % vs. 2024
+                        Interaktivní kalkulačka příjmů a nákladů · ceny +10 % vs. 2024 (2025 byl zrušen — sucho)
                     </p>
                 </div>
                 <div className="flex items-center gap-2 flex-wrap">
