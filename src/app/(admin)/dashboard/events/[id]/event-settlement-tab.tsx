@@ -148,7 +148,7 @@ function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
     }));
 }
 
-// ── Koeficientová pill ────────────────────────────────────────────────────────
+// ── Koeficientový chip (jméno + koef, klik = popover) ────────────────────────
 
 const COEF_PRESETS = [
     { label: "0×", value: 0 },
@@ -157,8 +157,17 @@ const COEF_PRESETS = [
     { label: "2×", value: 2 },
 ];
 
-function CoefPill({ personKey, value, onChange, disabled }: {
+function coefLabel(v: number): string {
+    if (v === 0) return "0×";
+    if (v === 0.5) return "½";
+    if (v === 1) return "1×";
+    if (v === 2) return "2×";
+    return `${v}×`;
+}
+
+function CoefChip({ personKey, fullName, value, onChange, disabled }: {
     personKey: string;
+    fullName: string;
     value: number;
     onChange: (key: string, val: number) => void;
     disabled?: boolean;
@@ -177,15 +186,11 @@ function CoefPill({ personKey, value, onChange, disabled }: {
 
     function commitDraft() {
         const parsed = parseFloat(draft.replace(",", "."));
-        if (!isNaN(parsed) && parsed >= 0) {
-            onChange(personKey, parsed);
-        } else {
-            setDraft(String(value));
-        }
+        if (!isNaN(parsed) && parsed >= 0) onChange(personKey, parsed);
+        else setDraft(String(value));
     }
 
     const isExcluded = value === 0;
-    const pillLabel = value === 0.5 ? "½" : value === 0 ? "0×" : value === 1 ? "1×" : value === 2 ? "2×" : `${value}×`;
 
     return (
         <Popover open={open} onOpenChange={setOpen}>
@@ -194,17 +199,24 @@ function CoefPill({ personKey, value, onChange, disabled }: {
                     type="button"
                     disabled={disabled}
                     className={[
-                        "inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border transition-colors min-w-[2.5rem] justify-center",
+                        "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
                         isExcluded
-                            ? "bg-gray-50 text-gray-300 border-gray-200"
-                            : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
+                            ? "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                            : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100",
                         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                     ].join(" ")}
                 >
-                    {pillLabel}
+                    <span className={isExcluded ? "line-through" : ""}>{fullName}</span>
+                    <span className={[
+                        "font-mono text-[10px]",
+                        isExcluded ? "text-gray-300" : value === 1 ? "text-emerald-400" : "text-emerald-600 font-semibold",
+                    ].join(" ")}>
+                        {coefLabel(value)}
+                    </span>
                 </button>
             </PopoverTrigger>
-            <PopoverContent side="top" align="end" className="w-auto p-2 space-y-2">
+            <PopoverContent side="top" align="center" className="w-auto p-2 space-y-2">
+                <p className="text-[11px] font-medium text-gray-600 truncate max-w-[140px]">{fullName}</p>
                 <div className="flex gap-1">
                     {COEF_PRESETS.map(p => (
                         <button
@@ -236,6 +248,7 @@ function CoefPill({ personKey, value, onChange, disabled }: {
                         min="0"
                         step="0.1"
                         inputMode="decimal"
+                        autoFocus
                     />
                     <span className="text-xs text-gray-400">×</span>
                 </div>
@@ -406,46 +419,26 @@ function ExpenseAllocationRow({
             {isCustom && expanded && (
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 mt-2">
                     <div />
-                    <div className="space-y-3">
-                        <p className="text-xs text-gray-400">
+                    <div className="space-y-2">
+                        <p className="text-xs text-gray-400 tabular-nums">
                             {totalWeight > 0
-                                ? <><span className="font-medium text-gray-600">{fmtCzk(pricePerUnit)}</span> / podíl · celkem {totalWeight} podílů</>
-                                : <span className="text-gray-400">Žádné podíly (součet koeficientů je nula)</span>}
+                                ? <>{totalWeight} podílů · <span className="font-medium text-gray-600">{fmtCzk(pricePerUnit)}/podíl</span></>
+                                : <span className="text-amber-600">Součet koeficientů je nula</span>}
                         </p>
-                        {registrations.map(reg => {
-                            const persons = getPersonsForAlloc(reg);
-                            return (
-                                <div key={reg.registrationId} className="space-y-1.5">
-                                    <p className="text-xs text-gray-500 font-medium">
-                                        {reg.firstName} {reg.lastName}
-                                        {persons.length > 1 && (
-                                            <span className="font-normal text-gray-400 ml-1">({persons.length} os.)</span>
-                                        )}
-                                    </p>
-                                    <div className="space-y-1">
-                                        {persons.map(p => {
-                                            const coef = coefficients[p.key] ?? 1;
-                                            return (
-                                                <div key={p.key} className="flex items-center justify-between gap-2 pr-1">
-                                                    <span className={[
-                                                        "text-xs truncate",
-                                                        coef === 0 ? "text-gray-300 line-through" : "text-gray-700",
-                                                    ].join(" ")}>
-                                                        {p.fullName}
-                                                    </span>
-                                                    <CoefPill
-                                                        personKey={p.key}
-                                                        value={coef}
-                                                        onChange={handleCoefChange}
-                                                        disabled={disabled}
-                                                    />
-                                                </div>
-                                            );
-                                        })}
-                                    </div>
-                                </div>
-                            );
-                        })}
+                        {registrations.map(reg => (
+                            <div key={reg.registrationId} className="flex flex-wrap gap-1.5">
+                                {getPersonsForAlloc(reg).map(p => (
+                                    <CoefChip
+                                        key={p.key}
+                                        personKey={p.key}
+                                        fullName={p.fullName}
+                                        value={coefficients[p.key] ?? 1}
+                                        onChange={handleCoefChange}
+                                        disabled={disabled}
+                                    />
+                                ))}
+                            </div>
+                        ))}
                         {saveError && <p className="text-xs text-red-500">{saveError}</p>}
                     </div>
                 </div>
