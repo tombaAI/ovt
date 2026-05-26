@@ -6,13 +6,13 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { ChevronDown, ChevronRight, Loader2, Check, X, Info, Mail } from "lucide-react";
+import { ChevronDown, ChevronRight, Loader2, Check, Info, Mail } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     getEventSettlement,
     updateEventSubsidy,
     updateExpenseAllocationMethod,
-    setExpenseRegistrationAllocations,
+    setExpenseParticipantCoefficients,
     sendEventSettlementEmails,
     sendSingleRegistrationEmail,
     lockBilling,
@@ -148,6 +148,102 @@ function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
     }));
 }
 
+// ── Koeficientová pill ────────────────────────────────────────────────────────
+
+const COEF_PRESETS = [
+    { label: "0×", value: 0 },
+    { label: "½", value: 0.5 },
+    { label: "1×", value: 1 },
+    { label: "2×", value: 2 },
+];
+
+function CoefPill({ personKey, value, onChange, disabled }: {
+    personKey: string;
+    value: number;
+    onChange: (key: string, val: number) => void;
+    disabled?: boolean;
+}) {
+    const [open, setOpen] = useState(false);
+    const [draft, setDraft] = useState(String(value));
+
+    useEffect(() => {
+        if (!open) setDraft(String(value));
+    }, [value, open]);
+
+    function applyPreset(v: number) {
+        onChange(personKey, v);
+        setOpen(false);
+    }
+
+    function commitDraft() {
+        const parsed = parseFloat(draft.replace(",", "."));
+        if (!isNaN(parsed) && parsed >= 0) {
+            onChange(personKey, parsed);
+        } else {
+            setDraft(String(value));
+        }
+    }
+
+    const isExcluded = value === 0;
+    const pillLabel = value === 0.5 ? "½" : value === 0 ? "0×" : value === 1 ? "1×" : value === 2 ? "2×" : `${value}×`;
+
+    return (
+        <Popover open={open} onOpenChange={setOpen}>
+            <PopoverTrigger asChild>
+                <button
+                    type="button"
+                    disabled={disabled}
+                    className={[
+                        "inline-flex items-center px-2 py-0.5 rounded text-xs font-mono border transition-colors min-w-[2.5rem] justify-center",
+                        isExcluded
+                            ? "bg-gray-50 text-gray-300 border-gray-200"
+                            : "bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100",
+                        disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
+                    ].join(" ")}
+                >
+                    {pillLabel}
+                </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="end" className="w-auto p-2 space-y-2">
+                <div className="flex gap-1">
+                    {COEF_PRESETS.map(p => (
+                        <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => applyPreset(p.value)}
+                            className={[
+                                "px-2 py-1 text-xs rounded border transition-colors font-mono",
+                                Math.abs(value - p.value) < 0.001
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-medium"
+                                    : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                            ].join(" ")}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+                <div className="flex items-center gap-1.5">
+                    <Input
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onBlur={commitDraft}
+                        onKeyDown={e => {
+                            if (e.key === "Enter") { commitDraft(); setOpen(false); }
+                            if (e.key === "Escape") { setDraft(String(value)); setOpen(false); }
+                        }}
+                        className="h-7 w-16 text-xs text-right font-mono"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        inputMode="decimal"
+                    />
+                    <span className="text-xs text-gray-400">×</span>
+                </div>
+            </PopoverContent>
+        </Popover>
+    );
+}
+
 // ── Expense allocation row ────────────────────────────────────────────────────
 
 function ExpenseAllocationRow({
@@ -162,21 +258,25 @@ function ExpenseAllocationRow({
     disabled?: boolean;
 }) {
     const [expanded, setExpanded] = useState(false);
-    const [method, setMethod] = useState<"split_all" | "per_registration">(expense.allocationMethod);
+    const [method, setMethod] = useState<"split_all" | "per_registration" | "with_coefficients">(expense.allocationMethod);
 
-    // Per-person výběr: klíč = "p{participantId}" nebo "r{regId}-{index}"
-    const [checkedPersons, setCheckedPersons] = useState<Set<string>>(() => {
-        const init = new Set<string>();
+    // Koeficienty per osoba — inicializujeme z uložených dat nebo odvozeně z alokací
+    const [coefficients, setCoefficients] = useState<Record<string, number>>(() => {
+        if (expense.participantCoefficients) return expense.participantCoefficients;
+        // Odvodit z alokací: přihlášky s amount>0 → osoby dostávají 1, ostatní 0
         const hasAnyAlloc = registrations.some(r => {
             const ex = r.expenses.find(e => e.expenseId === expense.id);
             return ex && ex.allocatedAmount > 0;
         });
+        const coefs: Record<string, number> = {};
         for (const reg of registrations) {
             const ex = reg.expenses.find(e => e.expenseId === expense.id);
             const regIncluded = !hasAnyAlloc || (ex && ex.allocatedAmount > 0);
-            if (regIncluded) getPersonsForAlloc(reg).forEach(p => init.add(p.key));
+            for (const p of getPersonsForAlloc(reg)) {
+                coefs[p.key] = regIncluded ? 1 : 0;
+            }
         }
-        return init;
+        return coefs;
     });
 
     const [saveError, setSaveError] = useState<string | null>(null);
@@ -185,45 +285,74 @@ function ExpenseAllocationRow({
 
     useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
 
-    function calcAmountsFor(cp: Set<string>): { registrationId: number; amount: number }[] {
-        const totalChecked = registrations.reduce((s, reg) =>
-            s + getPersonsForAlloc(reg).filter(p => cp.has(p.key)).length, 0);
-        const ppCost = totalChecked > 0 ? Math.ceil(expense.amount / totalChecked) : 0;
+    // Přepočet alokací per přihláška z koeficientů
+    function calcAllocsFromCoefs(coefs: Record<string, number>): { registrationId: number; amount: number }[] {
+        const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
+        const totalWeight = allKeys.reduce((s, k) => s + (coefs[k] ?? 0), 0);
+        if (totalWeight === 0) return registrations.map(r => ({ registrationId: r.registrationId, amount: 0 }));
         return registrations.map(reg => {
-            const count = getPersonsForAlloc(reg).filter(p => cp.has(p.key)).length;
-            return { registrationId: reg.registrationId, amount: count > 0 ? ppCost * count : 0 };
+            const regWeight = getPersonsForAlloc(reg).reduce((s, p) => s + (coefs[p.key] ?? 0), 0);
+            return { registrationId: reg.registrationId, amount: Math.ceil(expense.amount * regWeight / totalWeight) };
         });
     }
 
-    function handleTogglePerson(key: string) {
+    function handleSetSplitAll() {
+        if (disabled || methodSaving) return;
+        startMethodSave(async () => {
+            const res = await updateExpenseAllocationMethod(expense.id, "split_all");
+            if ("error" in res) { setSaveError(res.error); return; }
+            setMethod("split_all");
+            setExpanded(false);
+            setSaveError(null);
+        });
+    }
+
+    function handleSetWithCoefficients() {
+        if (disabled || methodSaving) return;
+        if (method === "with_coefficients" || method === "per_registration") {
+            setExpanded(v => !v);
+            return;
+        }
+        // Přepínáme ze split_all — inicializujeme koeficienty na 1 pro všechny osoby
+        const initCoefs: Record<string, number> = {};
+        for (const reg of registrations) {
+            for (const p of getPersonsForAlloc(reg)) initCoefs[p.key] = 1;
+        }
+        setCoefficients(initCoefs);
+        startMethodSave(async () => {
+            const allocs = calcAllocsFromCoefs(initCoefs);
+            const res = await setExpenseParticipantCoefficients(expense.id, initCoefs);
+            if ("error" in res) { setSaveError(res.error); return; }
+            setMethod("with_coefficients");
+            onAllocationsChanged?.(expense.id, allocs);
+            setExpanded(true);
+            setSaveError(null);
+        });
+    }
+
+    function handleCoefChange(key: string, val: number) {
         if (disabled) return;
-        const newCp = new Set(checkedPersons);
-        if (newCp.has(key)) newCp.delete(key); else newCp.add(key);
-        setCheckedPersons(newCp);
-        const newAllocs = calcAmountsFor(newCp);
+        const newCoefs = { ...coefficients, [key]: val };
+        setCoefficients(newCoefs);
+        const newAllocs = calcAllocsFromCoefs(newCoefs);
         onAllocationsChanged?.(expense.id, newAllocs);
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
-            const res = await setExpenseRegistrationAllocations(expense.id, newAllocs);
+            const res = await setExpenseParticipantCoefficients(expense.id, newCoefs);
             if ("error" in res) setSaveError(res.error); else setSaveError(null);
-        }, 500);
+        }, 800);
     }
 
-    function handleMethodChange(newMethod: "split_all" | "per_registration") {
-        if (disabled) return;
-        startMethodSave(async () => {
-            const res = await updateExpenseAllocationMethod(expense.id, newMethod);
-            if ("error" in res) { setSaveError(res.error); return; }
-            setMethod(newMethod);
-            setSaveError(null);
-            if (newMethod === "per_registration") setExpanded(true);
-        });
-    }
+    const isCustom = method === "with_coefficients" || method === "per_registration";
 
-    // Cena per osoba z aktuálního výběru
-    const totalChecked = registrations.reduce((s, reg) =>
-        s + getPersonsForAlloc(reg).filter(p => checkedPersons.has(p.key)).length, 0);
-    const ppCost = totalChecked > 0 ? Math.ceil(expense.amount / totalChecked) : 0;
+    // Celková váha a cena na podíl (pro zobrazení)
+    const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
+    const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
+    const pricePerUnit = totalWeight > 0 ? Math.round(expense.amount / totalWeight) : 0;
+
+    // Cena na osobu pro split_all (pro zobrazení v řádku 2)
+    const totalParticipants = registrations.reduce((s, r) => s + r.personsCount, 0);
+    const ppCostSplitAll = totalParticipants > 0 ? Math.ceil(expense.amount / totalParticipants) : 0;
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
@@ -234,68 +363,86 @@ function ExpenseAllocationRow({
                 </div>
                 <p className="text-sm font-medium text-gray-800">{expense.purposeText ?? "—"}</p>
 
-                {/* Řádek 2: per osoba + tlačítka */}
+                {/* Řádek 2: per osoba/podíl + metoda tlačítka */}
                 <div className="text-xs text-gray-400 tabular-nums whitespace-nowrap text-right">
-                    {totalChecked > 0
-                        ? <>{fmtCzk(ppCost)}/os. · {totalChecked}&nbsp;os.</>
-                        : "—"}
+                    {method === "split_all" && totalParticipants > 0
+                        ? <>{fmtCzk(ppCostSplitAll)}/os. · {totalParticipants}&nbsp;os.</>
+                        : isCustom && totalWeight > 0
+                            ? <>{fmtCzk(pricePerUnit)}/podíl · {totalWeight}&nbsp;p.</>
+                            : "—"}
                 </div>
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <button
-                        onClick={() => handleMethodChange("split_all")}
+                        onClick={handleSetSplitAll}
                         disabled={methodSaving || disabled}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
+                        className={[
+                            "text-xs px-2 py-0.5 rounded border transition-colors",
+                            method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300",
+                            disabled ? "opacity-50 cursor-not-allowed" : "",
+                        ].join(" ")}>
                         <span className="sm:hidden">Rovnoměrně</span>
                         <span className="hidden sm:inline">Rovnoměrně na každého</span>
                     </button>
                     <button
-                        onClick={() => handleMethodChange("per_registration")}
+                        onClick={handleSetWithCoefficients}
                         disabled={methodSaving || disabled}
-                        className={`text-xs px-2 py-0.5 rounded border transition-colors ${method === "per_registration" ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300"} ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}>
-                        <span className="sm:hidden">Jen někdo</span>
-                        <span className="hidden sm:inline">Jen někteří účastníci</span>
+                        className={[
+                            "text-xs px-2 py-0.5 rounded border transition-colors",
+                            isCustom ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300",
+                            disabled ? "opacity-50 cursor-not-allowed" : "",
+                        ].join(" ")}>
+                        <span className="sm:hidden">Vlastní podíly</span>
+                        <span className="hidden sm:inline">Vlastní podíly</span>
                     </button>
-                    {method === "per_registration" && (
+                    {isCustom && (
                         <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
                             {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
                         </button>
                     )}
+                    {methodSaving && <Loader2 size={13} className="animate-spin text-gray-400" />}
                 </div>
             </div>
 
-            {method === "per_registration" && expanded && (
+            {isCustom && expanded && (
                 <div className="grid grid-cols-[auto_1fr] gap-x-4 mt-2">
-                    <div /> {/* zarovnání pod levý sloupec */}
+                    <div />
                     <div className="space-y-3">
-                        <p className="text-xs text-gray-400 tabular-nums">
-                            {totalChecked > 0
-                                ? <>{totalChecked} {totalChecked === 1 ? "osoba" : totalChecked < 5 ? "osoby" : "osob"} · <span className="font-medium text-gray-600">{fmtCzk(ppCost)}/os.</span></>
-                                : <span className="text-gray-400">Nikdo není vybrán</span>}
+                        <p className="text-xs text-gray-400">
+                            {totalWeight > 0
+                                ? <><span className="font-medium text-gray-600">{fmtCzk(pricePerUnit)}</span> / podíl · celkem {totalWeight} podílů</>
+                                : <span className="text-gray-400">Žádné podíly (součet koeficientů je nula)</span>}
                         </p>
                         {registrations.map(reg => {
                             const persons = getPersonsForAlloc(reg);
                             return (
-                                <div key={reg.registrationId} className="flex flex-wrap gap-1.5">
-                                    {persons.map(p => {
-                                        const isIn = checkedPersons.has(p.key);
-                                        return (
-                                            <button
-                                                key={p.key}
-                                                type="button"
-                                                onClick={() => handleTogglePerson(p.key)}
-                                                className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all ${
-                                                    isIn
-                                                        ? "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100"
-                                                        : "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
-                                                }`}
-                                            >
-                                                {isIn
-                                                    ? <Check size={11} strokeWidth={2.5} className="text-emerald-600 shrink-0" />
-                                                    : <X size={11} strokeWidth={2.5} className="text-gray-300 shrink-0" />}
-                                                {p.fullName}
-                                            </button>
-                                        );
-                                    })}
+                                <div key={reg.registrationId} className="space-y-1.5">
+                                    <p className="text-xs text-gray-500 font-medium">
+                                        {reg.firstName} {reg.lastName}
+                                        {persons.length > 1 && (
+                                            <span className="font-normal text-gray-400 ml-1">({persons.length} os.)</span>
+                                        )}
+                                    </p>
+                                    <div className="space-y-1">
+                                        {persons.map(p => {
+                                            const coef = coefficients[p.key] ?? 1;
+                                            return (
+                                                <div key={p.key} className="flex items-center justify-between gap-2 pr-1">
+                                                    <span className={[
+                                                        "text-xs truncate",
+                                                        coef === 0 ? "text-gray-300 line-through" : "text-gray-700",
+                                                    ].join(" ")}>
+                                                        {p.fullName}
+                                                    </span>
+                                                    <CoefPill
+                                                        personKey={p.key}
+                                                        value={coef}
+                                                        onChange={handleCoefChange}
+                                                        disabled={disabled}
+                                                    />
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
                                 </div>
                             );
                         })}
@@ -303,7 +450,7 @@ function ExpenseAllocationRow({
                     </div>
                 </div>
             )}
-            {saveError && method !== "per_registration" && <p className="text-xs text-red-500 mt-1">{saveError}</p>}
+            {saveError && !expanded && <p className="text-xs text-red-500 mt-1">{saveError}</p>}
         </div>
     );
 }

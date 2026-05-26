@@ -35,7 +35,7 @@ export type SettlementExpenseRow = {
     expenseId: number;
     purposeText: string | null;
     amount: number;
-    allocationMethod: "split_all" | "per_registration";
+    allocationMethod: "split_all" | "per_registration" | "with_coefficients";
     allocatedAmount: number; // pro tuto přihlášku
 };
 
@@ -74,7 +74,7 @@ export type EventSettlement = {
     unitPrice: number;              // cena per osoba = Math.ceil(expensesSum / totalParticipants)
     totalParticipants: number;
     totalMemberParticipants: number;
-    finalExpenses: { id: number; purposeText: string | null; amount: number; allocationMethod: "split_all" | "per_registration" }[];
+    finalExpenses: { id: number; purposeText: string | null; amount: number; allocationMethod: "split_all" | "per_registration" | "with_coefficients"; participantCoefficients: Record<string, number> | null }[];
     registrations: SettlementRegistrationRow[];
     grandTotal: number;
     expensesSum: number;
@@ -102,6 +102,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             purposeText: eventExpenses.purposeText,
             amount: eventExpenses.amount,
             allocationMethod: eventExpenses.allocationMethod,
+            participantCoefficients: eventExpenses.participantCoefficients,
         })
         .from(eventExpenses)
         .where(and(eq(eventExpenses.eventId, eventId), eq(eventExpenses.status, "final"), isNotNull(eventExpenses.amount)));
@@ -110,11 +111,14 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         id: e.id,
         purposeText: e.purposeText,
         amount: parseFloat(e.amount!),
-        allocationMethod: e.allocationMethod as "split_all" | "per_registration",
+        allocationMethod: e.allocationMethod as "split_all" | "per_registration" | "with_coefficients",
+        participantCoefficients: (e.participantCoefficients as Record<string, number> | null) ?? null,
     }));
 
-    // Alokace per registrace pro per_registration náklady
-    const perRegExpenseIds = finalExpenses.filter(e => e.allocationMethod === "per_registration").map(e => e.id);
+    // Alokace per registrace pro per_registration + with_coefficients náklady
+    const perRegExpenseIds = finalExpenses
+        .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
+        .map(e => e.id);
     const allocations = perRegExpenseIds.length > 0
         ? await db
             .select({ expenseId: eventExpenseAllocations.expenseId, registrationId: eventExpenseAllocations.registrationId, amount: eventExpenseAllocations.amount })
@@ -208,15 +212,16 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                     ? (expense.amount / totalParticipants) * personsCount
                     : 0;
             } else {
+                // per_registration nebo with_coefficients: čte předpočítané alokace z DB
                 const alloc = allocations.find(a => a.expenseId === expense.id && a.registrationId === reg.id);
                 allocatedAmount = alloc ? parseFloat(alloc.amount) : 0;
             }
-            return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod, allocatedAmount };
+            return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod as "split_all" | "per_registration" | "with_coefficients", allocatedAmount };
         });
 
-        // split_all: unitPrice × osoby (uniformní sazba); per_registration: explicitní alokace
+        // split_all: unitPrice × osoby (uniformní sazba); per_registration / with_coefficients: explicitní alokace
         const perRegTotal = expenseRows
-            .filter(e => e.allocationMethod === "per_registration")
+            .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
             .reduce((s, e) => s + e.allocatedAmount, 0);
         const expensesTotal = unitPrice * personsCount + perRegTotal;
         // Dotace: poměrná část celkové dotace podle počtu členů v přihlášce
@@ -345,7 +350,7 @@ export async function updateExpenseAllocationMethod(
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
         await db.update(eventExpenses)
-            .set({ allocationMethod: method })
+            .set({ allocationMethod: method, participantCoefficients: null })
             .where(eq(eventExpenses.id, expenseId));
 
         if (method === "split_all") {
@@ -395,6 +400,85 @@ export async function setExpenseRegistrationAllocations(
         return { success: true };
     } catch {
         return { error: "Nepodařilo se uložit alokace" };
+    }
+}
+
+// ── Koeficienty účastníků ─────────────────────────────────────────────────────
+
+/**
+ * Uloží koeficienty účastníků, přepočítá per-registrace alokace a přepne metodu na with_coefficients.
+ * Klíče: "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné.
+ */
+export async function setExpenseParticipantCoefficients(
+    expenseId: number,
+    coefficients: Record<string, number>,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+
+        const [exp] = await db
+            .select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId })
+            .from(eventExpenses)
+            .where(eq(eventExpenses.id, expenseId));
+        if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
+        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+
+        const expenseAmount = parseFloat(exp.amount);
+
+        // Načtení přihlášek a účastníků pro přepočet alokací
+        const regs = await db
+            .select({ id: eventRegistrations.id, personsCount: eventRegistrations.personsCount })
+            .from(eventRegistrations)
+            .where(and(eq(eventRegistrations.eventId, exp.eventId), isNull(eventRegistrations.cancelledAt)));
+
+        const regIds = regs.map(r => r.id);
+        const participants = regIds.length > 0
+            ? await db
+                .select({ id: eventRegistrationParticipants.id, registrationId: eventRegistrationParticipants.registrationId })
+                .from(eventRegistrationParticipants)
+                .where(inArray(eventRegistrationParticipants.registrationId, regIds))
+            : [];
+
+        // Generuje klíče osob pro přihlášku — stejná logika jako getPersonsForAlloc na klientu
+        function getPersonKeys(regId: number, personsCount: number | null): string[] {
+            const regParticipants = participants.filter(p => p.registrationId === regId);
+            if (regParticipants.length > 0) {
+                return regParticipants.map((p, i) => p.id > 0 ? `p${p.id}` : `r${regId}-${i}`);
+            }
+            return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
+        }
+
+        // Celková váha = součet koeficientů všech osob
+        const allKeys = regs.flatMap(r => getPersonKeys(r.id, r.personsCount));
+        const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
+
+        // Alokace per přihláška
+        const allocations = regs.map(reg => {
+            const keys = getPersonKeys(reg.id, reg.personsCount);
+            const regWeight = keys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
+            const amount = totalWeight > 0 ? Math.ceil(expenseAmount * regWeight / totalWeight) : 0;
+            return { registrationId: reg.id, amount };
+        });
+
+        await db.transaction(async tx => {
+            await tx.update(eventExpenses)
+                .set({ allocationMethod: "with_coefficients", participantCoefficients: coefficients })
+                .where(eq(eventExpenses.id, expenseId));
+
+            await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
+            const nonZero = allocations.filter(a => a.amount > 0);
+            if (nonZero.length > 0) {
+                await tx.insert(eventExpenseAllocations).values(
+                    nonZero.map(a => ({ expenseId, registrationId: a.registrationId, amount: String(a.amount) }))
+                );
+            }
+        });
+
+        revalidatePath(`/dashboard/events/${exp.eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Nepodařilo se uložit koeficienty" };
     }
 }
 

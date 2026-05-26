@@ -517,7 +517,7 @@ export type ExpenseCategory = typeof expenseCategoryEnum[number];
 export const eventExpenseStatusEnum = ["draft", "unconfirmed", "final"] as const;
 export type EventExpenseStatus = typeof eventExpenseStatusEnum[number];
 
-export const eventExpenseAllocationMethodEnum = ["split_all", "per_registration"] as const;
+export const eventExpenseAllocationMethodEnum = ["split_all", "per_registration", "with_coefficients"] as const;
 export type EventExpenseAllocationMethod = typeof eventExpenseAllocationMethodEnum[number];
 
 export const eventExpenses = appSchema.table(
@@ -528,6 +528,7 @@ export const eventExpenses = appSchema.table(
         status: text("status", { enum: eventExpenseStatusEnum }).notNull().default("final"),
         amount: numeric("amount", { precision: 10, scale: 2 }),        // null u draftů
         allocationMethod: text("allocation_method", { enum: eventExpenseAllocationMethodEnum }).notNull().default("split_all"),
+        participantCoefficients: jsonb("participant_coefficients").$type<Record<string, number>>(),
         purposeText: text("purpose_text"),
         purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }),
         reimbursementPersonId: integer("reimbursement_person_id").references(() => people.id, { onDelete: "set null" }),
