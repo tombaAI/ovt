@@ -477,7 +477,8 @@ export async function setExpenseParticipantCoefficients(
 
         revalidatePath(`/dashboard/events/${exp.eventId}`);
         return { success: true };
-    } catch {
+    } catch (e) {
+        console.error("[setExpenseParticipantCoefficients]", e);
         return { error: "Nepodařilo se uložit koeficienty" };
     }
 }
