@@ -288,7 +288,7 @@ function ExpenseAllocationRow({
 }: {
     expense: EventSettlement["finalExpenses"][0];
     registrations: SettlementRegistrationRow[];
-    onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[]) => void;
+    onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[], newMethod?: "with_coefficients" | "per_registration") => void;
     disabled?: boolean;
 }) {
     const [expanded, setExpanded] = useState(false);
@@ -362,17 +362,17 @@ function ExpenseAllocationRow({
             }
             setCoefficients(coefs);
         }
-        // Okamžitá UI aktualizace
+        // Okamžitá UI aktualizace včetně přepočtu spodní tabulky
         const prevMethod = method;
         setMethod("with_coefficients");
         setExpanded(true);
         setSaveError(null);
+        onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs), "with_coefficients");
         // Uložení v pozadí
         setMethodSaving(true);
         setExpenseParticipantCoefficients(expense.id, coefs)
             .then(res => {
                 if ("error" in res) { setSaveError(res.error); setMethod(prevMethod); setExpanded(false); }
-                else { onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs)); }
             })
             .finally(() => setMethodSaving(false));
     }
@@ -382,7 +382,7 @@ function ExpenseAllocationRow({
         const newCoefs = { ...coefficients, [key]: val };
         setCoefficients(newCoefs);
         const newAllocs = calcAllocsFromCoefs(newCoefs);
-        onAllocationsChanged?.(expense.id, newAllocs);
+        onAllocationsChanged?.(expense.id, newAllocs, "with_coefficients");
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
             const res = await setExpenseParticipantCoefficients(expense.id, newCoefs);
@@ -683,16 +683,22 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
         setSettlement(s => s ? recomputeSettlement(s, newSubsidy) : null);
     }
 
-    function handleAllocationsChanged(expenseId: number, newAllocs: { registrationId: number; amount: number }[]) {
+    function handleAllocationsChanged(
+        expenseId: number,
+        newAllocs: { registrationId: number; amount: number }[],
+        newMethod?: "with_coefficients" | "per_registration",
+    ) {
         setSettlement(prev => {
             if (!prev) return prev;
             const allocMap = new Map(newAllocs.map(a => [a.registrationId, a.amount]));
             const newRegs = prev.registrations.map(reg => {
                 const newExpenses = reg.expenses.map(e =>
-                    e.expenseId === expenseId ? { ...e, allocatedAmount: allocMap.get(reg.registrationId) ?? 0 } : e
+                    e.expenseId === expenseId
+                        ? { ...e, allocatedAmount: allocMap.get(reg.registrationId) ?? 0, ...(newMethod ? { allocationMethod: newMethod } : {}) }
+                        : e
                 );
                 const perRegPart = newExpenses
-                    .filter(e => e.allocationMethod === "per_registration")
+                    .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
                     .reduce((s, e) => s + e.allocatedAmount, 0);
                 const expensesTotal = prev.unitPrice * reg.personsCount + perRegPart;
                 const subsidy = prev.totalMemberParticipants > 0
@@ -934,7 +940,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                     <RegistrationSummaryTable
                         rows={settlement.registrations}
                         unitPrice={settlement.unitPrice}
-                        hasPerReg={settlement.finalExpenses.some(e => e.allocationMethod === "per_registration")}
+                        hasPerReg={settlement.finalExpenses.some(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")}
                         isPrescribed={isPrescribed}
                         treasurerApproved={treasurerApproved}
                         onSendEmail={(id, name) => { setSendFeedback(null); setIndividualTarget({ registrationId: id, name }); }}
