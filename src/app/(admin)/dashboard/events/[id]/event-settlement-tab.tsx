@@ -284,11 +284,13 @@ function ExpenseAllocationRow({
     expense,
     registrations,
     onAllocationsChanged,
+    onReload,
     disabled,
 }: {
     expense: EventSettlement["finalExpenses"][0];
     registrations: SettlementRegistrationRow[];
     onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[], newMethod?: "with_coefficients" | "per_registration") => void;
+    onReload?: () => void;
     disabled?: boolean;
 }) {
     const [expanded, setExpanded] = useState(false);
@@ -342,6 +344,7 @@ function ExpenseAllocationRow({
         updateExpenseAllocationMethod(expense.id, "split_all")
             .then(res => {
                 if ("error" in res) { setSaveError(res.error); setMethod(prevMethod); setExpanded(prevMethod !== "split_all"); }
+                else { onReload?.(); }
             })
             .finally(() => setMethodSaving(false));
     }
@@ -671,6 +674,10 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
             .finally(() => setLoading(false));
     }
 
+    function silentReload() {
+        getEventSettlement(eventId).then(s => { setSettlement(s); setSubsidyTotal(s.subsidyTotal); });
+    }
+
     function loadLog() {
         getEventSettlementEmailLog(eventId).then(setEmailLog);
     }
@@ -920,6 +927,7 @@ export function EventSettlementTab({ eventId, billingStatus: initialBillingStatu
                             expense={exp}
                             registrations={settlement.registrations}
                             onAllocationsChanged={handleAllocationsChanged}
+                            onReload={silentReload}
                             disabled={isPrescribed}
                         />
                     ))
