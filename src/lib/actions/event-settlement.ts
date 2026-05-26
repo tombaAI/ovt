@@ -349,8 +349,9 @@ export async function updateExpenseAllocationMethod(
         if (await getBillingStatus(db, exp.eventId) === "prescribed")
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
+        // participantCoefficients záměrně nezahazujeme — zachováme je pro obnovu při přepnutí zpět
         await db.update(eventExpenses)
-            .set({ allocationMethod: method, participantCoefficients: null })
+            .set({ allocationMethod: method })
             .where(eq(eventExpenses.id, expenseId));
 
         if (method === "split_all") {

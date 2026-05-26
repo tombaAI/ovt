@@ -150,12 +150,9 @@ function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
 
 // ── Koeficientový chip (jméno + koef, klik = popover) ────────────────────────
 
-const COEF_PRESETS = [
-    { label: "0×", value: 0 },
-    { label: "½", value: 0.5 },
-    { label: "1×", value: 1 },
-    { label: "2×", value: 2 },
-];
+// Velká tlačítka (řádek 1), malá tlačítka (řádek 2)
+const COEF_LARGE = [{ label: "0×", value: 0 }, { label: "1×", value: 1 }];
+const COEF_SMALL = [{ label: "½", value: 0.5 }, { label: "2×", value: 2 }];
 
 function coefLabel(v: number): string {
     if (v === 0) return "0×";
@@ -215,18 +212,21 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
                     </span>
                 </button>
             </PopoverTrigger>
-            <PopoverContent side="top" align="center" className="w-auto p-2 space-y-2">
-                <p className="text-[11px] font-medium text-gray-600 truncate max-w-[140px]">{fullName}</p>
-                <div className="flex gap-1">
-                    {COEF_PRESETS.map(p => (
+            <PopoverContent side="top" align="center" className="w-40 p-2.5 space-y-1.5">
+                <p className="text-[11px] text-gray-400 truncate pb-0.5">{fullName}</p>
+                {/* Velká tlačítka: 0× a 1× */}
+                <div className="flex gap-1.5">
+                    {COEF_LARGE.map(p => (
                         <button
                             key={p.label}
                             type="button"
                             onClick={() => applyPreset(p.value)}
                             className={[
-                                "px-2 py-1 text-xs rounded border transition-colors font-mono",
+                                "flex-1 py-2 text-sm font-semibold rounded-lg border transition-colors",
                                 Math.abs(value - p.value) < 0.001
-                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-medium"
+                                    ? p.value === 0
+                                        ? "bg-gray-100 border-gray-300 text-gray-700"
+                                        : "bg-emerald-50 border-emerald-300 text-emerald-700"
                                     : "border-gray-200 text-gray-600 hover:bg-gray-50",
                             ].join(" ")}
                         >
@@ -234,7 +234,27 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
                         </button>
                     ))}
                 </div>
-                <div className="flex items-center gap-1.5">
+                {/* Malá tlačítka: ½ a 2× */}
+                <div className="flex gap-1.5">
+                    {COEF_SMALL.map(p => (
+                        <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => applyPreset(p.value)}
+                            className={[
+                                "flex-1 py-1 rounded border transition-colors",
+                                p.value === 0.5 ? "text-base leading-none" : "text-xs font-mono",
+                                Math.abs(value - p.value) < 0.001
+                                    ? "bg-emerald-50 border-emerald-200 text-emerald-700 font-medium"
+                                    : "border-gray-200 text-gray-500 hover:bg-gray-50",
+                            ].join(" ")}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
+                </div>
+                {/* Vlastní hodnota */}
+                <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100">
                     <Input
                         value={draft}
                         onChange={e => setDraft(e.target.value)}
@@ -243,14 +263,15 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
                             if (e.key === "Enter") { commitDraft(); setOpen(false); }
                             if (e.key === "Escape") { setDraft(String(value)); setOpen(false); }
                         }}
-                        className="h-7 w-16 text-xs text-right font-mono"
+                        className="flex-1 h-7 text-sm text-right font-mono"
                         type="number"
                         min="0"
                         step="0.1"
                         inputMode="decimal"
                         autoFocus
+                        placeholder="vlastní"
                     />
-                    <span className="text-xs text-gray-400">×</span>
+                    <span className="text-sm text-gray-400 shrink-0">×</span>
                 </div>
             </PopoverContent>
         </Popover>
@@ -326,18 +347,21 @@ function ExpenseAllocationRow({
             setExpanded(v => !v);
             return;
         }
-        // Přepínáme ze split_all — inicializujeme koeficienty na 1 pro všechny osoby
-        const initCoefs: Record<string, number> = {};
-        for (const reg of registrations) {
-            for (const p of getPersonsForAlloc(reg)) initCoefs[p.key] = 1;
+        // Použijeme zachované koeficienty ze split_all módu, nebo inicializujeme na 1
+        const hasSaved = Object.keys(coefficients).length > 0;
+        let coefs = coefficients;
+        if (!hasSaved) {
+            coefs = {};
+            for (const reg of registrations) {
+                for (const p of getPersonsForAlloc(reg)) coefs[p.key] = 1;
+            }
+            setCoefficients(coefs);
         }
-        setCoefficients(initCoefs);
         startMethodSave(async () => {
-            const allocs = calcAllocsFromCoefs(initCoefs);
-            const res = await setExpenseParticipantCoefficients(expense.id, initCoefs);
+            const res = await setExpenseParticipantCoefficients(expense.id, coefs);
             if ("error" in res) { setSaveError(res.error); return; }
             setMethod("with_coefficients");
-            onAllocationsChanged?.(expense.id, allocs);
+            onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs));
             setExpanded(true);
             setSaveError(null);
         });
@@ -357,6 +381,10 @@ function ExpenseAllocationRow({
     }
 
     const isCustom = method === "with_coefficients" || method === "per_registration";
+    // Má zachované nestandardní koeficienty (při split_all = indikátor "nastavení uloženo")
+    const hasSavedCoefs = method === "split_all" &&
+        Object.keys(coefficients).length > 0 &&
+        Object.values(coefficients).some(v => Math.abs(v - 1) > 0.001 || v === 0);
 
     // Celková váha a cena na podíl (pro zobrazení)
     const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
@@ -400,12 +428,14 @@ function ExpenseAllocationRow({
                         onClick={handleSetWithCoefficients}
                         disabled={methodSaving || disabled}
                         className={[
-                            "text-xs px-2 py-0.5 rounded border transition-colors",
+                            "text-xs px-2 py-0.5 rounded border transition-colors inline-flex items-center gap-1",
                             isCustom ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300",
                             disabled ? "opacity-50 cursor-not-allowed" : "",
                         ].join(" ")}>
-                        <span className="sm:hidden">Vlastní podíly</span>
-                        <span className="hidden sm:inline">Vlastní podíly</span>
+                        <span>Vlastní podíly</span>
+                        {hasSavedCoefs && (
+                            <span title="Koeficienty jsou zachovány" className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block shrink-0" />
+                        )}
                     </button>
                     {isCustom && (
                         <button onClick={() => setExpanded(v => !v)} className="text-gray-400 hover:text-gray-600 transition-colors">
