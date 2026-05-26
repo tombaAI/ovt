@@ -214,25 +214,25 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
             </PopoverTrigger>
             <PopoverContent side="top" align="center" className="w-40 p-2.5 space-y-1.5">
                 <p className="text-[11px] text-gray-400 truncate pb-0.5">{fullName}</p>
-                {/* Velká tlačítka: 0× a 1× */}
-                <div className="flex gap-1.5">
-                    {COEF_LARGE.map(p => (
-                        <button
-                            key={p.label}
-                            type="button"
-                            onClick={() => applyPreset(p.value)}
-                            className={[
-                                "flex-1 py-2 text-sm font-semibold rounded-lg border transition-colors",
-                                Math.abs(value - p.value) < 0.001
-                                    ? p.value === 0
-                                        ? "bg-gray-100 border-gray-300 text-gray-700"
-                                        : "bg-emerald-50 border-emerald-300 text-emerald-700"
-                                    : "border-gray-200 text-gray-600 hover:bg-gray-50",
-                            ].join(" ")}
-                        >
-                            {p.label}
-                        </button>
-                    ))}
+                {/* Vlastní hodnota nahoře */}
+                <div className="flex items-center gap-1.5 pb-1 border-b border-gray-100">
+                    <Input
+                        value={draft}
+                        onChange={e => setDraft(e.target.value)}
+                        onBlur={commitDraft}
+                        onKeyDown={e => {
+                            if (e.key === "Enter") { commitDraft(); setOpen(false); }
+                            if (e.key === "Escape") { setDraft(String(value)); setOpen(false); }
+                        }}
+                        className="flex-1 h-7 text-sm text-right font-mono"
+                        type="number"
+                        min="0"
+                        step="0.1"
+                        inputMode="decimal"
+                        autoFocus
+                        placeholder="vlastní"
+                    />
+                    <span className="text-sm text-gray-400 shrink-0">×</span>
                 </div>
                 {/* Malá tlačítka: ½ a 2× */}
                 <div className="flex gap-1.5">
@@ -253,25 +253,25 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
                         </button>
                     ))}
                 </div>
-                {/* Vlastní hodnota */}
-                <div className="flex items-center gap-1.5 pt-1 border-t border-gray-100">
-                    <Input
-                        value={draft}
-                        onChange={e => setDraft(e.target.value)}
-                        onBlur={commitDraft}
-                        onKeyDown={e => {
-                            if (e.key === "Enter") { commitDraft(); setOpen(false); }
-                            if (e.key === "Escape") { setDraft(String(value)); setOpen(false); }
-                        }}
-                        className="flex-1 h-7 text-sm text-right font-mono"
-                        type="number"
-                        min="0"
-                        step="0.1"
-                        inputMode="decimal"
-                        autoFocus
-                        placeholder="vlastní"
-                    />
-                    <span className="text-sm text-gray-400 shrink-0">×</span>
+                {/* Velká tlačítka: 0× a 1× dole (po ruce) */}
+                <div className="flex gap-1.5">
+                    {COEF_LARGE.map(p => (
+                        <button
+                            key={p.label}
+                            type="button"
+                            onClick={() => applyPreset(p.value)}
+                            className={[
+                                "flex-1 py-2 text-sm font-semibold rounded-lg border transition-colors",
+                                Math.abs(value - p.value) < 0.001
+                                    ? p.value === 0
+                                        ? "bg-gray-100 border-gray-300 text-gray-700"
+                                        : "bg-emerald-50 border-emerald-300 text-emerald-700"
+                                    : "border-gray-200 text-gray-600 hover:bg-gray-50",
+                            ].join(" ")}
+                        >
+                            {p.label}
+                        </button>
+                    ))}
                 </div>
             </PopoverContent>
         </Popover>
@@ -314,7 +314,7 @@ function ExpenseAllocationRow({
     });
 
     const [saveError, setSaveError] = useState<string | null>(null);
-    const [methodSaving, startMethodSave] = useTransition();
+    const [methodSaving, setMethodSaving] = useState(false);
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
@@ -331,18 +331,23 @@ function ExpenseAllocationRow({
     }
 
     function handleSetSplitAll() {
-        if (disabled || methodSaving) return;
-        startMethodSave(async () => {
-            const res = await updateExpenseAllocationMethod(expense.id, "split_all");
-            if ("error" in res) { setSaveError(res.error); return; }
-            setMethod("split_all");
-            setExpanded(false);
-            setSaveError(null);
-        });
+        if (disabled) return;
+        const prevMethod = method;
+        // Okamžitá UI aktualizace
+        setMethod("split_all");
+        setExpanded(false);
+        setSaveError(null);
+        // Uložení v pozadí
+        setMethodSaving(true);
+        updateExpenseAllocationMethod(expense.id, "split_all")
+            .then(res => {
+                if ("error" in res) { setSaveError(res.error); setMethod(prevMethod); setExpanded(prevMethod !== "split_all"); }
+            })
+            .finally(() => setMethodSaving(false));
     }
 
     function handleSetWithCoefficients() {
-        if (disabled || methodSaving) return;
+        if (disabled) return;
         if (method === "with_coefficients" || method === "per_registration") {
             setExpanded(v => !v);
             return;
@@ -357,14 +362,19 @@ function ExpenseAllocationRow({
             }
             setCoefficients(coefs);
         }
-        startMethodSave(async () => {
-            const res = await setExpenseParticipantCoefficients(expense.id, coefs);
-            if ("error" in res) { setSaveError(res.error); return; }
-            setMethod("with_coefficients");
-            onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs));
-            setExpanded(true);
-            setSaveError(null);
-        });
+        // Okamžitá UI aktualizace
+        const prevMethod = method;
+        setMethod("with_coefficients");
+        setExpanded(true);
+        setSaveError(null);
+        // Uložení v pozadí
+        setMethodSaving(true);
+        setExpenseParticipantCoefficients(expense.id, coefs)
+            .then(res => {
+                if ("error" in res) { setSaveError(res.error); setMethod(prevMethod); setExpanded(false); }
+                else { onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs)); }
+            })
+            .finally(() => setMethodSaving(false));
     }
 
     function handleCoefChange(key: string, val: number) {
@@ -415,7 +425,7 @@ function ExpenseAllocationRow({
                 <div className="flex items-center gap-1.5 flex-wrap">
                     <button
                         onClick={handleSetSplitAll}
-                        disabled={methodSaving || disabled}
+                        disabled={disabled}
                         className={[
                             "text-xs px-2 py-0.5 rounded border transition-colors",
                             method === "split_all" ? "bg-emerald-50 text-emerald-700 border-emerald-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300",
@@ -426,7 +436,7 @@ function ExpenseAllocationRow({
                     </button>
                     <button
                         onClick={handleSetWithCoefficients}
-                        disabled={methodSaving || disabled}
+                        disabled={disabled}
                         className={[
                             "text-xs px-2 py-0.5 rounded border transition-colors inline-flex items-center gap-1",
                             isCustom ? "bg-blue-50 text-blue-700 border-blue-200 font-medium" : "text-gray-500 border-gray-200 hover:border-gray-300",
