@@ -17,7 +17,7 @@ import {
     sendSingleRegistrationEmail,
     getEventSettlementEmailLog,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow, EmailSendLogEntry, PrescriptionInfo } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, EmailSendLogEntry } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
