@@ -79,15 +79,15 @@ export function buildContributionReminderEmail(data: ContribReminderEmailData): 
 
     const subject = `Příspěvky OVT Bohemians ${data.year} — připomínka platby`;
 
-    const latePenaltyNote = data.latePenalty > 0 && data.dueDate
-        ? `<p style="margin:12px 0 0;font-size:13px;color:#b45309;line-height:1.6;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;">
-             Po termínu splatnosti (<strong>${fmtDate(data.dueDate)}</strong>) bude k částce připočten poplatek z prodlení
-             <strong>${fmt(data.latePenalty)}</strong>.
-           </p>`
-        : data.latePenalty > 0
-        ? `<p style="margin:12px 0 0;font-size:13px;color:#b45309;line-height:1.6;padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;">
-             Po termínu splatnosti bude k částce připočten poplatek z prodlení <strong>${fmt(data.latePenalty)}</strong>.
-           </p>`
+    const latePenaltyNote = data.latePenalty > 0
+        ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+             <tr><td style="padding:10px 12px;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;font-size:13px;color:#b45309;line-height:1.6;">
+               ${data.dueDate
+                 ? `Po termínu splatnosti (<strong>${fmtDate(data.dueDate)}</strong>) bude k částce připočten poplatek z prodlení <strong>${fmt(data.latePenalty)}</strong>.`
+                 : `Po termínu splatnosti bude k částce připočten poplatek z prodlení <strong>${fmt(data.latePenalty)}</strong>.`
+               }
+             </td></tr>
+           </table>`
         : "";
 
     const html = `<!DOCTYPE html>
@@ -115,15 +115,10 @@ export function buildContributionReminderEmail(data: ContribReminderEmailData): 
         <strong>${data.year}</strong> dosud neevidujeme jako zaplacené.
       </p>
       ${data.dueDate
-        ? `<p style="margin:0 0 24px;font-size:14px;color:#6b7280;line-height:1.6;">
-             Prosíme tě o uhrazení do <strong>${fmtDate(data.dueDate)}</strong>.
-             ${latePenaltyNote}
-           </p>`
-        : `<p style="margin:0 0 24px;font-size:14px;color:#6b7280;line-height:1.6;">
-             Prosíme tě o co nejrychlejší uhrazení níže uvedené částky.
-             ${latePenaltyNote}
-           </p>`
+        ? `<p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">Prosíme tě o uhrazení do <strong>${fmtDate(data.dueDate)}</strong>.</p>`
+        : `<p style="margin:0 0 16px;font-size:14px;color:#6b7280;line-height:1.6;">Prosíme tě o co nejrychlejší uhrazení níže uvedené částky.</p>`
       }
+      ${latePenaltyNote}
 
       <!-- Rozpis příspěvků -->
       <table width="100%" cellpadding="0" cellspacing="0"
