@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, events } from "@/db/schema";
+import { eventExpenses, events, mailEvents } from "@/db/schema";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildInvoicePaymentInstructionEmail } from "@/lib/email-templates/invoice-payment-instruction";
 
@@ -113,7 +113,7 @@ export async function POST(
         const from = settings.from ?? "OVT Bohemians <onboarding@resend.dev>";
         const to = settings.testTo ?? hospodarEmail;
 
-        await resend.emails.send({
+        const { data, error: sendError } = await resend.emails.send({
             from,
             to,
             subject,
@@ -121,10 +121,30 @@ export async function POST(
             attachments: [{ filename: attachment.filename, content: attachment.content }],
         });
 
-        await db
-            .update(eventExpenses)
-            .set({ invoicePaymentSentAt: new Date() })
-            .where(eq(eventExpenses.id, expenseId));
+        const sentAt = new Date();
+
+        await Promise.all([
+            db.update(eventExpenses)
+                .set({ invoicePaymentSentAt: sentAt })
+                .where(eq(eventExpenses.id, expenseId)),
+            db.insert(mailEvents).values({
+                provider: "resend",
+                direction: "outbound",
+                eventType: "sent",
+                emailType: "invoice_payment_instruction",
+                messageId: data?.id ?? null,
+                fromEmail: from,
+                toEmail: to,
+                subject,
+                payload: {
+                    eventId,
+                    expenseId,
+                    fileName: expense.fileName,
+                    testTo: settings.testTo ?? null,
+                    sendError: sendError ? String(sendError) : null,
+                },
+            }),
+        ]);
 
         return NextResponse.json({ success: true, recipient: to });
     } catch (err) {
