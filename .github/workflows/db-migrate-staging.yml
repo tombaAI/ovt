@@ -1,0 +1,40 @@
+name: DB migrace — staging
+
+on:
+  push:
+    branches: [staging]
+    paths:
+      - 'supabase/migrations/**.sql'
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+
+      - name: Nainstalovat PostgreSQL client
+        run: sudo apt-get install -y --no-install-recommends postgresql-client
+
+      - name: Spustit nové migrace na staging DB
+        env:
+          DATABASE_URL: ${{ secrets.STAGING_DATABASE_URL }}
+        run: |
+          NEW_FILES=$(git diff --name-only --diff-filter=A HEAD~1 HEAD -- 'supabase/migrations/*.sql' | sort)
+
+          if [ -z "$NEW_FILES" ]; then
+            echo "Žádné nové migrační soubory — přeskakuji."
+            exit 0
+          fi
+
+          echo "Nalezené migrace:"
+          echo "$NEW_FILES"
+          echo "---"
+
+          while IFS= read -r file; do
+            echo "▶ Aplikuji: $file"
+            psql "$DATABASE_URL" -f "$file"
+            echo "✓ Hotovo: $file"
+          done <<< "$NEW_FILES"
