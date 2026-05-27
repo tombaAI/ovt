@@ -61,6 +61,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
         discountCommittee: defaults.discountCommittee ?? 0,
         discountTom:       defaults.discountTom       ?? 0,
         brigadeSurcharge:  defaults.brigadeSurcharge  ?? 0,
+        latePenalty:       defaults.latePenalty       ?? 0,
         dueDate:           defaults.dueDate           ?? null,
         bankAccount:       defaults.bankAccount       ?? DEFAULT_BANK,
     });
@@ -76,6 +77,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
             discountCommittee: defaults.discountCommittee ?? 0,
             discountTom:       defaults.discountTom       ?? 0,
             brigadeSurcharge:  defaults.brigadeSurcharge  ?? 0,
+            latePenalty:       defaults.latePenalty       ?? 0,
             dueDate:           defaults.dueDate           ?? null,
             bankAccount:       defaults.bankAccount       ?? DEFAULT_BANK,
         });
@@ -179,6 +181,13 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
                                             className="h-8 text-sm"
                                         />
                                     </div>
+                                </div>
+                                <div className="mt-3">
+                                    <NumInput label="Poplatek z prodlení po splatnosti (Kč)" value={form.latePenalty}
+                                        onChange={v => setNum("latePenalty", v)} />
+                                    <p className="mt-1 text-[11px] text-gray-400">
+                                        Zobrazí se v připomínkovém emailu jako upozornění na navýšení po termínu.
+                                    </p>
                                 </div>
                             </div>
 

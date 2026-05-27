@@ -21,6 +21,7 @@ export type PeriodDetail = PeriodTab & {
     discountCommittee: number;
     discountTom: number;
     brigadeSurcharge: number;
+    latePenalty: number;
     dueDate: string | null;
     bankAccount: string;
 };
@@ -157,6 +158,7 @@ export async function loadContributionPeriods(): Promise<PeriodDetail[]> {
             discountCommittee: contributionPeriods.discountCommittee,
             discountTom: contributionPeriods.discountTom,
             brigadeSurcharge: contributionPeriods.brigadeSurcharge,
+            latePenalty: contributionPeriods.latePenalty,
             dueDate: contributionPeriods.dueDate,
             bankAccount: contributionPeriods.bankAccount,
         })
@@ -261,6 +263,7 @@ export async function loadContributionDetail(contribId: number): Promise<{ row: 
             discountCommitteePeriod: contributionPeriods.discountCommittee,
             discountTomPeriod: contributionPeriods.discountTom,
             brigadeSurchargePeriod: contributionPeriods.brigadeSurcharge,
+            latePenaltyPeriod: contributionPeriods.latePenalty,
             dueDate: contributionPeriods.dueDate,
             bankAccount: contributionPeriods.bankAccount,
         })
@@ -309,6 +312,7 @@ export async function loadContributionDetail(contribId: number): Promise<{ row: 
             discountCommittee: baseRow.discountCommitteePeriod,
             discountTom: baseRow.discountTomPeriod,
             brigadeSurcharge: baseRow.brigadeSurchargePeriod,
+            latePenalty: baseRow.latePenaltyPeriod,
             dueDate: baseRow.dueDate as unknown as string | null,
             bankAccount: baseRow.bankAccount,
         },

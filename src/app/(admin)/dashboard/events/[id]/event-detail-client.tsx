@@ -25,6 +25,7 @@ import type {
 import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
+import { EventPaymentsTab } from "./event-payments-tab";
 import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
 import { removeParticipantFromRegistration, cancelAdminRegistration } from "@/lib/actions/event-settlement";
@@ -971,6 +972,10 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
     const [syncing, setSyncing] = useState(false);
     const [auditOpen, setAuditOpen] = useState(false);
     const [deleting, startDeleteT] = useTransition();
+    // Sdílený billing status — aktualizuje se z EventPaymentsTab a propaguje do EventSettlementTab
+    const [billingStatus, setBillingStatus] = useState<"draft" | "prescribed">(
+        (event.billingStatus as "draft" | "prescribed") ?? "draft"
+    );
 
     // Members loaded lazily — not needed for initial render
     const [allMembers, setAllMembers] = useState<MemberOption[]>([]);
@@ -1088,7 +1093,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                 {/* ── Tabs ── */}
                 <Tabs value={activeTab} onValueChange={tab => { setActiveTab(tab); sessionStorage.setItem(`event-${event.id}-tab`, tab); }} className="gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
-                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-4 gap-1.5 bg-transparent p-0">
+                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-5 gap-1.5 bg-transparent p-0">
                             <TabsTrigger value="detail"
                                 className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
                                 <span className="inline-flex items-center gap-1.5">
@@ -1115,6 +1120,13 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                 <span className="inline-flex items-center gap-1.5">
                                     <Calculator size={14} />
                                     <span className="font-semibold">Vyúčtování</span>
+                                </span>
+                            </TabsTrigger>
+                            <TabsTrigger value="payments"
+                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                <span className="inline-flex items-center gap-1.5">
+                                    <Wallet size={14} />
+                                    <span className="font-semibold">Platby</span>
                                 </span>
                             </TabsTrigger>
                         </TabsList>
@@ -1227,7 +1239,17 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
 
                     {/* ── Tab: Vyúčtování ── */}
                     <TabsContent value="settlement" className="mt-0">
-                        <EventSettlementTab eventId={event.id} billingStatus={event.billingStatus} treasurerApproved={event.treasurerApproved} />
+                        <EventSettlementTab eventId={event.id} billingStatus={billingStatus} />
+                    </TabsContent>
+
+                    {/* ── Tab: Platby ── */}
+                    <TabsContent value="payments" className="mt-0">
+                        <EventPaymentsTab
+                            eventId={event.id}
+                            billingStatus={billingStatus}
+                            treasurerApproved={event.treasurerApproved}
+                            onBillingStatusChange={setBillingStatus}
+                        />
                     </TabsContent>
                 </Tabs>
 

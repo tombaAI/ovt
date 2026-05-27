@@ -666,6 +666,7 @@ type ExpenseRow = {
   reimbursementPersonId: number | null;
   reimbursementPayeeBankAccountNumber: string | null;
   reimbursementPayeeBankCode: string | null;
+  isPaid?: boolean;
 };
 
 function computeBlockingIssues(expenses: ExpenseRow[]): string[] {
@@ -674,8 +675,9 @@ function computeBlockingIssues(expenses: ExpenseRow[]): string[] {
   if (unconfirmed > 0) {
     issues.push(`${unconfirmed} doklad${unconfirmed === 1 ? "" : "ů"} není potvrzeno`);
   }
+  // Doklady s isPaid=false (faktury k úhradě účetnictvím) nepotřebují příjemce
   const missingFields = expenses.filter(
-    (e) => e.status === "final" && (!e.amount || Number(e.amount) <= 0 || !e.purposeText || !e.reimbursementPersonId),
+    (e) => e.status === "final" && (!e.amount || Number(e.amount) <= 0 || !e.purposeText || (e.isPaid !== false && !e.reimbursementPersonId)),
   ).length;
   if (missingFields > 0) {
     issues.push(`${missingFields} potvrzený doklad${missingFields === 1 ? "" : "ů"} má nevyplněná povinná pole`);
@@ -683,7 +685,7 @@ function computeBlockingIssues(expenses: ExpenseRow[]): string[] {
   const seen = new Set<number>();
   let missingBank = 0;
   for (const e of expenses) {
-    if (e.status === "final" && e.reimbursementPersonId && !seen.has(e.reimbursementPersonId)) {
+    if (e.status === "final" && e.isPaid !== false && e.reimbursementPersonId && !seen.has(e.reimbursementPersonId)) {
       seen.add(e.reimbursementPersonId);
       if (!e.reimbursementPayeeBankAccountNumber || !e.reimbursementPayeeBankCode) missingBank++;
     }

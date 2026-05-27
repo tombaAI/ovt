@@ -129,6 +129,9 @@ export async function POST(
         const purposeCategory = String(formData.get("purposeCategory") ?? "");
         const reimbursementPersonIdRaw = String(formData.get("reimbursementPersonId") ?? "").trim();
         const reimbursementMemberIdRaw = String(formData.get("reimbursementMemberId") ?? "").trim();
+        const isPaidRaw = formData.get("isPaid");
+        const isPaid = isPaidRaw === null ? true : isPaidRaw !== "false" && isPaidRaw !== "0";
+        const invoicePayeeName = String(formData.get("invoicePayeeName") ?? "").trim() || null;
         const file = formData.get("file") as File | null;
 
         let amount: number | null = null;
@@ -183,6 +186,8 @@ export async function POST(
             purposeCategory: purposeCategoryVal,
             reimbursementPersonId,
             reimbursementMemberId,
+            isPaid,
+            invoicePayeeName: isPaid ? null : invoicePayeeName,
             fileUrl,
             fileName,
             fileMime,
@@ -224,6 +229,8 @@ export async function PATCH(
             purposeCategory?: unknown;
             reimbursementPersonId?: unknown;
             reimbursementMemberId?: unknown;
+            isPaid?: unknown;
+            invoicePayeeName?: unknown;
         };
 
         const expenseId = Number(body.expenseId);
@@ -231,6 +238,24 @@ export async function PATCH(
             return NextResponse.json({ error: "Chybí expenseId" }, { status: 400 });
         }
 
+        const [row] = await db.select({ id: eventExpenses.id, eventId: eventExpenses.eventId })
+            .from(eventExpenses)
+            .where(eq(eventExpenses.id, expenseId));
+
+        if (!row || row.eventId !== eventId) {
+            return NextResponse.json({ error: "Doklad nenalezen" }, { status: 404 });
+        }
+
+        // Quick toggle: only isPaid provided
+        if (body.isPaid !== undefined && body.amount === undefined) {
+            const isPaid = body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
+            await db.update(eventExpenses)
+                .set({ isPaid })
+                .where(eq(eventExpenses.id, expenseId));
+            return NextResponse.json({ success: true });
+        }
+
+        // Full update
         const amountStr = String(body.amount ?? "").replace(",", ".");
         const purposeText = String(body.purposeText ?? "").trim();
         const purposeCategory = String(body.purposeCategory ?? "");
@@ -240,6 +265,10 @@ export async function PATCH(
         const reimbursementMemberIdRaw = body.reimbursementMemberId === null || body.reimbursementMemberId === undefined
             ? ""
             : String(body.reimbursementMemberId).trim();
+        const isPaid = body.isPaid === undefined ? true : body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
+        const invoicePayeeName = body.invoicePayeeName !== undefined && body.invoicePayeeName !== null
+            ? String(body.invoicePayeeName).trim() || null
+            : null;
 
         const amount = parseFloat(amountStr);
         if (isNaN(amount) || amount <= 0) {
@@ -250,14 +279,6 @@ export async function PATCH(
         }
         if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory)) {
             return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
-        }
-
-        const [row] = await db.select({ id: eventExpenses.id, eventId: eventExpenses.eventId })
-            .from(eventExpenses)
-            .where(eq(eventExpenses.id, expenseId));
-
-        if (!row || row.eventId !== eventId) {
-            return NextResponse.json({ error: "Doklad nenalezen" }, { status: 404 });
         }
 
         const reimbursement = await resolveReimbursementTarget(db, reimbursementPersonIdRaw, reimbursementMemberIdRaw);
@@ -271,6 +292,8 @@ export async function PATCH(
                 purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],
                 reimbursementPersonId: reimbursement.value.reimbursementPersonId,
                 reimbursementMemberId: reimbursement.value.reimbursementMemberId,
+                isPaid,
+                invoicePayeeName: isPaid ? null : invoicePayeeName,
             })
             .where(eq(eventExpenses.id, expenseId));
 

@@ -107,6 +107,7 @@ export const contributionPeriods = appSchema.table("contribution_periods", {
     discountTom: integer("discount_tom").notNull().default(0),
     brigadeSurcharge: integer("brigade_surcharge").notNull().default(0),
     dueDate: date("due_date"),
+    latePenalty: integer("late_penalty").notNull().default(0),
     bankAccount: text("bank_account").notNull().default("2701772934/2010"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });
@@ -517,7 +518,7 @@ export type ExpenseCategory = typeof expenseCategoryEnum[number];
 export const eventExpenseStatusEnum = ["draft", "unconfirmed", "final"] as const;
 export type EventExpenseStatus = typeof eventExpenseStatusEnum[number];
 
-export const eventExpenseAllocationMethodEnum = ["split_all", "per_registration"] as const;
+export const eventExpenseAllocationMethodEnum = ["split_all", "per_registration", "with_coefficients"] as const;
 export type EventExpenseAllocationMethod = typeof eventExpenseAllocationMethodEnum[number];
 
 export const eventExpenses = appSchema.table(
@@ -528,6 +529,7 @@ export const eventExpenses = appSchema.table(
         status: text("status", { enum: eventExpenseStatusEnum }).notNull().default("final"),
         amount: numeric("amount", { precision: 10, scale: 2 }),        // null u draftů
         allocationMethod: text("allocation_method", { enum: eventExpenseAllocationMethodEnum }).notNull().default("split_all"),
+        participantCoefficients: jsonb("participant_coefficients").$type<Record<string, number>>(),
         purposeText: text("purpose_text"),
         purposeCategory: text("purpose_category", { enum: expenseCategoryEnum }),
         reimbursementPersonId: integer("reimbursement_person_id").references(() => people.id, { onDelete: "set null" }),
@@ -535,6 +537,9 @@ export const eventExpenses = appSchema.table(
         fileUrl: text("file_url"),
         fileName: text("file_name"),
         fileMime: text("file_mime"),
+        isPaid: boolean("is_paid").notNull().default(true),
+        invoicePayeeName: text("invoice_payee_name"),
+        invoicePaymentSentAt: timestamp("invoice_payment_sent_at", { withTimezone: true }),
         uploadedBy: text("uploaded_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     },
