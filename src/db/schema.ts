@@ -437,6 +437,7 @@ export const eventRegistrations = appSchema.table(
         personsCount: smallint("persons_count").notNull().default(1),
         personsNames: text("persons_names"),
         transportInfo: text("transport_info"),
+        note: text("note"),
         cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
         // Trvalý kód přihlášky (C<prescriptionCode>) — přiřadí se jednou při prvním lockBilling
         // a zůstává nezměněný po celý život přihlášky (i po odemčení/zamčení).

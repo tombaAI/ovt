@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,7 +26,7 @@ import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/ac
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
-import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog } from "./admin-registration-dialog";
+import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
 import { removeParticipantFromRegistration, cancelAdminRegistration } from "@/lib/actions/event-settlement";
 
@@ -664,6 +664,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
     const [removingId, setRemovingId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
     const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
 
     const isCancelled = !!r.cancelledAt;
@@ -760,6 +761,13 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
                     </div>
                 )}
 
+                {r.note && (
+                    <div className="rounded-lg border border-sky-100 bg-sky-50/70 px-3 py-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-sky-700">Poznámka</p>
+                        <p className="mt-1 text-xs text-sky-900 whitespace-pre-wrap">{r.note}</p>
+                    </div>
+                )}
+
                 <div className="space-y-2">
                     <p className="text-xs font-medium text-slate-500">Účastníci</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -809,7 +817,12 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
                 </div>
 
                 {!isCancelled && !isPrescribed && (
-                    <div className="flex justify-end pt-1">
+                    <div className="flex justify-between items-center pt-1">
+                        <button onClick={() => setEditOpen(true)}
+                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                            <Pencil size={12} />
+                            Upravit
+                        </button>
                         <button onClick={handleCancel} disabled={cancelling}
                             className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
                             <Ban size={12} />
@@ -821,6 +834,18 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
 
             <RegistrationHistory registrationId={r.registrationId} />
 
+            <EditRegistrationDialog
+                registrationId={r.registrationId}
+                initialEmail={r.email}
+                initialPhone={r.phone ?? null}
+                initialNote={r.note}
+                participants={participants
+                    .filter(p => p.id !== undefined)
+                    .map(p => ({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null }))}
+                open={editOpen}
+                onClose={() => setEditOpen(false)}
+                onSaved={onRefresh}
+            />
             <AddParticipantDialog
                 registrationId={r.registrationId}
                 open={addParticipantOpen}

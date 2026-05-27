@@ -1156,6 +1156,7 @@ export type EventRegistrationAdminRow = {
     participants: ForeignWaterRegistrationParticipant[];
     participantNames: string[];
     transportInfo: string | null;
+    note: string | null;
     cancelledAt: Date | null;
     paymentId: number | null;
     paymentCode: number | null;
@@ -1184,6 +1185,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             personsCount: eventRegistrations.personsCount,
             personsNames: eventRegistrations.personsNames,
             transportInfo: eventRegistrations.transportInfo,
+            note: eventRegistrations.note,
             cancelledAt: eventRegistrations.cancelledAt,
             paymentId: eventPaymentPrescriptions.id,
             paymentCode: eventPaymentPrescriptions.prescriptionCode,
@@ -1267,6 +1269,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         participants,
         participantNames,
         transportInfo: row.transportInfo,
+        note: row.note,
         cancelledAt: row.cancelledAt as unknown as Date | null,
         paymentId: row.paymentId,
         paymentCode: row.paymentCode,

@@ -5,16 +5,19 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/u
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { UserCheck, X, ChevronDown, ChevronRight } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { UserCheck, X, ChevronDown, ChevronRight, Pencil, Check } from "lucide-react";
 import {
     addAdminEventRegistration,
     linkParticipantToMember,
     getMembersForSettlement,
     addParticipantToRegistration,
+    updateAdminRegistration,
+    updateParticipantFullName,
 } from "@/lib/actions/event-settlement";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
 
-// ── Přidání přihlášky ─────────────────────────────────────────────────────────
+// ── Typy ─────────────────────────────────────────────────────────────────────
 
 type MemberOption = {
     id: number;
@@ -28,9 +31,9 @@ type MemberOption = {
 type NonMemberDraft = {
     firstName: string;
     lastName: string;
-    email: string;
-    phone: string;
 };
+
+// ── Přidání přihlášky (#3 oprava: více nečlenů, #7: poznámka) ────────────────
 
 interface AddRegistrationDialogProps {
     eventId: number;
@@ -43,24 +46,28 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
     const [allMembers, setAllMembers] = useState<MemberOption[] | null>(null);
     const [search, setSearch] = useState("");
     const [selectedMembers, setSelectedMembers] = useState<MemberOption[]>([]);
-    const [showNonMember, setShowNonMember] = useState(false);
-    const [nonMember, setNonMember] = useState<NonMemberDraft>({ firstName: "", lastName: "", email: "", phone: "" });
+    // #3: pole nečlenů místo jednoho objektu
+    const [nonMembers, setNonMembers] = useState<NonMemberDraft[]>([]);
+    const [showNonMemberForm, setShowNonMemberForm] = useState(false);
+    const [newNonMember, setNewNonMember] = useState<NonMemberDraft & { email: string; phone: string }>({
+        firstName: "", lastName: "", email: "", phone: "",
+    });
+    // #7: poznámka
+    const [note, setNote] = useState("");
+    const [showNote, setShowNote] = useState(false);
     const [saving, startSave] = useTransition();
     const [error, setError] = useState<string | null>(null);
 
-    // načíst členy při prvním otevření
     useEffect(() => {
         if (open && !allMembers) getMembersForSettlement().then(setAllMembers);
     }, [open, allMembers]);
 
-    // reset při zavření
     useEffect(() => {
         if (!open) {
-            setSearch("");
-            setSelectedMembers([]);
-            setShowNonMember(false);
-            setNonMember({ firstName: "", lastName: "", email: "", phone: "" });
-            setError(null);
+            setSearch(""); setSelectedMembers([]); setNonMembers([]);
+            setShowNonMemberForm(false);
+            setNewNonMember({ firstName: "", lastName: "", email: "", phone: "" });
+            setNote(""); setShowNote(false); setError(null);
         }
     }, [open]);
 
@@ -80,55 +87,59 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
         setSelectedMembers(prev => prev.filter(m => m.id !== id));
     }
 
+    function addNonMember() {
+        if (!newNonMember.firstName.trim()) return;
+        setNonMembers(prev => [...prev, { firstName: newNonMember.firstName.trim(), lastName: newNonMember.lastName.trim() }]);
+        setNewNonMember(prev => ({ ...prev, firstName: "", lastName: "" }));
+        setShowNonMemberForm(false);
+    }
+
+    function removeNonMember(index: number) {
+        setNonMembers(prev => prev.filter((_, i) => i !== index));
+    }
+
     function handleSubmit() {
         setError(null);
         const hasMember = selectedMembers.length > 0;
-        const hasNonMember = showNonMember && nonMember.firstName.trim();
+        const hasNonMembers = nonMembers.length > 0;
+        const hasNewNonMember = showNonMemberForm && newNonMember.firstName.trim();
 
-        if (!hasMember && !showNonMember) {
-            setError("Vyberte alespoň jednoho člena OVT");
-            return;
-        }
-        if (showNonMember && !nonMember.firstName.trim() && !hasMember) {
-            setError("Vyplňte jméno nečlena");
+        if (!hasMember && !hasNonMembers && !hasNewNonMember) {
+            setError("Vyberte alespoň jednoho člena OVT nebo přidejte nečlena");
             return;
         }
 
-        // kontaktní e-mail: z profilu prvního člena, nebo z pole nečlena
-        const email = hasMember ? (selectedMembers[0].email ?? "") : nonMember.email.trim();
-        const phone = hasMember ? (selectedMembers[0].phone ?? "") : nonMember.phone.trim();
+        // Kontaktní údaje: z profilu prvního člena, nebo z pole nečlena
+        const email = hasMember ? (selectedMembers[0].email ?? "") : newNonMember.email.trim();
+        const phone = hasMember ? (selectedMembers[0].phone ?? "") : newNonMember.phone.trim();
 
         if (!email) {
             setError("Vyplňte e-mail kontaktní osoby");
             return;
         }
 
-        // kontaktní osoba = první člen, nebo nečlen
-        const firstName = hasMember ? selectedMembers[0].firstName : nonMember.firstName.trim();
-        const lastName = hasMember ? selectedMembers[0].lastName : nonMember.lastName.trim();
+        const firstName = hasMember ? selectedMembers[0].firstName : (nonMembers[0]?.firstName ?? newNonMember.firstName.trim());
+        const lastName  = hasMember ? selectedMembers[0].lastName  : (nonMembers[0]?.lastName  ?? newNonMember.lastName.trim());
 
-        // sestavit účastníky
+        // Sestavit finální seznam nečlenů (přidaní + případně rozpracovaný)
+        const allNonMembers = hasNewNonMember
+            ? [...nonMembers, { firstName: newNonMember.firstName.trim(), lastName: newNonMember.lastName.trim() }]
+            : nonMembers;
+
         const participants: Array<{ fullName: string; isPrimary: boolean; memberId: number | null }> = [
-            ...selectedMembers.map((m, i) => ({
-                fullName: m.fullName,
-                isPrimary: i === 0,
-                memberId: m.id,
+            ...selectedMembers.map((m, i) => ({ fullName: m.fullName, isPrimary: i === 0, memberId: m.id })),
+            ...allNonMembers.map((nm, i) => ({
+                fullName: `${nm.firstName} ${nm.lastName}`.trim(),
+                isPrimary: !hasMember && i === 0,
+                memberId: null,
             })),
         ];
-        if (hasNonMember) {
-            participants.push({
-                fullName: `${nonMember.firstName.trim()} ${nonMember.lastName.trim()}`.trim(),
-                isPrimary: !hasMember,
-                memberId: null,
-            });
-        }
 
         startSave(async () => {
             const res = await addAdminEventRegistration(eventId, {
-                email,
-                phone: phone || undefined,
-                firstName,
-                lastName,
+                email, phone: phone || undefined,
+                firstName, lastName,
+                note: note.trim() || null,
                 participants,
             });
             if ("error" in res) { setError(res.error); }
@@ -136,7 +147,9 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
         });
     }
 
-    const canSubmit = selectedMembers.length > 0 || (showNonMember && !!nonMember.firstName.trim());
+    const canSubmit = selectedMembers.length > 0
+        || nonMembers.length > 0
+        || (showNonMemberForm && !!newNonMember.firstName.trim());
 
     return (
         <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -146,7 +159,6 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
                 </DialogHeader>
 
                 <div className="space-y-4 pt-2">
-
                     {/* ── Výběr člena OVT ── */}
                     <div>
                         <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Člen OVT</p>
@@ -172,8 +184,7 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
                             onChange={e => setSearch(e.target.value)}
                             onKeyDown={e => {
                                 if (e.key === "Enter" && filtered.length > 0) {
-                                    e.preventDefault();
-                                    addMember(filtered[0]);
+                                    e.preventDefault(); addMember(filtered[0]);
                                 }
                             }}
                             placeholder={selectedMembers.length === 0 ? "Hledat člena OVT…" : "Přidat dalšího člena…"}
@@ -183,12 +194,8 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
 
                         {search && (
                             <div className="mt-1 border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
-                                {allMembers === null && (
-                                    <p className="text-xs text-gray-400 px-3 py-2">Načítám…</p>
-                                )}
-                                {allMembers !== null && filtered.length === 0 && (
-                                    <p className="text-xs text-gray-400 px-3 py-2">Nic nenalezeno</p>
-                                )}
+                                {allMembers === null && <p className="text-xs text-gray-400 px-3 py-2">Načítám…</p>}
+                                {allMembers !== null && filtered.length === 0 && <p className="text-xs text-gray-400 px-3 py-2">Nic nenalezeno</p>}
                                 {filtered.map(m => (
                                     <button key={m.id} onClick={() => addMember(m)}
                                         className="w-full text-left px-3 py-2 text-sm hover:bg-emerald-50 transition-colors border-b border-gray-100 last:border-0">
@@ -216,51 +223,93 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
                         </div>
                     )}
 
-                    {/* ── Sekce nečlen ── */}
+                    {/* ── Sekce nečlenů ── */}
                     <div>
+                        {/* Přidaní nečlenové jako chipy */}
+                        {nonMembers.length > 0 && (
+                            <div className="flex flex-wrap gap-1.5 mb-2">
+                                {nonMembers.map((nm, i) => (
+                                    <span key={i}
+                                        className="inline-flex items-center gap-1 text-xs bg-gray-50 text-gray-700 border border-gray-200 rounded-full px-2.5 py-1">
+                                        {nm.firstName} {nm.lastName}
+                                        <button onClick={() => removeNonMember(i)}
+                                            className="ml-0.5 text-gray-400 hover:text-red-500 transition-colors">
+                                            <X size={11} />
+                                        </button>
+                                    </span>
+                                ))}
+                            </div>
+                        )}
+
+                        {/* Tlačítko pro rozbalení formuláře — vždy viditelné (#3 fix) */}
                         <button
-                            onClick={() => setShowNonMember(!showNonMember)}
+                            onClick={() => setShowNonMemberForm(!showNonMemberForm)}
                             className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
-                            {showNonMember
-                                ? <ChevronDown size={12} />
-                                : <ChevronRight size={12} />}
-                            {selectedMembers.length > 0 ? "Přidat nečlena" : "Přihlásit nečlena"}
+                            {showNonMemberForm ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            {selectedMembers.length > 0 || nonMembers.length > 0 ? "Přidat nečlena" : "Přihlásit nečlena"}
                         </button>
 
-                        {showNonMember && (
+                        {showNonMemberForm && (
                             <div className="mt-2 border border-dashed border-gray-200 rounded-lg p-3 space-y-2">
                                 <div className="grid grid-cols-2 gap-2">
                                     <div>
                                         <Label className="text-xs text-gray-600">Jméno</Label>
-                                        <Input value={nonMember.firstName}
-                                            onChange={e => setNonMember(f => ({ ...f, firstName: e.target.value }))}
+                                        <Input value={newNonMember.firstName}
+                                            onChange={e => setNewNonMember(f => ({ ...f, firstName: e.target.value }))}
                                             className="mt-1 h-8 text-sm" placeholder="Jana" />
                                     </div>
                                     <div>
                                         <Label className="text-xs text-gray-600">Příjmení</Label>
-                                        <Input value={nonMember.lastName}
-                                            onChange={e => setNonMember(f => ({ ...f, lastName: e.target.value }))}
+                                        <Input value={newNonMember.lastName}
+                                            onChange={e => setNewNonMember(f => ({ ...f, lastName: e.target.value }))}
                                             className="mt-1 h-8 text-sm" placeholder="Nováková" />
                                     </div>
                                 </div>
-                                {/* E-mail + telefon jen pokud není vybraný žádný člen (nečlen = kontaktní osoba) */}
-                                {selectedMembers.length === 0 && (
+                                {/* E-mail + telefon jen pokud není žádný člen ani přidaný nečlen */}
+                                {selectedMembers.length === 0 && nonMembers.length === 0 && (
                                     <div className="grid grid-cols-2 gap-2">
                                         <div>
                                             <Label className="text-xs text-gray-600">E-mail *</Label>
-                                            <Input type="email" value={nonMember.email}
-                                                onChange={e => setNonMember(f => ({ ...f, email: e.target.value }))}
+                                            <Input type="email" value={newNonMember.email}
+                                                onChange={e => setNewNonMember(f => ({ ...f, email: e.target.value }))}
                                                 className="mt-1 h-8 text-sm" placeholder="jana@example.cz" />
                                         </div>
                                         <div>
                                             <Label className="text-xs text-gray-600">Telefon</Label>
-                                            <Input value={nonMember.phone}
-                                                onChange={e => setNonMember(f => ({ ...f, phone: e.target.value }))}
+                                            <Input value={newNonMember.phone}
+                                                onChange={e => setNewNonMember(f => ({ ...f, phone: e.target.value }))}
                                                 className="mt-1 h-8 text-sm" placeholder="+420…" />
                                         </div>
                                     </div>
                                 )}
+                                <div className="flex justify-end">
+                                    <Button size="sm" variant="outline"
+                                        onClick={addNonMember}
+                                        disabled={!newNonMember.firstName.trim()}
+                                        className="h-7 text-xs">
+                                        Přidat
+                                    </Button>
+                                </div>
                             </div>
+                        )}
+                    </div>
+
+                    {/* ── Poznámka (#7) ── */}
+                    <div>
+                        <button
+                            onClick={() => setShowNote(!showNote)}
+                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-600 transition-colors">
+                            {showNote ? <ChevronDown size={12} /> : <ChevronRight size={12} />}
+                            Poznámka k přihlášce
+                        </button>
+                        {showNote && (
+                            <Textarea
+                                value={note}
+                                onChange={e => setNote(e.target.value)}
+                                placeholder="Jedu vlastní dopravou, odjíždím v sobotu ráno…"
+                                className="mt-2 text-sm resize-none"
+                                rows={2}
+                            />
                         )}
                     </div>
 
@@ -278,7 +327,7 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
     );
 }
 
-// ── Přidání účastníka do existující přihlášky ─────────────────────────────────
+// ── Přidání účastníka do existující přihlášky (#5 oprava: dvě pole) ──────────
 
 interface AddParticipantDialogProps {
     registrationId: number;
@@ -292,7 +341,9 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
     const [search, setSearch] = useState("");
     const [selectedMember, setSelectedMember] = useState<MemberOption | null>(null);
     const [showNonMember, setShowNonMember] = useState(false);
-    const [nonMemberName, setNonMemberName] = useState("");
+    // #5: dvě pole místo jednoho fullName
+    const [nmFirstName, setNmFirstName] = useState("");
+    const [nmLastName, setNmLastName] = useState("");
     const [saving, startSave] = useTransition();
     const [error, setError] = useState<string | null>(null);
 
@@ -303,7 +354,7 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
     useEffect(() => {
         if (!open) {
             setSearch(""); setSelectedMember(null);
-            setShowNonMember(false); setNonMemberName(""); setError(null);
+            setShowNonMember(false); setNmFirstName(""); setNmLastName(""); setError(null);
         }
     }, [open]);
 
@@ -313,7 +364,9 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
 
     function handleSubmit() {
         setError(null);
-        const fullName = selectedMember ? selectedMember.fullName : nonMemberName.trim();
+        const fullName = selectedMember
+            ? selectedMember.fullName
+            : `${nmFirstName.trim()} ${nmLastName.trim()}`.trim();
         const memberId = selectedMember ? selectedMember.id : null;
 
         if (!fullName) {
@@ -326,6 +379,8 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
             else { onAdded(); onClose(); }
         });
     }
+
+    const canSubmit = !!selectedMember || !!nmFirstName.trim();
 
     return (
         <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
@@ -354,8 +409,7 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
                                     onKeyDown={e => {
                                         if (e.key === "Enter" && filtered.length > 0) {
                                             e.preventDefault();
-                                            setSelectedMember(filtered[0]);
-                                            setSearch("");
+                                            setSelectedMember(filtered[0]); setSearch("");
                                         }
                                     }}
                                     placeholder="Hledat člena OVT…"
@@ -378,7 +432,7 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
                         )}
                     </div>
 
-                    {/* Nečlen */}
+                    {/* Nečlen — #5: dvě pole Jméno + Příjmení */}
                     {!selectedMember && (
                         <div>
                             <button onClick={() => setShowNonMember(!showNonMember)}
@@ -387,12 +441,21 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
                                 Přidat nečlena
                             </button>
                             {showNonMember && (
-                                <div className="mt-2">
-                                    <Label className="text-xs text-gray-600">Celé jméno</Label>
-                                    <Input value={nonMemberName}
-                                        onChange={e => setNonMemberName(e.target.value)}
-                                        onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
-                                        className="mt-1 h-8 text-sm" placeholder="Jana Nováková" />
+                                <div className="mt-2 grid grid-cols-2 gap-2">
+                                    <div>
+                                        <Label className="text-xs text-gray-600">Jméno</Label>
+                                        <Input value={nmFirstName}
+                                            onChange={e => setNmFirstName(e.target.value)}
+                                            onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+                                            className="mt-1 h-8 text-sm" placeholder="Jana" />
+                                    </div>
+                                    <div>
+                                        <Label className="text-xs text-gray-600">Příjmení</Label>
+                                        <Input value={nmLastName}
+                                            onChange={e => setNmLastName(e.target.value)}
+                                            onKeyDown={e => { if (e.key === "Enter") handleSubmit(); }}
+                                            className="mt-1 h-8 text-sm" placeholder="Nováková" />
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -402,7 +465,7 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
 
                     <div className="flex justify-end gap-2 pt-1">
                         <Button variant="outline" size="sm" onClick={onClose}>Zrušit</Button>
-                        <Button size="sm" onClick={handleSubmit} disabled={saving || (!selectedMember && !nonMemberName.trim())}>
+                        <Button size="sm" onClick={handleSubmit} disabled={saving || !canSubmit}>
                             {saving ? "Ukládám…" : "Přidat"}
                         </Button>
                     </div>
@@ -412,7 +475,7 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
     );
 }
 
-// ── Párování účastníka s členem (standalone) ──────────────────────────────────
+// ── Párování účastníka s členem ───────────────────────────────────────────────
 
 interface LinkParticipantDialogProps {
     participant: SettlementParticipant & { registrationId: number };
@@ -476,6 +539,179 @@ export function LinkParticipantDialog({ participant, open, onClose, onLinked }: 
                     {error && <p className="text-xs text-red-500">{error}</p>}
                     <div className="flex justify-end">
                         <Button variant="outline" size="sm" onClick={onClose}>Zavřít</Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Editace přihlášky (#6) ────────────────────────────────────────────────────
+
+type EditableParticipant = {
+    id: number;
+    fullName: string;
+    isPrimary: boolean;
+    memberId: number | null | undefined;
+};
+
+interface EditRegistrationDialogProps {
+    registrationId: number;
+    initialEmail: string;
+    initialPhone: string | null;
+    initialNote: string | null;
+    participants: EditableParticipant[];
+    open: boolean;
+    onClose: () => void;
+    onSaved: () => void;
+}
+
+export function EditRegistrationDialog({
+    registrationId, initialEmail, initialPhone, initialNote,
+    participants, open, onClose, onSaved,
+}: EditRegistrationDialogProps) {
+    const [email, setEmail] = useState(initialEmail);
+    const [phone, setPhone] = useState(initialPhone ?? "");
+    const [note, setNote] = useState(initialNote ?? "");
+    const [saving, startSave] = useTransition();
+    const [error, setError] = useState<string | null>(null);
+
+    // Inline přejmenování účastníka
+    const [editingParticipantId, setEditingParticipantId] = useState<number | null>(null);
+    const [editingName, setEditingName] = useState("");
+
+    useEffect(() => {
+        if (open) {
+            setEmail(initialEmail);
+            setPhone(initialPhone ?? "");
+            setNote(initialNote ?? "");
+            setEditingParticipantId(null);
+            setError(null);
+        }
+    }, [open, initialEmail, initialPhone, initialNote]);
+
+    function handleSave() {
+        if (!email.trim()) { setError("E-mail je povinný"); return; }
+        setError(null);
+        startSave(async () => {
+            const res = await updateAdminRegistration(registrationId, {
+                email: email.trim(),
+                phone: phone.trim() || undefined,
+                note: note.trim() || null,
+            });
+            if ("error" in res) { setError(res.error); }
+            else { onSaved(); onClose(); }
+        });
+    }
+
+    function startRenaming(p: EditableParticipant) {
+        setEditingParticipantId(p.id);
+        setEditingName(p.fullName);
+    }
+
+    function handleRename(participantId: number) {
+        if (!editingName.trim()) return;
+        startSave(async () => {
+            const res = await updateParticipantFullName(participantId, editingName);
+            if ("error" in res) { setError(res.error); }
+            else { setEditingParticipantId(null); onSaved(); }
+        });
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Upravit přihlášku</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-4 pt-2">
+                    {/* Kontaktní údaje */}
+                    <div>
+                        <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Kontaktní údaje</p>
+                        <div className="grid grid-cols-2 gap-2">
+                            <div>
+                                <Label className="text-xs text-gray-600">E-mail *</Label>
+                                <Input type="email" value={email}
+                                    onChange={e => setEmail(e.target.value)}
+                                    className="mt-1 h-8 text-sm" />
+                            </div>
+                            <div>
+                                <Label className="text-xs text-gray-600">Telefon</Label>
+                                <Input value={phone}
+                                    onChange={e => setPhone(e.target.value)}
+                                    className="mt-1 h-8 text-sm" placeholder="+420…" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Účastníci — přejmenování nečlenů */}
+                    {participants.length > 0 && (
+                        <div>
+                            <p className="text-xs font-medium text-gray-500 mb-2 uppercase tracking-wide">Účastníci</p>
+                            <div className="space-y-1">
+                                {participants.map(p => (
+                                    <div key={p.id} className="flex items-center gap-2">
+                                        {editingParticipantId === p.id ? (
+                                            <>
+                                                <Input
+                                                    value={editingName}
+                                                    onChange={e => setEditingName(e.target.value)}
+                                                    onKeyDown={e => {
+                                                        if (e.key === "Enter") handleRename(p.id);
+                                                        if (e.key === "Escape") setEditingParticipantId(null);
+                                                    }}
+                                                    className="h-7 text-xs flex-1"
+                                                    autoFocus
+                                                />
+                                                <button onClick={() => handleRename(p.id)} disabled={saving}
+                                                    className="text-emerald-500 hover:text-emerald-700 transition-colors">
+                                                    <Check size={14} />
+                                                </button>
+                                                <button onClick={() => setEditingParticipantId(null)}
+                                                    className="text-gray-400 hover:text-gray-600 transition-colors">
+                                                    <X size={14} />
+                                                </button>
+                                            </>
+                                        ) : (
+                                            <>
+                                                <span className="text-sm text-gray-700 flex-1">{p.fullName}</span>
+                                                {p.isPrimary && (
+                                                    <span className="text-[10px] font-medium text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">kontakt</span>
+                                                )}
+                                                {/* Přejmenování jen pro nečleny */}
+                                                {!p.memberId && (
+                                                    <button onClick={() => startRenaming(p)}
+                                                        className="text-gray-300 hover:text-gray-600 transition-colors"
+                                                        title="Přejmenovat">
+                                                        <Pencil size={12} />
+                                                    </button>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Poznámka */}
+                    <div>
+                        <Label className="text-xs text-gray-600">Poznámka</Label>
+                        <Textarea value={note}
+                            onChange={e => setNote(e.target.value)}
+                            placeholder="Jedu vlastní dopravou, odjíždím v sobotu ráno…"
+                            className="mt-1 text-sm resize-none"
+                            rows={2}
+                        />
+                    </div>
+
+                    {error && <p className="text-xs text-red-500 bg-red-50 rounded px-3 py-2">{error}</p>}
+
+                    <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" size="sm" onClick={onClose} disabled={saving}>Zrušit</Button>
+                        <Button size="sm" onClick={handleSave} disabled={saving}>
+                            {saving ? "Ukládám…" : "Uložit"}
+                        </Button>
                     </div>
                 </div>
             </DialogContent>
