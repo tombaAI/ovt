@@ -23,6 +23,8 @@ export type EventExpenseRow = {
     fileUrl: string | null;
     fileName: string | null;
     fileMime: string | null;
+    isPaid: boolean;
+    invoicePaymentSentAt: Date | null;
     uploadedBy: string;
     createdAt: Date;
 };
@@ -46,6 +48,8 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             fileUrl: eventExpenses.fileUrl,
             fileName: eventExpenses.fileName,
             fileMime: eventExpenses.fileMime,
+            isPaid: eventExpenses.isPaid,
+            invoicePaymentSentAt: eventExpenses.invoicePaymentSentAt,
             uploadedBy: eventExpenses.uploadedBy,
             createdAt: eventExpenses.createdAt,
         })
@@ -59,5 +63,7 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
         reimbursementPayeeKind: row.reimbursementPayeeName
             ? row.reimbursementPayeeMemberId === null ? "external" : "member"
             : null,
+        isPaid: row.isPaid,
+        invoicePaymentSentAt: row.invoicePaymentSentAt ?? null,
     })) as EventExpenseRow[];
 }
