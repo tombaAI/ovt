@@ -107,6 +107,7 @@ export const contributionPeriods = appSchema.table("contribution_periods", {
     discountTom: integer("discount_tom").notNull().default(0),
     brigadeSurcharge: integer("brigade_surcharge").notNull().default(0),
     dueDate: date("due_date"),
+    latePenalty: integer("late_penalty").notNull().default(0),
     bankAccount: text("bank_account").notNull().default("2701772934/2010"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 });

@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { ChevronDown, Pencil, Search, SlidersHorizontal, X } from "lucide-react";
+import { Bell, ChevronDown, Pencil, Search, SlidersHorizontal, X } from "lucide-react";
 import { pushNavStack } from "@/lib/nav-stack";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/table";
 import { PrepareDialog } from "./prepare-dialog";
 import { EditPrescriptionDialog } from "./edit-prescription-dialog";
+import { SendEmailDialog } from "./send-email-dialog";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, MemberOption, PeriodDetail } from "./data";
 
@@ -243,6 +244,7 @@ export function ContributionsOverviewClient({
     const [prepareOpen, setPrepareOpen] = useState(false);
     const [editRow, setEditRow] = useState<ContribRow | null>(null);
     const [editOpen, setEditOpen] = useState(false);
+    const [reminderOpen, setReminderOpen] = useState(false);
     const [memberSearch, setMemberSearch] = useState("");
 
     const updateUrl = useCallback((updates: Record<string, string | null>) => {
@@ -375,6 +377,11 @@ export function ContributionsOverviewClient({
         if (labels.length === 1) return labels[0] ?? "Filtrovat";
         return `Filtrovat (${labels.length})`;
     }, [paymentState, process, yearMode]);
+
+    const reminderRows = useMemo(
+        () => memberScopedRows.filter(row => row.status !== "paid" && row.reviewed),
+        [memberScopedRows]
+    );
 
     const hasActiveFilters = filter !== "all"
         || selectedBadgeFilters.length > 0
@@ -715,13 +722,27 @@ export function ContributionsOverviewClient({
                             )}
                         </div>
 
-                        {canPrepare && yearMode !== "all" && (
-                            <Button
-                                onClick={() => setPrepareOpen(true)}
-                                className="h-8 shrink-0 self-start bg-[#327600] text-white hover:bg-[#327600]/90 lg:ml-4"
-                            >
-                                Definuj
-                            </Button>
+                        {yearMode !== "all" && (
+                            <div className="flex shrink-0 self-start gap-2 lg:ml-4">
+                                <Button
+                                    variant="outline"
+                                    onClick={() => setReminderOpen(true)}
+                                    disabled={reminderRows.length === 0}
+                                    title={reminderRows.length === 0 ? "Žádní zkontrolovaní nezaplacení členové" : undefined}
+                                    className="h-8 gap-1.5 text-sm"
+                                >
+                                    <Bell className="h-3.5 w-3.5" />
+                                    Připomínka ({reminderRows.length})
+                                </Button>
+                                {canPrepare && (
+                                    <Button
+                                        onClick={() => setPrepareOpen(true)}
+                                        className="h-8 bg-[#327600] text-white hover:bg-[#327600]/90"
+                                    >
+                                        Definuj
+                                    </Button>
+                                )}
+                            </div>
                         )}
                     </div>
                 </div>
@@ -945,6 +966,14 @@ export function ContributionsOverviewClient({
             )}
 
             <EditPrescriptionDialog open={editOpen} onOpenChange={setEditOpen} row={editRow} />
+
+            <SendEmailDialog
+                open={reminderOpen}
+                onOpenChange={setReminderOpen}
+                rows={reminderRows}
+                emailType="reminder"
+                onSent={() => router.refresh()}
+            />
         </div>
     );
 }

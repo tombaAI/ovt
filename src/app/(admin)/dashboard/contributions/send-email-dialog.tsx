@@ -13,14 +13,16 @@ interface Props {
     open:         boolean;
     onOpenChange: (open: boolean) => void;
     rows:         ContribRow[];   // příjemci (1 nebo více)
+    emailType?:   "prescription" | "reminder";
     onSent?:      () => void;
 }
 
-export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
+export function SendEmailDialog({ open, onOpenChange, rows, emailType = "prescription", onSent }: Props) {
     const [isPending, startTransition] = useTransition();
     const [result, setResult] = useState<SendEmailResult | null>(null);
     const [error, setError]   = useState<string | null>(null);
 
+    const isReminder     = emailType === "reminder";
     const withEmail      = rows.filter(r => r.email);
     const withoutEmail   = rows.filter(r => !r.email);
     const notReviewed    = rows.filter(r => !r.reviewed);
@@ -38,7 +40,7 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
         startTransition(async () => {
             const res = await sendContributionEmails(
                 rows.map(r => r.contribId),
-                "prescription",
+                emailType,
             );
             if ("error" in res) {
                 setError(res.error);
@@ -56,10 +58,14 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
                     <DialogTitle className="flex items-center gap-2">
                         <Mail className="w-4 h-4 text-[#327600]" />
                         {result
-                            ? "Email odeslán"
-                            : rows.length === 1
-                                ? `Odeslat email — ${rows[0].firstName} ${rows[0].lastName}`
-                                : `Odeslat emaily — ${rows.length} členů`
+                            ? (isReminder ? "Připomínka odeslána" : "Email odeslán")
+                            : isReminder
+                                ? rows.length === 1
+                                    ? `Připomínka — ${rows[0].firstName} ${rows[0].lastName}`
+                                    : `Připomínka k zaplacení — ${rows.length} členů`
+                                : rows.length === 1
+                                    ? `Odeslat email — ${rows[0].firstName} ${rows[0].lastName}`
+                                    : `Odeslat emaily — ${rows.length} členů`
                         }
                     </DialogTitle>
                 </DialogHeader>
@@ -133,7 +139,10 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
 
                         {/* Typ emailu */}
                         <p className="text-xs text-gray-400 rounded-lg border border-gray-100 bg-gray-50 px-3 py-2">
-                            Bude odeslán email s předpisem příspěvků vč. rozpisuslužek a QR kódu pro platbu.
+                            {isReminder
+                                ? "Bude odeslána přátelská připomínka k zaplacení vč. platebních údajů a QR kódu. Email připomínky lze odeslat opakovaně."
+                                : "Bude odeslán email s předpisem příspěvků vč. rozpisu složek a QR kódu pro platbu."
+                            }
                         </p>
 
                         {error && <p className="text-sm text-red-600">{error}</p>}
@@ -149,9 +158,13 @@ export function SendEmailDialog({ open, onOpenChange, rows, onSent }: Props) {
                             >
                                 {isPending
                                     ? "Odesílám…"
-                                    : withEmail.length === 1
-                                        ? "Odeslat email"
-                                        : `Odeslat ${withEmail.length} emailů`
+                                    : isReminder
+                                        ? withEmail.length === 1
+                                            ? "Odeslat připomínku"
+                                            : `Odeslat ${withEmail.length} připomínek`
+                                        : withEmail.length === 1
+                                            ? "Odeslat email"
+                                            : `Odeslat ${withEmail.length} emailů`
                                 }
                             </Button>
                         </DialogFooter>

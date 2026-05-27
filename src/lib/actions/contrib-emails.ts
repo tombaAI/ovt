@@ -11,6 +11,7 @@ import {
     buildContributionPrescriptionEmail,
     type ContribEmailData,
 } from "@/lib/email-templates/contribution-prescription";
+import { buildContributionReminderEmail } from "@/lib/email-templates/contribution-reminder";
 
 export type SendEmailResult = {
     sent:    number;
@@ -82,6 +83,7 @@ export async function sendContributionEmails(
             year:        contributionPeriods.year,
             bankAccount: contributionPeriods.bankAccount,
             dueDate:     contributionPeriods.dueDate,
+            latePenalty: contributionPeriods.latePenalty,
         })
         .from(contributionPeriods)
         .where(eq(contributionPeriods.id, periodId));
@@ -120,7 +122,9 @@ export async function sendContributionEmails(
             dueDate:            period.dueDate as unknown as string | null,
         };
 
-        const { subject, html } = buildContributionPrescriptionEmail(emailData);
+        const { subject, html } = emailType === "reminder"
+            ? buildContributionReminderEmail({ ...emailData, latePenalty: period.latePenalty })
+            : buildContributionPrescriptionEmail(emailData);
 
         // V test módu posílat na testovací adresu
         const toEmail = settings.testTo ?? row.email;
