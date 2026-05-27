@@ -1,31 +1,32 @@
 export type InvoicePaymentInstructionData = {
     eventName: string;
+    payeeName: string | null;
     amount: number | null;
     purposeText: string | null;
     fileName: string | null;
     senderName: string;
 };
 
+function tableRow(label: string, value: string): string {
+    return `<tr>
+      <td style="padding:6px 12px 6px 0;color:#6b7280;font-size:14px;white-space:nowrap;vertical-align:top;">${label}</td>
+      <td style="padding:6px 0;font-size:14px;color:#111827;font-weight:500;text-align:right;">${value}</td>
+    </tr>`;
+}
+
 export function buildInvoicePaymentInstructionEmail(
     data: InvoicePaymentInstructionData,
 ): { subject: string; html: string } {
-    const subject = `Pokyn k úhradě faktury — ${data.eventName}`;
+    const payeeLabel = data.payeeName ?? "—";
+    const subject = `Pokyn k úhradě faktury — ${payeeLabel} (${data.eventName})`;
 
-    const amountRow = data.amount !== null
-        ? `<tr>
-            <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Částka</td>
-            <td style="padding:4px 0;font-size:14px;font-weight:600;color:#111827;text-align:right;">
-              ${new Intl.NumberFormat("cs-CZ").format(data.amount)} Kč
-            </td>
-          </tr>`
-        : "";
-
-    const purposeRow = data.purposeText
-        ? `<tr>
-            <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Popis</td>
-            <td style="padding:4px 0;font-size:14px;color:#374151;text-align:right;">${data.purposeText}</td>
-          </tr>`
-        : "";
+    const rows = [
+        data.payeeName ? tableRow("Příjemce", data.payeeName) : "",
+        data.amount !== null ? tableRow("Částka", `${new Intl.NumberFormat("cs-CZ").format(data.amount)} Kč`) : "",
+        data.purposeText ? tableRow("Popis", data.purposeText) : "",
+        data.fileName ? tableRow("Příloha", data.fileName) : "",
+        tableRow("Akce", data.eventName),
+    ].filter(Boolean).join("\n");
 
     const html = `<!DOCTYPE html>
 <html lang="cs">
@@ -37,36 +38,30 @@ export function buildInvoicePaymentInstructionEmail(
 
         <!-- Hlavička -->
         <tr>
-          <td style="background:#327600;padding:20px 28px;">
-            <p style="margin:0;color:#ffffff;font-size:13px;opacity:0.85;">OVT Bohemians — správa oddílu</p>
-            <h1 style="margin:4px 0 0;color:#ffffff;font-size:20px;font-weight:700;">Pokyn k úhradě faktury</h1>
+          <td style="background:#327600;padding:22px 28px;">
+            <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;line-height:1.2;">Pokyn k úhradě faktury</h1>
           </td>
         </tr>
 
         <!-- Tělo -->
         <tr>
-          <td style="padding:28px 28px 20px;">
-            <p style="margin:0 0 20px;font-size:15px;color:#111827;line-height:1.6;">
-              Prosím o proplacení faktury dle přílohy z účtu oddílu
+          <td style="padding:28px 28px 8px;">
+            <p style="margin:0 0 20px;font-size:15px;color:#111827;">Dobrý den,</p>
+            <p style="margin:0 0 24px;font-size:15px;color:#111827;line-height:1.6;">
+              prosím o proplacení faktury dle přílohy z účtu oddílu
               <strong style="color:#327600;">207 Oddíl Vodní Turistiky</strong>.
             </p>
 
-            <!-- Detaily -->
-            <table cellpadding="0" cellspacing="0" style="width:100%;border-top:1px solid #f3f4f6;margin-bottom:24px;">
-              <tr>
-                <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Akce</td>
-                <td style="padding:4px 0;font-size:14px;font-weight:600;color:#111827;text-align:right;">${data.eventName}</td>
-              </tr>
-              ${amountRow}
-              ${purposeRow}
-              ${data.fileName ? `<tr>
-                <td style="padding:4px 8px 4px 0;color:#6b7280;font-size:14px;">Příloha</td>
-                <td style="padding:4px 0;font-size:14px;color:#374151;text-align:right;">${data.fileName}</td>
-              </tr>` : ""}
+            <!-- Detailní tabulka -->
+            <table cellpadding="0" cellspacing="0" style="width:100%;border-top:1px solid #e5e7eb;border-bottom:1px solid #e5e7eb;margin-bottom:28px;">
+              ${rows}
             </table>
 
-            <p style="margin:0;font-size:13px;color:#6b7280;">
-              Faktura je přiložena k tomuto e-mailu. Pokud máte dotazy, odpovězte na tento e-mail.
+            <!-- Podpis -->
+            <p style="margin:0 0 4px;font-size:14px;color:#374151;line-height:1.7;">
+              Děkuji.<br>
+              Tomáš Bauer,<br>
+              Hospodář OVT
             </p>
           </td>
         </tr>
@@ -75,7 +70,7 @@ export function buildInvoicePaymentInstructionEmail(
         <tr>
           <td style="padding:16px 28px;border-top:1px solid #f3f4f6;background:#f9fafb;">
             <p style="margin:0;font-size:12px;color:#9ca3af;">
-              Odesláno systémem OVT Bohemians — správa oddílu · ${data.senderName}
+              Odesláno: ${data.senderName}
             </p>
           </td>
         </tr>

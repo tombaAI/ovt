@@ -24,6 +24,7 @@ export type EventExpenseRow = {
     fileName: string | null;
     fileMime: string | null;
     isPaid: boolean;
+    invoicePayeeName: string | null;
     invoicePaymentSentAt: Date | null;
     uploadedBy: string;
     createdAt: Date;
@@ -49,6 +50,7 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             fileName: eventExpenses.fileName,
             fileMime: eventExpenses.fileMime,
             isPaid: eventExpenses.isPaid,
+            invoicePayeeName: eventExpenses.invoicePayeeName,
             invoicePaymentSentAt: eventExpenses.invoicePaymentSentAt,
             uploadedBy: eventExpenses.uploadedBy,
             createdAt: eventExpenses.createdAt,
@@ -64,6 +66,7 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             ? row.reimbursementPayeeMemberId === null ? "external" : "member"
             : null,
         isPaid: row.isPaid,
+        invoicePayeeName: row.invoicePayeeName ?? null,
         invoicePaymentSentAt: row.invoicePaymentSentAt ?? null,
     })) as EventExpenseRow[];
 }

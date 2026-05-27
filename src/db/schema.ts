@@ -537,6 +537,7 @@ export const eventExpenses = appSchema.table(
         fileName: text("file_name"),
         fileMime: text("file_mime"),
         isPaid: boolean("is_paid").notNull().default(true),
+        invoicePayeeName: text("invoice_payee_name"),
         invoicePaymentSentAt: timestamp("invoice_payment_sent_at", { withTimezone: true }),
         uploadedBy: text("uploaded_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

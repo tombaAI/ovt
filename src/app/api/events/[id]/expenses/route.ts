@@ -131,6 +131,7 @@ export async function POST(
         const reimbursementMemberIdRaw = String(formData.get("reimbursementMemberId") ?? "").trim();
         const isPaidRaw = formData.get("isPaid");
         const isPaid = isPaidRaw === null ? true : isPaidRaw !== "false" && isPaidRaw !== "0";
+        const invoicePayeeName = String(formData.get("invoicePayeeName") ?? "").trim() || null;
         const file = formData.get("file") as File | null;
 
         let amount: number | null = null;
@@ -186,6 +187,7 @@ export async function POST(
             reimbursementPersonId,
             reimbursementMemberId,
             isPaid,
+            invoicePayeeName: isPaid ? null : invoicePayeeName,
             fileUrl,
             fileName,
             fileMime,
@@ -228,6 +230,7 @@ export async function PATCH(
             reimbursementPersonId?: unknown;
             reimbursementMemberId?: unknown;
             isPaid?: unknown;
+            invoicePayeeName?: unknown;
         };
 
         const expenseId = Number(body.expenseId);
@@ -263,6 +266,9 @@ export async function PATCH(
             ? ""
             : String(body.reimbursementMemberId).trim();
         const isPaid = body.isPaid === undefined ? true : body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
+        const invoicePayeeName = body.invoicePayeeName !== undefined && body.invoicePayeeName !== null
+            ? String(body.invoicePayeeName).trim() || null
+            : null;
 
         const amount = parseFloat(amountStr);
         if (isNaN(amount) || amount <= 0) {
@@ -287,6 +293,7 @@ export async function PATCH(
                 reimbursementPersonId: reimbursement.value.reimbursementPersonId,
                 reimbursementMemberId: reimbursement.value.reimbursementMemberId,
                 isPaid,
+                invoicePayeeName: isPaid ? null : invoicePayeeName,
             })
             .where(eq(eventExpenses.id, expenseId));
 

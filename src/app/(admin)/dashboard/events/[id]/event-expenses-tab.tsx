@@ -5,7 +5,7 @@ import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { Paperclip, Pencil, RotateCw, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert, Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
+
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
 import type { EventExpenseRow } from "@/lib/actions/event-expenses";
@@ -39,6 +39,8 @@ function isImage(mime: string | null) {
 // ── Gemini analysis result type ───────────────────────────────────────────────
 
 type ExpenseAnalysis = {
+    document_type: "receipt" | "invoice" | null;
+    payee_name: string | null;
     merchant: string;
     date: string | null;
     total_amount: number | null;
@@ -85,6 +87,22 @@ function AnalysisCard({ analysis }: { analysis: ExpenseAnalysis }) {
             </div>
 
             <div className="px-4 py-3 space-y-3">
+                {/* Typ dokladu + příjemce faktury */}
+                <div className="flex flex-wrap gap-2 items-center">
+                    {analysis.document_type === "invoice" ? (
+                        <span className="text-[11px] font-semibold uppercase tracking-wide rounded px-2 py-0.5 border text-orange-700 bg-orange-50 border-orange-200">
+                            Faktura
+                        </span>
+                    ) : analysis.document_type === "receipt" ? (
+                        <span className="text-[11px] font-semibold uppercase tracking-wide rounded px-2 py-0.5 border text-green-700 bg-green-50 border-green-200">
+                            Účtenka
+                        </span>
+                    ) : null}
+                    {analysis.payee_name && (
+                        <span className="text-xs text-gray-700 font-medium">{analysis.payee_name}</span>
+                    )}
+                </div>
+
                 {/* Obchodník + datum */}
                 <div className="flex flex-wrap gap-x-6 gap-y-1">
                     <div>
@@ -734,6 +752,7 @@ function AddExpenseForm({
     const [purposeText, setPurposeText] = useState("");
     const [reimbursementPersonId, setReimbursementPersonId] = useState("");
     const [isPaid, setIsPaid] = useState(true);
+    const [invoicePayeeName, setInvoicePayeeName] = useState("");
     const fileInputRef   = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const purposeRef     = useRef<HTMLInputElement>(null);
@@ -742,7 +761,7 @@ function AddExpenseForm({
     function resetToIdle() {
         setState({ tag: "idle" });
         setError(null);
-        setAmount(""); setCategory("501/004"); setPurposeText(""); setReimbursementPersonId(""); setIsPaid(true);
+        setAmount(""); setCategory("501/004"); setPurposeText(""); setReimbursementPersonId(""); setIsPaid(true); setInvoicePayeeName("");
         if (fileInputRef.current)   fileInputRef.current.value   = "";
         if (cameraInputRef.current) cameraInputRef.current.value = "";
     }
@@ -765,6 +784,10 @@ function AddExpenseForm({
             const cat = analysisData.account_code ?? "501/004";
             setAmount(amt);
             setCategory(cat);
+            if (analysisData.document_type === "invoice") {
+                setIsPaid(false);
+                setInvoicePayeeName(analysisData.payee_name ?? "");
+            }
 
             if (abandonRef.current) {
                 // User clicked "Nahrát další" during analysis — auto-save as unconfirmed in background
@@ -847,6 +870,7 @@ function AddExpenseForm({
             fd.append("purposeText", purposeText.trim());
             fd.append("purposeCategory", category);
             fd.append("isPaid", String(isPaid));
+            if (!isPaid && invoicePayeeName.trim()) fd.append("invoicePayeeName", invoicePayeeName.trim());
             if (isPaid && reimbursementPersonId) fd.append("reimbursementPersonId", reimbursementPersonId);
             fd.append("file", savedFile);
 
@@ -957,24 +981,15 @@ function AddExpenseForm({
                         />
                     </div>
 
-                    <div className="flex items-start gap-2.5 rounded-lg border bg-gray-50 px-3 py-2.5">
-                        <Checkbox
-                            id="addIsPaid"
-                            checked={isPaid}
-                            onCheckedChange={(v) => setIsPaid(v === true)}
-                            disabled={isUploading}
-                            className="mt-0.5"
-                        />
-                        <div>
-                            <label htmlFor="addIsPaid" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
-                                Doklad byl zaplacen (k proplacení osobě)
-                            </label>
-                            {!isPaid && (
-                                <p className="text-xs text-amber-700 mt-0.5">
-                                    Faktura čeká na uhrazení — pokyn k úhradě bude odeslán hospodáři TJ.
-                                </p>
-                            )}
-                        </div>
+                    <div className="flex rounded-lg border overflow-hidden text-sm">
+                        <button type="button" onClick={() => setIsPaid(true)} disabled={isUploading}
+                            className={`flex-1 px-3 py-2 transition-colors ${isPaid ? "bg-gray-800 text-white font-medium" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                            Účtenka (zaplacená)
+                        </button>
+                        <button type="button" onClick={() => setIsPaid(false)} disabled={isUploading}
+                            className={`flex-1 px-3 py-2 border-l transition-colors ${!isPaid ? "bg-orange-600 text-white font-medium" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                            Faktura (k proplacení)
+                        </button>
                     </div>
 
                     {isPaid && (
@@ -986,6 +1001,17 @@ function AddExpenseForm({
                             onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
                             onPersonCreated={onPersonCreated}
                         />
+                    )}
+                    {!isPaid && (
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Příjemce faktury</label>
+                            <input type="text" placeholder="Název firmy nebo osoby z faktury"
+                                value={invoicePayeeName}
+                                onChange={e => setInvoicePayeeName(e.target.value)}
+                                disabled={isUploading}
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                        </div>
                     )}
 
                     {error && <p className="text-xs text-red-500">{error}</p>}
@@ -1065,6 +1091,7 @@ function DraftProcessDialog({
     const [purposeCategory, setPurposeCategory] = useState<ExpenseCategory>("501/004");
     const [reimbursementPersonId, setReimbursementPersonId] = useState("");
     const [isPaid, setIsPaid] = useState(expense.isPaid);
+    const [invoicePayeeName, setInvoicePayeeName] = useState(expense.invoicePayeeName ?? "");
     const [analyzing, setAnalyzing] = useState(false);
     const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
     const [saving, setSaving] = useState(false);
@@ -1079,6 +1106,7 @@ function DraftProcessDialog({
         setPurposeCategory(expense.purposeCategory ?? "501/004");
         setReimbursementPersonId(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
         setIsPaid(expense.isPaid);
+        setInvoicePayeeName(expense.invoicePayeeName ?? "");
         setAnalysis(null); setError(null);
     }, [open, expense]);
 
@@ -1103,6 +1131,10 @@ function DraftProcessDialog({
                 setAmount(String(data.total_amount).replace(".", ","));
             }
             if (data.account_code) setPurposeCategory(data.account_code);
+            if (data.document_type === "invoice") {
+                setIsPaid(false);
+                if (data.payee_name) setInvoicePayeeName(data.payee_name);
+            }
         } catch (err) {
             setError(err instanceof Error ? err.message : "Analýza selhala");
         } finally {
@@ -1128,6 +1160,7 @@ function DraftProcessDialog({
                     purposeCategory,
                     isPaid,
                     reimbursementPersonId: isPaid ? (reimbursementPersonId || null) : null,
+                    invoicePayeeName: !isPaid ? (invoicePayeeName.trim() || null) : null,
                 }),
             });
             const payload = await response.json() as { error?: string };
@@ -1224,24 +1257,15 @@ function DraftProcessDialog({
                                 value={purposeText} onChange={e => setPurposeText(e.target.value)}
                                 className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring" />
                         </div>
-                        <div className="flex items-start gap-2.5 rounded-lg border bg-gray-50 px-3 py-2.5">
-                            <Checkbox
-                                id="draftIsPaid"
-                                checked={isPaid}
-                                onCheckedChange={(v) => setIsPaid(v === true)}
-                                disabled={saving}
-                                className="mt-0.5"
-                            />
-                            <div>
-                                <label htmlFor="draftIsPaid" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
-                                    Doklad byl zaplacen (k proplacení osobě)
-                                </label>
-                                {!isPaid && (
-                                    <p className="text-xs text-amber-700 mt-0.5">
-                                        Faktura čeká na uhrazení — pokyn k úhradě bude odeslán hospodáři TJ.
-                                    </p>
-                                )}
-                            </div>
+                        <div className="flex rounded-lg border overflow-hidden text-sm">
+                            <button type="button" onClick={() => setIsPaid(true)} disabled={saving}
+                                className={`flex-1 px-3 py-2 transition-colors ${isPaid ? "bg-gray-800 text-white font-medium" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                                Účtenka (zaplacená)
+                            </button>
+                            <button type="button" onClick={() => setIsPaid(false)} disabled={saving}
+                                className={`flex-1 px-3 py-2 border-l transition-colors ${!isPaid ? "bg-orange-600 text-white font-medium" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                                Faktura (k proplacení)
+                            </button>
                         </div>
                         {isPaid && (
                             <PersonAutocomplete
@@ -1252,6 +1276,17 @@ function DraftProcessDialog({
                                 onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
                                 onPersonCreated={onPersonCreated}
                             />
+                        )}
+                        {!isPaid && (
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-gray-500">Příjemce faktury</label>
+                                <input type="text" placeholder="Název firmy nebo osoby z faktury"
+                                    value={invoicePayeeName}
+                                    onChange={e => setInvoicePayeeName(e.target.value)}
+                                    disabled={saving}
+                                    className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                            </div>
                         )}
                         {error && <p className="text-sm text-red-500">{error}</p>}
                         <div className="flex justify-end gap-2">
@@ -1399,6 +1434,7 @@ function ExpenseEditDialog({
     const [purposeCategory, setPurposeCategory] = useState<ExpenseCategory>(expense.purposeCategory ?? "501/004");
     const [reimbursementPersonId, setReimbursementPersonId] = useState(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
     const [isPaid, setIsPaid] = useState(expense.isPaid);
+    const [invoicePayeeName, setInvoicePayeeName] = useState(expense.invoicePayeeName ?? "");
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
@@ -1409,6 +1445,7 @@ function ExpenseEditDialog({
         setPurposeCategory(expense.purposeCategory ?? "501/004");
         setReimbursementPersonId(expense.reimbursementPersonId ? String(expense.reimbursementPersonId) : "");
         setIsPaid(expense.isPaid);
+        setInvoicePayeeName(expense.invoicePayeeName ?? "");
         setError(null);
     }, [open, expense]);
 
@@ -1432,6 +1469,7 @@ function ExpenseEditDialog({
                     purposeCategory,
                     isPaid,
                     reimbursementPersonId: isPaid ? (reimbursementPersonId || null) : null,
+                    invoicePayeeName: !isPaid ? (invoicePayeeName.trim() || null) : null,
                 }),
             });
 
@@ -1493,24 +1531,15 @@ function ExpenseEditDialog({
                         />
                     </div>
 
-                    <div className="flex items-start gap-2.5 rounded-lg border bg-gray-50 px-3 py-2.5">
-                        <Checkbox
-                            id="editIsPaid"
-                            checked={isPaid}
-                            onCheckedChange={(v) => setIsPaid(v === true)}
-                            disabled={saving}
-                            className="mt-0.5"
-                        />
-                        <div>
-                            <label htmlFor="editIsPaid" className="text-sm font-medium text-gray-700 cursor-pointer select-none">
-                                Doklad byl zaplacen (k proplacení osobě)
-                            </label>
-                            {!isPaid && (
-                                <p className="text-xs text-amber-700 mt-0.5">
-                                    Faktura čeká na uhrazení — pokyn k úhradě bude odeslán hospodáři TJ.
-                                </p>
-                            )}
-                        </div>
+                    <div className="flex rounded-lg border overflow-hidden text-sm">
+                        <button type="button" onClick={() => setIsPaid(true)} disabled={saving}
+                            className={`flex-1 px-3 py-2 transition-colors ${isPaid ? "bg-gray-800 text-white font-medium" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                            Účtenka (zaplacená)
+                        </button>
+                        <button type="button" onClick={() => setIsPaid(false)} disabled={saving}
+                            className={`flex-1 px-3 py-2 border-l transition-colors ${!isPaid ? "bg-orange-600 text-white font-medium" : "bg-white text-gray-600 hover:bg-gray-50"}`}>
+                            Faktura (k proplacení)
+                        </button>
                     </div>
 
                     {isPaid && (
@@ -1522,6 +1551,17 @@ function ExpenseEditDialog({
                             onChange={person => setReimbursementPersonId(person ? String(person.id) : "")}
                             onPersonCreated={onPersonCreated}
                         />
+                    )}
+                    {!isPaid && (
+                        <div className="space-y-1.5">
+                            <label className="text-xs text-gray-500">Příjemce faktury</label>
+                            <input type="text" placeholder="Název firmy nebo osoby z faktury"
+                                value={invoicePayeeName}
+                                onChange={e => setInvoicePayeeName(e.target.value)}
+                                disabled={saving}
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                        </div>
                     )}
 
                     {expense.fileUrl && (
@@ -1696,6 +1736,9 @@ function ExpenseItem({
                         <span className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-px border text-orange-700 bg-orange-50 border-orange-200">
                             Faktura k úhradě
                         </span>
+                        {expense.invoicePayeeName && (
+                            <span className="text-xs text-gray-700">{expense.invoicePayeeName}</span>
+                        )}
                         {instrSentAt ? (
                             <span className="text-[10px] text-green-700 flex items-center gap-1">
                                 <Check size={10} />

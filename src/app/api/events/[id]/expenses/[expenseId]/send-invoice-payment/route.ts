@@ -65,6 +65,7 @@ export async function POST(
                 isPaid: eventExpenses.isPaid,
                 amount: eventExpenses.amount,
                 purposeText: eventExpenses.purposeText,
+                invoicePayeeName: eventExpenses.invoicePayeeName,
                 fileUrl: eventExpenses.fileUrl,
                 fileName: eventExpenses.fileName,
             })
@@ -103,6 +104,7 @@ export async function POST(
 
         const { subject, html } = buildInvoicePaymentInstructionEmail({
             eventName: event.name,
+            payeeName: expense.invoicePayeeName ?? null,
             amount: expense.amount ? Number(expense.amount) : null,
             purposeText: expense.purposeText,
             fileName: expense.fileName,

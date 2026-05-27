@@ -35,9 +35,21 @@ Pravidla pro zpracování:
 1. Pokud účtenka obsahuje položky z více kategorií, vyber kategorii podle položky s NEJVYŠŠÍ FINANČNÍ HODNOTOU.
 2. Účtenky za benzín/naftu, vlak, autobus a hotely zařaď VŽDY do "518/009".
 3. Pokud si nejsi absolutně jistý, přikloň se u fyzických věcí k "501/004" a u služeb k "518/009".
-4. Výstup musí být striktně ve formátu JSON, nic jiného nepiš.`;
+4. Výstup musí být striktně ve formátu JSON, nic jiného nepiš.
+
+Rozlišení typu dokladu (document_type):
+- "invoice" (FAKTURA): Formální obchodní dokument s IČO nebo DIČ dodavatele, číslem faktury, datem splatnosti a bankovním spojením. Typicky vystavovaný firmou nebo OSVČ.
+- "receipt" (ÚČTENKA): Pokladní doklad z pokladního systému, paragon, stvrzenka, palubní lístek, čestné prohlášení. Nemá číslo faktury ani IČO dodavatele.
+
+Pro faktury (invoice) vyplň payee_name jako název firmy nebo osoby uvedené v hlavičce faktury jako dodavatel/vystavovatel. Pro účtenky nech payee_name jako null.`;
 
 const resultSchema = z.object({
+    document_type: z.enum(["receipt", "invoice"]).describe(
+        "Typ dokladu: 'invoice' = faktura s IČO/DIČ dodavatele a číslem faktury; 'receipt' = účtenka, pokladní doklad nebo čestné prohlášení"
+    ),
+    payee_name:    z.string().nullable().describe(
+        "Pouze pro faktury: název dodavatele/příjemce tak, jak je uveden na faktuře (firma nebo fyzická osoba). Pro účtenky null."
+    ),
     merchant:      z.string().describe("Název obchodníka nebo dodavatele"),
     date:          z.string().nullable().describe("Datum dokladu YYYY-MM-DD, null pokud nečitelné"),
     total_amount:  z.number().nullable().describe("Celková částka s DPH jako číslo"),
