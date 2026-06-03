@@ -6,6 +6,7 @@ import {
     loadContributionMemberOptions,
     loadContributionPeriods,
     loadContributionRows,
+    loadMembersWithoutContrib,
 } from "./data";
 
 export type {
@@ -45,8 +46,11 @@ export default async function ContributionsPage({
         return <NoPeriodView year={yearMode} defaults={prepareDefaults} />;
     }
 
-    const rows = await loadContributionRows(yearMode);
-    const prepareDefaults = period ? await getDefaultsFromPrevYear(period.year) : {};
+    const [rows, prepareDefaults, membersWithoutContrib] = await Promise.all([
+        loadContributionRows(yearMode),
+        period ? getDefaultsFromPrevYear(period.year) : Promise.resolve({}),
+        period ? loadMembersWithoutContrib(period.year, period.id) : Promise.resolve([]),
+    ]);
 
     const initialMemberParam = typeof params.member === "string" ? Number(params.member) : NaN;
 
@@ -54,6 +58,7 @@ export default async function ContributionsPage({
         <ContributionsOverviewClient
             period={period}
             rows={rows}
+            membersWithoutContrib={membersWithoutContrib}
             memberOptions={memberOptions}
             yearMode={yearMode}
             selectedYear={selectedYear}

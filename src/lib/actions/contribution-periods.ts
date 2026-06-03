@@ -782,3 +782,127 @@ export async function deleteContribPrescription(
         return { error: "Chyba při mazání" };
     }
 }
+
+// ── Vygenerovat předpis pro jednoho člena ─────────────────────────────────────
+
+/**
+ * Vygeneruje předpis pro jednoho člena podle aktuálního nastavení období.
+ * Neupravuje nastavení období (na rozdíl od preparePrescriptions).
+ */
+export async function generateSinglePrescription(
+    memberId: number,
+    periodId: number,
+): Promise<{ error: string } | { success: true }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [period] = await db
+            .select()
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, periodId));
+
+        if (!period) return { error: "Období nenalezeno" };
+
+        const [existing] = await db
+            .select({ id: memberContributions.id })
+            .from(memberContributions)
+            .where(and(
+                eq(memberContributions.memberId, memberId),
+                eq(memberContributions.periodId, periodId),
+            ));
+
+        if (existing) return { error: "Předpis pro tohoto člena již existuje" };
+
+        const { year } = period;
+        const yearStart = `${year}-01-01`;
+        const yearEnd   = `${year}-12-31`;
+
+        const [member] = await db
+            .select({ isCommitteeMember: members.isCommitteeMember, isTomLeader: members.isTomLeader })
+            .from(members)
+            .where(eq(members.id, memberId));
+
+        if (!member) return { error: "Člen nenalezen" };
+
+        const boatRows = await db
+            .select({ id: boats.id })
+            .from(boats)
+            .where(and(
+                eq(boats.ownerId, memberId),
+                eq(boats.isPresent, true),
+                or(isNull(boats.storedFrom), lte(boats.storedFrom, yearEnd)),
+                or(isNull(boats.storedTo), sql`${boats.storedTo} >= ${yearStart}`),
+            ));
+        const boatCount = boatRows.length;
+
+        const brigadeParticipants = await getBrigadeMemberIdsByYear(year - 1);
+
+        const [prevPeriod] = await db
+            .select({ id: contributionPeriods.id })
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.year, year - 1));
+
+        const prevContrib = prevPeriod
+            ? await db
+                .select({
+                    discountIndividual:           memberContributions.discountIndividual,
+                    discountIndividualNote:        memberContributions.discountIndividualNote,
+                    discountIndividualValidUntil:  memberContributions.discountIndividualValidUntil,
+                })
+                .from(memberContributions)
+                .where(and(
+                    eq(memberContributions.periodId, prevPeriod.id),
+                    eq(memberContributions.memberId, memberId),
+                ))
+                .then(rows => rows[0] ?? null)
+            : null;
+
+        const discountCommittee    = member.isCommitteeMember ? -period.discountCommittee : null;
+        const discountTom          = member.isTomLeader       ? -period.discountTom       : null;
+        const effectiveDiscountTom = discountCommittee ? null : discountTom;
+
+        const hasValidIndividual =
+            prevContrib?.discountIndividual != null &&
+            (prevContrib.discountIndividualValidUntil ?? 0) >= year;
+        const discountIndividual           = hasValidIndividual ? prevContrib!.discountIndividual           : null;
+        const discountIndividualNote       = hasValidIndividual ? prevContrib!.discountIndividualNote       : null;
+        const discountIndividualValidUntil = hasValidIndividual ? prevContrib!.discountIndividualValidUntil : null;
+
+        const amountBoat1      = boatCount >= 1 ? period.amountBoat1 : 0;
+        const amountBoat2      = boatCount >= 2 ? period.amountBoat2 : 0;
+        const amountBoat3      = boatCount >= 3 ? period.amountBoat2 : 0;
+        const brigadeSurcharge = brigadeParticipants.has(memberId) ? 0 : period.brigadeSurcharge;
+
+        const amountTotal =
+            period.amountBase +
+            amountBoat1 + amountBoat2 + amountBoat3 +
+            (discountCommittee     ?? 0) +
+            (effectiveDiscountTom  ?? 0) +
+            (discountIndividual    ?? 0) +
+            brigadeSurcharge;
+
+        await db.insert(memberContributions).values({
+            memberId,
+            periodId,
+            amountBase:                  period.amountBase,
+            amountBoat1:                 amountBoat1 || null,
+            amountBoat2:                 amountBoat2 || null,
+            amountBoat3:                 amountBoat3 || null,
+            discountCommittee,
+            discountTom,
+            discountIndividual,
+            discountIndividualNote,
+            discountIndividualValidUntil,
+            brigadeSurcharge:            brigadeSurcharge || null,
+            amountTotal,
+        });
+
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[generateSinglePrescription]", e);
+        return { error: "Chyba při generování předpisu" };
+    }
+}

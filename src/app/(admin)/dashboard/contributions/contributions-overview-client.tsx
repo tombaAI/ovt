@@ -26,8 +26,9 @@ import {
 import { PrepareDialog } from "./prepare-dialog";
 import { EditPrescriptionDialog } from "./edit-prescription-dialog";
 import { SendEmailDialog } from "./send-email-dialog";
+import { generateSinglePrescription } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
-import type { ContribRow, MemberOption, PeriodDetail } from "./data";
+import type { ContribRow, MemberOption, MemberWithoutContrib, PeriodDetail } from "./data";
 
 type FilterKey = "all" | "issues" | "unpaid" | "todo";
 type PaymentStateFilter = "all" | "unpaid" | "underpaid" | "overpaid" | "paid";
@@ -182,6 +183,7 @@ function compareDate(a: string | null, b: string | null, dir: SortDir): number {
 interface Props {
     period: PeriodDetail | null;
     rows: ContribRow[];
+    membersWithoutContrib: MemberWithoutContrib[];
     memberOptions: MemberOption[];
     yearMode: number | "all";
     selectedYear: number;
@@ -200,6 +202,7 @@ interface Props {
 export function ContributionsOverviewClient({
     period,
     rows,
+    membersWithoutContrib,
     memberOptions,
     yearMode,
     selectedYear,
@@ -246,6 +249,7 @@ export function ContributionsOverviewClient({
     const [editOpen, setEditOpen] = useState(false);
     const [reminderOpen, setReminderOpen] = useState(false);
     const [memberSearch, setMemberSearch] = useState("");
+    const [generatingId, setGeneratingId] = useState<number | null>(null);
 
     const updateUrl = useCallback((updates: Record<string, string | null>) => {
         const url = new URL(window.location.href);
@@ -353,6 +357,35 @@ export function ContributionsOverviewClient({
             return compareText(left.firstName, right.firstName, "asc");
         });
     }, [filter, memberScopedRows, paymentState, process, q, selectedBadgeFilters, sort, sortDir, yearMode]);
+
+    const showNoPrescription = filter === "all" && paymentState === "all" && process === "all" && selectedBadgeFilters.length === 0;
+
+    const filteredNoPrescription = useMemo(() => {
+        if (!showNoPrescription || yearMode === "all" || !period) return [];
+        const query = q.trim().toLowerCase();
+        return membersWithoutContrib.filter(m => {
+            if (memberId && m.memberId !== memberId) return false;
+            if (!query) return true;
+            const fullName = `${m.firstName} ${m.lastName}`.toLowerCase();
+            const nickname = m.nickname?.toLowerCase() ?? "";
+            return fullName.includes(query) || nickname.includes(query);
+        });
+    }, [memberId, membersWithoutContrib, period, q, showNoPrescription, yearMode]);
+
+    async function handleGenerate(targetMemberId: number) {
+        if (!period) return;
+        setGeneratingId(targetMemberId);
+        try {
+            const result = await generateSinglePrescription(targetMemberId, period.id);
+            if ("error" in result) {
+                alert(result.error);
+            } else {
+                router.refresh();
+            }
+        } finally {
+            setGeneratingId(null);
+        }
+    }
 
     const filterMenuLabel = useMemo(() => {
         const labels: string[] = [];
@@ -899,6 +932,36 @@ export function ContributionsOverviewClient({
                                 </TableRow>
                             );
                         })}
+                        {filteredNoPrescription.map(m => (
+                            <TableRow key={`noprescription-${m.memberId}`} className="bg-gray-50/40">
+                                <TableCell className="font-medium text-gray-500">
+                                    <div className="flex items-center gap-1">
+                                        <span>{m.firstName}</span>
+                                        <span>{m.lastName}</span>
+                                        {m.nickname && <span className="text-gray-400">({m.nickname})</span>}
+                                    </div>
+                                </TableCell>
+                                <TableCell>
+                                    <span className="inline-flex items-center rounded px-1.5 py-0.5 text-xs border border-dashed border-gray-300 text-gray-400">
+                                        Bez předpisu
+                                    </span>
+                                </TableCell>
+                                <TableCell className="text-right font-mono text-sm text-gray-300">—</TableCell>
+                                <TableCell className="text-right font-mono text-sm text-gray-300">—</TableCell>
+                                <TableCell className="text-right font-mono text-sm text-gray-300">—</TableCell>
+                                <TableCell className="text-sm text-gray-300">—</TableCell>
+                                <TableCell>
+                                    <button
+                                        type="button"
+                                        disabled={generatingId === m.memberId}
+                                        onClick={() => handleGenerate(m.memberId)}
+                                        className="inline-flex items-center rounded-full border border-[#327600]/30 bg-[#327600]/5 px-2.5 py-1 text-xs font-medium text-[#327600] transition-colors hover:bg-[#327600]/10 disabled:opacity-50"
+                                    >
+                                        {generatingId === m.memberId ? "Generuji…" : "Generovat"}
+                                    </button>
+                                </TableCell>
+                            </TableRow>
+                        ))}
                     </TableBody>
                 </Table>
             </div>
@@ -954,6 +1017,25 @@ export function ContributionsOverviewClient({
                         </button>
                     );
                 })}
+                {filteredNoPrescription.map(m => (
+                    <div
+                        key={`noprescription-${m.memberId}`}
+                        className="flex items-center justify-between rounded-xl border border-dashed border-gray-200 bg-gray-50 p-3.5"
+                    >
+                        <p className="text-sm font-medium text-gray-500">
+                            {m.firstName} {m.lastName}
+                            {m.nickname && <span className="text-gray-400"> ({m.nickname})</span>}
+                        </p>
+                        <button
+                            type="button"
+                            disabled={generatingId === m.memberId}
+                            onClick={() => handleGenerate(m.memberId)}
+                            className="inline-flex items-center rounded-full border border-[#327600]/30 bg-[#327600]/5 px-2.5 py-1 text-xs font-medium text-[#327600] transition-colors hover:bg-[#327600]/10 disabled:opacity-50"
+                        >
+                            {generatingId === m.memberId ? "Generuji…" : "Generovat"}
+                        </button>
+                    </div>
+                ))}
             </div>
 
             {period === null && yearMode !== "all" ? null : (

@@ -589,6 +589,7 @@ export type AdminRegistrationInput = {
     phone?: string;
     firstName: string;
     lastName: string;
+    note?: string | null;
     participants: {
         fullName: string;
         isPrimary: boolean;
@@ -621,6 +622,7 @@ export async function addAdminEventRegistration(
                 phone: input.phone ?? null,
                 firstName: input.firstName,
                 lastName: input.lastName,
+                note: input.note ?? null,
                 publicToken,
                 personsCount: input.participants.length,
             }).returning({ id: eventRegistrations.id });
@@ -652,7 +654,7 @@ export async function addAdminEventRegistration(
 
 export async function updateAdminRegistration(
     registrationId: number,
-    input: Partial<Pick<AdminRegistrationInput, "email" | "phone" | "firstName" | "lastName">>,
+    input: Partial<Pick<AdminRegistrationInput, "email" | "phone" | "firstName" | "lastName"> & { note: string | null }>,
 ): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
@@ -664,6 +666,29 @@ export async function updateAdminRegistration(
         return { success: true };
     } catch {
         return { error: "Nepodařilo se upravit přihlášku" };
+    }
+}
+
+export async function updateParticipantFullName(
+    participantId: number,
+    fullName: string,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+        const [pRow] = await db
+            .select({ registrationId: eventRegistrationParticipants.registrationId })
+            .from(eventRegistrationParticipants)
+            .where(eq(eventRegistrationParticipants.id, participantId));
+        if (!pRow) return { error: "Účastník nenalezen" };
+        const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
+        if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+        await db.update(eventRegistrationParticipants)
+            .set({ fullName: fullName.trim() })
+            .where(eq(eventRegistrationParticipants.id, participantId));
+        if (regRow) revalidatePath(`/dashboard/events/${regRow.eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Nepodařilo se přejmenovat účastníka" };
     }
 }
 

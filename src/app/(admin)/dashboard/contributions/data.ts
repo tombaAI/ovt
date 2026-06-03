@@ -6,7 +6,7 @@ import {
     paymentAllocations,
     paymentLedger,
 } from "@/db/schema";
-import { and, asc, desc, eq, inArray } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, isNull, lte, notInArray, or, sql } from "drizzle-orm";
 
 export type PeriodTab = {
     id: number;
@@ -226,6 +226,46 @@ export async function loadContributionRows(yearMode: number | "all"): Promise<Co
 
     const paymentRows = await loadConfirmedPaymentsByContribIds(baseRows.map(row => row.contribId));
     return attachPayments(baseRows, paymentRows);
+}
+
+export type MemberWithoutContrib = {
+    memberId: number;
+    firstName: string;
+    lastName: string;
+    nickname: string | null;
+};
+
+export async function loadMembersWithoutContrib(year: number, periodId: number): Promise<MemberWithoutContrib[]> {
+    const db = getDb();
+    const yearStart = `${year}-01-01`;
+    const yearEnd   = `${year}-12-31`;
+
+    const existingRows = await db
+        .select({ memberId: memberContributions.memberId })
+        .from(memberContributions)
+        .where(eq(memberContributions.periodId, periodId));
+
+    const existingIds = existingRows.map(r => r.memberId);
+
+    const activeCondition = and(
+        lte(members.memberFrom, yearEnd),
+        or(isNull(members.memberTo), sql`${members.memberTo} >= ${yearStart}`),
+    );
+
+    const whereClause = existingIds.length > 0
+        ? and(activeCondition, notInArray(members.id, existingIds))
+        : activeCondition;
+
+    return db
+        .select({
+            memberId: members.id,
+            firstName: members.firstName,
+            lastName: members.lastName,
+            nickname: members.nickname,
+        })
+        .from(members)
+        .where(whereClause)
+        .orderBy(asc(members.lastName), asc(members.firstName));
 }
 
 export async function loadContributionDetail(contribId: number): Promise<{ row: ContribRow; period: PeriodDetail } | null> {

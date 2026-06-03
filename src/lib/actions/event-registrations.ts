@@ -14,6 +14,7 @@ import {
     type EventPaymentPrescriptionStatus,
 } from "@/db/schema";
 import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
 
@@ -1156,6 +1157,7 @@ export type EventRegistrationAdminRow = {
     participants: ForeignWaterRegistrationParticipant[];
     participantNames: string[];
     transportInfo: string | null;
+    note: string | null;
     cancelledAt: Date | null;
     paymentId: number | null;
     paymentCode: number | null;
@@ -1173,6 +1175,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
     if (!session?.user?.email) throw new Error("Nepřihlášen");
 
     const db = getDb();
+    const depositPresc = alias(eventPaymentPrescriptions, "deposit_presc");
+    const settlementPresc = alias(eventPaymentPrescriptions, "settlement_presc");
     const rows = await db
         .select({
             registrationId: eventRegistrations.id,
@@ -1184,24 +1188,27 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             personsCount: eventRegistrations.personsCount,
             personsNames: eventRegistrations.personsNames,
             transportInfo: eventRegistrations.transportInfo,
+            note: eventRegistrations.note,
             cancelledAt: eventRegistrations.cancelledAt,
-            paymentId: eventPaymentPrescriptions.id,
-            paymentCode: eventPaymentPrescriptions.prescriptionCode,
-            paymentAccount: eventPaymentPrescriptions.bankAccount,
-            paymentVariableSymbol: eventPaymentPrescriptions.variableSymbol,
-            paymentAmount: eventPaymentPrescriptions.amount,
-            paymentMessageForRecipient: eventPaymentPrescriptions.messageForRecipient,
-            paymentStatus: eventPaymentPrescriptions.status,
-            matchedLedgerId: eventPaymentPrescriptions.matchedLedgerId,
+            // Deposit (záloha) má přednost před settlement — pokud neexistuje, použij settlement
+            paymentId: sql<number | null>`COALESCE(${depositPresc.id}, ${settlementPresc.id})`,
+            paymentCode: sql<number | null>`COALESCE(${depositPresc.prescriptionCode}, ${settlementPresc.prescriptionCode})`,
+            paymentAccount: sql<string | null>`COALESCE(${depositPresc.bankAccount}, ${settlementPresc.bankAccount})`,
+            paymentVariableSymbol: sql<string | null>`COALESCE(${depositPresc.variableSymbol}, ${settlementPresc.variableSymbol})`,
+            paymentAmount: sql<string | null>`COALESCE(${depositPresc.amount}, ${settlementPresc.amount})`,
+            paymentMessageForRecipient: sql<string | null>`COALESCE(${depositPresc.messageForRecipient}, ${settlementPresc.messageForRecipient})`,
+            paymentStatus: sql<string | null>`COALESCE(${depositPresc.status}, ${settlementPresc.status})`,
+            matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
         })
         .from(eventRegistrations)
-        .leftJoin(
-            eventPaymentPrescriptions,
-            and(
-                eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
-                eq(eventPaymentPrescriptions.type, "deposit"),
-            ),
-        )
+        .leftJoin(depositPresc, and(
+            eq(depositPresc.registrationId, eventRegistrations.id),
+            eq(depositPresc.type, "deposit"),
+        ))
+        .leftJoin(settlementPresc, and(
+            eq(settlementPresc.registrationId, eventRegistrations.id),
+            eq(settlementPresc.type, "settlement"),
+        ))
         .where(eq(eventRegistrations.eventId, eventId))
         .orderBy(desc(eventRegistrations.createdAt));
 
@@ -1267,6 +1274,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         participants,
         participantNames,
         transportInfo: row.transportInfo,
+        note: row.note,
         cancelledAt: row.cancelledAt as unknown as Date | null,
         paymentId: row.paymentId,
         paymentCode: row.paymentCode,
@@ -1275,7 +1283,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         paymentVariableSymbol: row.paymentVariableSymbol,
         paymentAmount: row.paymentAmount ? Number(row.paymentAmount) : 0,
         paymentMessageForRecipient: row.paymentMessageForRecipient,
-        paymentStatus: row.paymentStatus,
+        paymentStatus: row.paymentStatus as EventPaymentPrescriptionStatus | null,
         matchedLedgerId: row.matchedLedgerId,
         };
     });

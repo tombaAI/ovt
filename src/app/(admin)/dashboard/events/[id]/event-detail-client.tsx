@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -26,9 +26,9 @@ import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/ac
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
-import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog } from "./admin-registration-dialog";
+import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
-import { removeParticipantFromRegistration, cancelAdminRegistration } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration, sendSingleRegistrationEmail } from "@/lib/actions/event-settlement";
 
 interface Props {
     event: EventRow;
@@ -660,11 +660,45 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
 
 // ── Karta přihlášky ───────────────────────────────────────────────────────────
 
-function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean }) {
+function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventName: string): string {
+    const [accountNumber, bankCode] = bankAccount.split("/");
+    const message = encodeURIComponent(`Platba za akci ${eventName}`);
+    return (
+        `https://api.paylibo.com/paylibo/generator/czech/image` +
+        `?accountNumber=${accountNumber}` +
+        `&bankCode=${bankCode}` +
+        `&amount=${amount}` +
+        `&currency=CZK` +
+        `&vs=${vs}` +
+        `&message=${message}` +
+        `&size=200`
+    );
+}
+
+function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string }) {
     const [removingId, setRemovingId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
+    const [editOpen, setEditOpen] = useState(false);
     const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
+    const [showQr, setShowQr] = useState(false);
+    const [sendingEmail, setSendingEmail] = useState(false);
+    const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
+
+    const hasPaymentDetails = !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
+
+    async function handleSendEmail() {
+        setSendingEmail(true);
+        setEmailFeedback(null);
+        const res = await sendSingleRegistrationEmail(r.registrationId);
+        setSendingEmail(false);
+        if ("error" in res) {
+            setEmailFeedback(`Chyba: ${res.error}`);
+        } else {
+            setEmailFeedback("E-mail odeslán.");
+            setTimeout(() => setEmailFeedback(null), 4000);
+        }
+    }
 
     const isCancelled = !!r.cancelledAt;
 
@@ -760,6 +794,74 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
                     </div>
                 )}
 
+                {r.note && (
+                    <div className="rounded-lg border border-sky-100 bg-sky-50/70 px-3 py-2">
+                        <p className="text-[11px] font-medium uppercase tracking-wide text-sky-700">Poznámka</p>
+                        <p className="mt-1 text-xs text-sky-900 whitespace-pre-wrap">{r.note}</p>
+                    </div>
+                )}
+
+                {hasPaymentDetails && (
+                    <div className="rounded-lg border border-slate-200">
+                        <button
+                            type="button"
+                            onClick={() => setShowQr((prev: boolean) => !prev)}
+                            className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 transition-colors rounded-lg"
+                        >
+                            <span className="flex items-center gap-1.5 font-medium">
+                                <QrCode size={12} /> Platební údaje
+                            </span>
+                            {showQr ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                        </button>
+                        {showQr && (
+                            <div className="px-3 pb-3 border-t border-slate-100">
+                                <div className="flex flex-col sm:flex-row gap-4 items-start pt-3">
+                                    {/* eslint-disable-next-line @next/next/no-img-element */}
+                                    <img
+                                        src={buildPayliboUrl(r.paymentAmount, r.paymentVariableSymbol!, r.paymentAccount!, eventName)}
+                                        alt="QR kód pro platbu"
+                                        width={140}
+                                        height={140}
+                                        className="border border-gray-200 rounded-lg p-1.5 shrink-0 bg-white"
+                                    />
+                                    <div className="space-y-2 text-xs min-w-0">
+                                        <div>
+                                            <p className="text-slate-400">Číslo účtu</p>
+                                            <p className="font-mono font-semibold text-slate-800">{r.paymentAccount}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-400">Variabilní symbol</p>
+                                            <p className="font-mono font-semibold text-slate-800">{r.paymentVariableSymbol}</p>
+                                        </div>
+                                        <div>
+                                            <p className="text-slate-400">Částka</p>
+                                            <p className="font-semibold text-[#327600]">{new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč</p>
+                                        </div>
+                                        {isPrescribed && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSendEmail}
+                                                    disabled={sendingEmail}
+                                                    className="flex items-center gap-1.5 mt-1 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-40 transition-colors"
+                                                >
+                                                    {sendingEmail
+                                                        ? <><Loader2 size={11} className="animate-spin" /> Odesílám…</>
+                                                        : <><Mail size={11} /> Odeslat e-mail s předpisem</>
+                                                    }
+                                                </button>
+                                                {emailFeedback && (
+                                                    <p className="text-xs text-emerald-600">{emailFeedback}</p>
+                                                )}
+                                            </>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+
                 <div className="space-y-2">
                     <p className="text-xs font-medium text-slate-500">Účastníci</p>
                     <div className="flex flex-wrap gap-1.5">
@@ -809,7 +911,12 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
                 </div>
 
                 {!isCancelled && !isPrescribed && (
-                    <div className="flex justify-end pt-1">
+                    <div className="flex justify-between items-center pt-1">
+                        <button onClick={() => setEditOpen(true)}
+                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                            <Pencil size={12} />
+                            Upravit
+                        </button>
                         <button onClick={handleCancel} disabled={cancelling}
                             className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
                             <Ban size={12} />
@@ -821,6 +928,18 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
 
             <RegistrationHistory registrationId={r.registrationId} />
 
+            <EditRegistrationDialog
+                registrationId={r.registrationId}
+                initialEmail={r.email}
+                initialPhone={r.phone ?? null}
+                initialNote={r.note}
+                participants={participants
+                    .filter(p => p.id !== undefined)
+                    .map(p => ({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null }))}
+                open={editOpen}
+                onClose={() => setEditOpen(false)}
+                onSaved={onRefresh}
+            />
             <AddParticipantDialog
                 registrationId={r.registrationId}
                 open={addParticipantOpen}
@@ -839,7 +958,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed }: { r: EventRegistration
     );
 }
 
-function RegistrationsTab({ eventId, billingStatus }: { eventId: number; billingStatus: string }) {
+function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: number; billingStatus: string; eventName: string }) {
     const [rows, setRows] = useState<EventRegistrationAdminRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -950,7 +1069,7 @@ function RegistrationsTab({ eventId, billingStatus }: { eventId: number; billing
 
             <div className="space-y-3">
                 {rows.map(r => (
-                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} />
+                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} />
                 ))}
             </div>
         </div>
@@ -1221,7 +1340,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
 
                     {/* ── Tab: Přihlášky ── */}
                     <TabsContent value="registrations" className="mt-0">
-                        <RegistrationsTab eventId={event.id} billingStatus={event.billingStatus} />
+                        <RegistrationsTab eventId={event.id} billingStatus={event.billingStatus} eventName={event.name} />
                     </TabsContent>
 
                     {/* ── Tab: Náklady ── */}
