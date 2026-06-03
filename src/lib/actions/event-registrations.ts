@@ -1201,7 +1201,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             eventPaymentPrescriptions,
             and(
                 eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
-                eq(eventPaymentPrescriptions.type, "deposit"),
+                eq(eventPaymentPrescriptions.type, "settlement"),
             ),
         )
         .where(eq(eventRegistrations.eventId, eventId))
