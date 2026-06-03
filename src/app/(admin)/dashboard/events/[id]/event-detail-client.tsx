@@ -685,7 +685,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
     const [sendingEmail, setSendingEmail] = useState(false);
     const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
 
-    const hasPaymentDetails = isPrescribed && !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
+    const hasPaymentDetails = !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
 
     async function handleSendEmail() {
         setSendingEmail(true);
@@ -837,19 +837,23 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                                             <p className="text-slate-400">Částka</p>
                                             <p className="font-semibold text-[#327600]">{new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč</p>
                                         </div>
-                                        <button
-                                            type="button"
-                                            onClick={handleSendEmail}
-                                            disabled={sendingEmail}
-                                            className="flex items-center gap-1.5 mt-1 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-40 transition-colors"
-                                        >
-                                            {sendingEmail
-                                                ? <><Loader2 size={11} className="animate-spin" /> Odesílám…</>
-                                                : <><Mail size={11} /> Odeslat e-mail s předpisem</>
-                                            }
-                                        </button>
-                                        {emailFeedback && (
-                                            <p className="text-xs text-emerald-600">{emailFeedback}</p>
+                                        {isPrescribed && (
+                                            <>
+                                                <button
+                                                    type="button"
+                                                    onClick={handleSendEmail}
+                                                    disabled={sendingEmail}
+                                                    className="flex items-center gap-1.5 mt-1 text-xs text-slate-500 hover:text-slate-800 disabled:opacity-40 transition-colors"
+                                                >
+                                                    {sendingEmail
+                                                        ? <><Loader2 size={11} className="animate-spin" /> Odesílám…</>
+                                                        : <><Mail size={11} /> Odeslat e-mail s předpisem</>
+                                                    }
+                                                </button>
+                                                {emailFeedback && (
+                                                    <p className="text-xs text-emerald-600">{emailFeedback}</p>
+                                                )}
+                                            </>
                                         )}
                                     </div>
                                 </div>
