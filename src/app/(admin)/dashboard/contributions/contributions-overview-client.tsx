@@ -26,7 +26,7 @@ import {
 import { PrepareDialog } from "./prepare-dialog";
 import { EditPrescriptionDialog } from "./edit-prescription-dialog";
 import { SendEmailDialog } from "./send-email-dialog";
-import { generateSinglePrescription } from "@/lib/actions/contribution-periods";
+import { generateSinglePrescription, generateMissingPrescriptions } from "@/lib/actions/contribution-periods";
 import type { PeriodFormData } from "@/lib/actions/contribution-periods";
 import type { ContribRow, MemberOption, MemberWithoutContrib, PeriodDetail } from "./data";
 
@@ -245,6 +245,7 @@ export function ContributionsOverviewClient({
         () => parseBadgeFilters(initialBadgeFilters)
     );
     const [prepareOpen, setPrepareOpen] = useState(false);
+    const [isGenerating, setIsGenerating] = useState(false);
     const [editRow, setEditRow] = useState<ContribRow | null>(null);
     const [editOpen, setEditOpen] = useState(false);
     const [reminderOpen, setReminderOpen] = useState(false);
@@ -384,6 +385,21 @@ export function ContributionsOverviewClient({
             }
         } finally {
             setGeneratingId(null);
+        }
+    }
+
+    async function handleGenerateAll() {
+        if (!period) return;
+        setIsGenerating(true);
+        try {
+            const result = await generateMissingPrescriptions(period.id);
+            if ("error" in result) {
+                alert(result.error);
+            } else {
+                router.refresh();
+            }
+        } finally {
+            setIsGenerating(false);
         }
     }
 
@@ -767,6 +783,17 @@ export function ContributionsOverviewClient({
                                     <Bell className="h-3.5 w-3.5" />
                                     Připomínka ({reminderRows.length})
                                 </Button>
+                                {period && (
+                                    <Button
+                                        variant="outline"
+                                        onClick={handleGenerateAll}
+                                        disabled={isGenerating || membersWithoutContrib.length === 0}
+                                        title={membersWithoutContrib.length === 0 ? "Všichni aktivní členové již mají předpis" : undefined}
+                                        className="h-8 text-sm"
+                                    >
+                                        {isGenerating ? "Generuji…" : `Generovat předpisy (${membersWithoutContrib.length})`}
+                                    </Button>
+                                )}
                                 {canPrepare && (
                                     <Button
                                         onClick={() => setPrepareOpen(true)}

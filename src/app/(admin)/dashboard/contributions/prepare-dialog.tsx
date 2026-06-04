@@ -8,7 +8,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { preparePrescriptions, type PeriodFormData } from "@/lib/actions/contribution-periods";
+import { savePeriodDefinition, type PeriodFormData } from "@/lib/actions/contribution-periods";
 
 // ── Pevné volby bankovního účtu ───────────────────────────────────────────────
 const BANK_ACCOUNTS = [
@@ -50,7 +50,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
     const router = useRouter();
     const [isPending, startTransition] = useTransition();
     const [error, setError]   = useState<string | null>(null);
-    const [result, setResult] = useState<{ generated: number; skipped: number } | null>(null);
+    const [saved, setSaved]   = useState(false);
 
     const [form, setForm] = useState<PeriodFormData>({
         year,
@@ -90,11 +90,11 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
     function handleSubmit() {
         setError(null);
         startTransition(async () => {
-            const res = await preparePrescriptions(form);
+            const res = await savePeriodDefinition(form);
             if ("error" in res) {
                 setError(res.error);
             } else {
-                setResult({ generated: res.generated, skipped: res.skipped });
+                setSaved(true);
                 router.refresh();
             }
         });
@@ -102,7 +102,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
 
     function handleClose() {
         if (!isPending) {
-            setResult(null);
+            setSaved(false);
             setError(null);
             onOpenChange(false);
         }
@@ -112,19 +112,16 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Připravit předpisy příspěvků {year}</DialogTitle>
+                    <DialogTitle>Definovat příspěvky {year}</DialogTitle>
                 </DialogHeader>
 
-                {result ? (
+                {saved ? (
                     /* ── Úspěch ── */
                     <div className="space-y-4 py-2">
                         <div className="rounded-lg bg-[#327600]/10 border border-[#327600]/20 p-4">
-                            <p className="font-semibold text-[#327600]">Hotovo</p>
+                            <p className="font-semibold text-[#327600]">Definice uložena</p>
                             <p className="text-sm text-[#327600]/80 mt-1">
-                                Vygenerováno <strong>{result.generated}</strong> nových předpisů.
-                                {result.skipped > 0 && (
-                                    <span className="text-gray-500"> ({result.skipped} předpisů již existovalo, přeskočeno)</span>
-                                )}
+                                Nastavení příspěvků pro rok {year} bylo uloženo. Předpisy pro členy vygenerujte tlačítkem <strong>Generovat předpisy</strong> v přehledu.
                             </p>
                         </div>
                         <DialogFooter>
@@ -215,10 +212,9 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
 
                             {/* Info */}
                             <p className="text-xs text-gray-400 leading-relaxed">
-                                Předpisy budou vygenerovány pro všechny aktivní členy v roce {year}.
-                                Slevy výbor / TOM / individuální se přenáší z roku {year - 1}.
+                                Nastavení se uloží a předpisy pro členy vygenerujte samostatně tlačítkem <strong>Generovat předpisy</strong>.
+                                Slevy výbor / TOM / individuální se při generování přenáší z roku {year - 1}.
                                 Penále za brigádu se uplatní u členů bez brigády z roku {year - 1}.
-                                Již existující předpisy jsou přeskočeny.
                             </p>
 
                             {error && (
@@ -235,7 +231,7 @@ export function PrepareDialog({ open, onOpenChange, year, defaults }: Props) {
                                 disabled={isPending}
                                 className="bg-[#327600] hover:bg-[#327600]/90 text-white"
                             >
-                                {isPending ? "Generuji…" : "Připravit předpisy"}
+                                {isPending ? "Ukládám…" : "Uložit"}
                             </Button>
                         </DialogFooter>
                     </>
@@ -258,12 +254,12 @@ export function NoPeriodView({ year, defaults }: NoPeriodViewProps) {
         <div className="space-y-4">
             <h1 className="text-2xl font-semibold text-gray-900">Příspěvky {year}</h1>
             <div className="flex flex-col items-center justify-center py-20 gap-4 text-center">
-                <p className="text-gray-500">Pro rok {year} zatím nejsou připravené příspěvky.</p>
+                <p className="text-gray-500">Pro rok {year} zatím nejsou definované příspěvky.</p>
                 <Button
                     onClick={() => setOpen(true)}
                     className="bg-[#327600] hover:bg-[#327600]/90 text-white"
                 >
-                    Připravit předpisy
+                    Definovat příspěvky
                 </Button>
             </div>
 
