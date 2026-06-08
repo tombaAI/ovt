@@ -1180,6 +1180,12 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                     </Link>
                     <div className="flex-1" />
                     <Button asChild size="sm" variant="outline">
+                        <a href={`/api/events/${event.id}/ucastnici`}>
+                            <Download size={14} />
+                            Seznam účastníků
+                        </a>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
                         <a href={`/api/events/${event.id}/vyuctovani`}>
                             <Download size={14} />
                             Vyúčtování oddílu
