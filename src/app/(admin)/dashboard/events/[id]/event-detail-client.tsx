@@ -701,6 +701,9 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
     }
 
     const isCancelled = !!r.cancelledAt;
+    const depositPaid = r.paymentStatus === "matched" || r.paymentStatus === "paid";
+    const canCancel = !isCancelled && !depositPaid;
+    const canEdit = !isCancelled && !isPrescribed;
 
     const participants = r.participants.length > 0
         ? r.participants
@@ -910,18 +913,26 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                     )}
                 </div>
 
-                {!isCancelled && !isPrescribed && (
+                {(canEdit || canCancel) && (
                     <div className="flex justify-between items-center pt-1">
-                        <button onClick={() => setEditOpen(true)}
-                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                            <Pencil size={12} />
-                            Upravit
-                        </button>
-                        <button onClick={handleCancel} disabled={cancelling}
-                            className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
-                            <Ban size={12} />
-                            {cancelling ? "Ruším…" : "Zrušit přihlášku"}
-                        </button>
+                        <span>
+                            {canEdit && (
+                                <button onClick={() => setEditOpen(true)}
+                                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                                    <Pencil size={12} />
+                                    Upravit
+                                </button>
+                            )}
+                        </span>
+                        <span>
+                            {canCancel && (
+                                <button onClick={handleCancel} disabled={cancelling}
+                                    className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
+                                    <Ban size={12} />
+                                    {cancelling ? "Ruším…" : "Zrušit přihlášku"}
+                                </button>
+                            )}
+                        </span>
                     </div>
                 )}
             </div>

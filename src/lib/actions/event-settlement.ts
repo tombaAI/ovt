@@ -1058,7 +1058,16 @@ export async function cancelAdminRegistration(
 
             if (!reg) throw new Error("Přihláška nenalezena");
             if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
-            if (await getBillingStatus(db, reg.eventId) === "prescribed") throw new Error("Nelze zrušit přihlášku — náklady jsou uzamčeny.");
+
+            const [paidPrescription] = await tx
+                .select({ id: eventPaymentPrescriptions.id })
+                .from(eventPaymentPrescriptions)
+                .where(and(
+                    eq(eventPaymentPrescriptions.registrationId, registrationId),
+                    inArray(eventPaymentPrescriptions.status, ["matched", "paid"]),
+                ))
+                .limit(1);
+            if (paidPrescription) throw new Error("Nelze zrušit přihlášku — záloha byla přijata. Pro ruční storno kontaktuj pokladníka.");
 
             eventId = reg.eventId;
 
