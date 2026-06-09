@@ -1094,3 +1094,52 @@ export async function cancelAdminRegistration(
         return { error: e instanceof Error ? e.message : "Nepodařilo se zrušit přihlášku" };
     }
 }
+
+export async function restoreAdminRegistration(
+    registrationId: number,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        let eventId: number | null = null;
+
+        await db.transaction(async tx => {
+            const [reg] = await tx
+                .select({ eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, registrationId));
+
+            if (!reg) throw new Error("Přihláška nenalezena");
+            if (!reg.cancelledAt) throw new Error("Přihláška není zrušena");
+
+            eventId = reg.eventId;
+
+            await tx.update(eventRegistrations)
+                .set({ cancelledAt: null })
+                .where(eq(eventRegistrations.id, registrationId));
+
+            // Obnov pouze prescriptions které byly zrušeny — matched/paid necháváme
+            await tx.update(eventPaymentPrescriptions)
+                .set({ status: "pending", updatedAt: new Date() })
+                .where(and(
+                    eq(eventPaymentPrescriptions.registrationId, registrationId),
+                    eq(eventPaymentPrescriptions.status, "cancelled"),
+                ));
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: registrationId,
+                action: "restore",
+                changes: { cancelledAt: { old: reg.cancelledAt.toISOString(), new: null } },
+                changedBy: session.user!.email!,
+            });
+        });
+
+        if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Nepodařilo se obnovit přihlášku" };
+    }
+}
