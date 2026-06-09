@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -28,7 +28,7 @@ import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
 import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
-import { removeParticipantFromRegistration, cancelAdminRegistration, sendSingleRegistrationEmail } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail } from "@/lib/actions/event-settlement";
 
 interface Props {
     event: EventRow;
@@ -678,6 +678,7 @@ function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventN
 function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string }) {
     const [removingId, setRemovingId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
+    const [restoring, setRestoring] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
@@ -701,6 +702,9 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
     }
 
     const isCancelled = !!r.cancelledAt;
+    const depositPaid = r.paymentStatus === "matched" || r.paymentStatus === "paid";
+    const canCancel = !isCancelled && !depositPaid;
+    const canEdit = !isCancelled && !isPrescribed;
 
     const participants = r.participants.length > 0
         ? r.participants
@@ -720,6 +724,15 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
         if ("error" in res) alert(res.error);
         else onRefresh();
         setRemovingId(null);
+    }
+
+    async function handleRestore() {
+        if (!confirm(`Obnovit přihlášku ${r.firstName} ${r.lastName}?`)) return;
+        setRestoring(true);
+        const res = await restoreAdminRegistration(r.registrationId);
+        if ("error" in res) alert(res.error);
+        else onRefresh();
+        setRestoring(false);
     }
 
     async function handleCancel() {
@@ -910,18 +923,32 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                     )}
                 </div>
 
-                {!isCancelled && !isPrescribed && (
+                {(canEdit || canCancel || isCancelled) && (
                     <div className="flex justify-between items-center pt-1">
-                        <button onClick={() => setEditOpen(true)}
-                            className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors">
-                            <Pencil size={12} />
-                            Upravit
-                        </button>
-                        <button onClick={handleCancel} disabled={cancelling}
-                            className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
-                            <Ban size={12} />
-                            {cancelling ? "Ruším…" : "Zrušit přihlášku"}
-                        </button>
+                        <span>
+                            {canEdit && (
+                                <button onClick={() => setEditOpen(true)}
+                                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-gray-700 transition-colors">
+                                    <Pencil size={12} />
+                                    Upravit
+                                </button>
+                            )}
+                        </span>
+                        <span>
+                            {isCancelled ? (
+                                <button onClick={handleRestore} disabled={restoring}
+                                    className="flex items-center gap-1.5 text-xs text-gray-400 hover:text-emerald-600 disabled:opacity-40 transition-colors">
+                                    <RotateCcw size={12} />
+                                    {restoring ? "Obnovuji…" : "Obnovit přihlášku"}
+                                </button>
+                            ) : canCancel && (
+                                <button onClick={handleCancel} disabled={cancelling}
+                                    className="flex items-center gap-1.5 text-xs text-red-400 hover:text-red-600 disabled:opacity-40 transition-colors">
+                                    <Ban size={12} />
+                                    {cancelling ? "Ruším…" : "Zrušit přihlášku"}
+                                </button>
+                            )}
+                        </span>
                     </div>
                 )}
             </div>
@@ -1168,6 +1195,12 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                         <span>Kalendář {event.year}</span>
                     </Link>
                     <div className="flex-1" />
+                    <Button asChild size="sm" variant="outline">
+                        <a href={`/api/events/${event.id}/ucastnici`}>
+                            <Download size={14} />
+                            Seznam účastníků
+                        </a>
+                    </Button>
                     <Button asChild size="sm" variant="outline">
                         <a href={`/api/events/${event.id}/vyuctovani`}>
                             <Download size={14} />

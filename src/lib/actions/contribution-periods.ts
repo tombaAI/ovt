@@ -23,49 +23,31 @@ export type PeriodFormData = {
     bankAccount: string;   // "2701772934/2010" | "1024298088/3030" | "351416278/0300"
 };
 
-export type PreparePrescriptionsResult =
-    | { error: string }
-    | { success: true; generated: number; skipped: number };
-
 /**
- * Upsertuje contribution_period a vygeneruje member_contributions pro všechny
- * aktivní členy daného roku. Již existující předpisy přeskočí (idempotentní).
- *
- * Logika výpočtu předpisu na člena:
- *  - amountBase: základ z období
- *  - amountBoat1/2/3: počet lodí v dané mříži × cena za loď
- *  - discountCommittee: přeneseno z loňska (jako záporná hodnota)
- *  - discountTom: přeneseno z loňska (záporná hodnota)
- *  - discountIndividual: přeneseno z loňska, jen pokud discountIndividualValidUntil >= rok
- *  - brigadeSurcharge: penále, pokud člen nemá brigádu z předchozího roku
+ * Uloží (upsertuje) definici období bez generování předpisů.
  */
-export async function preparePrescriptions(
+export async function savePeriodDefinition(
     data: PeriodFormData,
-): Promise<PreparePrescriptionsResult> {
+): Promise<{ error: string } | { success: true }> {
     const session = await auth();
     if (!session?.user) return { error: "Nepřihlášen" };
 
     const db = getDb();
-    const { year } = data;
-    const yearStart = `${year}-01-01`;
-    const yearEnd   = `${year}-12-31`;
-
     try {
-        // ── 1. Upsert periodo ────────────────────────────────────────────────
-        const [period] = await db
+        await db
             .insert(contributionPeriods)
             .values({
-                year:               data.year,
-                amountBase:         data.amountBase,
-                amountBoat1:        data.amountBoat1,
-                amountBoat2:        data.amountBoat2,
-                amountBoat3:        data.amountBoat2,   // 3. loď = stejná cena jako 2.
-                discountCommittee:  data.discountCommittee,
-                discountTom:        data.discountTom,
-                brigadeSurcharge:   data.brigadeSurcharge,
-                latePenalty:        data.latePenalty,
-                dueDate:            data.dueDate,
-                bankAccount:        data.bankAccount,
+                year:              data.year,
+                amountBase:        data.amountBase,
+                amountBoat1:       data.amountBoat1,
+                amountBoat2:       data.amountBoat2,
+                amountBoat3:       data.amountBoat2,   // 3. loď = stejná cena jako 2.
+                discountCommittee: data.discountCommittee,
+                discountTom:       data.discountTom,
+                brigadeSurcharge:  data.brigadeSurcharge,
+                latePenalty:       data.latePenalty,
+                dueDate:           data.dueDate,
+                bankAccount:       data.bankAccount,
             })
             .onConflictDoUpdate({
                 target: contributionPeriods.year,
@@ -81,10 +63,47 @@ export async function preparePrescriptions(
                     dueDate:           data.dueDate,
                     bankAccount:       data.bankAccount,
                 },
-            })
-            .returning();
+            });
 
-        // ── 2. Aktivní členové v daném roce ──────────────────────────────────
+        revalidatePath("/dashboard/contributions");
+        return { success: true };
+    } catch (e) {
+        console.error("[savePeriodDefinition]", e);
+        return { error: "Chyba při ukládání definice" };
+    }
+}
+
+/**
+ * Vygeneruje member_contributions pro všechny aktivní členy daného období,
+ * kteří ještě žádný předpis nemají. Idempotentní — existující předpisy přeskočí.
+ *
+ * Logika výpočtu předpisu na člena:
+ *  - amountBase: základ z období
+ *  - amountBoat1/2/3: počet lodí v dané mříži × cena za loď
+ *  - discountCommittee / discountTom: z trvalých příznaků člena
+ *  - discountIndividual: přeneseno z loňska, jen pokud discountIndividualValidUntil >= rok
+ *  - brigadeSurcharge: penále, pokud člen nemá brigádu z předchozího roku
+ */
+export async function generateMissingPrescriptions(
+    periodId: number,
+): Promise<{ error: string } | { success: true; generated: number; skipped: number }> {
+    const session = await auth();
+    if (!session?.user) return { error: "Nepřihlášen" };
+
+    const db = getDb();
+    try {
+        const [period] = await db
+            .select()
+            .from(contributionPeriods)
+            .where(eq(contributionPeriods.id, periodId));
+
+        if (!period) return { error: "Období nenalezeno" };
+
+        const { year } = period;
+        const yearStart = `${year}-01-01`;
+        const yearEnd   = `${year}-12-31`;
+
+        // ── Aktivní členové v daném roce ─────────────────────────────────────
         const activeMembers = await db
             .select({ id: members.id })
             .from(members)
@@ -100,7 +119,7 @@ export async function preparePrescriptions(
 
         const allMemberIds = activeMembers.map(m => m.id);
 
-        // ── 3. Přeskočit již existující předpisy ─────────────────────────────
+        // ── Přeskočit již existující předpisy ────────────────────────────────
         const existingRows = await db
             .select({ memberId: memberContributions.memberId })
             .from(memberContributions)
@@ -115,10 +134,7 @@ export async function preparePrescriptions(
             return { success: true, generated: 0, skipped };
         }
 
-        // ── 4. Lodě aktivní v daném roce — počet na člena ────────────────────
-        // Cena nezáleží na velikosti/mříži, ale na pořadí:
-        //   1. loď → amountBoat1, 2. loď → amountBoat2, 3. loď → amountBoat3
-        // Počítáme jen lodě fyzicky přítomné v krakorcích (isPresent = true)
+        // ── Lodě aktivní v daném roce — počet na člena ───────────────────────
         const boatRows = await db
             .select({ ownerId: boats.ownerId })
             .from(boats)
@@ -135,17 +151,17 @@ export async function preparePrescriptions(
             return acc;
         }, {} as Record<number, number>);
 
-        // ── 5. Brigáda z předchozího roku ────────────────────────────────────
+        // ── Brigáda z předchozího roku ───────────────────────────────────────
         const brigadeParticipants = await getBrigadeMemberIdsByYear(year - 1);
 
-        // ── 6. Příznaky výboru/TOM z members tabulky (trvalé vlastnosti člena) ──
+        // ── Příznaky výboru/TOM z members tabulky ───────────────────────────
         const memberFlagRows = await db
             .select({ id: members.id, isCommitteeMember: members.isCommitteeMember, isTomLeader: members.isTomLeader })
             .from(members)
             .where(inArray(members.id, newMemberIds));
         const memberFlagsById = new Map(memberFlagRows.map(m => [m.id, m]));
 
-        // ── 7. Přenosy individuální slevy z loňského roku ────────────────────
+        // ── Přenosy individuální slevy z loňského roku ──────────────────────
         const [prevPeriod] = await db
             .select({ id: contributionPeriods.id })
             .from(contributionPeriods)
@@ -168,41 +184,34 @@ export async function preparePrescriptions(
 
         const prevByMember = new Map(prevContribs.map(c => [c.memberId, c]));
 
-        // ── 8. Výpočet a vložení předpisů ────────────────────────────────────
+        // ── Výpočet a vložení předpisů ───────────────────────────────────────
         const toInsert = newMemberIds.map(memberId => {
             const prev      = prevByMember.get(memberId);
             const flags     = memberFlagsById.get(memberId);
             const boatCount = boatCountByMember[memberId] ?? 0;
 
-            // Slevy výbor/TOM: z trvalých příznaků člena (ne z loňských předpisů)
-            // Sleva výbor má přednost — pokud ji člen má, sleva TOM se do součtu nezapočítá
-            const discountCommittee = flags?.isCommitteeMember ? -period.discountCommittee : null;
-            const discountTom       = flags?.isTomLeader       ? -period.discountTom       : null;
+            const discountCommittee    = flags?.isCommitteeMember ? -period.discountCommittee : null;
+            const discountTom          = flags?.isTomLeader       ? -period.discountTom       : null;
             const effectiveDiscountTom = discountCommittee ? null : discountTom;
 
-            // Individuální sleva: přenést z loňska, pokud validUntil >= letošní rok
             const hasValidIndividual =
                 prev?.discountIndividual != null &&
                 (prev.discountIndividualValidUntil ?? 0) >= year;
-            const discountIndividual          = hasValidIndividual ? prev!.discountIndividual          : null;
-            const discountIndividualNote      = hasValidIndividual ? prev!.discountIndividualNote      : null;
+            const discountIndividual           = hasValidIndividual ? prev!.discountIndividual           : null;
+            const discountIndividualNote       = hasValidIndividual ? prev!.discountIndividualNote       : null;
             const discountIndividualValidUntil = hasValidIndividual ? prev!.discountIndividualValidUntil : null;
 
-            // Příplatky za lodě: 1. loď → amountBoat1, 2. a každá další → amountBoat2
-            const amountBoat1 = boatCount >= 1 ? period.amountBoat1 : 0;
-            const amountBoat2 = boatCount >= 2 ? period.amountBoat2 : 0;
-            const amountBoat3 = boatCount >= 3 ? period.amountBoat2 : 0; // stejná sazba jako 2.
-
-            // Penále za brigádu: uplatní se pokud člen NEMÁ brigádu z minulého roku
-            const didBrigade      = brigadeParticipants.has(memberId);
-            const brigadeSurcharge = didBrigade ? 0 : period.brigadeSurcharge;
+            const amountBoat1      = boatCount >= 1 ? period.amountBoat1 : 0;
+            const amountBoat2      = boatCount >= 2 ? period.amountBoat2 : 0;
+            const amountBoat3      = boatCount >= 3 ? period.amountBoat2 : 0;
+            const brigadeSurcharge = brigadeParticipants.has(memberId) ? 0 : period.brigadeSurcharge;
 
             const amountTotal =
                 period.amountBase +
                 amountBoat1 + amountBoat2 + amountBoat3 +
-                (discountCommittee ?? 0) +
-                (effectiveDiscountTom ?? 0) +
-                (discountIndividual ?? 0) +
+                (discountCommittee     ?? 0) +
+                (effectiveDiscountTom  ?? 0) +
+                (discountIndividual    ?? 0) +
                 brigadeSurcharge;
 
             return {
@@ -223,7 +232,6 @@ export async function preparePrescriptions(
         });
 
         if (toInsert.length > 0) {
-            // Batch insert po 100 záznamy (ochrana před extrémně velkými payloady)
             const BATCH = 100;
             for (let i = 0; i < toInsert.length; i += BATCH) {
                 await db.insert(memberContributions).values(toInsert.slice(i, i + BATCH));
@@ -234,7 +242,7 @@ export async function preparePrescriptions(
         return { success: true, generated: toInsert.length, skipped };
 
     } catch (e) {
-        console.error("[preparePrescriptions]", e);
+        console.error("[generateMissingPrescriptions]", e);
         return { error: "Chyba při generování předpisů" };
     }
 }
