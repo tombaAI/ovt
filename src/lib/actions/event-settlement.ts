@@ -718,6 +718,7 @@ export async function linkParticipantToMember(
             const [reg] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, p.registrationId));
             if (reg) revalidatePath(`/dashboard/events/${reg.eventId}`);
         }
+        if (memberId) revalidatePath(`/dashboard/members/${memberId}`);
         return { success: true };
     } catch {
         return { error: "Nepodařilo se spárovat účastníka" };
