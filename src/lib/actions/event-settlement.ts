@@ -631,6 +631,7 @@ export async function addAdminEventRegistration(
                 const p = input.participants[i];
                 await tx.insert(eventRegistrationParticipants).values({
                     registrationId: reg.id,
+                    eventId,
                     participantOrder: i + 1,
                     fullName: p.fullName,
                     isPrimary: p.isPrimary,
@@ -964,6 +965,7 @@ export async function addParticipantToRegistration(
 
             await tx.insert(eventRegistrationParticipants).values({
                 registrationId,
+                eventId: regRow.eventId,
                 participantOrder: nextOrder,
                 fullName: participant.fullName.trim(),
                 isPrimary: false,

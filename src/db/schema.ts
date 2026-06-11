@@ -457,6 +457,7 @@ export const eventRegistrationParticipants = appSchema.table(
     {
         id: serial("id").primaryKey(),
         registrationId: integer("registration_id").notNull().references(() => eventRegistrations.id, { onDelete: "cascade" }),
+        eventId: integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
         participantOrder: smallint("participant_order").notNull(),
         fullName: text("full_name").notNull(),
         isPrimary: boolean("is_primary").notNull().default(false),
@@ -467,7 +468,9 @@ export const eventRegistrationParticipants = appSchema.table(
     },
     (t) => [
         index("event_reg_participants_registration_idx").on(t.registrationId),
+        index("event_reg_participants_event_idx").on(t.eventId),
         uniqueIndex("event_reg_participants_registration_order_uq").on(t.registrationId, t.participantOrder),
+        uniqueIndex("event_reg_participants_event_member_uq").on(t.eventId, t.memberId),
     ]
 );
 
