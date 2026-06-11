@@ -43,11 +43,12 @@ Soubory v `supabase/migrations/` jsou **viditelné v PR diff** — uživatel v P
 
 Po mergi do `main` GitHub Action `db-migrate.yml` automaticky spustí nové `.sql` soubory přes `psql` na produkční databázi. **Už není třeba říkat uživateli, aby migraci spustil ručně** — děje se to samo.
 
-Při změně schématu na staging:
+**Stejný mechanismus funguje i pro staging**: GitHub Action `db-migrate-staging.yml` se triggeruje na push do větve `staging` a aplikuje nové `.sql` soubory na staging DB (`STAGING_DATABASE_URL`). `npm run db:push` tedy **není** potřeba — stačí commitnout a pushnout.
+
+Při změně schématu:
 - Uprav `src/db/schema.ts`
 - Vytvoř migrační soubor `supabase/migrations/YYYYMMDD_HHMMSS_popis.sql` s odpovídajícím SQL
-- Spusť `npm run db:push` pro aplikaci změn na staging DB
-- Commitni oba soubory spolu
+- Commitni oba soubory spolu — GHA aplikuje migraci automaticky (staging i produkce)
 
 ## Commands
 
