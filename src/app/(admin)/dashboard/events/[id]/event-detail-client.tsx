@@ -1202,6 +1202,12 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                         </a>
                     </Button>
                     <Button asChild size="sm" variant="outline">
+                        <a href={`/api/events/${event.id}/pivnik`}>
+                            <Download size={14} />
+                            Pivník
+                        </a>
+                    </Button>
+                    <Button asChild size="sm" variant="outline">
                         <a href={`/api/events/${event.id}/vyuctovani`}>
                             <Download size={14} />
                             Vyúčtování oddílu
