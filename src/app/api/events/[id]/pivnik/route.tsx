@@ -1,5 +1,5 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { and, asc, eq, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import {
@@ -41,32 +41,34 @@ export async function GET(
             return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
         }
 
-        const [regs, allParticipants] = await Promise.all([
-            db
-                .select({
-                    id: eventRegistrations.id,
-                    firstName: eventRegistrations.firstName,
-                    lastName: eventRegistrations.lastName,
-                })
-                .from(eventRegistrations)
-                .where(and(
-                    eq(eventRegistrations.eventId, eventId),
-                    isNull(eventRegistrations.cancelledAt),
-                ))
-                .orderBy(asc(eventRegistrations.id)),
-            db
+        const regs = await db
+            .select({
+                id: eventRegistrations.id,
+                firstName: eventRegistrations.firstName,
+                lastName: eventRegistrations.lastName,
+            })
+            .from(eventRegistrations)
+            .where(and(
+                eq(eventRegistrations.eventId, eventId),
+                isNull(eventRegistrations.cancelledAt),
+            ))
+            .orderBy(asc(eventRegistrations.id));
+
+        const regIds = regs.map((r) => r.id);
+        const allParticipants = regIds.length > 0
+            ? await db
                 .select({
                     registrationId: eventRegistrationParticipants.registrationId,
                     fullName: eventRegistrationParticipants.fullName,
                     participantOrder: eventRegistrationParticipants.participantOrder,
                 })
                 .from(eventRegistrationParticipants)
-                .where(eq(eventRegistrationParticipants.eventId, eventId))
+                .where(inArray(eventRegistrationParticipants.registrationId, regIds))
                 .orderBy(
                     asc(eventRegistrationParticipants.registrationId),
                     asc(eventRegistrationParticipants.participantOrder),
-                ),
-        ]);
+                )
+            : [];
 
         const participantsByReg = new Map<number, string[]>();
         for (const p of allParticipants) {
