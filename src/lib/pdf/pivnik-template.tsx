@@ -99,7 +99,7 @@ export type PivnikData = {
 export function PivnikDocument({ data }: { data: PivnikData }) {
     return (
         <Document>
-            <Page size="A4" orientation="landscape" style={styles.page}>
+            <Page size="A4" style={styles.page}>
                 <View style={styles.header}>
                     <Text style={styles.title}>Pivník — {data.eventName}</Text>
                     <Text style={styles.subtitle}>
