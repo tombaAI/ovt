@@ -19,10 +19,13 @@
       "Bash(sed *)",
       "Bash(gh issue *)",
       "Bash(gh auth *)",
-      "Bash(gh pr *)"
+      "Bash(gh pr *)",
+      "Bash(node -e \"const d = require\\('drizzle-orm'\\); console.log\\(Object.keys\\(d\\).filter\\(k => k.toLowerCase\\(\\).includes\\('alias'\\)\\)\\)\")",
+      "Bash(mkdir -p /Users/ext93895/work/ovt/src/app/api/events/\\\\[id\\\\]/expenses/\\\\[expenseId\\\\]/attach-file)"
     ],
     "additionalDirectories": [
-      "/Users/ext93895/work/ovt/src/app/(admin)/dashboard/members"
+      "/Users/ext93895/work/ovt/src/app/(admin)/dashboard/members",
+      "/Users/ext93895/work/ovt/src/app/api/events/[id]/expenses/[expenseId]"
     ]
   }
 }
