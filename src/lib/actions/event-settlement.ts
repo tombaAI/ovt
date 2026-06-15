@@ -59,7 +59,7 @@ export type PrescriptionInfo = {
 };
 
 /** Efektivní záloha pro výpočet doplatku — odečítáme jen co skutečně přišlo nebo je přislíbeno. */
-export function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
+function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
     if (!dep) return 0;
     if (dep.status === "matched" || dep.status === "paid")
         return dep.matchedAmount ?? dep.amount;
