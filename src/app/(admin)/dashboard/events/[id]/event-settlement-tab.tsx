@@ -23,13 +23,15 @@ type AllocPerson = { key: string; fullName: string };
 
 function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
     if (reg.participants.length > 0) {
-        return reg.participants.map((p, i) => ({
-            key: p.id > 0 ? `p${p.id}` : `r${reg.registrationId}-${i}`,
-            fullName: p.fullName,
-        }));
+        return reg.participants
+            .filter(p => !p.cancelledAt)
+            .map((p, i) => ({
+                key: p.id > 0 ? `p${p.id}` : `r${reg.registrationId}-${i}`,
+                fullName: p.fullName,
+            }));
     }
     // Fallback — registrace bez zaznamenaných účastníků
-    return Array.from({ length: reg.personsCount }, (_, i) => ({
+    return Array.from({ length: reg.activePersonsCount }, (_, i) => ({
         key: `r${reg.registrationId}-${i}`,
         fullName: i === 0 ? `${reg.firstName} ${reg.lastName}` : `Účastník ${i + 1}`,
     }));

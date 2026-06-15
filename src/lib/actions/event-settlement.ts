@@ -1306,7 +1306,19 @@ export async function cancelParticipant(
             });
         });
 
-        if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
+        if (eventId) {
+            // Pokud je billing uzamčen, přepočítáme settlement předpisy — jinak payments tab ukazuje
+            // stará čísla z doby před odhlášením účastníka.
+            const [ev] = await db
+                .select({ billingStatus: events.billingStatus, name: events.name })
+                .from(events)
+                .where(eq(events.id, eventId));
+            if (ev?.billingStatus === "prescribed") {
+                const settlement = await getEventSettlement(eventId);
+                await upsertPrescriptionAmounts(eventId, settlement, ev.name, db);
+            }
+            revalidatePath(`/dashboard/events/${eventId}`);
+        }
         return { success: true };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Nepodařilo se odhlásit účastníka" };
