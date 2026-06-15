@@ -1087,6 +1087,11 @@ export async function cancelAdminRegistration(
                 .set({ status: "cancelled", updatedAt: now })
                 .where(eq(eventPaymentPrescriptions.registrationId, registrationId));
 
+            // Odlinkovat členy — uvolní unique constraint pro případnou jinou aktivní přihlášku
+            await tx.update(eventRegistrationParticipants)
+                .set({ memberId: null })
+                .where(eq(eventRegistrationParticipants.registrationId, registrationId));
+
             await tx.insert(auditLog).values({
                 entityType: "event_registration",
                 entityId: registrationId,
