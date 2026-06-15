@@ -930,7 +930,9 @@ export async function sendSingleRegistrationEmail(
         if (!event.treasurerApproved) return { error: "Předpis nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním." };
 
         const settlement = await getEventSettlement(reg.eventId);
-        const regRow = settlement.registrations.find(r => r.registrationId === registrationId);
+        await upsertPrescriptionAmounts(reg.eventId, settlement, event.name, db);
+        const freshSettlement = await getEventSettlement(reg.eventId);
+        const regRow = freshSettlement.registrations.find(r => r.registrationId === registrationId);
         if (!regRow) return { error: "Přihláška není ve vyúčtování" };
         if (!regRow.settlementPrescription) return { error: "Přihláška nemá doplatek předpis — nejdříve uzamkněte náklady." };
 
