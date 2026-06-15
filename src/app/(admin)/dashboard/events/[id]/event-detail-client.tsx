@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw, UserX } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { InlineField } from "@/app/(admin)/dashboard/members/inline-field";
@@ -28,7 +29,8 @@ import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
 import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
-import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail, cancelParticipant, getEventFinalExpenses } from "@/lib/actions/event-settlement";
+import type { CancelParticipantData } from "@/lib/actions/event-settlement";
 
 interface Props {
     event: EventRow;
@@ -597,6 +599,191 @@ const REGISTRATION_FIELD_LABELS: Record<string, string> = {
     cancelledAt: "Zrušení přihlášky",
 };
 
+// ── Dialog: označit účastníka jako nejede ─────────────────────────────────────
+
+const FORFEIT_POLICY_LABELS: Record<string, string> = {
+    forfeit_to_expense: "Napočítat na náklad",
+    forfeit_split: "Rozdělit na náklady",
+    forfeit_to_club: "Propadne oddílu",
+};
+
+function CancelParticipantDialog({
+    open,
+    onOpenChange,
+    participantId,
+    participantName,
+    eventId,
+    depositAmount,
+    depositStatus,
+    personsCount,
+    onCancelled,
+}: {
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+    participantId: number;
+    participantName: string;
+    eventId: number;
+    depositAmount: number | null;
+    depositStatus: string | null;
+    personsCount: number;
+    onCancelled: () => void;
+}) {
+    const depositPerPerson = depositAmount != null && personsCount > 0
+        ? Math.round(depositAmount / personsCount * 100) / 100
+        : null;
+    const hasDeposit = depositPerPerson != null && depositPerPerson > 0 && (depositStatus === "matched" || depositStatus === "paid");
+
+    const [refundAmount, setRefundAmount] = useState("0");
+    const [policy, setPolicy] = useState<"forfeit_to_expense" | "forfeit_split" | "forfeit_to_club">("forfeit_to_expense");
+    const [expenseId, setExpenseId] = useState<number | null>(null);
+    const [expenses, setExpenses] = useState<{ id: number; purposeText: string | null; amount: number }[]>([]);
+    const [loadingExpenses, setLoadingExpenses] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setRefundAmount("0");
+        setPolicy("forfeit_to_expense");
+        setExpenseId(null);
+        setError(null);
+        if (hasDeposit) {
+            setLoadingExpenses(true);
+            getEventFinalExpenses(eventId)
+                .then(list => { setExpenses(list); if (list.length > 0) setExpenseId(list[0].id); })
+                .finally(() => setLoadingExpenses(false));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    async function handleSave() {
+        setSaving(true);
+        setError(null);
+        const data: CancelParticipantData = {};
+        if (hasDeposit) {
+            const parsed = parseFloat(refundAmount.replace(",", "."));
+            data.depositRefundAmount = isNaN(parsed) ? 0 : Math.min(parsed, depositPerPerson!);
+            data.depositForfeitPolicy = policy;
+            if (policy === "forfeit_to_expense") data.depositForfeitExpenseId = expenseId;
+        }
+        const res = await cancelParticipant(participantId, data);
+        setSaving(false);
+        if ("error" in res) { setError(res.error); return; }
+        onOpenChange(false);
+        onCancelled();
+    }
+
+    const refundParsed = parseFloat(refundAmount.replace(",", ".")) || 0;
+    const forfeitAmount = depositPerPerson != null ? Math.max(0, depositPerPerson - Math.min(refundParsed, depositPerPerson)) : 0;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Označit jako nejede</DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4 py-1">
+                    <p className="text-sm text-gray-700">
+                        <span className="font-medium">{participantName}</span> se akce nezúčastní.
+                        Přihláška zůstane aktivní pro ostatní účastníky.
+                    </p>
+
+                    {hasDeposit && (
+                        <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3 space-y-3">
+                            <div className="flex items-baseline justify-between">
+                                <p className="text-xs font-medium text-amber-800">Záloha za tohoto účastníka</p>
+                                <p className="text-sm font-semibold text-amber-900 tabular-nums">
+                                    {new Intl.NumberFormat("cs-CZ").format(depositPerPerson!)} Kč
+                                </p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs text-gray-600">Vrátit (Kč)</label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    max={depositPerPerson!}
+                                    step="1"
+                                    value={refundAmount}
+                                    onChange={e => setRefundAmount(e.target.value)}
+                                    className="h-8 text-sm"
+                                />
+                                {forfeitAmount > 0 && (
+                                    <p className="text-xs text-gray-500">
+                                        Propadne: <span className="font-medium text-red-600">{new Intl.NumberFormat("cs-CZ").format(forfeitAmount)} Kč</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {forfeitAmount > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-xs text-gray-600">Co se stane s propadlou zálohou</p>
+                                    <div className="space-y-1.5">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="radio" name="forfeitPolicy" value="forfeit_to_expense"
+                                                checked={policy === "forfeit_to_expense"}
+                                                onChange={() => setPolicy("forfeit_to_expense")}
+                                                className="accent-[#327600]"
+                                            />
+                                            <span className="text-xs">Napočítat na náklad</span>
+                                        </label>
+                                        {policy === "forfeit_to_expense" && (
+                                            <div className="ml-5">
+                                                {loadingExpenses ? (
+                                                    <span className="text-xs text-gray-400">Načítám náklady…</span>
+                                                ) : expenses.length === 0 ? (
+                                                    <span className="text-xs text-amber-600">Žádné finální náklady na akci</span>
+                                                ) : (
+                                                    <select
+                                                        value={expenseId ?? ""}
+                                                        onChange={e => setExpenseId(Number(e.target.value))}
+                                                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+                                                    >
+                                                        {expenses.map(exp => (
+                                                            <option key={exp.id} value={exp.id}>
+                                                                {exp.purposeText ?? "Bez názvu"} – {new Intl.NumberFormat("cs-CZ").format(exp.amount)} Kč
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        )}
+                                        <label className="flex items-center gap-2 cursor-not-allowed opacity-50">
+                                            <input type="radio" disabled name="forfeitPolicy" value="forfeit_split" className="accent-[#327600]" />
+                                            <span className="text-xs">Rozdělit na náklady <span className="text-gray-400">(bude doplněno)</span></span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-not-allowed opacity-50">
+                                            <input type="radio" disabled name="forfeitPolicy" value="forfeit_to_club" className="accent-[#327600]" />
+                                            <span className="text-xs">Propadne oddílu <span className="text-gray-400">(bude doplněno)</span></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {!hasDeposit && depositPerPerson == null && (
+                        <p className="text-xs text-gray-400">Přihláška nemá zálohu — žádné záložní nastavení není potřeba.</p>
+                    )}
+                    {!hasDeposit && depositPerPerson != null && (
+                        <p className="text-xs text-amber-600">Záloha zatím nebyla přijata (není spárována) — propadnutí bude bez efektu na vyúčtování.</p>
+                    )}
+
+                    {error && <p className="text-xs text-red-600">{error}</p>}
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>Zrušit</Button>
+                    <Button size="sm" onClick={handleSave} disabled={saving || (policy === "forfeit_to_expense" && forfeitAmount > 0 && !expenseId)}>
+                        {saving ? <><Loader2 size={13} className="animate-spin mr-1" /> Ukládám…</> : "Potvrdit"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function RegistrationHistory({ registrationId }: { registrationId: number }) {
     const [open, setOpen] = useState(false);
     const [log, setLog] = useState<RegistrationAuditEntry[] | null>(null);
@@ -675,7 +862,7 @@ function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventN
     );
 }
 
-function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string }) {
+function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string; eventId: number }) {
     const [removingId, setRemovingId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
     const [restoring, setRestoring] = useState(false);
@@ -685,6 +872,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
     const [showQr, setShowQr] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
+    const [cancelParticipantTarget, setCancelParticipantTarget] = useState<{ id: number; fullName: string } | null>(null);
 
     const hasPaymentDetails = !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
 
@@ -715,6 +903,10 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
             participantOrder: i + 1,
             memberId: undefined as number | null | undefined,
             memberName: undefined as string | null | undefined,
+            cancelledAt: null as Date | null,
+            depositRefundAmount: null as number | null,
+            depositForfeitPolicy: null as string | null,
+            depositForfeitExpenseId: null as number | null,
         }));
 
     async function handleRemove(participantId: number, name: string) {
@@ -876,45 +1068,100 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                 )}
 
                 <div className="space-y-2">
-                    <p className="text-xs font-medium text-slate-500">Účastníci</p>
-                    <div className="flex flex-wrap gap-1.5">
-                        {participants.map(p => (
-                            <div key={p.participantOrder}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 pl-2 pr-1.5 py-1">
-                                <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
-                                <span className="text-xs text-slate-700">{p.fullName}</span>
-                                {p.isPrimary && (
-                                    <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
-                                        kontakt
-                                    </span>
-                                )}
-                                {!isPrescribed && (p.memberId ? (
-                                    <button
-                                        onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, registrationId: r.registrationId })}
-                                        title={`Člen: ${p.memberName}`}
-                                        className="text-emerald-500 hover:text-emerald-700 transition-colors">
-                                        <UserCheck size={11} />
-                                    </button>
-                                ) : p.id ? (
-                                    <button
-                                        onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, registrationId: r.registrationId })}
-                                        title="Spárovat s členem OVT"
-                                        className="text-gray-300 hover:text-emerald-500 transition-colors">
-                                        <UserCheck size={11} />
-                                    </button>
-                                ) : null)}
-                                {!isCancelled && !isPrescribed && p.id && (
-                                    <button
-                                        onClick={() => handleRemove(p.id!, p.fullName)}
-                                        disabled={removingId === p.id}
-                                        title="Odebrat účastníka"
-                                        className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors ml-0.5">
-                                        <Trash2 size={10} />
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                    <div className="flex items-center gap-2">
+                        <p className="text-xs font-medium text-slate-500">Účastníci</p>
+                        {!isCancelled && (() => {
+                            const cancelledCount = participants.filter(p => p.cancelledAt).length;
+                            return cancelledCount > 0 ? (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-orange-200 bg-orange-50 text-orange-700">
+                                    {cancelledCount} {cancelledCount === 1 ? "nejede" : "nejedou"}
+                                </span>
+                            ) : null;
+                        })()}
                     </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {participants.map(p => {
+                            const isCancelledParticipant = !!p.cancelledAt;
+                            return (
+                                <div key={p.participantOrder}
+                                    className={`inline-flex items-center gap-1.5 rounded-full border pl-2 pr-1.5 py-1 ${isCancelledParticipant ? "border-orange-200 bg-orange-50/60" : "border-slate-200 bg-slate-50"}`}>
+                                    <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
+                                    <span className={`text-xs ${isCancelledParticipant ? "line-through text-slate-400" : "text-slate-700"}`}>{p.fullName}</span>
+                                    {isCancelledParticipant && (
+                                        <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600">nejede</span>
+                                    )}
+                                    {!isCancelledParticipant && p.isPrimary && (
+                                        <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                                            kontakt
+                                        </span>
+                                    )}
+                                    {!isCancelledParticipant && !isPrescribed && (p.memberId ? (
+                                        <button
+                                            onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, cancelledAt: null, depositRefundAmount: null, depositForfeitPolicy: null, depositForfeitExpenseId: null, registrationId: r.registrationId })}
+                                            title={`Člen: ${p.memberName}`}
+                                            className="text-emerald-500 hover:text-emerald-700 transition-colors">
+                                            <UserCheck size={11} />
+                                        </button>
+                                    ) : p.id ? (
+                                        <button
+                                            onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, cancelledAt: null, depositRefundAmount: null, depositForfeitPolicy: null, depositForfeitExpenseId: null, registrationId: r.registrationId })}
+                                            title="Spárovat s členem OVT"
+                                            className="text-gray-300 hover:text-emerald-500 transition-colors">
+                                            <UserCheck size={11} />
+                                        </button>
+                                    ) : null)}
+                                    {!isCancelled && !isCancelledParticipant && !isPrescribed && p.id && (
+                                        <>
+                                            <button
+                                                onClick={() => setCancelParticipantTarget({ id: p.id!, fullName: p.fullName })}
+                                                title="Označit jako nejede"
+                                                className="text-gray-300 hover:text-orange-500 transition-colors">
+                                                <UserX size={10} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemove(p.id!, p.fullName)}
+                                                disabled={removingId === p.id}
+                                                title="Odebrat účastníka"
+                                                className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors ml-0.5">
+                                                <Trash2 size={10} />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {/* Zobrazit forfeit info pro odhlášené účastníky */}
+                    {participants.some(p => p.cancelledAt) && (
+                        <div className="space-y-1 mt-1">
+                            {participants.filter(p => p.cancelledAt).map(p => {
+                                const depositPerPerson = r.depositAmount != null && r.personsCount > 0
+                                    ? r.depositAmount / r.personsCount : null;
+                                const forfeit = depositPerPerson != null && p.depositRefundAmount != null
+                                    ? depositPerPerson - p.depositRefundAmount
+                                    : depositPerPerson;
+                                return (
+                                    <div key={p.participantOrder} className="text-[11px] text-gray-500 flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-orange-500">↳</span>
+                                        <span className="font-medium">{p.fullName}:</span>
+                                        {p.depositForfeitPolicy ? (
+                                            <>
+                                                {p.depositRefundAmount != null && p.depositRefundAmount > 0 && (
+                                                    <span>vráceno {new Intl.NumberFormat("cs-CZ").format(p.depositRefundAmount)} Kč,</span>
+                                                )}
+                                                {forfeit != null && forfeit > 0 && (
+                                                    <span>propadlo {new Intl.NumberFormat("cs-CZ").format(Math.round(forfeit))} Kč</span>
+                                                )}
+                                                <span className="text-gray-400">({FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy})</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-gray-400">záloha nevyřešena</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                     {!isCancelled && !isPrescribed && (
                         <button onClick={() => setAddParticipantOpen(true)}
                             className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 transition-colors mt-1">
@@ -953,6 +1200,19 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                 )}
             </div>
 
+            {cancelParticipantTarget && (
+                <CancelParticipantDialog
+                    open={!!cancelParticipantTarget}
+                    onOpenChange={v => { if (!v) setCancelParticipantTarget(null); }}
+                    participantId={cancelParticipantTarget.id}
+                    participantName={cancelParticipantTarget.fullName}
+                    eventId={eventId}
+                    depositAmount={r.depositAmount}
+                    depositStatus={r.depositStatus}
+                    personsCount={r.personsCount}
+                    onCancelled={onRefresh}
+                />
+            )}
             <RegistrationHistory registrationId={r.registrationId} />
 
             <EditRegistrationDialog
@@ -1096,7 +1356,7 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
 
             <div className="space-y-3">
                 {rows.map(r => (
-                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} />
+                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} eventId={eventId} />
                 ))}
             </div>
         </div>

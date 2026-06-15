@@ -22,6 +22,8 @@ import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlemen
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
+export type DepositForfeitPolicy = "forfeit_to_expense" | "forfeit_split" | "forfeit_to_club";
+
 export type SettlementParticipant = {
     id: number;
     fullName: string;
@@ -29,6 +31,10 @@ export type SettlementParticipant = {
     memberId: number | null;
     personId: number | null;
     memberName: string | null;
+    cancelledAt: Date | null;
+    depositRefundAmount: number | null;
+    depositForfeitPolicy: DepositForfeitPolicy | null;
+    depositForfeitExpenseId: number | null;
 };
 
 export type SettlementExpenseRow = {
@@ -68,6 +74,7 @@ export type SettlementRegistrationRow = {
     lastName: string;
     email: string;
     personsCount: number;
+    activePersonsCount: number; // personsCount mínus individuálně odhlášení účastníci
     participants: SettlementParticipant[];
     memberCount: number;
     expenses: SettlementExpenseRow[];
@@ -80,13 +87,23 @@ export type SettlementRegistrationRow = {
     settlementPrescription: PrescriptionInfo | null;
 };
 
+export type FinalExpenseRow = {
+    id: number;
+    purposeText: string | null;
+    amount: number;
+    effectiveAmount: number; // amount − propadlé zálohy napojené na tento náklad
+    totalForfeit: number;    // Kč propadlých záloh odečtených z tohoto nákladu
+    allocationMethod: "split_all" | "per_registration" | "with_coefficients";
+    participantCoefficients: Record<string, number> | null;
+};
+
 export type EventSettlement = {
     eventId: number;
     subsidyTotal: number;           // celková dotace akce (uložena v events.subsidy_per_member)
-    unitPrice: number;              // cena per osoba = Math.ceil(expensesSum / totalParticipants)
-    totalParticipants: number;
+    unitPrice: number;              // cena per osoba = Math.ceil(efektivní splitAll / totalParticipants)
+    totalParticipants: number;      // počet aktivních (neodhlášených) účastníků
     totalMemberParticipants: number;
-    finalExpenses: { id: number; purposeText: string | null; amount: number; allocationMethod: "split_all" | "per_registration" | "with_coefficients"; participantCoefficients: Record<string, number> | null }[];
+    finalExpenses: FinalExpenseRow[];
     registrations: SettlementRegistrationRow[];
     grandTotal: number;
     expensesSum: number;
@@ -150,7 +167,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         .from(eventRegistrations)
         .where(and(eq(eventRegistrations.eventId, eventId), isNull(eventRegistrations.cancelledAt)));
 
-    // Účastníci přihlášek
+    // Účastníci přihlášek — včetně individuálně odhlášených (cancelled_at NOT NULL)
     const regIds = regs.map(r => r.id);
     const participants = regIds.length > 0
         ? await db
@@ -162,6 +179,10 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 memberId: eventRegistrationParticipants.memberId,
                 personId: eventRegistrationParticipants.personId,
                 memberName: members.fullName,
+                cancelledAt: eventRegistrationParticipants.cancelledAt,
+                depositRefundAmount: eventRegistrationParticipants.depositRefundAmount,
+                depositForfeitPolicy: eventRegistrationParticipants.depositForfeitPolicy,
+                depositForfeitExpenseId: eventRegistrationParticipants.depositForfeitExpenseId,
             })
             .from(eventRegistrationParticipants)
             .leftJoin(members, eq(eventRegistrationParticipants.memberId, members.id))
@@ -189,12 +210,60 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
         : [];
 
-    const totalParticipants = regs.reduce((s, r) => s + (r.personsCount ?? 1), 0);
-    const totalMemberParticipants = participants.filter(p => p.memberId !== null).length;
+    // Počet aktivních (neodhlášených) účastníků per přihláška
+    const activeCountByReg = new Map<number, number>();
+    for (const reg of regs) {
+        const regParts = participants.filter(p => p.registrationId === reg.id);
+        if (regParts.length === 0) {
+            activeCountByReg.set(reg.id, reg.personsCount ?? 1);
+        } else {
+            const active = regParts.filter(p => !p.cancelledAt).length;
+            activeCountByReg.set(reg.id, Math.max(1, active));
+        }
+    }
+
+    const totalParticipants = Array.from(activeCountByReg.values()).reduce((s, n) => s + n, 0);
+    const totalMemberParticipants = participants.filter(p => p.memberId !== null && !p.cancelledAt).length;
 
     const expensesSum = finalExpenses.reduce((s, e) => s + e.amount, 0);
+
+    // Výpočet propadlých záloh per náklad
+    // depositPerParticipant = depositPrescription.amount / personsCount (fixní sazba)
+    function calcForfeitForExpense(expenseId: number): number {
+        return participants
+            .filter(p =>
+                p.cancelledAt !== null &&
+                p.depositForfeitPolicy === "forfeit_to_expense" &&
+                p.depositForfeitExpenseId === expenseId
+            )
+            .reduce((sum, p) => {
+                const reg = regs.find(r => r.id === p.registrationId);
+                const depositRaw = prescriptions.find(pr => pr.registrationId === p.registrationId && pr.type === "deposit");
+                if (!reg || !depositRaw) return sum;
+                const depositPerPerson = parseFloat(depositRaw.amount) / (reg.personsCount ?? 1);
+                const refund = parseFloat(p.depositRefundAmount ?? "0") || 0;
+                return sum + Math.max(0, depositPerPerson - refund);
+            }, 0);
+    }
+
+    // finalExpenses s effective amount
+    const finalExpenseRows: FinalExpenseRow[] = finalExpenses.map(e => {
+        const totalForfeit = calcForfeitForExpense(e.id);
+        return {
+            id: e.id,
+            purposeText: e.purposeText,
+            amount: e.amount,
+            effectiveAmount: Math.max(0, e.amount - totalForfeit),
+            totalForfeit,
+            allocationMethod: e.allocationMethod,
+            participantCoefficients: e.participantCoefficients,
+        };
+    });
+
     // unitPrice platí jen pro "split_all" náklady — rovnoměrné rozdělení na každého
-    const splitAllSum = finalExpenses.filter(e => e.allocationMethod === "split_all").reduce((s, e) => s + e.amount, 0);
+    const splitAllSum = finalExpenseRows
+        .filter(e => e.allocationMethod === "split_all")
+        .reduce((s, e) => s + e.effectiveAmount, 0);
     const unitPrice = totalParticipants > 0 ? Math.ceil(splitAllSum / totalParticipants) : 0;
 
     // Per_registration náklady, které mají alespoň jednu alokaci v DB.
@@ -209,21 +278,26 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             memberId: p.memberId,
             personId: p.personId,
             memberName: p.memberName ?? null,
+            cancelledAt: p.cancelledAt as Date | null,
+            depositRefundAmount: p.depositRefundAmount ? parseFloat(p.depositRefundAmount) : null,
+            depositForfeitPolicy: p.depositForfeitPolicy as DepositForfeitPolicy | null,
+            depositForfeitExpenseId: p.depositForfeitExpenseId,
         }));
-        const memberCount = regParticipants.filter(p => p.memberId !== null).length;
+        const memberCount = regParticipants.filter(p => p.memberId !== null && !p.cancelledAt).length;
         const personsCount = reg.personsCount ?? 1;
+        const activePersonsCount = activeCountByReg.get(reg.id) ?? personsCount;
 
         // Podrobný rozpis nákladů — pro e-mail a zobrazení v záložce Náklady
-        const expenseRows: SettlementExpenseRow[] = finalExpenses.map(expense => {
+        const expenseRows: SettlementExpenseRow[] = finalExpenseRows.map(expense => {
             let allocatedAmount = 0;
             if (expense.allocationMethod === "split_all") {
                 allocatedAmount = totalParticipants > 0
-                    ? (expense.amount / totalParticipants) * personsCount
+                    ? (expense.effectiveAmount / totalParticipants) * activePersonsCount
                     : 0;
             } else if (!expensesWithAllocs.has(expense.id)) {
                 // Žádné alokace v DB → fallback: rovnoměrné rozdělení na všechny (jako split_all)
                 allocatedAmount = totalParticipants > 0
-                    ? (expense.amount / totalParticipants) * personsCount
+                    ? (expense.effectiveAmount / totalParticipants) * activePersonsCount
                     : 0;
             } else {
                 // per_registration nebo with_coefficients: čte předpočítané alokace z DB
@@ -233,11 +307,11 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod as "split_all" | "per_registration" | "with_coefficients", allocatedAmount };
         });
 
-        // split_all: unitPrice × osoby (uniformní sazba); per_registration / with_coefficients: explicitní alokace
+        // split_all: unitPrice × aktivní osoby; per_registration / with_coefficients: explicitní alokace
         const perRegTotal = expenseRows
             .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
             .reduce((s, e) => s + e.allocatedAmount, 0);
-        const expensesTotal = unitPrice * personsCount + perRegTotal;
+        const expensesTotal = unitPrice * activePersonsCount + perRegTotal;
         // Dotace: poměrná část celkové dotace podle počtu členů v přihlášce
         const subsidy = totalMemberParticipants > 0
             ? Math.round(subsidyTotal * memberCount / totalMemberParticipants)
@@ -268,6 +342,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             lastName: reg.lastName,
             email: reg.email,
             personsCount,
+            activePersonsCount,
             participants: regParticipants,
             memberCount,
             expenses: expenseRows,
@@ -281,7 +356,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
     const grandTotal = registrationRows.reduce((s, r) => s + r.totalAmount, 0);
 
-    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses, registrations: registrationRows, grandTotal, expensesSum };
+    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses: finalExpenseRows, registrations: registrationRows, grandTotal, expensesSum };
 }
 
 // ── Billing status helpers ────────────────────────────────────────────────────
@@ -832,8 +907,8 @@ function buildSettlementEmailPayload(
         amount: p.amount,
         bankAccount: p.bankAccount,
         paymentDue: p.paymentDue,
-        unitPrice: reg.personsCount > 0 ? Math.round(reg.expensesTotal / reg.personsCount) : 0,
-        participants: reg.participants.map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null })),
+        unitPrice: reg.activePersonsCount > 0 ? Math.round(reg.expensesTotal / reg.activePersonsCount) : 0,
+        participants: reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null })),
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
         depositAmount: effectiveDepositAmount(reg.depositPrescription),
@@ -1061,6 +1136,124 @@ export async function removeParticipantFromRegistration(
         return { success: true };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Nepodařilo se odebrat účastníka" };
+    }
+}
+
+// ── Finální náklady akce (pro select v dialogu propadlé zálohy) ───────────────
+
+export async function getEventFinalExpenses(
+    eventId: number,
+): Promise<{ id: number; purposeText: string | null; amount: number }[]> {
+    const db = getDb();
+    const rows = await db
+        .select({ id: eventExpenses.id, purposeText: eventExpenses.purposeText, amount: eventExpenses.amount })
+        .from(eventExpenses)
+        .where(and(eq(eventExpenses.eventId, eventId), eq(eventExpenses.status, "final"), isNotNull(eventExpenses.amount)));
+    return rows.map(r => ({ id: r.id, purposeText: r.purposeText, amount: parseFloat(r.amount!) }));
+}
+
+// ── Odhlášení konkrétního účastníka (bez zrušení celé přihlášky) ──────────────
+
+export interface CancelParticipantData {
+    depositRefundAmount?: number;
+    depositForfeitPolicy?: DepositForfeitPolicy;
+    depositForfeitExpenseId?: number | null;
+}
+
+export async function cancelParticipant(
+    participantId: number,
+    data: CancelParticipantData,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const now = new Date();
+        let eventId: number | null = null;
+
+        await db.transaction(async tx => {
+            const [participant] = await tx
+                .select({
+                    id: eventRegistrationParticipants.id,
+                    registrationId: eventRegistrationParticipants.registrationId,
+                    fullName: eventRegistrationParticipants.fullName,
+                    cancelledAt: eventRegistrationParticipants.cancelledAt,
+                })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            if (!participant) throw new Error("Účastník nenalezen");
+            if (participant.cancelledAt) throw new Error("Účastník je již odhlášen");
+
+            const [reg] = await tx
+                .select({ id: eventRegistrations.id, eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt, personsCount: eventRegistrations.personsCount })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, participant.registrationId));
+
+            if (!reg) throw new Error("Přihláška nenalezena");
+            if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
+
+            eventId = reg.eventId;
+
+            // Označit účastníka jako odhlášeného
+            await tx.update(eventRegistrationParticipants)
+                .set({
+                    cancelledAt: now,
+                    depositRefundAmount: data.depositRefundAmount != null ? String(data.depositRefundAmount) : null,
+                    depositForfeitPolicy: data.depositForfeitPolicy ?? null,
+                    depositForfeitExpenseId: data.depositForfeitExpenseId ?? null,
+                })
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            // Zkontrolovat: pokud jsou nyní VŠICHNI účastníci odhlášeni, přihláška se stává zrušenou
+            const remaining = await tx
+                .select({ id: eventRegistrationParticipants.id })
+                .from(eventRegistrationParticipants)
+                .where(and(
+                    eq(eventRegistrationParticipants.registrationId, participant.registrationId),
+                    isNull(eventRegistrationParticipants.cancelledAt),
+                ));
+
+            if (remaining.length === 0) {
+                await tx.update(eventRegistrations)
+                    .set({ cancelledAt: now })
+                    .where(eq(eventRegistrations.id, participant.registrationId));
+
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ status: "cancelled", updatedAt: now })
+                    .where(and(
+                        eq(eventPaymentPrescriptions.registrationId, participant.registrationId),
+                        inArray(eventPaymentPrescriptions.status, ["pending"]),
+                    ));
+
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId: participant.registrationId,
+                    action: "cancel",
+                    changes: { cancelledAt: { old: null, new: now.toISOString() }, reason: { old: null, new: "Všichni účastníci odhlášeni" } },
+                    changedBy: session.user!.email!,
+                });
+            }
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: participant.registrationId,
+                action: "cancel_participant",
+                changes: {
+                    participant: { old: null, new: participant.fullName },
+                    cancelledAt: { old: null, new: now.toISOString() },
+                    ...(data.depositRefundAmount != null ? { depositRefundAmount: { old: null, new: String(data.depositRefundAmount) } } : {}),
+                    ...(data.depositForfeitPolicy ? { depositForfeitPolicy: { old: null, new: data.depositForfeitPolicy } } : {}),
+                },
+                changedBy: session.user!.email!,
+            });
+        });
+
+        if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Nepodařilo se odhlásit účastníka" };
     }
 }
 

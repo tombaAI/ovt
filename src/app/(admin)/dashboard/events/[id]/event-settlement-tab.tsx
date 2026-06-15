@@ -9,7 +9,7 @@ import {
     updateExpenseAllocationMethod,
     setExpenseParticipantCoefficients,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, FinalExpenseRow } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -174,7 +174,7 @@ function ExpenseAllocationRow({
     onReload,
     disabled,
 }: {
-    expense: EventSettlement["finalExpenses"][0];
+    expense: FinalExpenseRow;
     registrations: SettlementRegistrationRow[];
     onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[], newMethod?: "with_coefficients" | "per_registration") => void;
     onReload?: () => void;
@@ -302,7 +302,17 @@ function ExpenseAllocationRow({
                 <div className="text-sm font-semibold text-gray-900 tabular-nums whitespace-nowrap text-right">
                     {fmtCzk(expense.amount)}
                 </div>
-                <p className="text-sm font-medium text-gray-800">{expense.purposeText ?? "—"}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-gray-800">{expense.purposeText ?? "—"}</p>
+                    {expense.totalForfeit > 0 && (
+                        <span
+                            title={`Záloha propadlá na tento náklad: −${fmtCzk(expense.totalForfeit)}. Efektivní částka: ${fmtCzk(expense.effectiveAmount)}`}
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-orange-200 bg-orange-50 text-orange-700 whitespace-nowrap cursor-help"
+                        >
+                            −{fmtCzk(expense.totalForfeit)} storno záloha
+                        </span>
+                    )}
+                </div>
 
                 {/* Řádek 2: per osoba/podíl + metoda tlačítka */}
                 <div className="text-xs text-gray-400 tabular-nums whitespace-nowrap text-right">

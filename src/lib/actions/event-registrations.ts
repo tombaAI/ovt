@@ -871,6 +871,10 @@ export type ForeignWaterRegistrationParticipant = {
     isMember: boolean;
     memberId?: number | null;
     memberName?: string | null;
+    cancelledAt?: Date | null;
+    depositRefundAmount?: number | null;
+    depositForfeitPolicy?: string | null;
+    depositForfeitExpenseId?: number | null;
 };
 
 export type ForeignWaterRegistrationDetail = {
@@ -1175,6 +1179,8 @@ export type EventRegistrationAdminRow = {
     paymentMessageForRecipient: string | null;
     paymentStatus: EventPaymentPrescriptionStatus | null;
     matchedLedgerId: number | null;
+    depositAmount: number | null;   // záloha (deposit prescription amount), null pokud neexistuje
+    depositStatus: EventPaymentPrescriptionStatus | null;
 };
 
 export async function getEventRegistrationsForAdmin(eventId: number): Promise<EventRegistrationAdminRow[]> {
@@ -1206,6 +1212,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             paymentMessageForRecipient: sql<string | null>`COALESCE(${depositPresc.messageForRecipient}, ${settlementPresc.messageForRecipient})`,
             paymentStatus: sql<string | null>`COALESCE(${depositPresc.status}, ${settlementPresc.status})`,
             matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
+            depositAmount: depositPresc.amount,
+            depositStatus: depositPresc.status,
         })
         .from(eventRegistrations)
         .leftJoin(depositPresc, and(
@@ -1231,6 +1239,10 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
                 isMember: eventRegistrationParticipants.isMember,
                 memberId: eventRegistrationParticipants.memberId,
                 memberName: members.fullName,
+                cancelledAt: eventRegistrationParticipants.cancelledAt,
+                depositRefundAmount: eventRegistrationParticipants.depositRefundAmount,
+                depositForfeitPolicy: eventRegistrationParticipants.depositForfeitPolicy,
+                depositForfeitExpenseId: eventRegistrationParticipants.depositForfeitExpenseId,
             })
             .from(eventRegistrationParticipants)
             .leftJoin(members, eq(eventRegistrationParticipants.memberId, members.id))
@@ -1252,6 +1264,10 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             isMember: participantRow.isMember,
             memberId: participantRow.memberId,
             memberName: participantRow.memberName,
+            cancelledAt: participantRow.cancelledAt as Date | null,
+            depositRefundAmount: participantRow.depositRefundAmount ? parseFloat(participantRow.depositRefundAmount) : null,
+            depositForfeitPolicy: participantRow.depositForfeitPolicy,
+            depositForfeitExpenseId: participantRow.depositForfeitExpenseId,
         });
         participantsByRegistration.set(participantRow.registrationId, list);
     }
@@ -1292,6 +1308,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         paymentMessageForRecipient: row.paymentMessageForRecipient,
         paymentStatus: row.paymentStatus as EventPaymentPrescriptionStatus | null,
         matchedLedgerId: row.matchedLedgerId,
+        depositAmount: row.depositAmount ? Number(row.depositAmount) : null,
+        depositStatus: row.depositStatus as EventPaymentPrescriptionStatus | null,
         };
     });
 }

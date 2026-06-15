@@ -465,6 +465,14 @@ export const eventRegistrationParticipants = appSchema.table(
         memberId: integer("member_id").references(() => members.id, { onDelete: "set null" }),
         personId: integer("person_id").references(() => people.id, { onDelete: "set null" }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        // Propadlá záloha per účastník — vyplněno při odhlášení konkrétního účastníka
+        cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+        depositRefundAmount: numeric("deposit_refund_amount", { precision: 10, scale: 2 }),
+        depositForfeitPolicy: text("deposit_forfeit_policy", {
+            enum: ["forfeit_to_expense", "forfeit_split", "forfeit_to_club"] as const,
+        }),
+        depositForfeitExpenseId: integer("deposit_forfeit_expense_id")
+            .references(() => eventExpenses.id, { onDelete: "set null" }),
     },
     (t) => [
         index("event_reg_participants_registration_idx").on(t.registrationId),
