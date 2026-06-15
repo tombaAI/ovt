@@ -519,9 +519,10 @@ type ForeignWaterRegistrationSubmitTxResult = {
 
 type ParticipantData = { fullName: string; isMember: boolean };
 
-function buildParticipantInsertRows(registrationId: number, participants: ParticipantData[]) {
+function buildParticipantInsertRows(registrationId: number, eventId: number, participants: ParticipantData[]) {
     return participants.map((p, index) => ({
         registrationId,
+        eventId,
         participantOrder: index + 1,
         fullName: p.fullName,
         isPrimary: index === 0,
@@ -643,7 +644,7 @@ export async function submitForeignWaterRegistration(
 
             await tx
                 .insert(eventRegistrationParticipants)
-                .values(buildParticipantInsertRows(registration.id, allParticipants));
+                .values(buildParticipantInsertRows(registration.id, event.id, allParticipants));
 
             const messageForRecipient = buildForeignWaterPaymentMessage(existing.code, fullName);
 
@@ -762,7 +763,7 @@ export async function submitForeignWaterRegistration(
 
         await tx
             .insert(eventRegistrationParticipants)
-            .values(buildParticipantInsertRows(registration.id, allParticipants));
+            .values(buildParticipantInsertRows(registration.id, event.id, allParticipants));
 
         const seqResult = await tx.execute(
             sql`SELECT nextval('app.event_payment_prescription_code_seq')::int AS code`,

@@ -631,6 +631,7 @@ export async function addAdminEventRegistration(
                 const p = input.participants[i];
                 await tx.insert(eventRegistrationParticipants).values({
                     registrationId: reg.id,
+                    eventId,
                     participantOrder: i + 1,
                     fullName: p.fullName,
                     isPrimary: p.isPrimary,
@@ -718,9 +719,15 @@ export async function linkParticipantToMember(
             const [reg] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, p.registrationId));
             if (reg) revalidatePath(`/dashboard/events/${reg.eventId}`);
         }
+        if (memberId) revalidatePath(`/dashboard/members/${memberId}`);
         return { success: true };
-    } catch {
-        return { error: "Nepodařilo se spárovat účastníka" };
+    } catch (e) {
+        console.error("[linkParticipantToMember]", e);
+        const msg = e instanceof Error ? e.message : String(e);
+        if (msg.includes("event_reg_participants_event_member_uq")) {
+            return { error: "Tento člen je již propojen s jiným účastníkem této akce." };
+        }
+        return { error: `Nepodařilo se spárovat účastníka: ${msg}` };
     }
 }
 
@@ -963,6 +970,7 @@ export async function addParticipantToRegistration(
 
             await tx.insert(eventRegistrationParticipants).values({
                 registrationId,
+                eventId: regRow.eventId,
                 participantOrder: nextOrder,
                 fullName: participant.fullName.trim(),
                 isPrimary: false,

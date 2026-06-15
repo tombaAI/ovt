@@ -59,7 +59,9 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (open && !allMembers) getMembersForSettlement().then(setAllMembers);
+        if (open && !allMembers) getMembersForSettlement()
+            .then(setAllMembers)
+            .catch(() => setError("Nepodařilo se načíst seznam členů. Zkus obnovit stránku."));
     }, [open, allMembers]);
 
     useEffect(() => {
@@ -348,7 +350,9 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (open && !allMembers) getMembersForSettlement().then(setAllMembers);
+        if (open && !allMembers) getMembersForSettlement()
+            .then(setAllMembers)
+            .catch(() => setError("Nepodařilo se načíst seznam členů. Zkus obnovit stránku."));
     }, [open, allMembers]);
 
     useEffect(() => {
@@ -490,9 +494,14 @@ export function LinkParticipantDialog({ participant, open, onClose, onLinked }: 
     const [saving, startSave] = useTransition();
     const [error, setError] = useState<string | null>(null);
 
-    function ensureMembers() {
-        if (!members) getMembersForSettlement().then(setMembers);
-    }
+    // Komponenta se mountuje čerstvě při každém otevření (podmíněný render {linkTarget && ...})
+    useEffect(() => {
+        setSearch(participant.fullName);
+        getMembersForSettlement()
+            .then(setMembers)
+            .catch(() => setError("Nepodařilo se načíst seznam členů. Zkus obnovit stránku."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []);
 
     function handleSelect(memberId: number | null) {
         startSave(async () => {
@@ -502,11 +511,16 @@ export function LinkParticipantDialog({ participant, open, onClose, onLinked }: 
         });
     }
 
-    const filtered = members?.filter(m => m.fullName.toLowerCase().includes(search.toLowerCase())) ?? [];
+    // Hledání po slovech: všechna slova z hledaného textu musí být obsažena v fullName člena
+    const words = search.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    const filtered = (members ?? []).filter(m => {
+        const name = m.fullName.toLowerCase();
+        return words.length === 0 || words.every(w => name.includes(w));
+    });
 
     return (
         <Dialog open={open} onOpenChange={v => { if (!v) onClose(); }} >
-            <DialogContent className="sm:max-w-sm" onOpenAutoFocus={() => ensureMembers()}>
+            <DialogContent className="sm:max-w-sm">
                 <DialogHeader>
                     <DialogTitle>Spárovat: {participant.fullName}</DialogTitle>
                 </DialogHeader>
@@ -526,7 +540,7 @@ export function LinkParticipantDialog({ participant, open, onClose, onLinked }: 
                         autoFocus
                     />
                     <div className="max-h-60 overflow-y-auto border border-gray-200 rounded-lg">
-                        {members === null && <p className="text-xs text-gray-400 px-3 py-3">Načítám…</p>}
+                        {members === null && !error && <p className="text-xs text-gray-400 px-3 py-3">Načítám…</p>}
                         {members !== null && filtered.length === 0 && <p className="text-xs text-gray-400 px-3 py-3">Nic nenalezeno</p>}
                         {filtered.map(m => (
                             <button key={m.id} onClick={() => handleSelect(m.id)} disabled={saving}

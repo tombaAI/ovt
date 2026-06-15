@@ -7,6 +7,7 @@ import {
     eventRegistrationParticipants, eventRegistrations, events, eventPaymentPrescriptions,
 } from "@/db/schema";
 import { eq, and, ne, sql, desc, inArray } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/auth";
 import { getSelectedYear } from "@/lib/actions/year";
@@ -646,6 +647,8 @@ export type MemberEventReg = {
 
 export async function getMemberEventRegistrations(memberId: number): Promise<MemberEventReg[]> {
     const db = getDb();
+    const depositPresc = alias(eventPaymentPrescriptions, "deposit_presc");
+    const settlementPresc = alias(eventPaymentPrescriptions, "settlement_presc");
 
     const rows = await db
         .select({
@@ -659,14 +662,21 @@ export async function getMemberEventRegistrations(memberId: number): Promise<Mem
             personsCount: eventRegistrations.personsCount,
             personsNames: eventRegistrations.personsNames,
             cancelledAt: eventRegistrations.cancelledAt,
-            prescriptionAmount: eventPaymentPrescriptions.amount,
-            prescriptionStatus: eventPaymentPrescriptions.status,
-            prescriptionDue: eventPaymentPrescriptions.paymentDue,
+            prescriptionAmount: sql<string | null>`COALESCE(${depositPresc.amount}, ${settlementPresc.amount})`,
+            prescriptionStatus: sql<string | null>`COALESCE(${depositPresc.status}, ${settlementPresc.status})`,
+            prescriptionDue: sql<string | null>`COALESCE(${depositPresc.paymentDue}, ${settlementPresc.paymentDue})`,
         })
         .from(eventRegistrationParticipants)
         .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
         .innerJoin(events, eq(events.id, eventRegistrations.eventId))
-        .leftJoin(eventPaymentPrescriptions, eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id))
+        .leftJoin(depositPresc, and(
+            eq(depositPresc.registrationId, eventRegistrations.id),
+            eq(depositPresc.type, "deposit"),
+        ))
+        .leftJoin(settlementPresc, and(
+            eq(settlementPresc.registrationId, eventRegistrations.id),
+            eq(settlementPresc.type, "settlement"),
+        ))
         .where(eq(eventRegistrationParticipants.memberId, memberId))
         .orderBy(desc(events.dateFrom));
 

@@ -175,11 +175,13 @@ function DocPreviewDialog({ url, mime, fileName, open, onClose }: {
                 <DialogHeader className="px-4 py-3 border-b shrink-0">
                     <DialogTitle className="text-sm font-medium truncate">{fileName ?? "Doklad"}</DialogTitle>
                 </DialogHeader>
-                <div className="flex-1 overflow-auto flex items-center justify-center bg-gray-50 p-4 min-h-0">
+                <div className="flex-1 overflow-auto min-h-0 bg-gray-50">
                     {isImg && (
-                        // eslint-disable-next-line @next/next/no-img-element
-                        <img src={url} alt={fileName ?? "doklad"}
-                            className="max-w-full max-h-full object-contain rounded shadow" />
+                        <div className="min-h-full min-w-full flex items-center justify-center p-4">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={url} alt={fileName ?? "doklad"}
+                                className="max-h-[80vh] rounded shadow" />
+                        </div>
                     )}
                     {isPdf && (
                         <iframe src={url} className="w-full rounded" style={{ height: "78vh" }}
