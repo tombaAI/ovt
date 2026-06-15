@@ -286,14 +286,14 @@ function ExpenseAllocationRow({
         Object.keys(coefficients).length > 0 &&
         Object.values(coefficients).some(v => Math.abs(v - 1) > 0.001 || v === 0);
 
-    // Celková váha a cena na podíl (pro zobrazení)
+    // Celková váha a cena na podíl (pro zobrazení) — z efektivní částky
     const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
     const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-    const pricePerUnit = totalWeight > 0 ? Math.round(expense.amount / totalWeight) : 0;
+    const pricePerUnit = totalWeight > 0 ? Math.round(expense.effectiveAmount / totalWeight) : 0;
 
-    // Cena na osobu pro split_all (pro zobrazení v řádku 2)
-    const totalParticipants = registrations.reduce((s, r) => s + r.personsCount, 0);
-    const ppCostSplitAll = totalParticipants > 0 ? Math.ceil(expense.amount / totalParticipants) : 0;
+    // Cena na osobu pro split_all — aktivní účastníci, efektivní částka
+    const totalActiveParticipants = registrations.reduce((s, r) => s + r.activePersonsCount, 0);
+    const ppCostSplitAll = totalActiveParticipants > 0 ? Math.ceil(expense.effectiveAmount / totalActiveParticipants) : 0;
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
@@ -316,8 +316,8 @@ function ExpenseAllocationRow({
 
                 {/* Řádek 2: per osoba/podíl + metoda tlačítka */}
                 <div className="text-xs text-gray-400 tabular-nums whitespace-nowrap text-right">
-                    {method === "split_all" && totalParticipants > 0
-                        ? <>{fmtCzk(ppCostSplitAll)}/os. · {totalParticipants}&nbsp;os.</>
+                    {method === "split_all" && totalActiveParticipants > 0
+                        ? <>{fmtCzk(ppCostSplitAll)}/os. · {totalActiveParticipants}&nbsp;os.</>
                         : isCustom && totalWeight > 0
                             ? <>{fmtCzk(pricePerUnit)}/podíl · {totalWeight}&nbsp;p.</>
                             : "—"}
@@ -428,7 +428,7 @@ export function EventSettlementTab({ eventId, billingStatus }: { eventId: number
                 const perRegPart = newExpenses
                     .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
                     .reduce((s, e) => s + e.allocatedAmount, 0);
-                const expensesTotal = prev.unitPrice * reg.personsCount + perRegPart;
+                const expensesTotal = prev.unitPrice * reg.activePersonsCount + perRegPart;
                 const subsidy = prev.totalMemberParticipants > 0
                     ? Math.round(prev.subsidyTotal * reg.memberCount / prev.totalMemberParticipants)
                     : 0;
