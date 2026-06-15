@@ -1650,6 +1650,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                             leaderName={event.leaderName}
                             leaderCskNumber={event.leaderCskNumber}
                             billingStatus={event.billingStatus}
+                            lockForReimbursement={event.lockForReimbursement}
                             treasurerApproved={event.treasurerApproved}
                             isTreasurer={isTreasurer}
                         />

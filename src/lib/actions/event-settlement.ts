@@ -361,9 +361,19 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
 // ── Billing status helpers ────────────────────────────────────────────────────
 
-async function getBillingStatus(db: ReturnType<typeof getDb>, eventId: number): Promise<"draft" | "prescribed" | null> {
-    const [row] = await db.select({ billingStatus: events.billingStatus }).from(events).where(eq(events.id, eventId));
-    return (row?.billingStatus as "draft" | "prescribed") ?? null;
+type EventLocks = {
+    billingStatus: "draft" | "prescribed";
+    lockForParticipants: boolean;
+    lockForReimbursement: boolean;
+};
+
+async function getEventLocks(db: ReturnType<typeof getDb>, eventId: number): Promise<EventLocks | null> {
+    const [row] = await db
+        .select({ billingStatus: events.billingStatus, lockForParticipants: events.lockForParticipants, lockForReimbursement: events.lockForReimbursement })
+        .from(events)
+        .where(eq(events.id, eventId));
+    if (!row) return null;
+    return { billingStatus: row.billingStatus as "draft" | "prescribed", lockForParticipants: row.lockForParticipants, lockForReimbursement: row.lockForReimbursement };
 }
 
 /** Uzamkne billing: vygeneruje předpisy a přepne stav na 'prescribed'. */
@@ -377,7 +387,7 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
-            .set({ billingStatus: "prescribed", updatedAt: new Date() })
+            .set({ billingStatus: "prescribed", lockForParticipants: true, updatedAt: new Date() })
             .where(eq(events.id, eventId));
 
         revalidatePath(`/dashboard/events/${eventId}`);
@@ -399,7 +409,7 @@ export async function unlockBilling(eventId: number): Promise<{ success: true; d
         const db = getDb();
 
         await db.update(events)
-            .set({ billingStatus: "draft", updatedAt: new Date() })
+            .set({ billingStatus: "draft", lockForParticipants: false, updatedAt: new Date() })
             .where(eq(events.id, eventId));
 
         revalidatePath(`/dashboard/events/${eventId}`);
@@ -410,12 +420,42 @@ export async function unlockBilling(eventId: number): Promise<{ success: true; d
     }
 }
 
+/** Uzamkne doklady pro proplacení — zamkne metadata nákladů (kategorie, popis, příjemce, soubor). */
+export async function lockForReimbursement(eventId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+        const [ev] = await db.select({ id: events.id }).from(events).where(eq(events.id, eventId));
+        if (!ev) return { error: "Akce nenalezena" };
+        await db.update(events)
+            .set({ lockForReimbursement: true, updatedAt: new Date() })
+            .where(eq(events.id, eventId));
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Chyba při uzamčení dokladů" };
+    }
+}
+
+/** Odemkne doklady pro proplacení. */
+export async function unlockForReimbursement(eventId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+        await db.update(events)
+            .set({ lockForReimbursement: false, updatedAt: new Date() })
+            .where(eq(events.id, eventId));
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Chyba při odemčení dokladů" };
+    }
+}
+
 // ── Dotace akce ───────────────────────────────────────────────────────────────
 
 export async function updateEventSubsidy(eventId: number, subsidyPerMember: number | null): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
-        if (await getBillingStatus(db, eventId) === "prescribed")
+        if ((await getEventLocks(db, eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
         await db.update(events)
             .set({ subsidyPerMember: subsidyPerMember !== null ? String(subsidyPerMember) : null, updatedAt: new Date() })
@@ -437,7 +477,7 @@ export async function updateExpenseAllocationMethod(
         const db = getDb();
         const [exp] = await db.select({ eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp) return { error: "Náklad nenalezen" };
-        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
         // participantCoefficients záměrně nezahazujeme — zachováme je pro obnovu při přepnutí zpět
@@ -467,7 +507,7 @@ export async function setExpenseRegistrationAllocations(
 
         const [exp] = await db.select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
-        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
         // Ověření, že součet sedí k částce nákladu
@@ -513,7 +553,7 @@ export async function setExpenseParticipantCoefficients(
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
-        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
         const expenseAmount = parseFloat(exp.amount);
@@ -697,7 +737,7 @@ export async function addAdminEventRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
-        if (await getBillingStatus(db, eventId) === "prescribed") return { error: "Nelze přidávat přihlášky — náklady jsou uzamčeny." };
+        if ((await getEventLocks(db, eventId))?.lockForParticipants) return { error: "Nelze přidávat přihlášky — náklady jsou uzamčeny." };
 
         const publicToken = randomBytes(24).toString("hex");
 
@@ -751,7 +791,7 @@ export async function updateAdminRegistration(
         const db = getDb();
         const [reg] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!reg) return { error: "Přihláška nenalezena" };
-        if (await getBillingStatus(db, reg.eventId) === "prescribed") return { error: "Nelze měnit přihlášky — náklady jsou uzamčeny." };
+        if ((await getEventLocks(db, reg.eventId))?.lockForParticipants) return { error: "Nelze měnit přihlášky — náklady jsou uzamčeny." };
         await db.update(eventRegistrations).set(input).where(eq(eventRegistrations.id, registrationId));
         if (reg) revalidatePath(`/dashboard/events/${reg.eventId}`);
         return { success: true };
@@ -772,7 +812,7 @@ export async function updateParticipantFullName(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+        if (regRow && (await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
         await db.update(eventRegistrationParticipants)
             .set({ fullName: fullName.trim() })
             .where(eq(eventRegistrationParticipants.id, participantId));
@@ -795,7 +835,7 @@ export async function linkParticipantToMember(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (pRow) {
             const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-            if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+            if (regRow && (await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
         }
         await db.update(eventRegistrationParticipants)
             .set({ memberId, personId: null })
@@ -998,7 +1038,7 @@ export async function sendSingleRegistrationEmail(
             .from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!reg) return { error: "Přihláška nenalezena" };
         if (reg.cancelledAt) return { error: "Přihláška je zrušena" };
-        if (await getBillingStatus(db, reg.eventId) !== "prescribed") return { error: "Náklady nejsou uzamčeny — nejdříve vygenerujte předpisy." };
+        if ((await getEventLocks(db, reg.eventId))?.billingStatus !== "prescribed") return { error: "Náklady nejsou uzamčeny — nejdříve vygenerujte předpisy." };
 
         const [event] = await db.select({ name: events.name, treasurerApproved: events.treasurerApproved }).from(events).where(eq(events.id, reg.eventId));
         if (!event) return { error: "Akce nenalezena" };
@@ -1050,7 +1090,7 @@ export async function addParticipantToRegistration(
         const db = getDb();
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!regRow) return { error: "Přihláška nenalezena" };
-        if (await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze přidávat účastníky — náklady jsou uzamčeny." };
+        if ((await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze přidávat účastníky — náklady jsou uzamčeny." };
 
         let eventId: number | null = null;
 
@@ -1100,7 +1140,7 @@ export async function removeParticipantFromRegistration(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze odebírat účastníky — náklady jsou uzamčeny." };
+        if (regRow && (await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze odebírat účastníky — náklady jsou uzamčeny." };
 
         let eventId: number | null = null;
 

@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses } from "@/db/schema";
+import { eventExpenses, events } from "@/db/schema";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +32,15 @@ export async function POST(
         }
 
         const db = getDb();
+
+        const [eventRow] = await db
+            .select({ lockForReimbursement: events.lockForReimbursement })
+            .from(events)
+            .where(eq(events.id, eventId));
+        if (!eventRow) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        if (eventRow.lockForReimbursement) {
+            return NextResponse.json({ error: "Nelze přikládat soubory — výdajový zámek je aktivní" }, { status: 409 });
+        }
 
         const [expense] = await db
             .select({ id: eventExpenses.id, eventId: eventExpenses.eventId, fileUrl: eventExpenses.fileUrl })

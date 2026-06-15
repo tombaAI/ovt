@@ -410,6 +410,8 @@ export const events = appSchema.table(
         note: text("note"),
         subsidyPerMember: numeric("subsidy_per_member", { precision: 10, scale: 2 }),
         billingStatus: text("billing_status", { enum: eventBillingStatusEnum }).notNull().default("draft"),
+        lockForParticipants: boolean("lock_for_participants").notNull().default(false),
+        lockForReimbursement: boolean("lock_for_reimbursement").notNull().default(false),
         treasurerApproved: boolean("treasurer_approved").notNull().default(false),
         createdBy: text("created_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

@@ -12,6 +12,7 @@ import type { EventExpenseRow } from "@/lib/actions/event-expenses";
 import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 import { setTreasurerApproval, getVyuctovaniActivityLog, type VyuctovaniActivity } from "@/lib/actions/events";
+import { lockForReimbursement, unlockForReimbursement } from "@/lib/actions/event-settlement";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
 import { Mail, Check } from "lucide-react";
@@ -1623,12 +1624,14 @@ function ExpenseEditDialog({
     onOpenChange,
     onPersonCreated,
     onSaved,
+    readonlyAmount,
 }: {
     expense: EventExpenseRow;
     eventId: number;
     open: boolean;
     people: PersonOption[];
     peopleLoaded: boolean;
+    readonlyAmount?: boolean;
     onOpenChange: (open: boolean) => void;
     onPersonCreated: (person: PersonOption) => void;
     onSaved: () => void | Promise<void>;
@@ -1659,22 +1662,27 @@ function ExpenseEditDialog({
         setError(null);
 
         try {
-            const amountNum = parseFloat(amount.replace(",", "."));
-            if (isNaN(amountNum) || amountNum <= 0) throw new Error("Oprav částku");
             if (!purposeText.trim()) throw new Error("Doplň účel dokladu");
+
+            const body: Record<string, unknown> = {
+                expenseId: expense.id,
+                purposeText: purposeText.trim(),
+                purposeCategory,
+                isPaid,
+                reimbursementPersonId: isPaid ? (reimbursementPersonId || null) : null,
+                invoicePayeeName: !isPaid ? (invoicePayeeName.trim() || null) : null,
+            };
+
+            if (!readonlyAmount) {
+                const amountNum = parseFloat(amount.replace(",", "."));
+                if (isNaN(amountNum) || amountNum <= 0) throw new Error("Oprav částku");
+                body.amount = amountNum;
+            }
 
             const response = await fetch(`/api/events/${eventId}/expenses`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    expenseId: expense.id,
-                    amount: amountNum,
-                    purposeText: purposeText.trim(),
-                    purposeCategory,
-                    isPaid,
-                    reimbursementPersonId: isPaid ? (reimbursementPersonId || null) : null,
-                    invoicePayeeName: !isPaid ? (invoicePayeeName.trim() || null) : null,
-                }),
+                body: JSON.stringify(body),
             });
 
             const payload = await response.json() as { error?: string };
@@ -1700,18 +1708,25 @@ function ExpenseEditDialog({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {readonlyAmount && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                            Příjmový zámek je aktivní — částku nelze měnit. Lze upravit kategorii, popis a příjemce.
+                        </p>
+                    )}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <label className="text-xs text-gray-500">Částka (Kč) *</label>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={amount}
-                                onChange={event => setAmount(event.target.value)}
-                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
+                        {!readonlyAmount && (
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-gray-500">Částka (Kč) *</label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={amount}
+                                    onChange={event => setAmount(event.target.value)}
+                                    className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                            </div>
+                        )}
+                        <div className={`space-y-1.5 ${readonlyAmount ? "sm:col-span-2" : ""}`}>
                             <label className="text-xs text-gray-500">Účetní kód *</label>
                             <select
                                 value={purposeCategory}
@@ -1797,7 +1812,8 @@ function ExpenseItem({
     onPersonCreated,
     onDeleted,
     onUpdated,
-    locked,
+    lockedForParticipants,
+    lockedForReimbursement,
 }: {
     expense: EventExpenseRow;
     eventId: number;
@@ -1806,7 +1822,8 @@ function ExpenseItem({
     onPersonCreated: (person: PersonOption) => void;
     onDeleted: () => void;
     onUpdated: () => void;
-    locked?: boolean;
+    lockedForParticipants?: boolean;
+    lockedForReimbursement?: boolean;
 }) {
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
@@ -1946,7 +1963,7 @@ function ExpenseItem({
                         {expense.invoicePayeeName && (
                             <span className="text-xs text-gray-700">{expense.invoicePayeeName}</span>
                         )}
-                        {!locked && (
+                        {!lockedForReimbursement && (
                             <button
                                 onClick={() => setAttachingFile(true)}
                                 className="text-[11px] font-medium text-amber-700 hover:text-amber-900 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-50 transition-colors flex items-center gap-1"
@@ -2001,14 +2018,14 @@ function ExpenseItem({
                         {isUnconfirmed ? "Potvrdit" : "Zpracovat"}
                     </button>
                 ) : null}
-                {!locked && (
+                {!lockedForReimbursement && (
                     <button onClick={() => needsAction ? setProcessing(true) : setEditing(true)}
                         className="text-gray-300 hover:text-gray-600 transition-colors"
                         title="Upravit">
                         <Pencil size={15} />
                     </button>
                 )}
-                {!locked && (
+                {!(lockedForParticipants || lockedForReimbursement) && (
                     <button onClick={handleDelete} disabled={deleting}
                         className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
                         title="Smazat doklad">
@@ -2036,6 +2053,7 @@ function ExpenseItem({
                 onOpenChange={setEditing}
                 onPersonCreated={onPersonCreated}
                 onSaved={onUpdated}
+                readonlyAmount={lockedForParticipants}
             />
             {isExternalPayee && (
                 <PersonEditDialog
@@ -2407,6 +2425,7 @@ export function EventExpensesTab({
     leaderName,
     leaderCskNumber,
     billingStatus,
+    lockForReimbursement: initialLockForReimbursement,
     treasurerApproved: initialTreasurerApproved,
     isTreasurer,
 }: {
@@ -2415,10 +2434,14 @@ export function EventExpensesTab({
     leaderName: string | null;
     leaderCskNumber: string | null;
     billingStatus: "draft" | "prescribed";
+    lockForReimbursement: boolean;
     treasurerApproved: boolean;
     isTreasurer: boolean;
 }) {
     const isPrescribed = billingStatus === "prescribed";
+    const lockedForParticipants = isPrescribed;
+    const [lockedForReimbursement, setLockedForReimbursement] = useState(initialLockForReimbursement);
+    const [reimbursementLocking, setReimbursementLocking] = useState(false);
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -2461,6 +2484,17 @@ export function EventExpensesTab({
         setApprovalSaving(false);
     }
 
+    async function handleToggleReimbursementLock() {
+        setReimbursementLocking(true);
+        const res = lockedForReimbursement
+            ? await unlockForReimbursement(eventId)
+            : await lockForReimbursement(eventId);
+        if (!("error" in res)) {
+            setLockedForReimbursement(v => !v);
+        }
+        setReimbursementLocking(false);
+    }
+
     function handlePersonCreated(person: PersonOption) {
         setPersonOptions(prev => [...prev, person].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs")));
     }
@@ -2477,7 +2511,7 @@ export function EventExpensesTab({
                     {/* Status řádek */}
                     <p className="text-sm text-[#327600] flex items-center gap-2">
                         <span>🔒</span>
-                        <span>Náklady jsou uzamčeny — předpisy byly vygenerovány. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
+                        <span>Příjmový zámek je aktivní — předpisy byly vygenerovány. Částky a rozdělení nelze měnit. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
                     </p>
 
                     {/* Souhlas hospodáře */}
@@ -2548,7 +2582,37 @@ export function EventExpensesTab({
                     )}
                 </div>
             )}
-            {!isPrescribed && (
+
+            {/* Výdajový zámek */}
+            <div className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-3 ${
+                lockedForReimbursement
+                    ? "border-orange-300 bg-orange-50"
+                    : "border-gray-200 bg-white"
+            }`}>
+                <div>
+                    <p className="text-sm font-medium text-gray-800">
+                        {lockedForReimbursement ? "🔒 Výdajový zámek aktivní" : "Výdajový zámek"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        {lockedForReimbursement
+                            ? "Nelze měnit kategorii, popis, příjemce ani přikládat soubory."
+                            : "Po uzamčení nelze měnit kategorii, popis, příjemce ani přikládat soubory k fakturám."}
+                    </p>
+                </div>
+                <button
+                    onClick={handleToggleReimbursementLock}
+                    disabled={reimbursementLocking}
+                    className={`shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40 ${
+                        lockedForReimbursement
+                            ? "border-orange-300 text-orange-700 bg-orange-100 hover:bg-orange-200"
+                            : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                    }`}
+                >
+                    {reimbursementLocking ? "…" : lockedForReimbursement ? "Odemknout doklady" : "Uzamknout doklady"}
+                </button>
+            </div>
+
+            {!(lockedForParticipants || lockedForReimbursement) && (
                 <AddExpenseForm
                     eventId={eventId}
                     personOptions={personOptions}
@@ -2577,7 +2641,8 @@ export function EventExpensesTab({
                                     onPersonCreated={handlePersonCreated}
                                     onDeleted={load}
                                     onUpdated={load}
-                                    locked={isPrescribed}
+                                    lockedForParticipants={lockedForParticipants}
+                                    lockedForReimbursement={lockedForReimbursement}
                                 />
                             ))}
                         </div>
