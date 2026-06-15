@@ -59,7 +59,9 @@ export function AddRegistrationDialog({ eventId, open, onClose, onAdded }: AddRe
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (open && !allMembers) getMembersForSettlement().then(setAllMembers);
+        if (open && !allMembers) getMembersForSettlement()
+            .then(setAllMembers)
+            .catch(() => setError("Nepodařilo se načíst seznam členů. Zkus obnovit stránku."));
     }, [open, allMembers]);
 
     useEffect(() => {
@@ -348,7 +350,9 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        if (open && !allMembers) getMembersForSettlement().then(setAllMembers);
+        if (open && !allMembers) getMembersForSettlement()
+            .then(setAllMembers)
+            .catch(() => setError("Nepodařilo se načíst seznam členů. Zkus obnovit stránku."));
     }, [open, allMembers]);
 
     useEffect(() => {
@@ -491,7 +495,9 @@ export function LinkParticipantDialog({ participant, open, onClose, onLinked }: 
     const [error, setError] = useState<string | null>(null);
 
     function ensureMembers() {
-        if (!members) getMembersForSettlement().then(setMembers);
+        if (!members) getMembersForSettlement()
+            .then(setMembers)
+            .catch(() => setError("Nepodařilo se načíst seznam členů. Zkus obnovit stránku."));
     }
 
     function handleSelect(memberId: number | null) {
