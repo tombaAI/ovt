@@ -16,8 +16,9 @@ import {
     sendEventSettlementEmails,
     sendSingleRegistrationEmail,
     getEventSettlementEmailLog,
+    setDepositPromise,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow, EmailSendLogEntry } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, PrescriptionInfo, EmailSendLogEntry } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -46,6 +47,90 @@ function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount:
     if (status === "matched") return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Spárováno ({fmtCzk(matchedAmount ?? 0)})</Badge>;
     if (status === "cancelled") return <Badge className="bg-gray-100 text-gray-500 border-0 text-xs">Zrušeno</Badge>;
     return <Badge className="bg-amber-100 text-amber-700 border-0 text-xs">Čeká na platbu</Badge>;
+}
+
+// ── Příslib zálohy dialog + badge ─────────────────────────────────────────────
+
+function DepositPromiseDialog({ open, currentNote, onSave, onClose, saving }: {
+    open: boolean;
+    currentNote: string | null;
+    onSave: (note: string) => void;
+    onClose: () => void;
+    saving: boolean;
+}) {
+    const [note, setNote] = useState(currentNote ?? "");
+    useEffect(() => { if (open) setNote(currentNote ?? ""); }, [open, currentNote]);
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v && !saving) onClose(); }}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>Příslib zálohy</DialogTitle></DialogHeader>
+                <p className="text-sm text-gray-500 -mt-1">
+                    Záloha zatím nebyla spárována, ale je na cestě. Příslib se zohlední při výpočtu doplatku.
+                </p>
+                <div className="space-y-1">
+                    <p className="text-xs font-medium text-gray-700">Poznámka <span className="text-gray-400 font-normal">(volitelné)</span></p>
+                    <Textarea
+                        placeholder="Např. účastník zaslal potvrzení platby…"
+                        value={note}
+                        onChange={e => setNote(e.target.value)}
+                        rows={3}
+                        className="resize-none text-sm"
+                        disabled={saving}
+                    />
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="ghost" size="sm" onClick={onClose} disabled={saving} className="text-gray-500">Zrušit</Button>
+                    <Button size="sm" onClick={() => onSave(note)} disabled={saving} className="bg-purple-600 hover:bg-purple-700 text-white">
+                        {saving ? <><Loader2 size={13} className="animate-spin mr-1.5" />Ukládám…</> : "Uložit příslib"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function DepositStatusCell({ dep, onPromiseChange }: {
+    dep: PrescriptionInfo;
+    onPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
+}) {
+    const [dialogOpen, setDialogOpen] = useState(false);
+    const [revoking, startRevoke] = useTransition();
+
+    if (dep.status !== "pending") {
+        return <StatusBadge status={dep.status} matchedAmount={dep.matchedAmount} />;
+    }
+
+    if (dep.depositPromise) {
+        return (
+            <div className="flex flex-col items-end gap-0.5">
+                <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Příslib zálohy</Badge>
+                <button
+                    onClick={() => { startRevoke(async () => onPromiseChange(dep.id, false, "")); }}
+                    disabled={revoking}
+                    className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
+                    {revoking ? "…" : "odvolat"}
+                </button>
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col items-end gap-0.5">
+            <StatusBadge status={dep.status} matchedAmount={dep.matchedAmount} />
+            <button
+                onClick={() => setDialogOpen(true)}
+                className="text-[10px] text-gray-400 hover:text-purple-600 transition-colors whitespace-nowrap">
+                označit příslib
+            </button>
+            <DepositPromiseDialog
+                open={dialogOpen}
+                currentNote={dep.depositPromiseNote}
+                onSave={note => { setDialogOpen(false); onPromiseChange(dep.id, true, note); }}
+                onClose={() => setDialogOpen(false)}
+                saving={false}
+            />
+        </div>
+    );
 }
 
 // ── Dotace ────────────────────────────────────────────────────────────────────
@@ -123,10 +208,11 @@ function SendEmailModal({ open, title, description, onSend, onSkip, onClose, sen
 
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail }: {
+function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange }: {
     rows: SettlementRegistrationRow[]; unitPrice: number; hasPerReg: boolean;
     isPrescribed: boolean; treasurerApproved: boolean;
     onSendEmail: (registrationId: number, name: string) => void;
+    onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
 }) {
     return (
         <div className="overflow-x-auto">
@@ -196,7 +282,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                                     {reg.depositPrescription && (
                                         <div className="flex items-center gap-1">
                                             <span className="text-xs text-gray-400">záloha</span>
-                                            <StatusBadge status={reg.depositPrescription.status} matchedAmount={reg.depositPrescription.matchedAmount} />
+                                            <DepositStatusCell dep={reg.depositPrescription} onPromiseChange={onDepositPromiseChange} />
                                         </div>
                                     )}
                                     <div className="inline-flex items-center gap-1">
@@ -311,6 +397,13 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                 setSendFeedback(`Odesláno ${res.sent} e-mailů${res.skipped > 0 ? `, přeskočeno ${res.skipped}` : ""}${res.failed.length > 0 ? `, ${res.failed.length} selhalo` : ""}.`);
                 loadLog();
             }
+        });
+    }
+
+    function handleDepositPromiseChange(prescriptionId: number, promise: boolean, note: string) {
+        setDepositPromise(prescriptionId, promise, note).then(res => {
+            if ("error" in res) setSendFeedback(`Chyba: ${res.error}`);
+            else load();
         });
     }
 
@@ -463,6 +556,7 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                         isPrescribed={isPrescribed}
                         treasurerApproved={treasurerApproved}
                         onSendEmail={(id, name) => { setSendFeedback(null); setIndividualTarget({ registrationId: id, name }); }}
+                        onDepositPromiseChange={handleDepositPromiseChange}
                     />
                 )}
             </div>

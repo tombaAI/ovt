@@ -48,7 +48,19 @@ export type PrescriptionInfo = {
     amount: number;
     matchedAmount: number | null;
     paymentDue: string | null;
+    depositPromise: boolean;
+    depositPromiseNote: string | null;
 };
+
+/** Efektivní záloha pro výpočet doplatku — odečítáme jen co skutečně přišlo nebo je přislíbeno. */
+export function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
+    if (!dep) return 0;
+    if (dep.status === "matched" || dep.status === "paid")
+        return dep.matchedAmount ?? dep.amount;
+    if (dep.depositPromise)
+        return dep.amount;
+    return 0;
+}
 
 export type SettlementRegistrationRow = {
     registrationId: number;
@@ -170,6 +182,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 amount: eventPaymentPrescriptions.amount,
                 matchedAmount: eventPaymentPrescriptions.matchedAmount,
                 paymentDue: eventPaymentPrescriptions.paymentDue,
+                depositPromise: eventPaymentPrescriptions.depositPromise,
+                depositPromiseNote: eventPaymentPrescriptions.depositPromiseNote,
             })
             .from(eventPaymentPrescriptions)
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
@@ -244,6 +258,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 amount: parseFloat(p.amount),
                 matchedAmount: p.matchedAmount ? parseFloat(p.matchedAmount) : null,
                 paymentDue: p.paymentDue,
+                depositPromise: p.depositPromise,
+                depositPromiseNote: p.depositPromiseNote,
             } : null;
 
         return {
@@ -557,8 +573,7 @@ async function upsertPrescriptionAmounts(
 
     await db.transaction(async tx => {
         for (const reg of settlement.registrations) {
-            // Záloha je fixní — od ní odečteme, abychom dostali doplatek
-            const depositAmount = reg.depositPrescription?.amount ?? 0;
+            const depositAmount = effectiveDepositAmount(reg.depositPrescription);
             const settlementAmount = String(Math.max(0, reg.totalAmount - depositAmount));
 
             if (reg.settlementPrescription) {
@@ -821,7 +836,7 @@ function buildSettlementEmailPayload(
         participants: reg.participants.map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null })),
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
-        depositAmount: reg.depositPrescription?.amount ?? 0,
+        depositAmount: effectiveDepositAmount(reg.depositPrescription),
         message: message || undefined,
         senderName,
         senderEmail,
@@ -1154,5 +1169,48 @@ export async function restoreAdminRegistration(
         return { success: true };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Nepodařilo se obnovit přihlášku" };
+    }
+}
+
+// ── Příslib zálohy ────────────────────────────────────────────────────────────
+
+export async function setDepositPromise(
+    prescriptionId: number,
+    promise: boolean,
+    note: string,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const [p] = await db
+            .select({
+                type: eventPaymentPrescriptions.type,
+                status: eventPaymentPrescriptions.status,
+                eventId: eventPaymentPrescriptions.eventId,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        if (!p) return { error: "Předpis nenalezen" };
+        if (p.type !== "deposit") return { error: "Příslib lze nastavit jen u zálohy" };
+        if (p.status === "cancelled") return { error: "Záloha je zrušena — příslib nedává smysl" };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({
+                depositPromise: promise,
+                depositPromiseNote: promise ? (note || null) : null,
+                depositPromiseBy: promise ? session.user.email : null,
+                depositPromiseAt: promise ? new Date() : null,
+                updatedAt: new Date(),
+            })
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        revalidatePath(`/dashboard/events/${p.eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se nastavit příslib zálohy" };
     }
 }
