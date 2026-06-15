@@ -975,6 +975,12 @@ export async function cancelForeignWaterRegistrationByToken(token: string): Prom
                 eq(eventPaymentPrescriptions.eventId, FOREIGN_WATER_EVENT_ID),
             ));
 
+        // Odlinkovat členy — uvolní unique constraint pro jinou aktivní přihlášku téhož člena
+        await tx
+            .update(eventRegistrationParticipants)
+            .set({ memberId: null })
+            .where(eq(eventRegistrationParticipants.registrationId, existing.registrationId));
+
         await tx.insert(auditLog).values({
             entityType: "event_registration",
             entityId:   existing.registrationId,
