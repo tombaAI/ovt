@@ -583,16 +583,24 @@ export async function setExpenseParticipantCoefficients(
         const regIds = regs.map(r => r.id);
         const participants = regIds.length > 0
             ? await db
-                .select({ id: eventRegistrationParticipants.id, registrationId: eventRegistrationParticipants.registrationId })
+                .select({
+                    id: eventRegistrationParticipants.id,
+                    registrationId: eventRegistrationParticipants.registrationId,
+                    cancelledAt: eventRegistrationParticipants.cancelledAt,
+                })
                 .from(eventRegistrationParticipants)
                 .where(inArray(eventRegistrationParticipants.registrationId, regIds))
             : [];
 
-        // Generuje klíče osob pro přihlášku — stejná logika jako getPersonsForAlloc na klientu
+        // Generuje klíče osob pro přihlášku — stejná logika jako getPersonsForAlloc na klientu.
+        // Zachováváme původní indexy (pro anonymní klíče r{regId}-{i}), ale vracíme jen aktivní.
         function getPersonKeys(regId: number, personsCount: number | null): string[] {
             const regParticipants = participants.filter(p => p.registrationId === regId);
             if (regParticipants.length > 0) {
-                return regParticipants.map((p, i) => p.id > 0 ? `p${p.id}` : `r${regId}-${i}`);
+                return regParticipants
+                    .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
+                    .filter(pk => pk.active)
+                    .map(pk => pk.key);
             }
             return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
         }
@@ -629,6 +637,85 @@ export async function setExpenseParticipantCoefficients(
         console.error("[setExpenseParticipantCoefficients]", e);
         return { error: "Nepodařilo se uložit koeficienty" };
     }
+}
+
+// ── Přepočet alokací with_coefficients po odhlášení účastníka ────────────────
+
+/**
+ * Přepočítá DB alokace pro všechny `with_coefficients` náklady akce,
+ * přičemž bere v úvahu jen aktivní (neodhlášené) účastníky.
+ * Koeficienty jsou uloženy v expenses.participantCoefficients — odhlášený
+ * účastník má tam stále svůj klíč, ale do váhy se nezapočítá.
+ */
+async function recalculateWithCoefficientsAllocations(eventId: number, db: ReturnType<typeof getDb>): Promise<void> {
+    const withCoeffExpenses = await db
+        .select({ id: eventExpenses.id, amount: eventExpenses.amount, participantCoefficients: eventExpenses.participantCoefficients })
+        .from(eventExpenses)
+        .where(and(
+            eq(eventExpenses.eventId, eventId),
+            eq(eventExpenses.allocationMethod, "with_coefficients"),
+            eq(eventExpenses.status, "final"),
+            isNotNull(eventExpenses.amount),
+        ));
+
+    if (withCoeffExpenses.length === 0) return;
+
+    const regs = await db
+        .select({ id: eventRegistrations.id, personsCount: eventRegistrations.personsCount })
+        .from(eventRegistrations)
+        .where(and(eq(eventRegistrations.eventId, eventId), isNull(eventRegistrations.cancelledAt)));
+
+    if (regs.length === 0) return;
+
+    const regIds = regs.map(r => r.id);
+    const allParticipants = regIds.length > 0
+        ? await db
+            .select({
+                id: eventRegistrationParticipants.id,
+                registrationId: eventRegistrationParticipants.registrationId,
+                cancelledAt: eventRegistrationParticipants.cancelledAt,
+            })
+            .from(eventRegistrationParticipants)
+            .where(inArray(eventRegistrationParticipants.registrationId, regIds))
+        : [];
+
+    function getActivePersonKeys(regId: number, personsCount: number | null): string[] {
+        const regParts = allParticipants.filter(p => p.registrationId === regId);
+        if (regParts.length > 0) {
+            // Zachováváme původní indexy (pro klíče r{regId}-{i}), ale vracíme jen aktivní
+            return regParts
+                .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
+                .filter(pk => pk.active)
+                .map(pk => pk.key);
+        }
+        return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
+    }
+
+    await db.transaction(async tx => {
+        for (const expense of withCoeffExpenses) {
+            const coefficients = expense.participantCoefficients as Record<string, number> | null;
+            if (!coefficients) continue;
+
+            const expenseAmount = parseFloat(expense.amount!);
+            const allKeys = regs.flatMap(r => getActivePersonKeys(r.id, r.personsCount));
+            const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
+
+            const allocations = regs.map(reg => {
+                const keys = getActivePersonKeys(reg.id, reg.personsCount);
+                const regWeight = keys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
+                const amount = totalWeight > 0 ? Math.ceil(expenseAmount * regWeight / totalWeight) : 0;
+                return { registrationId: reg.id, amount };
+            });
+
+            await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expense.id));
+            const nonZero = allocations.filter(a => a.amount > 0);
+            if (nonZero.length > 0) {
+                await tx.insert(eventExpenseAllocations).values(
+                    nonZero.map(a => ({ expenseId: expense.id, registrationId: a.registrationId, amount: String(a.amount) }))
+                );
+            }
+        }
+    });
 }
 
 // ── Předpisy plateb ───────────────────────────────────────────────────────────
@@ -1307,7 +1394,10 @@ export async function cancelParticipant(
         });
 
         if (eventId) {
-            // Pokud je billing uzamčen, přepočítáme settlement předpisy — jinak payments tab ukazuje
+            // Přepočítáme alokace with_coefficients — odhlášený účastník se nesmí podílet na nákladech.
+            await recalculateWithCoefficientsAllocations(eventId, db);
+
+            // Pokud je billing uzamčen, přepočítáme i settlement předpisy — jinak payments tab ukazuje
             // stará čísla z doby před odhlášením účastníka.
             const [ev] = await db
                 .select({ billingStatus: events.billingStatus, name: events.name })
