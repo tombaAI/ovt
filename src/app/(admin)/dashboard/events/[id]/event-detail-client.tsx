@@ -29,7 +29,7 @@ import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
 import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
-import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail, cancelParticipant, getEventFinalExpenses } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail, cancelParticipant, restoreParticipant, getEventFinalExpenses } from "@/lib/actions/event-settlement";
 import type { CancelParticipantData } from "@/lib/actions/event-settlement";
 
 interface Props {
@@ -818,11 +818,16 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
                             <div className="flex items-center justify-between gap-2 text-gray-400 flex-wrap">
                                 <div className="flex items-center gap-1.5">
                                     <span className="font-medium text-gray-600">{entry.changedBy}</span>
-                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${entry.action === "cancel"
+                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${
+                                        entry.action === "cancel" || entry.action === "cancel_participant"
                                             ? "bg-red-50 text-red-600 border-red-200"
+                                            : entry.action === "restore" || entry.action === "restore_participant"
+                                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
                                             : "bg-amber-50 text-amber-600 border-amber-200"
                                         }`}>
-                                        {entry.action === "cancel" ? "zrušení" : "úprava"}
+                                        {entry.action === "cancel" || entry.action === "cancel_participant" ? "odhlášení"
+                                            : entry.action === "restore" || entry.action === "restore_participant" ? "obnovení"
+                                            : "úprava"}
                                     </span>
                                 </div>
                                 <span>{fmtDateTime(entry.changedAt)}</span>
@@ -864,6 +869,7 @@ function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventN
 
 function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string; eventId: number }) {
     const [removingId, setRemovingId] = useState<number | null>(null);
+    const [restoringParticipantId, setRestoringParticipantId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
     const [restoring, setRestoring] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
@@ -916,6 +922,15 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
         if ("error" in res) alert(res.error);
         else onRefresh();
         setRemovingId(null);
+    }
+
+    async function handleRestoreParticipant(participantId: number, name: string) {
+        if (!confirm(`Obnovit účastníka „${name}" (zrušit stav Nejede)?`)) return;
+        setRestoringParticipantId(participantId);
+        const res = await restoreParticipant(participantId);
+        if ("error" in res) alert(res.error);
+        else onRefresh();
+        setRestoringParticipantId(null);
     }
 
     async function handleRestore() {
@@ -1088,7 +1103,18 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                     <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
                                     <span className={`text-xs ${isCancelledParticipant ? "line-through text-slate-400" : "text-slate-700"}`}>{p.fullName}</span>
                                     {isCancelledParticipant && (
-                                        <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600">nejede</span>
+                                        <>
+                                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600">nejede</span>
+                                            {!isCancelled && !isPrescribed && p.id && (
+                                                <button
+                                                    onClick={() => handleRestoreParticipant(p.id!, p.fullName)}
+                                                    disabled={restoringParticipantId === p.id}
+                                                    title="Zrušit stav Nejede"
+                                                    className="text-orange-300 hover:text-emerald-500 disabled:opacity-40 transition-colors">
+                                                    <RotateCcw size={10} />
+                                                </button>
+                                            )}
+                                        </>
                                     )}
                                     {!isCancelledParticipant && p.isPrimary && (
                                         <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">

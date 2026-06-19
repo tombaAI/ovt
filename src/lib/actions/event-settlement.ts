@@ -1415,6 +1415,113 @@ export async function cancelParticipant(
     }
 }
 
+export async function restoreParticipant(
+    participantId: number,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        let eventId: number | null = null;
+
+        await db.transaction(async tx => {
+            const [participant] = await tx
+                .select({
+                    id: eventRegistrationParticipants.id,
+                    registrationId: eventRegistrationParticipants.registrationId,
+                    fullName: eventRegistrationParticipants.fullName,
+                    cancelledAt: eventRegistrationParticipants.cancelledAt,
+                })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            if (!participant) throw new Error("Účastník nenalezen");
+            if (!participant.cancelledAt) throw new Error("Účastník není odhlášen");
+
+            const [reg] = await tx
+                .select({ id: eventRegistrations.id, eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, participant.registrationId));
+
+            if (!reg) throw new Error("Přihláška nenalezena");
+
+            eventId = reg.eventId;
+
+            // Zjistit, zda jsou všichni účastníci odhlášeni (auto-cancel přihlášky)
+            const activeParticipants = await tx
+                .select({ id: eventRegistrationParticipants.id })
+                .from(eventRegistrationParticipants)
+                .where(and(
+                    eq(eventRegistrationParticipants.registrationId, participant.registrationId),
+                    isNull(eventRegistrationParticipants.cancelledAt),
+                ));
+
+            const wasAutoCancel = activeParticipants.length === 0 && !!reg.cancelledAt;
+
+            // Obnovit účastníka
+            await tx.update(eventRegistrationParticipants)
+                .set({
+                    cancelledAt: null,
+                    depositRefundAmount: null,
+                    depositForfeitPolicy: null,
+                    depositForfeitExpenseId: null,
+                })
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            // Pokud byla přihláška auto-zrušena (všichni účastníci odhlášeni), obnovit i přihlášku
+            if (wasAutoCancel) {
+                await tx.update(eventRegistrations)
+                    .set({ cancelledAt: null })
+                    .where(eq(eventRegistrations.id, participant.registrationId));
+
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ status: "pending", updatedAt: new Date() })
+                    .where(and(
+                        eq(eventPaymentPrescriptions.registrationId, participant.registrationId),
+                        eq(eventPaymentPrescriptions.status, "cancelled"),
+                    ));
+
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId: participant.registrationId,
+                    action: "restore",
+                    changes: { cancelledAt: { old: reg.cancelledAt!.toISOString(), new: null } },
+                    changedBy: session.user!.email!,
+                });
+            }
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: participant.registrationId,
+                action: "restore_participant",
+                changes: {
+                    participant: { old: participant.fullName, new: null },
+                    cancelledAt: { old: participant.cancelledAt.toISOString(), new: null },
+                },
+                changedBy: session.user!.email!,
+            });
+        });
+
+        if (eventId) {
+            await recalculateWithCoefficientsAllocations(eventId, db);
+
+            const [ev] = await db
+                .select({ billingStatus: events.billingStatus, name: events.name })
+                .from(events)
+                .where(eq(events.id, eventId));
+            if (ev?.billingStatus === "prescribed") {
+                const settlement = await getEventSettlement(eventId);
+                await upsertPrescriptionAmounts(eventId, settlement, ev.name, db);
+            }
+            revalidatePath(`/dashboard/events/${eventId}`);
+        }
+        return { success: true };
+    } catch (e) {
+        return { error: e instanceof Error ? e.message : "Nepodařilo se obnovit účastníka" };
+    }
+}
+
 export async function cancelAdminRegistration(
     registrationId: number,
 ): Promise<{ success: true } | { error: string }> {
