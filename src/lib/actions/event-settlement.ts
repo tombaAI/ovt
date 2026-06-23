@@ -87,6 +87,8 @@ export type SettlementRegistrationRow = {
     expensesTotal: number;
     subsidy: number;
     totalAmount: number;
+    /** Doplatek (krok 8) = max(0, totalAmount − effectiveDepositAmount) — počítáno živě, nezávisle na tom, zda už existuje settlementPrescription. */
+    settlementAmount: number;
     /** Záloha — předpis platby vytvořený při podání přihlášky. Množství je fixní, billing ho nemění. */
     depositPrescription: PrescriptionInfo | null;
     /** Doplatek — předpis platby vytvořený při lockBilling. Částka = totalAmount − depositAmount. */
@@ -440,6 +442,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositPromiseNote: p.depositPromiseNote,
             } : null;
 
+        const depositPrescription = toPrescriptionInfo(depositRaw);
+
         return {
             registrationId: reg.id,
             firstName: reg.firstName,
@@ -453,7 +457,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             expensesTotal,
             subsidy,
             totalAmount,
-            depositPrescription: toPrescriptionInfo(depositRaw),
+            settlementAmount: Math.max(0, totalAmount - effectiveDepositAmount(depositPrescription)),
+            depositPrescription,
             settlementPrescription: toPrescriptionInfo(settlementRaw),
         };
     });
