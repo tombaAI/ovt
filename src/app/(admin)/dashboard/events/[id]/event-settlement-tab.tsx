@@ -217,7 +217,9 @@ function ExpenseAllocationRow({
         if (totalWeight === 0) return registrations.map(r => ({ registrationId: r.registrationId, amount: 0 }));
         return registrations.map(reg => {
             const regWeight = getPersonsForAlloc(reg).reduce((s, p) => s + (coefs[p.key] ?? 0), 0);
-            return { registrationId: reg.registrationId, amount: Math.ceil(expense.amount * regWeight / totalWeight) };
+            // effectiveAmount (ne hrubá amount) — stejná báze jako rescaling v getEventSettlement,
+            // ať se okamžitý UI náhled při úpravě koeficientů nerozchází se serverem u nákladů s propadlou zálohou.
+            return { registrationId: reg.registrationId, amount: Math.ceil(expense.effectiveAmount * regWeight / totalWeight) };
         });
     }
 

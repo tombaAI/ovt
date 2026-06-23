@@ -300,25 +300,23 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                     ? (expense.effectiveAmount / totalParticipants) * activePersonsCount
                     : 0;
             } else {
-                // per_registration nebo with_coefficients: čte předpočítané alokace z DB,
-                // minus propadlé zálohy z odhlášených účastníků TÉTO přihlášky napojené na tento náklad
-                const alloc = allocations.find(a => a.expenseId === expense.id && a.registrationId === reg.id);
+                // per_registration nebo with_coefficients: DB alokace reprezentují relativní
+                // podíl (váhu) přihlášky na hrubé částce nákladu. Pokud na náklad propadla
+                // záloha, podíly se proporčně přepočtou na efektivní (zálohou sníženou) částku —
+                // benefit propadlé zálohy se tak rozloží na všechny účastníky nákladu stejně
+                // jako v zobrazení nákladů (unitPrice/effectiveAmount výše), místo aby se odečetl
+                // jen z přihlášky, na které je záloha evidována.
+                const expenseAllocs = allocations.filter(a => a.expenseId === expense.id);
+                const alloc = expenseAllocs.find(a => a.registrationId === reg.id);
                 const baseAmount = alloc ? parseFloat(alloc.amount) : 0;
-                const regForfeit = participants
-                    .filter(p =>
-                        p.registrationId === reg.id &&
-                        p.cancelledAt !== null &&
-                        p.depositForfeitPolicy === "forfeit_to_expense" &&
-                        p.depositForfeitExpenseId === expense.id
-                    )
-                    .reduce((sum, p) => {
-                        const depRaw = prescriptions.find(pr => pr.registrationId === reg.id && pr.type === "deposit");
-                        if (!depRaw) return sum;
-                        const depositPerPerson = parseFloat(depRaw.amount) / (reg.personsCount ?? 1);
-                        const refund = parseFloat(p.depositRefundAmount ?? "0") || 0;
-                        return sum + Math.max(0, depositPerPerson - refund);
-                    }, 0);
-                allocatedAmount = Math.max(0, baseAmount - regForfeit);
+                if (expense.totalForfeit > 0) {
+                    const grossAllocSum = expenseAllocs.reduce((s, a) => s + parseFloat(a.amount), 0);
+                    allocatedAmount = grossAllocSum > 0
+                        ? Math.round((baseAmount / grossAllocSum) * expense.effectiveAmount)
+                        : 0;
+                } else {
+                    allocatedAmount = baseAmount;
+                }
             }
             return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod as "split_all" | "per_registration" | "with_coefficients", allocatedAmount };
         });
