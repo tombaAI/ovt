@@ -24,6 +24,7 @@ import type {
     GcalDiffResult, GcalDiffField, MemberOption,
 } from "@/lib/actions/events";
 import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
+import type { EventPaymentPrescriptionStatus } from "@/db/schema";
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
@@ -1276,6 +1277,7 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [addOpen, setAddOpen] = useState(false);
+    const [showCancelled, setShowCancelled] = useState(false);
 
     function load() {
         setLoading(true);
@@ -1306,15 +1308,26 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
         </div>
     );
 
+    const isReceived = (status: EventPaymentPrescriptionStatus | null) => status === "matched" || status === "paid";
+
     const activeRows = rows.filter(r => !r.cancelledAt);
     const cancelledRows = rows.filter(r => !!r.cancelledAt);
-    const totalPersons = activeRows.reduce((s, r) => s + r.personsCount, 0);
-    const cancelledPersons = cancelledRows.reduce((s, r) => s + r.personsCount, 0);
     const totalAmount = activeRows.reduce((s, r) => s + r.paymentAmount, 0);
-    const paidCount = activeRows.filter(r => r.paymentStatus === "paid").length;
-    const unresolvedCount = activeRows.filter(r => r.paymentStatus === "pending" || r.paymentStatus === "matched").length;
 
-    const summaryCards = [
+    // Účastníci aktivních přihlášek: kdo jede vs. kdo se z přihlášky individuálně odhlásil ("nejede")
+    const goingPersons = activeRows.reduce((s, r) => s + (r.personsCount - r.participants.filter(p => p.cancelledAt).length), 0);
+    const notGoingPersons = activeRows.reduce((s, r) => s + r.participants.filter(p => p.cancelledAt).length, 0);
+
+    const depositRows = activeRows.filter(r => r.depositAmount != null);
+    const depositPaid = depositRows.filter(r => isReceived(r.depositStatus)).length;
+    const settlementRows = activeRows.filter(r => r.settlementAmount != null);
+    const settlementPaid = settlementRows.filter(r => isReceived(r.settlementStatus)).length;
+
+    const unresolvedCount =
+        depositRows.filter(r => r.depositStatus === "pending").length +
+        settlementRows.filter(r => r.settlementStatus === "pending").length;
+
+    const summaryCards: { label: string; value: string | number; suffix: string; tone: string; subtext?: string }[] = [
         {
             label: "Přihlášky",
             value: activeRows.length,
@@ -1324,16 +1337,22 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
         },
         {
             label: "Účastníci",
-            value: totalPersons,
-            suffix: totalPersons === 1 ? "osoba" : totalPersons < 5 ? "osoby" : "osob",
+            value: goingPersons,
+            suffix: goingPersons === 1 ? "jede" : "jedou",
             tone: "text-blue-700 bg-blue-50/80 border-blue-100",
-            subtext: cancelledPersons > 0 ? `${cancelledPersons} zrušeno` : undefined,
+            subtext: notGoingPersons > 0 ? `+${notGoingPersons} ${notGoingPersons === 1 ? "nejede" : "nejedou"} (zaplaceno)` : undefined,
         },
         {
-            label: "Zaplaceno",
-            value: paidCount,
-            suffix: paidCount === 1 ? "platba" : paidCount < 5 ? "platby" : "plateb",
+            label: "Zálohy",
+            value: `${depositPaid}/${depositRows.length}`,
+            suffix: "zaplaceno",
             tone: "text-emerald-700 bg-emerald-50/90 border-emerald-100",
+        },
+        {
+            label: "Doplatky",
+            value: settlementRows.length > 0 ? `${settlementPaid}/${settlementRows.length}` : "—",
+            suffix: settlementRows.length > 0 ? "zaplaceno" : "nevypsány",
+            tone: settlementRows.length > 0 ? "text-sky-700 bg-sky-50/90 border-sky-100" : "text-slate-400 bg-slate-50/80 border-slate-200",
         },
         {
             label: "Čeká řešení",
@@ -1363,7 +1382,7 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
                     </p>
                 </div>
 
-                <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                     {summaryCards.map(card => (
                         <div key={card.label} className={`rounded-xl border px-3 py-2.5 ${card.tone}`}>
                             <p className="text-[11px] uppercase tracking-wide opacity-80">{card.label}</p>
@@ -1381,10 +1400,32 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
             <AddRegistrationDialog eventId={eventId} open={addOpen} onClose={() => setAddOpen(false)} onAdded={load} />
 
             <div className="space-y-3">
-                {rows.map(r => (
+                {activeRows.map(r => (
                     <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} eventId={eventId} />
                 ))}
             </div>
+
+            {cancelledRows.length > 0 && (
+                <div className="space-y-3">
+                    <button
+                        type="button"
+                        onClick={() => setShowCancelled(prev => !prev)}
+                        className="flex w-full items-center justify-between rounded-xl border border-red-100 bg-red-50/40 px-3.5 py-2.5 text-sm text-red-700 hover:bg-red-50/70 transition-colors"
+                    >
+                        <span className="font-medium">
+                            Zrušené přihlášky ({cancelledRows.length})
+                        </span>
+                        {showCancelled ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                    {showCancelled && (
+                        <div className="space-y-3">
+                            {cancelledRows.map(r => (
+                                <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} eventId={eventId} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }

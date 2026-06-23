@@ -1181,6 +1181,8 @@ export type EventRegistrationAdminRow = {
     matchedLedgerId: number | null;
     depositAmount: number | null;   // záloha (deposit prescription amount), null pokud neexistuje
     depositStatus: EventPaymentPrescriptionStatus | null;
+    settlementAmount: number | null;   // doplatek (settlement prescription amount), null pokud neexistuje
+    settlementStatus: EventPaymentPrescriptionStatus | null;
 };
 
 export async function getEventRegistrationsForAdmin(eventId: number): Promise<EventRegistrationAdminRow[]> {
@@ -1214,6 +1216,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
             depositAmount: depositPresc.amount,
             depositStatus: depositPresc.status,
+            settlementAmount: settlementPresc.amount,
+            settlementStatus: settlementPresc.status,
         })
         .from(eventRegistrations)
         .leftJoin(depositPresc, and(
@@ -1310,6 +1314,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         matchedLedgerId: row.matchedLedgerId,
         depositAmount: row.depositAmount ? Number(row.depositAmount) : null,
         depositStatus: row.depositStatus as EventPaymentPrescriptionStatus | null,
+        settlementAmount: row.settlementAmount ? Number(row.settlementAmount) : null,
+        settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
         };
     });
 }
