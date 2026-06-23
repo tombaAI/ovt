@@ -875,7 +875,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
     const [restoring, setRestoring] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
-    const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
+    const [linkTarget, setLinkTarget] = useState<Pick<SettlementParticipant, "id" | "fullName" | "memberId" | "memberName"> | null>(null);
     const [showQr, setShowQr] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
@@ -1124,14 +1124,14 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                     )}
                                     {!isCancelledParticipant && !isPrescribed && (p.memberId ? (
                                         <button
-                                            onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, cancelledAt: null, depositRefundAmount: null, depositForfeitPolicy: null, depositForfeitExpenseId: null, registrationId: r.registrationId })}
+                                            onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, memberId: p.memberId ?? null, memberName: p.memberName ?? null })}
                                             title={`Člen: ${p.memberName}`}
                                             className="text-emerald-500 hover:text-emerald-700 transition-colors">
                                             <UserCheck size={11} />
                                         </button>
                                     ) : p.id ? (
                                         <button
-                                            onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, cancelledAt: null, depositRefundAmount: null, depositForfeitPolicy: null, depositForfeitExpenseId: null, registrationId: r.registrationId })}
+                                            onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, memberId: null, memberName: null })}
                                             title="Spárovat s členem OVT"
                                             className="text-gray-300 hover:text-emerald-500 transition-colors">
                                             <UserCheck size={11} />

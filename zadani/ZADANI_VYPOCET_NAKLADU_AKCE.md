@@ -144,17 +144,22 @@ Všechny mezivýsledky (efektivní částka nákladu, cena/jednotka, náklad na 
 
 ---
 
-## Stav implementace vs. tento spec (k 2026-06-24)
+## Stav implementace vs. tento spec (k 2026-06-24, po realizaci kroků 3/7/8)
 
 | Krok | Aktuální kód | Soulad se spec |
 |---|---|---|
-| Krok 1 (váhy) | `getActivePersonKeys`/`getPersonKeys` v `event-settlement.ts` | ✅ |
-| Krok 2–3 (forfeit → effectiveAmount, rescaling alokací) | Opraveno dnes (commit `e698029`) — `getEventSettlement` proporčně přepočítá `per_registration`/`with_coefficients` alokace na `effectiveAmount` | ✅ |
-| Krok 3 ukládání alokací | `setExpenseParticipantCoefficients`, `recalculateWithCoefficientsAllocations`, klientský `calcAllocsFromCoefs` počítají `Math.ceil(...)` **per registrace, per náklad**, na hrubé `amount` | ⚠️ **Nesoulad** — předčasné zaokrouhlení nahoru, 1 Kč+ šum na náklad×přihláška, akumuluje se před krokem 7 namísto jediného zaokrouhlení na konci |
-| Krok 7 (jediné zaokrouhlení) | Neexistuje jako samostatný krok — kód zaokrouhluje throughout (`Math.ceil`/`Math.round` na úrovni nákladu a přihlášky, ne na úrovni účastníka) | ⚠️ **Nesoulad** — granularita zaokrouhlení je dnes "alokace nákladu na přihlášku", spec chce "finální částka jednoho účastníka" |
-| Krok 8 (součet přihlášky) | `expensesTotal = unitPrice × activePersonsCount + perRegTotal` v `getEventSettlement` | ⚠️ Sčítá už zaokrouhlené per-expense alokace, ne zaokrouhlené per-účastník částky — jiná granularita než spec |
+| Krok 1 (váhy) | `activePersonKeysForRegistration` (sdílená funkce) + váhy per náklad přímo z `participantCoefficients` (`with_coefficients`) nebo `eventExpenseAllocations` rozpočtených rovným dílem (`per_registration`) v `getEventSettlement` | ✅ |
+| Krok 2 (forfeit → effectiveAmount) | `calcForfeitForExpense` — beze změny, opraveno dříve (commit `e698029`) | ✅ |
+| Krok 3 (cena za jednotku váhy, plná přesnost) | `unitPriceByExpense.set(expense.id, effectiveAmount / totalWeight)` — žádné mezivýsledkové zaokrouhlení. `setExpenseParticipantCoefficients` už neukládá derivovanou Kč alokaci (jen koeficienty) | ✅ |
+| Krok 4–6 (náklad na účastníka, dotace) | `participantCalcs` — `totalCost`/`subsidyAmount` per účastník, plná přesnost | ✅ |
+| Krok 7 (jediné zaokrouhlení) | `ceilMoney(max(0, totalCost − subsidyAmount))` — počítáno přesně jednou, per účastník (`ParticipantCalc.finalAmount`) | ✅ |
+| Krok 8 (součet přihlášky) | `totalAmount = calcs.reduce((s,c) => s + c.finalAmount, 0)` — součet už zaokrouhlených částek účastníků | ✅ |
 
-**Důsledek:** současný kód je už korektní v tom, že forfeit se rozpočítá na všechny (dnešní fix), ale **rounding model neodpovídá tomuto zadání** — zaokrouhluje se na nesprávné úrovni (náklad×přihláška) místo na úrovni (účastník, přes všechny náklady najednou). Rozdíl je řádově jednotky Kč na přihlášku, ne desítky — ale je to systematické přeplacení, ne náhodná odchylka. **Implementace tohoto rozdílu je samostatný navazující úkol, není součástí dnešní opravy.**
+**Ověřeno** (2026-06-24) nezávislou JS reprodukcí nového algoritmu nad reálnými staging daty (event id 4) — výsledky přesně odpovídají sekci „Vypsané výpočty doplatku" níže (1814 / 4314 / 3892 / 1814 / 1656 Kč).
+
+`expensesTotal`/`subsidy` na `SettlementRegistrationRow` zůstávají informativní (plná přesnost, součet před zaokrouhlením) — skutečný doplatek (`totalAmount`) se od nich může lišit o pár Kč u přihlášek s více účastníky s různým členským statusem, protože se teď zaokrouhluje per účastník, ne per přihláška. To je očekávané a správné chování dle kroku 8.
+
+`recalculateWithCoefficientsAllocations` byla zrušena — váhy `with_coefficients` se čtou živě z `participantCoefficients`, odhlášení účastníci se vyřadí automaticky při čtení, není co přepočítávat a ukládat zvlášť.
 
 ---
 

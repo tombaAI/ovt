@@ -35,6 +35,12 @@ export type SettlementParticipant = {
     depositRefundAmount: number | null;
     depositForfeitPolicy: DepositForfeitPolicy | null;
     depositForfeitExpenseId: number | null;
+    /** Plnou přesností počítaný náklad přes všechny finální náklady (krok 4–5), 0 pro odhlášené. */
+    totalCost: number;
+    /** Dotace připsaná tomuto účastníkovi (0 pokud nečlen) — plná přesnost (krok 6). */
+    subsidyAmount: number;
+    /** Jediné místo zaokrouhlení v celém výpočtu — ceil(max(0, totalCost − subsidyAmount)) (krok 7). */
+    finalAmount: number;
 };
 
 export type SettlementExpenseRow = {
@@ -109,7 +115,37 @@ export type EventSettlement = {
     expensesSum: number;
 };
 
+// ── Klíče osob — sdílená identifikace účastníka pro koeficienty/váhy ──────────
+// "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné
+// (fallback dle personsCount, když přihláška nemá záznamy v event_registration_participants).
+// Stejná logika musí platit v getEventSettlement i při ukládání koeficientů (setExpenseParticipantCoefficients),
+// jinak se klíče v participantCoefficients neshodují s tím, co se čte při výpočtu.
+function activePersonKeysForRegistration(
+    regId: number,
+    personsCount: number | null,
+    regParticipants: { id: number; cancelledAt: Date | null }[],
+): string[] {
+    if (regParticipants.length > 0) {
+        return regParticipants
+            .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
+            .filter(pk => pk.active)
+            .map(pk => pk.key);
+    }
+    return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
+}
+
+/** Zaokrouhlení nahoru na celé Kč s tolerancí na chyby plovoucí desetinné čárky (krok 7 — jediné místo zaokrouhlení). */
+function ceilMoney(value: number): number {
+    return Math.ceil(value - 1e-9);
+}
+
 // ── Výpočet vyúčtování ────────────────────────────────────────────────────────
+//
+// Postup přesně dle zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md — počítá se s plnou
+// přesností (žádné mezivýsledkové Math.ceil/Math.round) a zaokrouhluje se
+// JEDNOU, na úplném konci, pro finální částku JEDNOHO ÚČASTNÍKA (krok 7).
+// Přihláška je jen platební obálka — její doplatek je součet už zaokrouhlených
+// částek jejích účastníků (krok 8), ne ceil() součtu celé přihlášky.
 
 export async function getEventSettlement(eventId: number): Promise<EventSettlement> {
     const db = getDb();
@@ -144,11 +180,12 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         participantCoefficients: (e.participantCoefficients as Record<string, number> | null) ?? null,
     }));
 
-    // Alokace per registrace pro per_registration + with_coefficients náklady
+    // Manuální Kč alokace per registrace — jen pro "per_registration" (bez koeficientů; "with_coefficients"
+    // se čte přímo z participantCoefficients výše, nepotřebuje derivovanou tabulku).
     const perRegExpenseIds = finalExpenses
-        .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
+        .filter(e => e.allocationMethod === "per_registration")
         .map(e => e.id);
-    const allocations = perRegExpenseIds.length > 0
+    const manualAllocations = perRegExpenseIds.length > 0
         ? await db
             .select({ expenseId: eventExpenseAllocations.expenseId, registrationId: eventExpenseAllocations.registrationId, amount: eventExpenseAllocations.amount })
             .from(eventExpenseAllocations)
@@ -210,24 +247,28 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
         : [];
 
-    // Počet aktivních (neodhlášených) účastníků per přihláška
-    const activeCountByReg = new Map<number, number>();
+    // ── Krok 1: klíče aktivních účastníků (per přihláška a globálně) ──────────
+    type PersonKey = { key: string; registrationId: number; memberId: number | null };
+    const personKeysByReg = new Map<number, PersonKey[]>();
     for (const reg of regs) {
         const regParts = participants.filter(p => p.registrationId === reg.id);
-        if (regParts.length === 0) {
-            activeCountByReg.set(reg.id, reg.personsCount ?? 1);
-        } else {
-            const active = regParts.filter(p => !p.cancelledAt).length;
-            activeCountByReg.set(reg.id, Math.max(1, active));
-        }
+        const keys = activePersonKeysForRegistration(reg.id, reg.personsCount, regParts);
+        personKeysByReg.set(
+            reg.id,
+            keys.map(key => {
+                const participant = regParts.find((p, i) => (p.id > 0 ? `p${p.id}` : `r${reg.id}-${i}`) === key);
+                return { key, registrationId: reg.id, memberId: participant?.memberId ?? null };
+            }),
+        );
     }
+    const allPersonKeys = Array.from(personKeysByReg.values()).flat();
 
-    const totalParticipants = Array.from(activeCountByReg.values()).reduce((s, n) => s + n, 0);
-    const totalMemberParticipants = participants.filter(p => p.memberId !== null && !p.cancelledAt).length;
+    const totalParticipants = allPersonKeys.length;
+    const totalMemberParticipants = allPersonKeys.filter(k => k.memberId !== null).length;
 
     const expensesSum = finalExpenses.reduce((s, e) => s + e.amount, 0);
 
-    // Výpočet propadlých záloh per náklad
+    // ── Krok 2: propadlé zálohy per náklad ─────────────────────────────────────
     // depositPerParticipant = depositPrescription.amount / personsCount (fixní sazba)
     function calcForfeitForExpense(expenseId: number): number {
         return participants
@@ -246,7 +287,6 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             }, 0);
     }
 
-    // finalExpenses s effective amount
     const finalExpenseRows: FinalExpenseRow[] = finalExpenses.map(e => {
         const totalForfeit = calcForfeitForExpense(e.id);
         return {
@@ -260,77 +300,127 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         };
     });
 
-    // unitPrice platí jen pro "split_all" náklady — rovnoměrné rozdělení na každého
+    // ── Krok 1 (váhy) + krok 3 (cena za jednotku váhy) — per náklad, plná přesnost ──
+    const weightsByExpense = new Map<number, Map<string, number>>(); // expenseId -> personKey -> weight
+    const unitPriceByExpense = new Map<number, number>();
+
+    for (const expense of finalExpenseRows) {
+        const weights = new Map<string, number>();
+
+        if (expense.allocationMethod === "split_all") {
+            for (const k of allPersonKeys) weights.set(k.key, 1);
+        } else if (expense.allocationMethod === "with_coefficients") {
+            // Koeficienty jsou jediný zdroj pravdy — žádná derivovaná tabulka. Chybějící klíč
+            // (účastník přidaný po uložení koeficientů) = váha 0, dokud admin nedoplní.
+            // Bez koeficientů vůbec (teoretický stav, with_coefficients se vždy ukládá s nimi) → rovnoměrně.
+            const coeffs = expense.participantCoefficients;
+            for (const k of allPersonKeys) weights.set(k.key, coeffs ? (coeffs[k.key] ?? 0) : 1);
+        } else {
+            // per_registration (manuální Kč částka per přihláška, bez koeficientů): váha = částka
+            // z eventExpenseAllocations, rozpočtená rovným dílem na aktivní účastníky té přihlášky.
+            // Bez jakýchkoli zadaných alokací → fallback: rovnoměrně na všechny (jako split_all).
+            const allocsForExpense = manualAllocations.filter(a => a.expenseId === expense.id);
+            if (allocsForExpense.length === 0) {
+                for (const k of allPersonKeys) weights.set(k.key, 1);
+            } else {
+                for (const [regId, keys] of personKeysByReg) {
+                    const alloc = allocsForExpense.find(a => a.registrationId === regId);
+                    const regWeight = alloc ? parseFloat(alloc.amount) : 0;
+                    const per = keys.length > 0 ? regWeight / keys.length : 0;
+                    for (const k of keys) weights.set(k.key, per);
+                }
+            }
+        }
+
+        weightsByExpense.set(expense.id, weights);
+        const totalWeight = allPersonKeys.reduce((s, k) => s + (weights.get(k.key) ?? 0), 0);
+        unitPriceByExpense.set(expense.id, totalWeight > 0 ? expense.effectiveAmount / totalWeight : 0);
+    }
+
+    // unitPrice — souhrnné informativní pole, jen pro "split_all" náklady. Plná přesnost (krok 3).
     const splitAllSum = finalExpenseRows
         .filter(e => e.allocationMethod === "split_all")
         .reduce((s, e) => s + e.effectiveAmount, 0);
-    const unitPrice = totalParticipants > 0 ? Math.ceil(splitAllSum / totalParticipants) : 0;
+    const unitPrice = totalParticipants > 0 ? splitAllSum / totalParticipants : 0;
 
-    // Per_registration náklady, které mají alespoň jednu alokaci v DB.
-    // Pokud žádnou nemají → fallback: rovnoměrné rozdělení (všichni zahrnuti).
-    const expensesWithAllocs = new Set(allocations.map(a => a.expenseId));
+    // ── Krok 4–7: náklad na účastníka přes všechny náklady, dotace, JEDINÉ zaokrouhlení ──
+    const subsidyPerMember = totalMemberParticipants > 0 ? subsidyTotal / totalMemberParticipants : 0;
 
+    type ParticipantCalc = {
+        key: string;
+        registrationId: number;
+        memberId: number | null;
+        totalCost: number;
+        subsidyAmount: number;
+        finalAmount: number;
+        perExpense: Map<number, number>; // expenseId -> plná přesnost příspěvek (rozpis pro UI/e-mail)
+    };
+
+    const participantCalcs: ParticipantCalc[] = allPersonKeys.map(k => {
+        const perExpense = new Map<number, number>();
+        let totalCost = 0;
+        for (const expense of finalExpenseRows) {
+            const weight = weightsByExpense.get(expense.id)?.get(k.key) ?? 0;
+            const cost = (unitPriceByExpense.get(expense.id) ?? 0) * weight;
+            perExpense.set(expense.id, cost);
+            totalCost += cost;
+        }
+        const subsidyAmount = k.memberId !== null ? subsidyPerMember : 0;
+        const finalAmount = ceilMoney(Math.max(0, totalCost - subsidyAmount));
+        return { key: k.key, registrationId: k.registrationId, memberId: k.memberId, totalCost, subsidyAmount, finalAmount, perExpense };
+    });
+
+    const calcsByReg = new Map<number, ParticipantCalc[]>();
+    for (const c of participantCalcs) {
+        const arr = calcsByReg.get(c.registrationId) ?? [];
+        arr.push(c);
+        calcsByReg.set(c.registrationId, arr);
+    }
+
+    // ── Krok 8: doplatek přihlášky = součet už zaokrouhlených částek jejích účastníků ──
     const registrationRows: SettlementRegistrationRow[] = regs.map(reg => {
-        const regParticipants = participants.filter(p => p.registrationId === reg.id).map(p => ({
-            id: p.id,
-            fullName: p.fullName,
-            isPrimary: p.isPrimary,
-            memberId: p.memberId,
-            personId: p.personId,
-            memberName: p.memberName ?? null,
-            cancelledAt: p.cancelledAt as Date | null,
-            depositRefundAmount: p.depositRefundAmount ? parseFloat(p.depositRefundAmount) : null,
-            depositForfeitPolicy: p.depositForfeitPolicy as DepositForfeitPolicy | null,
-            depositForfeitExpenseId: p.depositForfeitExpenseId,
-        }));
+        const calcs = calcsByReg.get(reg.id) ?? [];
+
+        const regParticipants = participants.filter(p => p.registrationId === reg.id).map((p, i) => {
+            const key = p.id > 0 ? `p${p.id}` : `r${reg.id}-${i}`;
+            const calc = calcs.find(c => c.key === key);
+            return {
+                id: p.id,
+                fullName: p.fullName,
+                isPrimary: p.isPrimary,
+                memberId: p.memberId,
+                personId: p.personId,
+                memberName: p.memberName ?? null,
+                cancelledAt: p.cancelledAt as Date | null,
+                depositRefundAmount: p.depositRefundAmount ? parseFloat(p.depositRefundAmount) : null,
+                depositForfeitPolicy: p.depositForfeitPolicy as DepositForfeitPolicy | null,
+                depositForfeitExpenseId: p.depositForfeitExpenseId,
+                totalCost: calc?.totalCost ?? 0,
+                subsidyAmount: calc?.subsidyAmount ?? 0,
+                finalAmount: calc?.finalAmount ?? 0,
+            };
+        });
         const memberCount = regParticipants.filter(p => p.memberId !== null && !p.cancelledAt).length;
         const personsCount = reg.personsCount ?? 1;
-        const activePersonsCount = activeCountByReg.get(reg.id) ?? personsCount;
+        const activePersonsCount = calcs.length > 0 ? calcs.length : personsCount;
 
-        // Podrobný rozpis nákladů — pro e-mail a zobrazení v záložce Náklady
+        // Rozpis nákladů pro zobrazení (Náklady/Platby tab, e-mail) — plná přesnost,
+        // sečteno přes aktivní účastníky této přihlášky. Informativní; doplatek (totalAmount)
+        // se počítá ze zaokrouhlených finalAmount jednotlivých účastníků, ne z tohoto součtu.
         const expenseRows: SettlementExpenseRow[] = finalExpenseRows.map(expense => {
-            let allocatedAmount = 0;
-            if (expense.allocationMethod === "split_all") {
-                allocatedAmount = totalParticipants > 0
-                    ? (expense.effectiveAmount / totalParticipants) * activePersonsCount
-                    : 0;
-            } else if (!expensesWithAllocs.has(expense.id)) {
-                // Žádné alokace v DB → fallback: rovnoměrné rozdělení na všechny (jako split_all)
-                allocatedAmount = totalParticipants > 0
-                    ? (expense.effectiveAmount / totalParticipants) * activePersonsCount
-                    : 0;
-            } else {
-                // per_registration nebo with_coefficients: DB alokace reprezentují relativní
-                // podíl (váhu) přihlášky na hrubé částce nákladu. Pokud na náklad propadla
-                // záloha, podíly se proporčně přepočtou na efektivní (zálohou sníženou) částku —
-                // benefit propadlé zálohy se tak rozloží na všechny účastníky nákladu stejně
-                // jako v zobrazení nákladů (unitPrice/effectiveAmount výše), místo aby se odečetl
-                // jen z přihlášky, na které je záloha evidována.
-                const expenseAllocs = allocations.filter(a => a.expenseId === expense.id);
-                const alloc = expenseAllocs.find(a => a.registrationId === reg.id);
-                const baseAmount = alloc ? parseFloat(alloc.amount) : 0;
-                if (expense.totalForfeit > 0) {
-                    const grossAllocSum = expenseAllocs.reduce((s, a) => s + parseFloat(a.amount), 0);
-                    allocatedAmount = grossAllocSum > 0
-                        ? Math.round((baseAmount / grossAllocSum) * expense.effectiveAmount)
-                        : 0;
-                } else {
-                    allocatedAmount = baseAmount;
-                }
-            }
-            return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod as "split_all" | "per_registration" | "with_coefficients", allocatedAmount };
+            const allocatedAmount = calcs.reduce((s, c) => s + (c.perExpense.get(expense.id) ?? 0), 0);
+            return {
+                expenseId: expense.id,
+                purposeText: expense.purposeText,
+                amount: expense.amount,
+                allocationMethod: expense.allocationMethod,
+                allocatedAmount,
+            };
         });
 
-        // split_all: unitPrice × aktivní osoby; per_registration / with_coefficients: explicitní alokace
-        const perRegTotal = expenseRows
-            .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
-            .reduce((s, e) => s + e.allocatedAmount, 0);
-        const expensesTotal = unitPrice * activePersonsCount + perRegTotal;
-        // Dotace: poměrná část celkové dotace podle počtu členů v přihlášce
-        const subsidy = totalMemberParticipants > 0
-            ? Math.round(subsidyTotal * memberCount / totalMemberParticipants)
-            : 0;
-        const totalAmount = Math.max(0, expensesTotal - subsidy);
+        const expensesTotal = calcs.reduce((s, c) => s + c.totalCost, 0);
+        const subsidy = calcs.reduce((s, c) => s + c.subsidyAmount, 0);
+        const totalAmount = calcs.reduce((s, c) => s + c.finalAmount, 0);
 
         const regPrescriptions = prescriptions.filter(p => p.registrationId === reg.id);
         const depositRaw = regPrescriptions.find(p => p.type === "deposit") ?? null;
@@ -552,8 +642,13 @@ export async function setExpenseRegistrationAllocations(
 // ── Koeficienty účastníků ─────────────────────────────────────────────────────
 
 /**
- * Uloží koeficienty účastníků, přepočítá per-registrace alokace a přepne metodu na with_coefficients.
- * Klíče: "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné.
+ * Uloží koeficienty účastníků a přepne metodu na with_coefficients.
+ * Klíče: "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné —
+ * stejná identifikace jako activePersonKeysForRegistration v getEventSettlement.
+ *
+ * Žádná derivovaná Kč alokace se neukládá — getEventSettlement čte participantCoefficients
+ * přímo a počítá s plnou přesností (krok 1+3 v ZADANI_VYPOCET_NAKLADU_AKCE.md). Staré
+ * alokace (např. z dřívějšího per_registration) se smažou, aby nezůstaly jako mrtvá data.
  */
 export async function setExpenseParticipantCoefficients(
     expenseId: number,
@@ -570,63 +665,11 @@ export async function setExpenseParticipantCoefficients(
         if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
-        const expenseAmount = parseFloat(exp.amount);
-
-        // Načtení přihlášek a účastníků pro přepočet alokací
-        const regs = await db
-            .select({ id: eventRegistrations.id, personsCount: eventRegistrations.personsCount })
-            .from(eventRegistrations)
-            .where(and(eq(eventRegistrations.eventId, exp.eventId), isNull(eventRegistrations.cancelledAt)));
-
-        const regIds = regs.map(r => r.id);
-        const participants = regIds.length > 0
-            ? await db
-                .select({
-                    id: eventRegistrationParticipants.id,
-                    registrationId: eventRegistrationParticipants.registrationId,
-                    cancelledAt: eventRegistrationParticipants.cancelledAt,
-                })
-                .from(eventRegistrationParticipants)
-                .where(inArray(eventRegistrationParticipants.registrationId, regIds))
-            : [];
-
-        // Generuje klíče osob pro přihlášku — stejná logika jako getPersonsForAlloc na klientu.
-        // Zachováváme původní indexy (pro anonymní klíče r{regId}-{i}), ale vracíme jen aktivní.
-        function getPersonKeys(regId: number, personsCount: number | null): string[] {
-            const regParticipants = participants.filter(p => p.registrationId === regId);
-            if (regParticipants.length > 0) {
-                return regParticipants
-                    .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
-                    .filter(pk => pk.active)
-                    .map(pk => pk.key);
-            }
-            return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
-        }
-
-        // Celková váha = součet koeficientů všech osob
-        const allKeys = regs.flatMap(r => getPersonKeys(r.id, r.personsCount));
-        const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-
-        // Alokace per přihláška
-        const allocations = regs.map(reg => {
-            const keys = getPersonKeys(reg.id, reg.personsCount);
-            const regWeight = keys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-            const amount = totalWeight > 0 ? Math.ceil(expenseAmount * regWeight / totalWeight) : 0;
-            return { registrationId: reg.id, amount };
-        });
-
         await db.transaction(async tx => {
             await tx.update(eventExpenses)
                 .set({ allocationMethod: "with_coefficients", participantCoefficients: coefficients })
                 .where(eq(eventExpenses.id, expenseId));
-
             await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
-            const nonZero = allocations.filter(a => a.amount > 0);
-            if (nonZero.length > 0) {
-                await tx.insert(eventExpenseAllocations).values(
-                    nonZero.map(a => ({ expenseId, registrationId: a.registrationId, amount: String(a.amount) }))
-                );
-            }
         });
 
         revalidatePath(`/dashboard/events/${exp.eventId}`);
@@ -635,85 +678,6 @@ export async function setExpenseParticipantCoefficients(
         console.error("[setExpenseParticipantCoefficients]", e);
         return { error: "Nepodařilo se uložit koeficienty" };
     }
-}
-
-// ── Přepočet alokací with_coefficients po odhlášení účastníka ────────────────
-
-/**
- * Přepočítá DB alokace pro všechny `with_coefficients` náklady akce,
- * přičemž bere v úvahu jen aktivní (neodhlášené) účastníky.
- * Koeficienty jsou uloženy v expenses.participantCoefficients — odhlášený
- * účastník má tam stále svůj klíč, ale do váhy se nezapočítá.
- */
-async function recalculateWithCoefficientsAllocations(eventId: number, db: ReturnType<typeof getDb>): Promise<void> {
-    const withCoeffExpenses = await db
-        .select({ id: eventExpenses.id, amount: eventExpenses.amount, participantCoefficients: eventExpenses.participantCoefficients })
-        .from(eventExpenses)
-        .where(and(
-            eq(eventExpenses.eventId, eventId),
-            eq(eventExpenses.allocationMethod, "with_coefficients"),
-            eq(eventExpenses.status, "final"),
-            isNotNull(eventExpenses.amount),
-        ));
-
-    if (withCoeffExpenses.length === 0) return;
-
-    const regs = await db
-        .select({ id: eventRegistrations.id, personsCount: eventRegistrations.personsCount })
-        .from(eventRegistrations)
-        .where(and(eq(eventRegistrations.eventId, eventId), isNull(eventRegistrations.cancelledAt)));
-
-    if (regs.length === 0) return;
-
-    const regIds = regs.map(r => r.id);
-    const allParticipants = regIds.length > 0
-        ? await db
-            .select({
-                id: eventRegistrationParticipants.id,
-                registrationId: eventRegistrationParticipants.registrationId,
-                cancelledAt: eventRegistrationParticipants.cancelledAt,
-            })
-            .from(eventRegistrationParticipants)
-            .where(inArray(eventRegistrationParticipants.registrationId, regIds))
-        : [];
-
-    function getActivePersonKeys(regId: number, personsCount: number | null): string[] {
-        const regParts = allParticipants.filter(p => p.registrationId === regId);
-        if (regParts.length > 0) {
-            // Zachováváme původní indexy (pro klíče r{regId}-{i}), ale vracíme jen aktivní
-            return regParts
-                .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
-                .filter(pk => pk.active)
-                .map(pk => pk.key);
-        }
-        return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
-    }
-
-    await db.transaction(async tx => {
-        for (const expense of withCoeffExpenses) {
-            const coefficients = expense.participantCoefficients as Record<string, number> | null;
-            if (!coefficients) continue;
-
-            const expenseAmount = parseFloat(expense.amount!);
-            const allKeys = regs.flatMap(r => getActivePersonKeys(r.id, r.personsCount));
-            const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-
-            const allocations = regs.map(reg => {
-                const keys = getActivePersonKeys(reg.id, reg.personsCount);
-                const regWeight = keys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-                const amount = totalWeight > 0 ? Math.ceil(expenseAmount * regWeight / totalWeight) : 0;
-                return { registrationId: reg.id, amount };
-            });
-
-            await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expense.id));
-            const nonZero = allocations.filter(a => a.amount > 0);
-            if (nonZero.length > 0) {
-                await tx.insert(eventExpenseAllocations).values(
-                    nonZero.map(a => ({ expenseId: expense.id, registrationId: a.registrationId, amount: String(a.amount) }))
-                );
-            }
-        }
-    });
 }
 
 // ── Předpisy plateb ───────────────────────────────────────────────────────────
@@ -1392,8 +1356,8 @@ export async function cancelParticipant(
         });
 
         if (eventId) {
-            // Přepočítáme alokace with_coefficients — odhlášený účastník se nesmí podílet na nákladech.
-            await recalculateWithCoefficientsAllocations(eventId, db);
+            // with_coefficients váhy se počítají vždy živě z aktivních účastníků (getEventSettlement),
+            // odhlášený účastník se tedy automaticky vyřadí — žádný přepočet alokací není potřeba.
 
             // Pokud je billing uzamčen, přepočítáme i settlement předpisy — jinak payments tab ukazuje
             // stará čísla z doby před odhlášením účastníka.
@@ -1502,8 +1466,6 @@ export async function restoreParticipant(
         });
 
         if (eventId) {
-            await recalculateWithCoefficientsAllocations(eventId, db);
-
             const [ev] = await db
                 .select({ billingStatus: events.billingStatus, name: events.name })
                 .from(events)

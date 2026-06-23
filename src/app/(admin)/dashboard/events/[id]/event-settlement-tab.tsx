@@ -172,13 +172,11 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
 function ExpenseAllocationRow({
     expense,
     registrations,
-    onAllocationsChanged,
     onReload,
     disabled,
 }: {
     expense: FinalExpenseRow;
     registrations: SettlementRegistrationRow[];
-    onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[], newMethod?: "with_coefficients" | "per_registration") => void;
     onReload?: () => void;
     disabled?: boolean;
 }) {
@@ -209,19 +207,6 @@ function ExpenseAllocationRow({
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
-
-    // Přepočet alokací per přihláška z koeficientů
-    function calcAllocsFromCoefs(coefs: Record<string, number>): { registrationId: number; amount: number }[] {
-        const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
-        const totalWeight = allKeys.reduce((s, k) => s + (coefs[k] ?? 0), 0);
-        if (totalWeight === 0) return registrations.map(r => ({ registrationId: r.registrationId, amount: 0 }));
-        return registrations.map(reg => {
-            const regWeight = getPersonsForAlloc(reg).reduce((s, p) => s + (coefs[p.key] ?? 0), 0);
-            // effectiveAmount (ne hrubá amount) — stejná báze jako rescaling v getEventSettlement,
-            // ať se okamžitý UI náhled při úpravě koeficientů nerozchází se serverem u nákladů s propadlou zálohou.
-            return { registrationId: reg.registrationId, amount: Math.ceil(expense.effectiveAmount * regWeight / totalWeight) };
-        });
-    }
 
     function handleSetSplitAll() {
         if (disabled) return;
@@ -256,17 +241,18 @@ function ExpenseAllocationRow({
             }
             setCoefficients(coefs);
         }
-        // Okamžitá UI aktualizace včetně přepočtu spodní tabulky
+        // Okamžitá UI aktualizace (přepínač metody, rozbalení) — koeficientové chipy se vykreslí hned
         const prevMethod = method;
         setMethod("with_coefficients");
         setExpanded(true);
         setSaveError(null);
-        onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs), "with_coefficients");
-        // Uložení v pozadí
+        // Uložení v pozadí; po úspěchu tichý reload — částky se počítají na serveru (getEventSettlement),
+        // klient je už neaproximuje, ať se zobrazení nikdy nerozejde s tím, co půjde do předpisu.
         setMethodSaving(true);
         setExpenseParticipantCoefficients(expense.id, coefs)
             .then(res => {
                 if ("error" in res) { setSaveError(res.error); setMethod(prevMethod); setExpanded(false); }
+                else { onReload?.(); }
             })
             .finally(() => setMethodSaving(false));
     }
@@ -275,12 +261,11 @@ function ExpenseAllocationRow({
         if (disabled) return;
         const newCoefs = { ...coefficients, [key]: val };
         setCoefficients(newCoefs);
-        const newAllocs = calcAllocsFromCoefs(newCoefs);
-        onAllocationsChanged?.(expense.id, newAllocs, "with_coefficients");
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
             const res = await setExpenseParticipantCoefficients(expense.id, newCoefs);
-            if ("error" in res) setSaveError(res.error); else setSaveError(null);
+            if ("error" in res) setSaveError(res.error);
+            else { setSaveError(null); onReload?.(); }
         }, 800);
     }
 
@@ -415,33 +400,6 @@ export function EventSettlementTab({ eventId, billingStatus }: { eventId: number
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { load(); }, [eventId]);
 
-    function handleAllocationsChanged(
-        expenseId: number,
-        newAllocs: { registrationId: number; amount: number }[],
-        newMethod?: "with_coefficients" | "per_registration",
-    ) {
-        setSettlement(prev => {
-            if (!prev) return prev;
-            const allocMap = new Map(newAllocs.map(a => [a.registrationId, a.amount]));
-            const newRegs = prev.registrations.map(reg => {
-                const newExpenses = reg.expenses.map(e =>
-                    e.expenseId === expenseId
-                        ? { ...e, allocatedAmount: allocMap.get(reg.registrationId) ?? 0, ...(newMethod ? { allocationMethod: newMethod } : {}) }
-                        : e
-                );
-                const perRegPart = newExpenses
-                    .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
-                    .reduce((s, e) => s + e.allocatedAmount, 0);
-                const expensesTotal = prev.unitPrice * reg.activePersonsCount + perRegPart;
-                const subsidy = prev.totalMemberParticipants > 0
-                    ? Math.round(prev.subsidyTotal * reg.memberCount / prev.totalMemberParticipants)
-                    : 0;
-                return { ...reg, expenses: newExpenses, expensesTotal, subsidy, totalAmount: Math.max(0, expensesTotal - subsidy) };
-            });
-            return { ...prev, registrations: newRegs, grandTotal: newRegs.reduce((s, r) => s + r.totalAmount, 0) };
-        });
-    }
-
     if (loading) {
         return (
             <div className="flex items-center justify-center py-16 text-gray-400 gap-2">
@@ -483,7 +441,6 @@ export function EventSettlementTab({ eventId, billingStatus }: { eventId: number
                             key={exp.id}
                             expense={exp}
                             registrations={settlement.registrations}
-                            onAllocationsChanged={handleAllocationsChanged}
                             onReload={silentReload}
                             disabled={isPrescribed}
                         />

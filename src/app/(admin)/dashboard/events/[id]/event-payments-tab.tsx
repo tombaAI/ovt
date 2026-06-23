@@ -30,16 +30,6 @@ function fmtDateTime(d: Date) {
     return new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
 }
 
-function recomputeSettlement(s: EventSettlement, newSubsidyTotal: number): EventSettlement {
-    const newRegs = s.registrations.map(reg => {
-        const subsidy = s.totalMemberParticipants > 0
-            ? Math.round(newSubsidyTotal * reg.memberCount / s.totalMemberParticipants)
-            : 0;
-        return { ...reg, subsidy, totalAmount: Math.max(0, reg.expensesTotal - subsidy) };
-    });
-    return { ...s, subsidyTotal: newSubsidyTotal, registrations: newRegs, grandTotal: newRegs.reduce((sum, r) => sum + r.totalAmount, 0) };
-}
-
 // ── Status badge ──────────────────────────────────────────────────────────────
 
 function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount: number | null }) {
@@ -352,14 +342,20 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
             .finally(() => setLoading(false));
     }
 
+    function silentReload() {
+        getEventSettlement(eventId).then(s => { setSettlement(s); setSubsidyTotal(s.subsidyTotal); });
+    }
+
     function loadLog() { getEventSettlementEmailLog(eventId).then(setEmailLog); }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { load(); loadLog(); }, [eventId]);
 
     function handleSubsidyChange(newSubsidy: number) {
+        // Dotace se rozpočítává per člen a zaokrouhluje per účastník na serveru (getEventSettlement) —
+        // klient čísla neaproximuje, jen po uložení tiše dotáhne čerstvá data.
         setSubsidyTotal(newSubsidy);
-        setSettlement(s => s ? recomputeSettlement(s, newSubsidy) : null);
+        silentReload();
     }
 
     function handleLock() {
