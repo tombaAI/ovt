@@ -345,8 +345,10 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         .reduce((s, e) => s + e.effectiveAmount, 0);
     const unitPrice = totalParticipants > 0 ? splitAllSum / totalParticipants : 0;
 
-    // ── Krok 4–7: náklad na účastníka přes všechny náklady, dotace, JEDINÉ zaokrouhlení ──
-    const subsidyPerMember = totalMemberParticipants > 0 ? subsidyTotal / totalMemberParticipants : 0;
+    // ── Krok 4–7: náklad na účastníka přes všechny náklady, dotace, JEDINÉ zaokrouhlení NAHORU ──
+    // Dotace na člena se zaokrouhluje DOLŮ na celé Kč už tady (výjimka z "zaokrouhli jen jednou") —
+    // součet skutečně přiznané dotace tak nikdy nepřekročí schválenou částku event.subsidyPerMember.
+    const subsidyPerMember = totalMemberParticipants > 0 ? Math.floor(subsidyTotal / totalMemberParticipants) : 0;
 
     type ParticipantCalc = {
         key: string;

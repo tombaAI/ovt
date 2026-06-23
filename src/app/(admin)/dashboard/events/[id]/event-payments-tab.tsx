@@ -150,7 +150,7 @@ function SubsidyField({ eventId, value, totalMemberParticipants, onChange, disab
                     {value > 0 ? fmtCzk(value) : <span className="text-gray-400 italic">Nezadána</span>}
                 </button>
                 {value > 0 && totalMemberParticipants > 0 && (
-                    <p className="text-xs text-gray-400 mt-0.5">= {fmtCzk(Math.round(value / totalMemberParticipants))}/člen ({totalMemberParticipants} členů)</p>
+                    <p className="text-xs text-gray-400 mt-0.5">= {fmtCzk(Math.floor(value / totalMemberParticipants))}/člen ({totalMemberParticipants} členů)</p>
                 )}
             </div>
         );

@@ -8,7 +8,9 @@ Navazuje na `ZADANI_PROPADLA_ZALOHA.md` (definice propadlé zálohy) — tento d
 
 ## Princip: počítej s plnou přesností, zaokrouhli jen jednou — na konci, per účastník
 
-Celý výpočet od nákladu po doplatek běží **ve float/decimal přesnosti, beze ztráty** (žádné mezivýsledkové `Math.ceil`/`Math.round`). Zaokrouhlení nahoru na celé koruny se provede **přesně jednou** — na úplném konci, pro **finální částku jednoho účastníka**, ne pro náklad, ne pro přihlášku jako celek.
+Celý výpočet od nákladu po doplatek běží **ve float/decimal přesnosti, beze ztráty** (žádné mezivýsledkové `Math.ceil`/`Math.round`). Zaokrouhlení **nahoru** na celé koruny se provede **přesně jednou** — na úplném konci, pro **finální částku jednoho účastníka**, ne pro náklad, ne pro přihlášku jako celek.
+
+**Výjimka — dotace na člena (krok 6) se zaokrouhluje DOLŮ na celé Kč hned v kroku 6**, ne na konci. Důvod: dotace je schválená částka, kterou klub reálně dává členům jako slevu — součet skutečně přiznané dotace (`subsidyPerMember × totalMemberParticipants`) tak nikdy nepřekročí schválenou `event.subsidyPerMember`, nanejvýš bude o pár Kč nižší (zbytek zůstává klubu, ne navíc rozpočítaný mezi členy zaokrouhlením nahoru). Zaokrouhlení nahoru v kroku 7 zůstává jediné zaokrouhlení směrem nahoru v celém výpočtu.
 
 Zobrazení (UI) může jakoukoli mezivýslednou hodnotu ukázat zaokrouhlenou na 2 desetinná místa (matematicky — round-half-up), ale **ta zobrazená zaokrouhlená hodnota se nikdy nepoužije zpátky do dalšího počítání** — vždy se pokračuje s plnou přesností uloženou v paměti/výpočtu.
 
@@ -100,18 +102,20 @@ Stále plná přesnost, žádné zaokrouhlení.
 ## Krok 6 — dotace
 
 ```
-subsidyPerMember = event.subsidyPerMember / totalMemberParticipants   // PLNÁ přesnost
+subsidyPerMember = floor( event.subsidyPerMember / totalMemberParticipants )   // ZAOKROUHLENO DOLŮ na celé Kč
 ```
 
 kde `totalMemberParticipants` = počet aktivních účastníků s `memberId != null` (napříč celou akcí, ne per přihláška).
 
 Dotace se odečítá **jen účastníkům, kteří jsou členi** (`memberId != null`); ostatní platí `totalCost(p)` bez odpočtu.
 
-**Příklad:** `5000 / 19 = 263,157894736…`
+`subsidyPerMember` je od tohoto kroku dál **celé číslo (Kč)** — žádná desetinná přesnost se do kroku 7 nepřenáší (viz výjimka v principu výše).
+
+**Příklad:** `floor(5000 / 19) = floor(263,157894736…) = 263 Kč` — dál se počítá s `263`, ne s `263,157894736…`.
 
 ---
 
-## Krok 7 — finální částka účastníka (JEDINÉ místo, kde se zaokrouhluje)
+## Krok 7 — finální částka účastníka (jediné zaokrouhlení NAHORU v celém výpočtu)
 
 ```
 participantFinal(p) = ceil( max(0, totalCost(p) − (isMember(p) ? subsidyPerMember : 0)) )
@@ -121,7 +125,7 @@ participantFinal(p) = ceil( max(0, totalCost(p) − (isMember(p) ? subsidyPerMem
 
 **Příklad:**
 - Nečlen: `ceil(4577,053076923…) = 4578`
-- Člen: `ceil(4577,053076923… − 263,157894736…) = ceil(4313,895182186…) = 4314`
+- Člen: `ceil(4577,053076923… − 263) = ceil(4314,053076923…) = 4315`
 
 ---
 
@@ -144,18 +148,19 @@ Všechny mezivýsledky (efektivní částka nákladu, cena/jednotka, náklad na 
 
 ---
 
-## Stav implementace vs. tento spec (k 2026-06-24, po realizaci kroků 3/7/8)
+## Stav implementace vs. tento spec (k 2026-06-24, po realizaci kroků 3/6/7/8)
 
 | Krok | Aktuální kód | Soulad se spec |
 |---|---|---|
 | Krok 1 (váhy) | `activePersonKeysForRegistration` (sdílená funkce) + váhy per náklad přímo z `participantCoefficients` (`with_coefficients`) nebo `eventExpenseAllocations` rozpočtených rovným dílem (`per_registration`) v `getEventSettlement` | ✅ |
 | Krok 2 (forfeit → effectiveAmount) | `calcForfeitForExpense` — beze změny, opraveno dříve (commit `e698029`) | ✅ |
 | Krok 3 (cena za jednotku váhy, plná přesnost) | `unitPriceByExpense.set(expense.id, effectiveAmount / totalWeight)` — žádné mezivýsledkové zaokrouhlení. `setExpenseParticipantCoefficients` už neukládá derivovanou Kč alokaci (jen koeficienty) | ✅ |
-| Krok 4–6 (náklad na účastníka, dotace) | `participantCalcs` — `totalCost`/`subsidyAmount` per účastník, plná přesnost | ✅ |
-| Krok 7 (jediné zaokrouhlení) | `ceilMoney(max(0, totalCost − subsidyAmount))` — počítáno přesně jednou, per účastník (`ParticipantCalc.finalAmount`) | ✅ |
+| Krok 4–5 (náklad na účastníka) | `participantCalcs` — `totalCost` per účastník, plná přesnost | ✅ |
+| Krok 6 (dotace, zaokrouhleno DOLŮ) | `subsidyPerMember = Math.floor(subsidyTotal / totalMemberParticipants)` v `getEventSettlement` — výjimka z principu, viz výše | ✅ (2026-06-24) |
+| Krok 7 (jediné zaokrouhlení nahoru) | `ceilMoney(max(0, totalCost − subsidyAmount))` — počítáno přesně jednou, per účastník (`ParticipantCalc.finalAmount`) | ✅ |
 | Krok 8 (součet přihlášky) | `totalAmount = calcs.reduce((s,c) => s + c.finalAmount, 0)` — součet už zaokrouhlených částek účastníků | ✅ |
 
-**Ověřeno** (2026-06-24) nezávislou JS reprodukcí nového algoritmu nad reálnými staging daty (event id 4) — výsledky přesně odpovídají sekci „Vypsané výpočty doplatku" níže (1814 / 4314 / 3892 / 1814 / 1656 Kč).
+**Ověřeno** (2026-06-24) nezávislou JS reprodukcí nového algoritmu nad reálnými staging daty (event id 4) — výsledky přesně odpovídají sekci „Vypsané výpočty doplatku" níže (1815 / 4315 / 3893 / 1815 / 1656 Kč) po zavedení floor dotace v kroku 6.
 
 `expensesTotal`/`subsidy` na `SettlementRegistrationRow` zůstávají informativní (plná přesnost, součet před zaokrouhlením) — skutečný doplatek (`totalAmount`) se od nich může lišit o pár Kč u přihlášek s více účastníky s různým členským statusem, protože se teď zaokrouhluje per účastník, ne per přihláška. To je očekávané a správné chování dle kroku 8.
 
@@ -177,7 +182,7 @@ Akce **„Zahraniční zájezd – Isel“**, `events.id = 4`, staging DB, `bill
 
 **Očekávané výsledky podle tohoto spec (krok 7), účastník s váhou 1 na všech 3 nákladech:**
 - nečlen: **4578 Kč**
-- člen: **4314 Kč**
+- člen: **4315 Kč** (dotace zaokrouhlena dolů na 263 Kč v kroku 6, ne 263,157894736…)
 
 Tato čísla lze použít jako acceptance test (unit test na čistou funkci dle dřívějšího návrhu testů, nebo Playwright assert na záložce Náklady + vygenerovaný předpis) — obě musí dát identický výsledek.
 
@@ -185,7 +190,7 @@ Tato čísla lze použít jako acceptance test (unit test na čistou funkci dle 
 
 ## Vypsané výpočty doplatku — 5 konkrétních přihlášek (stejná fixture, event id 4)
 
-Společné pro všechny: `unitPrice` per náklad je stejné jako výše (Bus 3657,038461538…, Kemp 910,41, Odvoz 9,604615384…), `subsidyPerMember = 263,157894736…`. Liší se jen `personsCount`, váhy jednotlivých účastníků a stav zálohy.
+Společné pro všechny: `unitPrice` per náklad je stejné jako výše (Bus 3657,038461538…, Kemp 910,41, Odvoz 9,604615384…), `subsidyPerMember = 263 Kč` (floor(5000/19), krok 6 — celé číslo, ne 263,157894736…). Liší se jen `personsCount`, váhy jednotlivých účastníků a stav zálohy.
 
 ### Cenek Havelka (registrace 64, 3 osoby)
 
@@ -211,15 +216,15 @@ doplatek = max(0, 9156 − 7500) = 1656 Kč
 ```
 Tomáš Bauer:    člen (member_id = 56), váha 1 na všech 3 nákladech
                 totalCost = 4577,053076923…
-                − subsidyPerMember 263,157894736… = 4313,895182187…
-                participantFinal = ceil(4313,895182187…) = 4314
+                − subsidyPerMember 263 (floor, krok 6) = 4314,053076923…
+                participantFinal = ceil(4314,053076923…) = 4315
 
-registrationTotal = 4314
+registrationTotal = 4315
 
 Záloha: prescription 2 500, status = matched, matched_amount = 2 500
 effectiveDepositAmount = 2 500
 
-doplatek = max(0, 4314 − 2500) = 1814 Kč
+doplatek = max(0, 4315 − 2500) = 1815 Kč
 ```
 
 ### Robert Riedl (registrace 24, 2 osoby)
@@ -228,19 +233,19 @@ Robert Riedl je člen, Hana Riedlová (druhá osoba na přihlášce) ne — dota
 
 ```
 Robert Riedl:   člen (member_id = 161), váha 1
-                totalCost = 4577,053076923… − 263,157894736… = 4313,895182187…
-                participantFinal = ceil(4313,895182187…) = 4314
+                totalCost = 4577,053076923… − 263 (floor, krok 6) = 4314,053076923…
+                participantFinal = ceil(4314,053076923…) = 4315
 
 Hana Riedlová:  nečlen, váha 1, bez dotace
                 totalCost = 4577,053076923…
                 participantFinal = ceil(4577,053076923…) = 4578
 
-registrationTotal = 4314 + 4578 = 8892
+registrationTotal = 4315 + 4578 = 8893
 
 Záloha: prescription 5 000, status = matched, matched_amount = 5 000
 effectiveDepositAmount = 5 000
 
-doplatek = max(0, 8892 − 5000) = 3892 Kč
+doplatek = max(0, 8893 − 5000) = 3893 Kč
 ```
 
 ### Štěpán Klepač (registrace 13, 2 osoby) — nebude platit zálohu
@@ -253,15 +258,15 @@ doplatek = max(0, 8892 − 5000) = 3892 Kč
                     participantFinal = ceil(max(0, 0 − 0)) = 0
 
 Kateřina Klepačová: člen (member_id = 62), váha 1
-                    totalCost = 4577,053076923… − 263,157894736… = 4313,895182187…
-                    participantFinal = ceil(4313,895182187…) = 4314
+                    totalCost = 4577,053076923… − 263 (floor, krok 6) = 4314,053076923…
+                    participantFinal = ceil(4314,053076923…) = 4315
 
-registrationTotal = 0 + 4314 = 4314
+registrationTotal = 0 + 4315 = 4315
 
 Záloha: prescription 5 000, status = pending, deposit_promise = false
 effectiveDepositAmount = 0   (nepřijata, nepřislíbena → nezapočítává se)
 
-doplatek = max(0, 4314 − 0) = 4314 Kč
+doplatek = max(0, 4315 − 0) = 4315 Kč
 ```
 
 Pozn.: pokud by se „nebude platit zálohu" myslelo jako trvalé rozhodnutí (záloha se nikdy nevybere), je vhodné to v UI/datech odlišit od běžného „zatím nepřišla" pendingu — jinak vyúčtování vypadá identicky jako běžná nezaplacená záloha čekající na úhradu. Funkčně na výpočet doplatku to ale nemá vliv, dokud `status` zůstává `pending` a `deposit_promise = false`.
@@ -272,15 +277,15 @@ Záloha 2 500 Kč je v DB `status = pending`, ale `deposit_promise = true` — p
 
 ```
 Zbynek Herynek: člen (member_id = 73), váha 1
-                totalCost = 4577,053076923… − 263,157894736… = 4313,895182187…
-                participantFinal = ceil(4313,895182187…) = 4314
+                totalCost = 4577,053076923… − 263 (floor, krok 6) = 4314,053076923…
+                participantFinal = ceil(4314,053076923…) = 4315
 
-registrationTotal = 4314
+registrationTotal = 4315
 
 Záloha: prescription 2 500, status = pending, deposit_promise = true
 effectiveDepositAmount = 2 500   (přislíbená záloha se počítá jako přijatá)
 
-doplatek = max(0, 4314 − 2500) = 1814 Kč
+doplatek = max(0, 4315 − 2500) = 1815 Kč
 ```
 
 ### Shrnutí
@@ -288,7 +293,7 @@ doplatek = max(0, 4314 − 2500) = 1814 Kč
 | Přihláška | registrationTotal | Záloha (efektivní) | Doplatek |
 |---|---|---|---|
 | Cenek Havelka (3 os., 1 odhlášen) | 9156 | 7500 (matched) | **1656 Kč** |
-| Tomáš Bauer (1 os.) | 4314 | 2500 (matched) | **1814 Kč** |
-| Robert Riedl (2 os.) | 8892 | 5000 (matched) | **3892 Kč** |
-| Štěpán Klepač (2 os., 1 s váhou 0) | 4314 | 0 (pending, bez příslibu) | **4314 Kč** |
-| Zbynek Herynek (1 os.) | 4314 | 2500 (pending, příslib) | **1814 Kč** |
+| Tomáš Bauer (1 os.) | 4315 | 2500 (matched) | **1815 Kč** |
+| Robert Riedl (2 os.) | 8893 | 5000 (matched) | **3893 Kč** |
+| Štěpán Klepač (2 os., 1 s váhou 0) | 4315 | 0 (pending, bez příslibu) | **4315 Kč** |
+| Zbynek Herynek (1 os.) | 4315 | 2500 (pending, příslib) | **1815 Kč** |
