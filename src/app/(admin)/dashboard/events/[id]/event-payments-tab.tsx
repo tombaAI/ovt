@@ -279,10 +279,9 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                                         {(reg.depositPrescription || reg.settlementPrescription) && (
                                             <span className="text-xs text-gray-400">doplatek</span>
                                         )}
-                                        {isPrescribed && reg.settlementPrescription ? (
+                                        <span className="text-xs font-medium text-gray-700 tabular-nums">{fmtCzk(reg.settlementAmount)}</span>
+                                        {reg.settlementPrescription && (
                                             <StatusBadge status={reg.settlementPrescription.status} matchedAmount={reg.settlementPrescription.matchedAmount} />
-                                        ) : (
-                                            <span className="text-xs font-medium text-gray-600 tabular-nums">{fmtCzk(reg.settlementAmount)}</span>
                                         )}
                                         {isPrescribed && treasurerApproved && reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled" && (
                                             <button onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
