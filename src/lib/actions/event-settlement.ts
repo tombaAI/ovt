@@ -74,6 +74,23 @@ function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
     return 0;
 }
 
+/**
+ * Část zálohy téže přihlášky, která už propadla (forfeit_to_expense) a snížila effectiveAmount
+ * nějakého nákladu v kroku 2 — tu samou korunu nelze započítat podruhé jako "zaplaceno" proti
+ * doplatku zbylých (stále aktivních) účastníků téže přihlášky.
+ */
+function calcOwnForfeitedAmount(
+    personsCount: number | null,
+    depositAmount: number | null,
+    regParticipants: { cancelledAt: Date | null; depositForfeitPolicy: DepositForfeitPolicy | null; depositRefundAmount: number | null }[],
+): number {
+    if (!depositAmount) return 0;
+    const depositPerPerson = depositAmount / (personsCount ?? 1);
+    return regParticipants
+        .filter(p => p.cancelledAt !== null && p.depositForfeitPolicy === "forfeit_to_expense")
+        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
+
 export type SettlementRegistrationRow = {
     registrationId: number;
     firstName: string;
@@ -87,8 +104,14 @@ export type SettlementRegistrationRow = {
     expensesTotal: number;
     subsidy: number;
     totalAmount: number;
-    /** Doplatek (krok 8) = max(0, totalAmount − effectiveDepositAmount) — počítáno živě, nezávisle na tom, zda už existuje settlementPrescription. */
+    /** Doplatek (krok 8) = max(0, totalAmount − effectiveDepositForSettlement) — počítáno živě, nezávisle na tom, zda už existuje settlementPrescription. */
     settlementAmount: number;
+    /**
+     * Efektivní záloha použitá pro výpočet doplatku = effectiveDepositAmount minus ta část,
+     * která už propadla (forfeit_to_expense) a snížila náklad v kroku 2 — jinak by se stejná
+     * koruna započítala dvakrát (issue 2026-06-24, viz ZADANI_VYPOCET_NAKLADU_AKCE.md).
+     */
+    effectiveDepositForSettlement: number;
     /** Záloha — předpis platby vytvořený při podání přihlášky. Množství je fixní, billing ho nemění. */
     depositPrescription: PrescriptionInfo | null;
     /** Doplatek — předpis platby vytvořený při lockBilling. Částka = totalAmount − depositAmount. */
@@ -446,6 +469,13 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
         const depositPrescription = toPrescriptionInfo(depositRaw);
 
+        const ownForfeitedAmount = calcOwnForfeitedAmount(
+            reg.personsCount,
+            depositRaw ? parseFloat(depositRaw.amount) : null,
+            regParticipants,
+        );
+        const effectiveDepositForSettlement = Math.max(0, effectiveDepositAmount(depositPrescription) - ownForfeitedAmount);
+
         return {
             registrationId: reg.id,
             firstName: reg.firstName,
@@ -459,7 +489,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             expensesTotal,
             subsidy,
             totalAmount,
-            settlementAmount: Math.max(0, totalAmount - effectiveDepositAmount(depositPrescription)),
+            settlementAmount: Math.max(0, totalAmount - effectiveDepositForSettlement),
+            effectiveDepositForSettlement,
             depositPrescription,
             settlementPrescription: toPrescriptionInfo(settlementRaw),
         };
@@ -760,8 +791,7 @@ async function upsertPrescriptionAmounts(
 
     await db.transaction(async tx => {
         for (const reg of settlement.registrations) {
-            const depositAmount = effectiveDepositAmount(reg.depositPrescription);
-            const settlementAmount = String(Math.max(0, reg.totalAmount - depositAmount));
+            const settlementAmount = String(Math.max(0, reg.totalAmount - reg.effectiveDepositForSettlement));
 
             if (reg.settlementPrescription) {
                 await tx.update(eventPaymentPrescriptions)
@@ -1024,7 +1054,7 @@ function buildSettlementEmailPayload(
         participants: reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.finalAmount + pt.subsidyAmount })),
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
-        depositAmount: effectiveDepositAmount(reg.depositPrescription),
+        depositAmount: reg.effectiveDepositForSettlement,
         message: message || undefined,
         senderName,
         senderEmail,
