@@ -101,6 +101,20 @@ function calcOwnForfeitedAmount(
         .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
 }
 
+/**
+ * Součet nevrácených (propadlých) částí zálohy přes odhlášené účastníky s rozhodnutou
+ * politikou — na rozdíl od calcOwnForfeitedAmount (jen forfeit_to_expense, používá se
+ * pro odpočet v Kroku 8) tady jde o JAKOUKOLI rozhodnutou politiku, čistě pro zobrazení
+ * (e-mail s vyúčtováním, tabulka na záložce Platby) — viz ZADANI_VYPOCET_NAKLADU_AKCE.md.
+ */
+function registrationForfeitTotal(reg: { depositPrescription: PrescriptionInfo | null; personsCount: number; participants: SettlementParticipant[] }): number {
+    if (!reg.depositPrescription) return 0;
+    const depositPerPerson = reg.depositPrescription.amount / reg.personsCount;
+    return reg.participants
+        .filter(p => p.cancelledAt && p.depositForfeitPolicy)
+        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
+
 export type SettlementRegistrationRow = {
     registrationId: number;
     firstName: string;
@@ -1089,8 +1103,9 @@ function buildSettlementEmailPayload(
             ...reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.finalAmount + pt.subsidyAmount })),
             // Odhlášení účastníci s nevrácenou (propadlou) zálohou — čistě informativní řádek,
             // bez rozpisu/vysvětlení (na rozdíl od tabulky na záložce Platby). Na výpočet doplatku
-            // ani na celkový finanční výsledek akce to nemá žádný vliv.
-            ...reg.participants.filter(pt => pt.cancelledAt && reg.depositPrescription).map(pt => {
+            // ani na celkový finanční výsledek akce to nemá žádný vliv — forfeitTotal se proto
+            // přidává i k zobrazené záloze níž (Cena/os. i Záloha z přihlášky se vykrátí stejně).
+            ...reg.participants.filter(pt => pt.cancelledAt && pt.depositForfeitPolicy && reg.depositPrescription).map(pt => {
                 const depositPerPerson = reg.depositPrescription!.amount / reg.personsCount;
                 const forfeitAmount = Math.max(0, depositPerPerson - (pt.depositRefundAmount ?? 0));
                 return forfeitAmount > 0 ? { fullName: pt.fullName, isMember: pt.memberId !== null, cost: forfeitAmount } : null;
@@ -1098,7 +1113,7 @@ function buildSettlementEmailPayload(
         ],
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
-        depositAmount: reg.effectiveDepositForSettlement,
+        depositAmount: reg.effectiveDepositForSettlement + registrationForfeitTotal(reg),
         message: message || undefined,
         senderName,
         senderEmail,

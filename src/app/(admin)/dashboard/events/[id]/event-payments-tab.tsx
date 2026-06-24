@@ -37,6 +37,21 @@ const FORFEIT_POLICY_LABELS: Record<string, string> = {
     forfeit_to_club: "propadlo oddílu",
 };
 
+/**
+ * Součet nevrácených (propadlých) částí zálohy přes odhlášené účastníky s rozhodnutou
+ * politikou — stejná čísla, co se zobrazují per účastník v ParticipantRow. Přidává se
+ * k zobrazené Ceně akce i Záloze v souhrnném řádku přihlášky (a v součtu dole), aby
+ * sloupce souhlasily se součtem řádků účastníků. K zaplacení se nemění — forfeit se
+ * v něm odečte i přičte, takže se vykrátí (totalAmount − effectiveDeposit zůstává stejné).
+ */
+function registrationForfeitTotal(reg: SettlementRegistrationRow): number {
+    if (!reg.depositPrescription) return 0;
+    const depositPerPerson = reg.depositPrescription.amount / reg.personsCount;
+    return reg.participants
+        .filter(p => p.cancelledAt && p.depositForfeitPolicy)
+        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
+
 // ── Stav platby přihlášky (krok navíc nad samotným doplatkem/zálohou) ────────
 // "Cena akce / Dotace / K zaplacení" se nemění — toto je jen odvozený životní cyklus
 // plateb pro zobrazení, nepoužívá se nikde ve výpočtu doplatku.
@@ -312,7 +327,7 @@ function ParticipantRow({ p, reg, depositSharePerPerson }: { p: SettlementPartic
         const depositPerPerson = reg.depositPrescription ? reg.depositPrescription.amount / reg.personsCount : null;
         const forfeitAmount = depositPerPerson != null ? Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)) : null;
 
-        if (forfeitAmount != null && forfeitAmount > 0) {
+        if (p.depositForfeitPolicy && forfeitAmount != null && forfeitAmount > 0) {
             return (
                 <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
                     <td />
@@ -378,6 +393,11 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
     const [expanded, setExpanded] = useState(false);
     const lifecycle = computeLifecycle(reg, isPrescribed);
     const canSend = isPrescribed && treasurerApproved && !!reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled";
+    // Propadlá záloha se v souhrnu přičítá k Ceně akce i Záloze (vykrátí se), aby tyhle dva
+    // sloupce souhlasily se součtem rozbalených řádků účastníků — viz registrationForfeitTotal.
+    const forfeitTotal = registrationForfeitTotal(reg);
+    const displayCenaAkce = reg.totalAmount + reg.subsidy + forfeitTotal;
+    const displayZaloha = reg.effectiveDepositForSettlement + forfeitTotal;
 
     return (
         <>
@@ -397,8 +417,8 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
                 </td>
                 <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
                     <div className="inline-flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
-                        {fmtCzk(reg.totalAmount + reg.subsidy)}
-                        {(hasPerReg || reg.expenses.length > 1) && (
+                        {fmtCzk(displayCenaAkce)}
+                        {(hasPerReg || reg.expenses.length > 1 || forfeitTotal > 0) && (
                             <Popover>
                                 <PopoverTrigger asChild>
                                     <button className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"><Info size={13} /></button>
@@ -417,8 +437,14 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
                                             </div>
                                         );
                                     })}
+                                    {forfeitTotal > 0 && (
+                                        <div className="flex justify-between gap-3 text-gray-700">
+                                            <span className="truncate font-medium">Propadlá záloha (nejede)</span>
+                                            <span className="tabular-nums shrink-0">{fmtCzk(forfeitTotal)}</span>
+                                        </div>
+                                    )}
                                     <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
-                                        <span>Celkem</span><span className="tabular-nums">{fmtCzk(reg.totalAmount + reg.subsidy)}</span>
+                                        <span>Celkem</span><span className="tabular-nums">{fmtCzk(displayCenaAkce)}</span>
                                     </div>
                                 </PopoverContent>
                             </Popover>
@@ -430,7 +456,7 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
                 </td>
                 <td className="py-2 pr-3 text-right text-gray-700 tabular-nums" onClick={e => e.stopPropagation()}>
                     <div className="flex flex-col items-end gap-0.5">
-                        <span>{fmtCzk(reg.effectiveDepositForSettlement)}</span>
+                        <span>{fmtCzk(displayZaloha)}</span>
                         {reg.depositPrescription && (
                             <DepositStatusCell dep={reg.depositPrescription} locked={isPrescribed} onPromiseChange={onDepositPromiseChange} onWontPayChange={onDepositWontPayChange} />
                         )}
@@ -501,9 +527,9 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                         <td />
                         <td className="pt-2 text-xs font-medium text-gray-500">Celkem</td>
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{rows.reduce((s, r) => s + r.personsCount, 0)} os.</td>
-                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount + r.subsidy, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount + r.subsidy + registrationForfeitTotal(r), 0))}</td>
                         <td className="pt-2 pr-3 text-right text-xs text-emerald-600 tabular-nums">−{fmtCzk(rows.reduce((s, r) => s + r.subsidy, 0))}</td>
-                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.effectiveDepositForSettlement, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.effectiveDepositForSettlement + registrationForfeitTotal(r), 0))}</td>
                         <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.settlementAmount, 0))}</td>
                         <td />
                     </tr>
