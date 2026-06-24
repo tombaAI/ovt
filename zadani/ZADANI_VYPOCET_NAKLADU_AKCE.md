@@ -63,6 +63,8 @@ Náklady bez napojeného forfeitu: `effectiveAmount = amount` (beze změny).
 
 **Příklad:** Bus 97 583, propadlá záloha 2 500 (Čeněk Havelka, 1 z 3 účastníků jeho přihlášky, plný podíl bez vrácení) → `effectiveAmount = 95 083`. Kemp a Odvoz nemají na sobě napojený žádný forfeit → beze změny.
 
+**⚠️ Důležité — tahle částka je tím "spotřebovaná".** Jakmile `forfeit_to_expense` snížil `effectiveAmount` nákladu (a tím i `unitPrice`, a tím nepřímo náklad VŠECH aktivních účastníků akce), nesmí se ta samá koruna ještě jednou započítat jako "zaplacená záloha" v Kroku 8 u přihlášky, ze které propadlá záloha pocházela — viz `ownForfeitedAmount` v Kroku 8 níže. Jinak se stejná koruna použije dvakrát (issue nalezený 2026-06-24, akce „Zahraniční zájezd – Isel" — viz sekce „Issue: dvojí započtení propadlé zálohy" na konci dokumentu).
+
 ---
 
 ## Krok 3 — cena za jednotku váhy
@@ -133,10 +135,26 @@ participantFinal(p) = ceil( max(0, totalCost(p) − (isMember(p) ? subsidyPerMem
 
 ```
 registrationTotal = Σ participantFinal(p) pro všechny AKTIVNÍ účastníky této přihlášky
-settlementAmount = max(0, registrationTotal − effectiveDepositAmount(registration))
+
+ownForfeitedAmount(registration) =
+  Σ over participants p of THIS registration where:
+    p.cancelledAt IS NOT NULL
+    AND p.depositForfeitPolicy = 'forfeit_to_expense'
+  of:
+    depositPerPerson(p) = depositPrescription(registration).amount / registration.personsCount
+    max(0, depositPerPerson(p) − p.depositRefundAmount)
+
+effectiveDepositForSettlement(registration) =
+  max(0, effectiveDepositAmount(registration) − ownForfeitedAmount(registration))
+
+settlementAmount = max(0, registrationTotal − effectiveDepositForSettlement(registration))
 ```
 
 `effectiveDepositAmount` — viz `event-settlement.ts::effectiveDepositAmount`: zálohu započítáváme jen pokud byla skutečně přijata (`status IN ('matched','paid')`) nebo přislíbena (`depositPromise = true`); jinak 0, i když je prescription vystavený.
+
+**`ownForfeitedAmount` — nová položka (oprava issue z 2026-06-24).** Pokud má přihláška odhlášeného účastníka s `depositForfeitPolicy = 'forfeit_to_expense'`, ta část zálohy, která propadla, už byla v Kroku 2 použita ke snížení `effectiveAmount` nákladu (a tím nákladu všech aktivních účastníků akce). Stejnou částku proto **nelze podruhé** započítat jako "zaplaceno" u zbylých (stále aktivních) účastníků téže přihlášky — odečítá se z `effectiveDepositAmount` ještě před výpočtem doplatku. Pro politiky `forfeit_to_club` a `forfeit_split` (zatím v Kroku 2 nemají žádný efekt na `effectiveAmount`) je `ownForfeitedAmount = 0` — tam k dvojímu započtení nedochází, protože se nic neodečítá v Kroku 2.
+
+Pokud přihláška nemá žádného odhlášeného účastníka s `forfeit_to_expense`, `ownForfeitedAmount = 0` a `effectiveDepositForSettlement = effectiveDepositAmount` (beze změny oproti dřívějšímu chování).
 
 Sčítají se **už zaokrouhlené `participantFinal` hodnoty jednotlivých účastníků** — ne nezaokrouhlený `totalCost`. Tj. pro přihlášku se 2 účastníky se nejdřív zaokrouhlí každý zvlášť, pak se sečte.
 
@@ -170,6 +188,7 @@ Díky tomu, že `subsidyAmount`/`subsidy` je od kroku 6 celé číslo, platí `d
 | Krok 6 (dotace, zaokrouhleno DOLŮ) | `subsidyPerMember = Math.floor(subsidyTotal / totalMemberParticipants)` v `getEventSettlement` — výjimka z principu, viz výše | ✅ (2026-06-24) |
 | Krok 7 (jediné zaokrouhlení nahoru) | `ceilMoney(max(0, totalCost − subsidyAmount))` — počítáno přesně jednou, per účastník (`ParticipantCalc.finalAmount`) | ✅ |
 | Krok 8 (součet přihlášky) | `totalAmount = calcs.reduce((s,c) => s + c.finalAmount, 0)` — součet už zaokrouhlených částek účastníků | ✅ |
+| Krok 8 (`ownForfeitedAmount` odpočet od zálohy) | `effectiveDepositAmount()` v `event-settlement.ts` a `settlement-calc.ts` zatím **nepočítá** `ownForfeitedAmount` — používá se celá `effectiveDepositAmount(registration)` bez odpočtu propadlé části | ❌ **TODO — viz „Issue: dvojí započtení propadlé zálohy" níže** |
 
 **Ověřeno** (2026-06-24) nezávislou JS reprodukcí nového algoritmu nad reálnými staging daty (event id 4) — výsledky přesně odpovídají sekci „Vypsané výpočty doplatku" níže (1815 / 4315 / 3893 / 1815 / 1656 Kč) po zavedení floor dotace v kroku 6.
 
@@ -219,8 +238,14 @@ registrationTotal = 4578 + 4578 = 9156
 Záloha: prescription 7 500, status = matched, matched_amount = 7 500
 effectiveDepositAmount = 7 500   (skutečně přijatá)
 
-doplatek = max(0, 9156 − 7500) = 1656 Kč
+ownForfeitedAmount = 2 500   ("A A", forfeit_to_expense → expense 49, refund 0 — STEJNÁ koruna,
+                              co už snížila effectiveAmount busu v kroku 2, viz upozornění tam)
+effectiveDepositForSettlement = max(0, 7500 − 2500) = 5000   (= 2 × 2500, reálný podíl Ceneka a Jiriho)
+
+doplatek = max(0, 9156 − 5000) = 4156 Kč
 ```
+
+**Bez tohoto odpočtu** (= aktuální chování kódu k 2026-06-24) vychází doplatek `max(0, 9156 − 7500) = 1656 Kč` — o 2 500 Kč méně, protože stejná koruna z propadlé zálohy „A A" se započítá dvakrát: jednou už v kroku 2 (snížila náklad busu pro všech 26 aktivních účastníků), podruhé tady (jako už zaplacená záloha Ceneka a Jiriho). Viz „Issue: dvojí započtení propadlé zálohy" na konci dokumentu pro úplnou rekonstrukci na celé akci.
 
 ### Tomáš Bauer (registrace 12, 1 osoba)
 
@@ -299,12 +324,63 @@ effectiveDepositAmount = 2 500   (přislíbená záloha se počítá jako přija
 doplatek = max(0, 4315 − 2500) = 1815 Kč
 ```
 
+---
+
+## Issue: dvojí započtení propadlé zálohy (nalezeno 2026-06-24)
+
+**Symptom:** Akce má reálné náklady **121 503,38 Kč** (47+48+49: 249,72 + 23 670,66 + 97 583,00), dotaci **5 000 Kč** — naivně by tedy účastníci měli dohromady zaplatit `121 503,38 − 5 000 = 116 503,38 Kč`. Součet toho, co se podle aktuálního kódu od účastníků skutečně vybere (zaplacené zálohy + přislíbené zálohy + doplatky), ale vyjde jen **114 031,00 Kč** — o **2 472,38 Kč méně**.
+
+**Příčina:** propadlá záloha „A A" (2 500 Kč, `forfeit_to_expense` → Bus, registrace 64 — Cenek Havelka) se započítává **dvakrát**:
+
+1. V Kroku 2 snižuje `effectiveAmount` busu (97 583 → 95 083) → nižší `unitPrice` busu pro **všech 26 aktivních účastníků** akce (mírně nižší náklad pro každého, ne jen pro Ceneka/Jiriho).
+2. V Kroku 8 (před opravou) se ale **celá** záloha registrace 64 (7 500 Kč, `status = matched`) započítává jako `effectiveDepositAmount` proti doplatku Ceneka a Jiriho — včetně té samé propadlé části. Reálně by mělo k jejich vlastnímu doplatku přispívat jen 5 000 Kč (jejich 2 × 2 500 vlastní záloha), protože těch 2 500 Kč navíc už "udělalo svou práci" v kroku 1.
+
+**Důsledek:** stejná koruna sníží náklad jednou pro celou akci (krok 2) a podruhé zase jen pro Ceneka a Jiriho (krok 8) — `2 500 Kč` se tak ztratí z toho, co se má vybrat.
+
+**Ověření výpočtem (nezávisle na účetní logice, jen sečtením skutečné hotovosti):**
+
+```
+Zaplacené zálohy                52 500,00
+Přislíbené zálohy                5 000,00
+Doplatky (současný kód)         56 531,00
+Dotace (skutečně přiznaná)       4 997,00   (floor(5000/19) × 19, krok 6)
+─────────────────────────────────────────
+Celkem k dispozici              119 028,00
+Náklady akce                   121 503,38
+Chybí                             2 475,38
+```
+
+(Rozdíl `2 500 − 24,62 Kč` zaokrouhlovacího zisku z kroku 7 napříč 26 platícími účastníky = `2 475,38` — sedí přesně na chybějící částku.)
+
+**Oprava** (popsaná výše v Kroku 8 — `ownForfeitedAmount`): od `effectiveDepositAmount` registrace se před výpočtem doplatku odečte ta část zálohy, která už propadla s politikou `forfeit_to_expense`. Po opravě:
+
+```
+Doplatek Havelka (oprava)        4 156,00   (= 1 656 + 2 500, místo 1 656)
+─────────────────────────────────────────
+Zaplacené zálohy                52 500,00
+Přislíbené zálohy                5 000,00
+Doplatky (opraveno)             59 031,00   (= 56 531 + 2 500)
+Dotace (skutečně přiznaná)       4 997,00
+─────────────────────────────────────────
+Celkem k dispozici              121 528,00
+Náklady akce                   121 503,38
+Přebytek (zaokrouhlovací zisk)      24,62   ✅ čeká se přesně tento drobný přebytek (krok 7 vždy zaokrouhluje nahoru)
+```
+
+Po opravě tedy sedí účet na korunu (až na očekávaný zaokrouhlovací přebytek ~24,62 Kč, který je podle principu výpočtu žádoucí — klub se díky zaokrouhlení nahoru nikdy nedostane do mínusu).
+
+**Rozsah dopadu:** chyba se projeví jen u přihlášky, kde **(a)** je alespoň jeden odhlášený účastník s `depositForfeitPolicy = 'forfeit_to_expense'` **a** **(b)** v té samé přihlášce zůstává alespoň jeden aktivní (platící) účastník. Pokud se zruší celá přihláška (všichni účastníci odhlášeni), k dvojímu započtení nedochází — taková přihláška se do `registrationRows`/doplatků vůbec nepočítá. Politiky `forfeit_to_club` a `forfeit_split` chybou nejsou zasaženy (Krok 2 je v současné implementaci nijak nezohledňuje).
+
+**Status:** popsáno a přepočítáno v tomto spec dokumentu (Krok 8, sekce „Stav implementace"), **čeká na schválení a implementaci** v `src/lib/actions/event-settlement.ts` (`upsertPrescriptionAmounts`, `effectiveDepositAmount`) a `src/lib/settlement-calc.ts` (`effectiveDepositAmount` + nová `ownForfeitedAmount`/`calcForfeitForExpense` na úrovni registrace). Billing akce „Zahraniční zájezd – Isel" (event id 4) je na staging ve stavu `draft` (nic zamčené, žádné odeslané e-maily) — bezpečné pro opravu a přegenerování předpisů.
+
 ### Shrnutí
 
-| Přihláška | registrationTotal | Záloha (efektivní) | Doplatek |
+| Přihláška | registrationTotal | Záloha (efektivní pro doplatek) | Doplatek |
 |---|---|---|---|
-| Cenek Havelka (3 os., 1 odhlášen) | 9156 | 7500 (matched) | **1656 Kč** |
+| Cenek Havelka (3 os., 1 odhlášen) | 9156 | 5000 (7500 matched − 2500 `ownForfeitedAmount`) | **4156 Kč** |
 | Tomáš Bauer (1 os.) | 4315 | 2500 (matched) | **1815 Kč** |
 | Robert Riedl (2 os.) | 8893 | 5000 (matched) | **3893 Kč** |
 | Štěpán Klepač (2 os., 1 s váhou 0) | 4315 | 0 (pending, bez příslibu) | **4315 Kč** |
 | Zbynek Herynek (1 os.) | 4315 | 2500 (pending, příslib) | **1815 Kč** |
+
+Pozn.: doplatek Havelkovy přihlášky je zde podle **opraveného** vzorce (s `ownForfeitedAmount`). Aktuální kód k 2026-06-24 dává 1656 Kč (bez odpočtu) — viz tabulka „Stav implementace" výše a sekce „Issue: dvojí započtení propadlé zálohy" níže.
