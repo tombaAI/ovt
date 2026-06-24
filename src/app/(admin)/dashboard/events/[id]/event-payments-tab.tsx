@@ -235,7 +235,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                             </td>
                             <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
                                 <div className="inline-flex items-center justify-end gap-1">
-                                    {fmtCzk(reg.expensesTotal)}
+                                    {fmtCzk(reg.totalAmount + reg.subsidy)}
                                     {(hasPerReg || reg.expenses.length > 1) && (
                                         <Popover>
                                             <PopoverTrigger asChild>
@@ -256,7 +256,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                                                     );
                                                 })}
                                                 <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
-                                                    <span>Celkem</span><span className="tabular-nums">{fmtCzk(reg.expensesTotal)}</span>
+                                                    <span>Celkem</span><span className="tabular-nums">{fmtCzk(reg.totalAmount + reg.subsidy)}</span>
                                                 </div>
                                             </PopoverContent>
                                         </Popover>
@@ -300,7 +300,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                     <tr className="border-t border-gray-300">
                         <td className="pt-2 text-xs font-medium text-gray-500">Celkem</td>
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{rows.reduce((s, r) => s + r.personsCount, 0)} os.</td>
-                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.expensesTotal, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount + r.subsidy, 0))}</td>
                         <td className="pt-2 pr-3 text-right text-xs text-emerald-600 tabular-nums">−{fmtCzk(rows.reduce((s, r) => s + r.subsidy, 0))}</td>
                         <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount, 0))}</td>
                         <td />

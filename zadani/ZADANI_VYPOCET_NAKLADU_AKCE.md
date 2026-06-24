@@ -146,6 +146,17 @@ Sčítají se **už zaokrouhlené `participantFinal` hodnoty jednotlivých úča
 
 Všechny mezivýsledky (efektivní částka nákladu, cena/jednotka, náklad na osobu před zaokrouhlením, dotace na člena) se v UI zobrazují **zaokrouhlené na 2 desetinná místa matematicky** (round-half-up), čistě pro čitelnost. Tato zobrazená hodnota se nikdy nevrací do výpočtu — interní reprezentace zůstává plná přesnost (float/decimal) po celou dobu průchodu kroky 1–7.
 
+**Pravidlo „Cena akce − Dotace = K zaplacení musí vždy přesně sedět":** kdekoli se v UI (Přehled plateb) nebo v e-mailu s předpisem zobrazuje hrubá cena před dotací (souhrnně za přihlášku, nebo per účastník), **nepoužívá se** raw `totalCost`/`expensesTotal` (krok 4–5, plná přesnost před zaokrouhlením), protože odečtením celočíselné dotace od neceločíselného nákladu a až následným porovnáním se zaokrouhleným `K zaplacení` vznikne viditelný nesoulad o 1 Kč (issue nahlášený uživatelem 2026-06-24 — Cena akce 4 577 − Dotace 263 ≠ K zaplacení 4 315).
+
+Místo toho se zobrazená hrubá cena **odvozuje zpětně z už zaokrouhlených kanonických hodnot**:
+
+```
+displayGrossCost(p)          = finalAmount(p) + subsidyAmount(p)        // per účastník (e-mail "Cena/os.")
+displayGrossCost(registrace) = totalAmount(registrace) + subsidy(registrace)   // souhrnně (UI "Cena akce")
+```
+
+Díky tomu, že `subsidyAmount`/`subsidy` je od kroku 6 celé číslo, platí `displayGrossCost − dotace = finalAmount`/`totalAmount` **přesně**, bez ohledu na to, kolik desetinných míst měl původní `totalCost`. `expensesTotal` na `SettlementRegistrationRow` zůstává interní/informativní pole (např. pro rozpad ceny podle jednotlivých nákladů v popoveru) — pro headline „Cena akce" se už nepoužívá.
+
 ---
 
 ## Stav implementace vs. tento spec (k 2026-06-24, po realizaci kroků 3/6/7/8)

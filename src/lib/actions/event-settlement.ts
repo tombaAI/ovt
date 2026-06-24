@@ -1019,7 +1019,9 @@ function buildSettlementEmailPayload(
         amount: p.amount,
         bankAccount: p.bankAccount,
         paymentDue: p.paymentDue,
-        participants: reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.totalCost })),
+        // cost = finalAmount + subsidyAmount (gross cena před dotací, odvozená ze zaokrouhleného finalAmount) —
+        // ne raw totalCost, aby Cena/os. − Dotace v mailu vždy přesně dalo finalAmount (žádný zbytkový Kč navíc/míň).
+        participants: reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.finalAmount + pt.subsidyAmount })),
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
         depositAmount: effectiveDepositAmount(reg.depositPrescription),
