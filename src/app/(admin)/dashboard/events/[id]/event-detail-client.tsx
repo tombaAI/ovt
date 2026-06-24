@@ -1338,7 +1338,9 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
 
     const activeRows = rows.filter(r => !r.cancelledAt);
     const cancelledRows = rows.filter(r => !!r.cancelledAt);
-    const totalAmount = activeRows.reduce((s, r) => s + r.paymentAmount, 0);
+    // Záloha + doplatek zvlášť (ne COALESCE paymentAmount) — u admin přihlášky bez zálohy by
+    // COALESCE sečetl celý doplatek místo zálohy a smíchal tak dvě různé veličiny do jednoho čísla.
+    const totalAmount = activeRows.reduce((s, r) => s + (r.depositAmount ?? 0) + (r.settlementAmount ?? 0), 0);
 
     // Účastníci aktivních přihlášek: kdo jede vs. kdo se z přihlášky individuálně odhlásil ("nejede")
     const goingPersons = activeRows.reduce((s, r) => s + (r.personsCount - r.participants.filter(p => p.cancelledAt).length), 0);
