@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Check, Info, Mail } from "lucide-react";
+import { Loader2, Check, Info, Mail, ChevronDown, ChevronRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     getEventSettlement,
@@ -19,7 +19,7 @@ import {
     setDepositPromise,
     setDepositWontPay,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow, PrescriptionInfo, EmailSendLogEntry } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, SettlementParticipant, PrescriptionInfo, EmailSendLogEntry } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -31,11 +31,59 @@ function fmtDateTime(d: Date) {
     return new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
 }
 
+const FORFEIT_POLICY_LABELS: Record<string, string> = {
+    forfeit_to_expense: "napočítáno na náklad",
+    forfeit_split: "rozděleno na náklady",
+    forfeit_to_club: "propadlo oddílu",
+};
+
+// ── Stav platby přihlášky (krok navíc nad samotným doplatkem/zálohou) ────────
+// "Cena akce / Dotace / K zaplacení" se nemění — toto je jen odvozený životní cyklus
+// plateb pro zobrazení, nepoužívá se nikde ve výpočtu doplatku.
+
+type PaymentLifecycle =
+    | { kind: "not_yet" }
+    | { kind: "send_prescription" }
+    | { kind: "awaiting" }
+    | { kind: "paid" }
+    | { kind: "underpaid"; diff: number }
+    | { kind: "overpaid"; diff: number };
+
+function paidAmountOf(p: PrescriptionInfo | null): number {
+    if (!p) return 0;
+    if (p.status === "matched" || p.status === "paid") return p.matchedAmount ?? p.amount;
+    return 0;
+}
+
+function computeLifecycle(reg: SettlementRegistrationRow, isPrescribed: boolean): PaymentLifecycle {
+    if (!isPrescribed) return { kind: "not_yet" };
+    const owedTotal = reg.totalAmount;
+    const paidTotal = paidAmountOf(reg.depositPrescription) + paidAmountOf(reg.settlementPrescription);
+    const diff = paidTotal - owedTotal;
+    if (Math.abs(diff) < 0.5) return { kind: "paid" };
+    if (diff > 0) return { kind: "overpaid", diff };
+    if (!reg.settlementPrescription?.emailSentAt) return { kind: "send_prescription" };
+    const settlementHasMatch = reg.settlementPrescription.status === "matched" || reg.settlementPrescription.status === "paid";
+    if (settlementHasMatch) return { kind: "underpaid", diff: -diff };
+    return { kind: "awaiting" };
+}
+
+function LifecycleBadge({ lifecycle }: { lifecycle: PaymentLifecycle }) {
+    switch (lifecycle.kind) {
+        case "not_yet": return <Badge className="bg-gray-100 text-gray-500 border-0 text-xs">Ještě není k placení</Badge>;
+        case "send_prescription": return <Badge className="bg-orange-100 text-orange-700 border-0 text-xs">Odeslat předpis</Badge>;
+        case "awaiting": return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">K zaplacení</Badge>;
+        case "paid": return <Badge className="bg-green-100 text-green-700 border-0 text-xs">Zaplaceno</Badge>;
+        case "underpaid": return <Badge className="bg-red-100 text-red-700 border-0 text-xs">Nedoplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+        case "overpaid": return <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Přeplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+    }
+}
+
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount: number | null }) {
+function StatusBadge({ status, matchedAmount, compact }: { status: string; matchedAmount: number | null; compact?: boolean }) {
     if (status === "paid") return <Badge className="bg-green-100 text-green-700 border-0 text-xs">Zaplaceno</Badge>;
-    if (status === "matched") return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Spárováno ({fmtCzk(matchedAmount ?? 0)})</Badge>;
+    if (status === "matched") return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Spárováno{!compact && ` (${fmtCzk(matchedAmount ?? 0)})`}</Badge>;
     if (status === "cancelled") return <Badge className="bg-gray-100 text-gray-500 border-0 text-xs">Zrušeno</Badge>;
     return <Badge className="bg-amber-100 text-amber-700 border-0 text-xs">Čeká na platbu</Badge>;
 }
@@ -96,7 +144,7 @@ function DepositStatusCell({ dep, locked, onPromiseChange, onWontPayChange }: {
     const [revoking, startRevoke] = useTransition();
 
     if (dep.status !== "pending") {
-        return <StatusBadge status={dep.status} matchedAmount={dep.matchedAmount} />;
+        return <StatusBadge status={dep.status} matchedAmount={dep.matchedAmount} compact />;
     }
 
     if (dep.depositPromise) {
@@ -248,7 +296,139 @@ function SendEmailModal({ open, title, description, onSend, onSkip, onClose, sen
     );
 }
 
+// ── Detail účastníků přihlášky (po rozbalení řádku) ───────────────────────────
+
+function ParticipantDetailRow({ p }: { p: SettlementParticipant }) {
+    if (p.cancelledAt) {
+        const forfeit = p.depositForfeitPolicy ? FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy : null;
+        return (
+            <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
+                <span className="line-through text-gray-400">{p.fullName}</span>
+                <span className="text-[10px] font-semibold uppercase tracking-wide text-orange-600">nejede</span>
+                {p.depositRefundAmount != null && p.depositRefundAmount > 0 && (
+                    <span>vráceno {fmtCzk(p.depositRefundAmount)}</span>
+                )}
+                {forfeit ? <span className="text-gray-400">({forfeit})</span> : <span className="text-gray-400">záloha nevyřešena</span>}
+            </div>
+        );
+    }
+    return (
+        <div className="flex items-center justify-between gap-3 text-xs">
+            <span className="text-gray-700">
+                {p.fullName}
+                {p.memberId !== null && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-emerald-600">člen</span>}
+            </span>
+            <span className="text-gray-500 tabular-nums whitespace-nowrap">
+                {fmtCzk(p.finalAmount + p.subsidyAmount)}
+                {p.subsidyAmount > 0 && <span className="text-emerald-600"> − {fmtCzk(p.subsidyAmount)}</span>}
+                {" = "}<span className="font-semibold text-gray-800">{fmtCzk(p.finalAmount)}</span>
+            </span>
+        </div>
+    );
+}
+
 // ── Registration summary table ────────────────────────────────────────────────
+
+function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange }: {
+    reg: SettlementRegistrationRow; hasPerReg: boolean;
+    isPrescribed: boolean; treasurerApproved: boolean;
+    onSendEmail: (registrationId: number, name: string) => void;
+    onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
+    onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const lifecycle = computeLifecycle(reg, isPrescribed);
+    const canSend = isPrescribed && treasurerApproved && !!reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled";
+
+    return (
+        <>
+            <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50/60 cursor-pointer" onClick={() => setExpanded(v => !v)}>
+                <td className="py-2 pl-1 pr-1 text-gray-300">
+                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </td>
+                <td className="py-2 pr-3">
+                    <p className="font-medium text-gray-800">{reg.firstName} {reg.lastName}</p>
+                    <p className="text-xs text-gray-400">{reg.email}</p>
+                    {reg.depositPrescription && <p className="text-xs font-mono text-gray-400 mt-0.5">záloha C{reg.depositPrescription.prescriptionCode}</p>}
+                    {reg.settlementPrescription && <p className="text-xs font-mono text-gray-500 mt-0">doplatek C{reg.settlementPrescription.prescriptionCode}</p>}
+                </td>
+                <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
+                    {reg.personsCount}
+                    {reg.memberCount > 0 && <span className="text-xs text-emerald-600 ml-1">({reg.memberCount} čl.)</span>}
+                </td>
+                <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
+                    <div className="inline-flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        {fmtCzk(reg.totalAmount + reg.subsidy)}
+                        {(hasPerReg || reg.expenses.length > 1) && (
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <button className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"><Info size={13} /></button>
+                                </PopoverTrigger>
+                                <PopoverContent side="left" align="start" className="w-64 p-3 text-xs space-y-2">
+                                    <p className="font-semibold text-gray-700">Rozpad ceny akce</p>
+                                    {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => {
+                                        const up = e.allocationMethod === "split_all" && reg.personsCount > 1 ? e.allocatedAmount / reg.personsCount : null;
+                                        return (
+                                            <div key={e.expenseId} className="space-y-0.5">
+                                                <div className="flex justify-between gap-3 text-gray-700">
+                                                    <span className="truncate font-medium">{e.purposeText ?? "—"}</span>
+                                                    <span className="tabular-nums shrink-0">{fmtCzk(e.allocatedAmount)}</span>
+                                                </div>
+                                                {up !== null && <p className="text-gray-400 tabular-nums">{fmtCzk(up)}/os. × {reg.personsCount} os.</p>}
+                                            </div>
+                                        );
+                                    })}
+                                    <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
+                                        <span>Celkem</span><span className="tabular-nums">{fmtCzk(reg.totalAmount + reg.subsidy)}</span>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        )}
+                    </div>
+                </td>
+                <td className="py-2 pr-3 text-right text-emerald-600 tabular-nums">
+                    {reg.subsidy > 0 ? `−${fmtCzk(reg.subsidy)}` : "—"}
+                </td>
+                <td className="py-2 pr-3 text-right text-gray-700 tabular-nums" onClick={e => e.stopPropagation()}>
+                    <div className="flex flex-col items-end gap-0.5">
+                        <span>{fmtCzk(reg.effectiveDepositForSettlement)}</span>
+                        {reg.depositPrescription && (
+                            <DepositStatusCell dep={reg.depositPrescription} locked={isPrescribed} onPromiseChange={onDepositPromiseChange} onWontPayChange={onDepositWontPayChange} />
+                        )}
+                    </div>
+                </td>
+                <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.settlementAmount)}</td>
+                <td className="py-2 text-right" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
+                        <LifecycleBadge lifecycle={lifecycle} />
+                        {canSend && (
+                            <button onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
+                                title="Odeslat/přeposlat předpis e-mailem"
+                                className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
+                                <Mail size={13} />
+                            </button>
+                        )}
+                    </div>
+                </td>
+            </tr>
+            {expanded && (
+                <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+                    <td />
+                    <td colSpan={7} className="py-2.5 pr-3">
+                        <div className="space-y-1.5">
+                            {reg.participants.map(p => (
+                                <ParticipantDetailRow key={p.id > 0 ? p.id : p.fullName} p={p} />
+                            ))}
+                            {reg.participants.length === 0 && (
+                                <p className="text-xs text-gray-400">Bez detailu účastníků.</p>
+                            )}
+                        </div>
+                    </td>
+                </tr>
+            )}
+        </>
+    );
+}
 
 function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange }: {
     rows: SettlementRegistrationRow[]; unitPrice: number; hasPerReg: boolean;
@@ -262,6 +442,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
             <table className="w-full text-sm">
                 <thead>
                     <tr className="border-b border-gray-200">
+                        <th className="w-5" />
                         <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Přihláška</th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Osoby</th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">
@@ -269,93 +450,27 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                             {unitPrice > 0 && !hasPerReg && <span className="block text-gray-400 font-normal">{fmtCzk(unitPrice)}/os.</span>}
                         </th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Dotace</th>
+                        <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Záloha</th>
                         <th className="text-right py-2 pr-3 text-xs font-semibold text-gray-800">K zaplacení</th>
                         <th className="text-right py-2 text-xs font-medium text-gray-500 font-normal">Stav</th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows.map(reg => (
-                        <tr key={reg.registrationId} className="border-b border-gray-100 last:border-0">
-                            <td className="py-2 pr-3">
-                                <p className="font-medium text-gray-800">{reg.firstName} {reg.lastName}</p>
-                                <p className="text-xs text-gray-400">{reg.email}</p>
-                                {reg.depositPrescription && <p className="text-xs font-mono text-gray-400 mt-0.5">záloha C{reg.depositPrescription.prescriptionCode}</p>}
-                                {reg.settlementPrescription && <p className="text-xs font-mono text-gray-500 mt-0">doplatek C{reg.settlementPrescription.prescriptionCode}</p>}
-                            </td>
-                            <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
-                                {reg.personsCount}
-                                {reg.memberCount > 0 && <span className="text-xs text-emerald-600 ml-1">({reg.memberCount} čl.)</span>}
-                            </td>
-                            <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
-                                <div className="inline-flex items-center justify-end gap-1">
-                                    {fmtCzk(reg.totalAmount + reg.subsidy)}
-                                    {(hasPerReg || reg.expenses.length > 1) && (
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <button className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"><Info size={13} /></button>
-                                            </PopoverTrigger>
-                                            <PopoverContent side="left" align="start" className="w-64 p-3 text-xs space-y-2">
-                                                <p className="font-semibold text-gray-700">Rozpad ceny akce</p>
-                                                {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => {
-                                                    const up = e.allocationMethod === "split_all" && reg.personsCount > 1 ? e.allocatedAmount / reg.personsCount : null;
-                                                    return (
-                                                        <div key={e.expenseId} className="space-y-0.5">
-                                                            <div className="flex justify-between gap-3 text-gray-700">
-                                                                <span className="truncate font-medium">{e.purposeText ?? "—"}</span>
-                                                                <span className="tabular-nums shrink-0">{fmtCzk(e.allocatedAmount)}</span>
-                                                            </div>
-                                                            {up !== null && <p className="text-gray-400 tabular-nums">{fmtCzk(up)}/os. × {reg.personsCount} os.</p>}
-                                                        </div>
-                                                    );
-                                                })}
-                                                <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
-                                                    <span>Celkem</span><span className="tabular-nums">{fmtCzk(reg.totalAmount + reg.subsidy)}</span>
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    )}
-                                </div>
-                            </td>
-                            <td className="py-2 pr-3 text-right text-emerald-600 tabular-nums">
-                                {reg.subsidy > 0 ? `−${fmtCzk(reg.subsidy)}` : "—"}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.totalAmount)}</td>
-                            <td className="py-2 text-right">
-                                <div className="flex flex-col items-end gap-1">
-                                    {reg.depositPrescription && (
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-xs text-gray-400">záloha</span>
-                                            <DepositStatusCell dep={reg.depositPrescription} locked={isPrescribed} onPromiseChange={onDepositPromiseChange} onWontPayChange={onDepositWontPayChange} />
-                                        </div>
-                                    )}
-                                    <div className="inline-flex items-center gap-1">
-                                        {(reg.depositPrescription || reg.settlementPrescription) && (
-                                            <span className="text-xs text-gray-400">doplatek</span>
-                                        )}
-                                        <span className="text-xs font-medium text-gray-700 tabular-nums">{fmtCzk(reg.settlementAmount)}</span>
-                                        {reg.settlementPrescription && (
-                                            <StatusBadge status={reg.settlementPrescription.status} matchedAmount={reg.settlementPrescription.matchedAmount} />
-                                        )}
-                                        {isPrescribed && treasurerApproved && reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled" && (
-                                            <button onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
-                                                title="Odeslat doplatek e-mailem"
-                                                className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
-                                                <Mail size={13} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
+                        <RegistrationRow key={reg.registrationId} reg={reg} hasPerReg={hasPerReg}
+                            isPrescribed={isPrescribed} treasurerApproved={treasurerApproved}
+                            onSendEmail={onSendEmail} onDepositPromiseChange={onDepositPromiseChange} onDepositWontPayChange={onDepositWontPayChange} />
                     ))}
                 </tbody>
                 <tfoot>
                     <tr className="border-t border-gray-300">
+                        <td />
                         <td className="pt-2 text-xs font-medium text-gray-500">Celkem</td>
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{rows.reduce((s, r) => s + r.personsCount, 0)} os.</td>
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount + r.subsidy, 0))}</td>
                         <td className="pt-2 pr-3 text-right text-xs text-emerald-600 tabular-nums">−{fmtCzk(rows.reduce((s, r) => s + r.subsidy, 0))}</td>
-                        <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.effectiveDepositForSettlement, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.settlementAmount, 0))}</td>
                         <td />
                     </tr>
                 </tfoot>

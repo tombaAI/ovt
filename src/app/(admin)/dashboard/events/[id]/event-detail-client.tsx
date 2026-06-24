@@ -980,9 +980,12 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                         banka spárována
                                     </span>
                                 )}
-                                <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
-                                    {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
-                                </Badge>
+                                {/* "Nebude platit zálohu" je definitivní rozhodnutí — badge "čeká" by tu mátlo, na nic se nečeká. */}
+                                {!(r.depositStatus === "pending" && r.depositWontPay) && (
+                                    <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                                        {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
+                                    </Badge>
+                                )}
                                 {r.depositStatus === "pending" && (
                                     r.depositPromise ? (
                                         <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
@@ -1335,12 +1338,15 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
 
     const depositRows = activeRows.filter(r => r.depositAmount != null);
     const depositPaid = depositRows.filter(r => isReceived(r.depositStatus)).length;
-    const settlementRows = activeRows.filter(r => r.settlementAmount != null);
+    // Doplatky (settlement) mají smysl zobrazovat až po vygenerování předpisů — předtím můžou
+    // existovat jen zastaralé řádky (admin přihláška bez zálohy, nebo dřívější odemčený billing).
+    const settlementRows = isPrescribed ? activeRows.filter(r => r.settlementAmount != null) : [];
     const settlementPaid = settlementRows.filter(r => isReceived(r.settlementStatus)).length;
 
-    const unresolvedCount =
-        depositRows.filter(r => r.depositStatus === "pending").length +
-        settlementRows.filter(r => r.settlementStatus === "pending").length;
+    // Čeká na vyřešení = jen zálohy bez rozhodnutí (ne zaplaceno, ne příslib, ne "nebude platit").
+    const unresolvedCount = depositRows.filter(r =>
+        r.depositStatus === "pending" && !r.depositPromise && !r.depositWontPay
+    ).length;
 
     const summaryCards: { label: string; value: string | number; suffix: string; tone: string; subtext?: string }[] = [
         {

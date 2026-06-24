@@ -518,6 +518,10 @@ export const eventPaymentPrescriptions = appSchema.table(
         depositWontPayNote: text("deposit_wont_pay_note"),
         depositWontPayBy: text("deposit_wont_pay_by"),
         depositWontPayAt: timestamp("deposit_wont_pay_at", { withTimezone: true }),
+        // Kdy byl tomuto konkrétnímu předpisu (typicky settlement) naposledy úspěšně odeslán
+        // e-mail s předpisem — rozlišuje stav "odeslat předpis" vs. "k zaplacení" na záložce Platby.
+        // Nastavuje se jen při úspěšném odeslání (ne při skip/fail v batch rozeslání).
+        emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },

@@ -64,6 +64,7 @@ export type PrescriptionInfo = {
     depositPromiseNote: string | null;
     depositWontPay: boolean;
     depositWontPayNote: string | null;
+    emailSentAt: Date | null;
 };
 
 /** Záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude platit) — blokuje generování doplatku. */
@@ -278,6 +279,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositPromiseNote: eventPaymentPrescriptions.depositPromiseNote,
                 depositWontPay: eventPaymentPrescriptions.depositWontPay,
                 depositWontPayNote: eventPaymentPrescriptions.depositWontPayNote,
+                emailSentAt: eventPaymentPrescriptions.emailSentAt,
             })
             .from(eventPaymentPrescriptions)
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
@@ -478,6 +480,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositPromiseNote: p.depositPromiseNote,
                 depositWontPay: p.depositWontPay,
                 depositWontPayNote: p.depositWontPayNote,
+                emailSentAt: p.emailSentAt,
             } : null;
 
         const depositPrescription = toPrescriptionInfo(depositRaw);
@@ -1116,6 +1119,7 @@ export async function sendEventSettlementEmails(
         let sent = 0;
         let skipped = 0;
         const failed: { name: string; email: string; error: string }[] = [];
+        const sentPrescriptionIds: number[] = [];
         const senderName = session.user.name ?? undefined;
         const senderEmail = session.user.email;
 
@@ -1130,11 +1134,17 @@ export async function sendEventSettlementEmails(
             try {
                 const result = await resend.emails.send({ from: emailSettings.from, to, replyTo: emailSettings.replyTo, subject, html });
                 if (result.error) { failed.push({ name: fullName, email: to, error: result.error.message }); }
-                else { sent++; }
+                else { sent++; sentPrescriptionIds.push(p.id); }
             } catch (e) {
                 failed.push({ name: fullName, email: to, error: e instanceof Error ? e.message : "Neznámá chyba" });
             }
             await new Promise(r => setTimeout(r, 250));
+        }
+
+        if (sentPrescriptionIds.length > 0) {
+            await db.update(eventPaymentPrescriptions)
+                .set({ emailSentAt: new Date() })
+                .where(inArray(eventPaymentPrescriptions.id, sentPrescriptionIds));
         }
 
         await db.insert(eventSettlementEmailSends).values({
@@ -1192,6 +1202,10 @@ export async function sendSingleRegistrationEmail(
 
         const result = await getResendClient().emails.send({ from: emailSettings.from, to, replyTo: emailSettings.replyTo, subject, html });
         if (result.error) return { error: result.error.message };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({ emailSentAt: new Date() })
+            .where(eq(eventPaymentPrescriptions.id, regRow.settlementPrescription.id));
 
         await db.insert(eventSettlementEmailSends).values({
             eventId: reg.eventId,
