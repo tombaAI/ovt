@@ -264,33 +264,32 @@ function DepositResolutionActions({ r, locked, onChanged }: { r: EventRegistrati
 
     if (r.depositPromise) {
         return (
-            <button onClick={() => handlePromiseChange(false, "")} disabled={pending}
-                className="text-[11px] text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+            <Button size="sm" variant="outline" onClick={() => handlePromiseChange(false, "")} disabled={pending}
+                className="h-7 text-xs border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200">
                 {pending ? "…" : "odvolat příslib"}
-            </button>
+            </Button>
         );
     }
     if (r.depositWontPay) {
         return (
-            <button onClick={() => handleWontPayChange(false, "")} disabled={pending}
-                className="text-[11px] text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+            <Button size="sm" variant="outline" onClick={() => handleWontPayChange(false, "")} disabled={pending}
+                className="h-7 text-xs border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200">
                 {pending ? "…" : "odvolat"}
-            </button>
+            </Button>
         );
     }
 
     return (
         <>
             <div className="flex items-center gap-1.5">
-                <button onClick={() => setPromiseDialogOpen(true)} disabled={pending}
-                    className="text-[11px] text-gray-400 hover:text-purple-600 transition-colors whitespace-nowrap">
-                    příslib
-                </button>
-                <span className="text-[11px] text-gray-300">·</span>
-                <button onClick={() => setWontPayDialogOpen(true)} disabled={pending}
-                    className="text-[11px] text-gray-400 hover:text-slate-700 transition-colors whitespace-nowrap">
-                    nebude platit
-                </button>
+                <Button size="sm" onClick={() => setPromiseDialogOpen(true)} disabled={pending}
+                    className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white">
+                    Příslib
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setWontPayDialogOpen(true)} disabled={pending}
+                    className="h-7 text-xs border-slate-300 text-slate-600 hover:bg-slate-100">
+                    Nebude platit
+                </Button>
             </div>
             <DepositResolutionDialog
                 open={promiseDialogOpen}
@@ -1233,8 +1232,15 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                 )}
 
                 {!isCancelled && !isPrescribed && r.depositAmount != null && r.depositStatus === "pending" && (
-                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
-                        <span className="text-xs text-slate-400">Vyřešení zálohy</span>
+                    <div className={`rounded-lg border px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap ${
+                        r.depositPromise || r.depositWontPay
+                            ? "border-slate-200 bg-slate-50"
+                            : "border-red-300 bg-red-50 ring-1 ring-red-200"
+                    }`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold text-slate-600">Záloha:</span>
+                            <DepositStatusInline r={r} />
+                        </div>
                         <DepositResolutionActions r={r} locked={isPrescribed} onChanged={onRefresh} />
                     </div>
                 )}
