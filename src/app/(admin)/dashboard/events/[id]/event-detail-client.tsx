@@ -954,7 +954,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
 
     return (
         <div className={`rounded-2xl border shadow-sm overflow-hidden ${isCancelled ? "border-red-100 bg-red-50/30 opacity-70" : "border-slate-200 bg-white"}`}>
-            <div className={`h-1 bg-gradient-to-r ${isCancelled ? "from-rose-300 via-rose-400 to-rose-500" : (PAYMENT_STATUS_BAR_COLORS[r.paymentStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400")}`} />
+            <div className={`h-1 bg-gradient-to-r ${isCancelled ? "from-rose-300 via-rose-400 to-rose-500" : r.depositAmount == null ? "from-slate-200 via-slate-300 to-slate-400" : (PAYMENT_STATUS_BAR_COLORS[r.depositStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400")}`} />
 
             <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -980,30 +980,38 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                         banka spárována
                                     </span>
                                 )}
-                                {/* "Nebude platit zálohu" je definitivní rozhodnutí — badge "čeká" by tu mátlo, na nic se nečeká. */}
-                                {!(r.depositStatus === "pending" && r.depositWontPay) && (
-                                    <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
-                                        {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
-                                    </Badge>
+                                {r.depositAmount == null ? (
+                                    // Admin přihláška bez zálohy (addAdminEventRegistration ji nikdy nevytváří) —
+                                    // doplatek se na téhle kartě nezobrazuje, takže tu není co řešit ani ukazovat.
+                                    <Badge className="bg-slate-50 text-slate-400 border-0 text-[11px] font-medium">Bez zálohy</Badge>
+                                ) : (
+                                    <>
+                                        {/* "Nebude platit zálohu" je definitivní rozhodnutí — badge "čeká" by tu mátlo, na nic se nečeká. */}
+                                        {!(r.depositStatus === "pending" && r.depositWontPay) && (
+                                            <Badge className={`${PAYMENT_STATUS_COLORS[r.depositStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                                                {PAYMENT_STATUS_LABELS[r.depositStatus ?? "pending"] ?? r.depositStatus}
+                                            </Badge>
+                                        )}
+                                        {r.depositStatus === "pending" && (
+                                            r.depositPromise ? (
+                                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
+                                                    příslib zálohy
+                                                </span>
+                                            ) : r.depositWontPay ? (
+                                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-700">
+                                                    nebude platit zálohu
+                                                </span>
+                                            ) : (
+                                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
+                                                    záloha nevyřešena
+                                                </span>
+                                            )
+                                        )}
+                                        <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                                            {new Intl.NumberFormat("cs-CZ").format(r.depositAmount)} Kč
+                                        </span>
+                                    </>
                                 )}
-                                {r.depositStatus === "pending" && (
-                                    r.depositPromise ? (
-                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
-                                            příslib zálohy
-                                        </span>
-                                    ) : r.depositWontPay ? (
-                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-700">
-                                            nebude platit zálohu
-                                        </span>
-                                    ) : (
-                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
-                                            záloha nevyřešena
-                                        </span>
-                                    )
-                                )}
-                                <span className="text-sm font-semibold text-slate-700 tabular-nums">
-                                    {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
-                                </span>
                             </>
                         )}
                     </div>
