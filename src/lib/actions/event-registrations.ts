@@ -1181,10 +1181,13 @@ export type EventRegistrationAdminRow = {
     matchedLedgerId: number | null;
     depositAmount: number | null;   // záloha (deposit prescription amount), null pokud neexistuje
     depositStatus: EventPaymentPrescriptionStatus | null;
+    depositMatchedAmount: number | null;
     depositPromise: boolean;   // příslib zálohy — pro doplatek se počítá jako zaplaceno
     depositWontPay: boolean;   // explicitní rozhodnutí "záloha se nebude vybírat" — jde do doplatku
     settlementAmount: number | null;   // doplatek (settlement prescription amount), null pokud neexistuje
     settlementStatus: EventPaymentPrescriptionStatus | null;
+    settlementMatchedAmount: number | null;
+    settlementEmailSentAt: Date | null;   // kdy byl naposledy odeslán e-mail s předpisem doplatku
 };
 
 export async function getEventRegistrationsForAdmin(eventId: number): Promise<EventRegistrationAdminRow[]> {
@@ -1218,10 +1221,13 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
             depositAmount: depositPresc.amount,
             depositStatus: depositPresc.status,
+            depositMatchedAmount: depositPresc.matchedAmount,
             depositPromise: depositPresc.depositPromise,
             depositWontPay: depositPresc.depositWontPay,
             settlementAmount: settlementPresc.amount,
             settlementStatus: settlementPresc.status,
+            settlementMatchedAmount: settlementPresc.matchedAmount,
+            settlementEmailSentAt: settlementPresc.emailSentAt,
         })
         .from(eventRegistrations)
         .leftJoin(depositPresc, and(
@@ -1318,10 +1324,13 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         matchedLedgerId: row.matchedLedgerId,
         depositAmount: row.depositAmount ? Number(row.depositAmount) : null,
         depositStatus: row.depositStatus as EventPaymentPrescriptionStatus | null,
+        depositMatchedAmount: row.depositMatchedAmount ? Number(row.depositMatchedAmount) : null,
         depositPromise: row.depositPromise ?? false,
         depositWontPay: row.depositWontPay ?? false,
         settlementAmount: row.settlementAmount ? Number(row.settlementAmount) : null,
         settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
+        settlementMatchedAmount: row.settlementMatchedAmount ? Number(row.settlementMatchedAmount) : null,
+        settlementEmailSentAt: row.settlementEmailSentAt as unknown as Date | null,
         };
     });
 }

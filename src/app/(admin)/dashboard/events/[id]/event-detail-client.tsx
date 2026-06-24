@@ -123,6 +123,86 @@ const PAYMENT_STATUS_BAR_COLORS: Record<string, string> = {
     cancelled: "from-rose-200 via-rose-300 to-rose-400",
 };
 
+function fmtCzk(amount: number) {
+    return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 }).format(amount) + " Kč";
+}
+
+// ── Stav doplatku (životní cyklus) — analogicky k záložce Platby ─────────────
+// Stejná logika jako computeLifecycle v event-payments-tab.tsx, jen na datech
+// z getEventRegistrationsForAdmin (bez canonického totalAmount z getEventSettlement,
+// proto se "k úhradě" počítá jako depositAmount+settlementAmount — v drtivé většině
+// případů totéž, liší se jen u propadlé zálohy v rámci přihlášky, viz spec).
+
+type PaymentLifecycle =
+    | { kind: "not_yet" }
+    | { kind: "send_prescription" }
+    | { kind: "awaiting" }
+    | { kind: "paid" }
+    | { kind: "underpaid"; diff: number }
+    | { kind: "overpaid"; diff: number };
+
+function computeRegistrationLifecycle(r: EventRegistrationAdminRow, isPrescribed: boolean): PaymentLifecycle {
+    if (!isPrescribed) return { kind: "not_yet" };
+    const paidOf = (status: EventPaymentPrescriptionStatus | null, amount: number | null, matched: number | null) =>
+        (status === "matched" || status === "paid") ? (matched ?? amount ?? 0) : 0;
+    const owedTotal = (r.depositAmount ?? 0) + (r.settlementAmount ?? 0);
+    const paidTotal = paidOf(r.depositStatus, r.depositAmount, r.depositMatchedAmount) + paidOf(r.settlementStatus, r.settlementAmount, r.settlementMatchedAmount);
+    const diff = paidTotal - owedTotal;
+    if (Math.abs(diff) < 0.5) return { kind: "paid" };
+    if (diff > 0) return { kind: "overpaid", diff };
+    if (!r.settlementEmailSentAt) return { kind: "send_prescription" };
+    if (r.settlementStatus === "matched" || r.settlementStatus === "paid") return { kind: "underpaid", diff: -diff };
+    return { kind: "awaiting" };
+}
+
+/** Badge(y) stavu zálohy — sdílené mezi sbaleným headerem karty a jejím rozbaleným obsahem. */
+function DepositStatusInline({ r }: { r: EventRegistrationAdminRow }) {
+    if (r.depositAmount == null) {
+        // Admin přihláška bez zálohy (addAdminEventRegistration ji nikdy nevytváří) —
+        // doplatek se tu nezobrazuje, takže tu není co řešit ani ukazovat.
+        return <Badge className="bg-slate-50 text-slate-400 border-0 text-[11px] font-medium">Bez zálohy</Badge>;
+    }
+    return (
+        <>
+            {/* "Nebude platit zálohu" je definitivní rozhodnutí — badge "čeká" by tu mátlo, na nic se nečeká. */}
+            {!(r.depositStatus === "pending" && r.depositWontPay) && (
+                <Badge className={`${PAYMENT_STATUS_COLORS[r.depositStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                    {PAYMENT_STATUS_LABELS[r.depositStatus ?? "pending"] ?? r.depositStatus}
+                </Badge>
+            )}
+            {r.depositStatus === "pending" && (
+                r.depositPromise ? (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
+                        příslib zálohy
+                    </span>
+                ) : r.depositWontPay ? (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-700">
+                        nebude platit zálohu
+                    </span>
+                ) : (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
+                        záloha nevyřešena
+                    </span>
+                )
+            )}
+            <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                {fmtCzk(r.depositAmount)}
+            </span>
+        </>
+    );
+}
+
+function LifecycleBadge({ lifecycle }: { lifecycle: PaymentLifecycle }) {
+    switch (lifecycle.kind) {
+        case "not_yet": return <Badge className="bg-gray-100 text-gray-500 border-0 text-[11px] font-medium">Ještě není k placení</Badge>;
+        case "send_prescription": return <Badge className="bg-orange-100 text-orange-700 border-0 text-[11px] font-medium">Odeslat předpis</Badge>;
+        case "awaiting": return <Badge className="bg-blue-100 text-blue-700 border-0 text-[11px] font-medium">K zaplacení</Badge>;
+        case "paid": return <Badge className="bg-green-100 text-green-700 border-0 text-[11px] font-medium">Zaplaceno</Badge>;
+        case "underpaid": return <Badge className="bg-red-100 text-red-700 border-0 text-[11px] font-medium">Nedoplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+        case "overpaid": return <Badge className="bg-purple-100 text-purple-700 border-0 text-[11px] font-medium">Přeplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+    }
+}
+
 // ── Audit log dialog ──────────────────────────────────────────────────────────
 
 function AuditLogDialog({ open, onOpenChange, eventId }: {
@@ -880,8 +960,10 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
     const [sendingEmail, setSendingEmail] = useState(false);
     const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
     const [cancelParticipantTarget, setCancelParticipantTarget] = useState<{ id: number; fullName: string } | null>(null);
+    const [expanded, setExpanded] = useState(false);
 
     const hasPaymentDetails = !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
+    const lifecycle = computeRegistrationLifecycle(r, isPrescribed);
 
     async function handleSendEmail() {
         setSendingEmail(true);
@@ -954,6 +1036,38 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
 
     return (
         <div className={`rounded-2xl border shadow-sm overflow-hidden ${isCancelled ? "border-red-100 bg-red-50/30 opacity-70" : "border-slate-200 bg-white"}`}>
+            {/* ── Sbalený header — vždy viditelný, klik rozbalí/sbalí zbytek karty ── */}
+            <button type="button" onClick={() => setExpanded(v => !v)}
+                className="w-full flex items-center gap-3 px-4 sm:px-5 py-3 text-left hover:bg-slate-50/60 transition-colors">
+                {expanded ? <ChevronUp size={16} className="text-slate-400 shrink-0" /> : <ChevronDown size={16} className="text-slate-400 shrink-0" />}
+                <span className="font-semibold text-slate-900 text-sm shrink-0">{r.firstName} {r.lastName}</span>
+                <span className="text-xs text-slate-500 shrink-0 tabular-nums">
+                    {r.personsCount} {r.personsCount === 1 ? "osoba" : r.personsCount < 5 ? "osoby" : "osob"}
+                </span>
+                <span className="flex-1" />
+                {isCancelled ? (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700 shrink-0">
+                        Zrušeno
+                    </span>
+                ) : (
+                    <div className="flex items-center gap-3 flex-wrap justify-end">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wide">záloha</span>
+                            <DepositStatusInline r={r} />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wide">doplatek</span>
+                            {r.settlementAmount != null && r.settlementAmount > 0 && (
+                                <span className="text-sm font-semibold text-slate-700 tabular-nums">{fmtCzk(r.settlementAmount)}</span>
+                            )}
+                            <LifecycleBadge lifecycle={lifecycle} />
+                        </div>
+                    </div>
+                )}
+            </button>
+
+            {expanded && (
+            <>
             <div className={`h-1 bg-gradient-to-r ${isCancelled ? "from-rose-300 via-rose-400 to-rose-500" : r.depositAmount == null ? "from-slate-200 via-slate-300 to-slate-400" : (PAYMENT_STATUS_BAR_COLORS[r.depositStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400")}`} />
 
             <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
@@ -980,38 +1094,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                         banka spárována
                                     </span>
                                 )}
-                                {r.depositAmount == null ? (
-                                    // Admin přihláška bez zálohy (addAdminEventRegistration ji nikdy nevytváří) —
-                                    // doplatek se na téhle kartě nezobrazuje, takže tu není co řešit ani ukazovat.
-                                    <Badge className="bg-slate-50 text-slate-400 border-0 text-[11px] font-medium">Bez zálohy</Badge>
-                                ) : (
-                                    <>
-                                        {/* "Nebude platit zálohu" je definitivní rozhodnutí — badge "čeká" by tu mátlo, na nic se nečeká. */}
-                                        {!(r.depositStatus === "pending" && r.depositWontPay) && (
-                                            <Badge className={`${PAYMENT_STATUS_COLORS[r.depositStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
-                                                {PAYMENT_STATUS_LABELS[r.depositStatus ?? "pending"] ?? r.depositStatus}
-                                            </Badge>
-                                        )}
-                                        {r.depositStatus === "pending" && (
-                                            r.depositPromise ? (
-                                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
-                                                    příslib zálohy
-                                                </span>
-                                            ) : r.depositWontPay ? (
-                                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-700">
-                                                    nebude platit zálohu
-                                                </span>
-                                            ) : (
-                                                <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
-                                                    záloha nevyřešena
-                                                </span>
-                                            )
-                                        )}
-                                        <span className="text-sm font-semibold text-slate-700 tabular-nums">
-                                            {new Intl.NumberFormat("cs-CZ").format(r.depositAmount)} Kč
-                                        </span>
-                                    </>
-                                )}
+                                <DepositStatusInline r={r} />
                             </>
                         )}
                     </div>
@@ -1267,6 +1350,8 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                 />
             )}
             <RegistrationHistory registrationId={r.registrationId} />
+            </>
+            )}
 
             <EditRegistrationDialog
                 registrationId={r.registrationId}
