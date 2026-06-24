@@ -17,6 +17,7 @@ import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { getEventSettlement } from "@/lib/actions/event-settlement";
 
 const FOREIGN_WATER_FORM_SLUG = "zahranicnivoda";
 const FOREIGN_WATER_EVENT_ID = 4;
@@ -1191,6 +1192,7 @@ export type EventRegistrationAdminRow = {
     settlementStatus: EventPaymentPrescriptionStatus | null;
     settlementMatchedAmount: number | null;
     settlementEmailSentAt: Date | null;   // kdy byl naposledy odeslán e-mail s předpisem doplatku
+    totalAmount: number | null;   // živě počítaná cena akce po dotaci (getEventSettlement) — null u zrušených přihlášek
 };
 
 export async function getEventRegistrationsForAdmin(eventId: number): Promise<EventRegistrationAdminRow[]> {
@@ -1292,6 +1294,14 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         participantsByRegistration.set(participantRow.registrationId, list);
     }
 
+    // Doplatek uložený v prescription se nepřepočítává automaticky při každé změně
+    // (příslib/nebude platit zálohy, spárování platby, úprava dotace…) — jen při
+    // lockBilling/regeneratePrescriptions/odeslání e-mailu. Aby tahle admin tabulka
+    // neukazovala zastaralé číslo, doplatek (a totalAmount pro stav plateb) se vždy
+    // dotáhne živě ze stejného zdroje jako záložka Platby (getEventSettlement).
+    const liveSettlement = await getEventSettlement(eventId);
+    const liveByRegistration = new Map(liveSettlement.registrations.map(sr => [sr.registrationId, sr]));
+
     return rows.map((row) => {
         const fallbackParticipants = parseParticipantNames(
             row.personsNames,
@@ -1336,10 +1346,11 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         depositPromiseNote: row.depositPromiseNote,
         depositWontPay: row.depositWontPay ?? false,
         depositWontPayNote: row.depositWontPayNote,
-        settlementAmount: row.settlementAmount ? Number(row.settlementAmount) : null,
+        settlementAmount: liveByRegistration.get(row.registrationId)?.settlementAmount ?? (row.settlementAmount ? Number(row.settlementAmount) : null),
         settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
         settlementMatchedAmount: row.settlementMatchedAmount ? Number(row.settlementMatchedAmount) : null,
         settlementEmailSentAt: row.settlementEmailSentAt as unknown as Date | null,
+        totalAmount: liveByRegistration.get(row.registrationId)?.totalAmount ?? null,
         };
     });
 }

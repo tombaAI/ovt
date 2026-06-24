@@ -128,10 +128,11 @@ function fmtCzk(amount: number) {
 }
 
 // ── Stav doplatku (životní cyklus) — analogicky k záložce Platby ─────────────
-// Stejná logika jako computeLifecycle v event-payments-tab.tsx, jen na datech
-// z getEventRegistrationsForAdmin (bez canonického totalAmount z getEventSettlement,
-// proto se "k úhradě" počítá jako depositAmount+settlementAmount — v drtivé většině
-// případů totéž, liší se jen u propadlé zálohy v rámci přihlášky, viz spec).
+// Stejná logika jako computeLifecycle v event-payments-tab.tsx. r.totalAmount i
+// r.settlementAmount (viz getEventRegistrationsForAdmin) jsou živě dotažené z
+// getEventSettlement, ne jen uložená (a snadno zastaralá) hodnota z prescription —
+// jinak by se po příslibu/spárování zálohy bez přegenerování předpisů ukazovalo
+// staré číslo doplatku (issue nahlášený uživatelem 2026-06-24, Filip Havlíček).
 
 type PaymentLifecycle =
     | { kind: "not_yet" }
@@ -145,7 +146,7 @@ function computeRegistrationLifecycle(r: EventRegistrationAdminRow, isPrescribed
     if (!isPrescribed) return { kind: "not_yet" };
     const paidOf = (status: EventPaymentPrescriptionStatus | null, amount: number | null, matched: number | null) =>
         (status === "matched" || status === "paid") ? (matched ?? amount ?? 0) : 0;
-    const owedTotal = (r.depositAmount ?? 0) + (r.settlementAmount ?? 0);
+    const owedTotal = r.totalAmount ?? ((r.depositAmount ?? 0) + (r.settlementAmount ?? 0));
     const paidTotal = paidOf(r.depositStatus, r.depositAmount, r.depositMatchedAmount) + paidOf(r.settlementStatus, r.settlementAmount, r.settlementMatchedAmount);
     const diff = paidTotal - owedTotal;
     if (Math.abs(diff) < 0.5) return { kind: "paid" };
