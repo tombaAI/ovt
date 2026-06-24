@@ -85,8 +85,9 @@ function DepositResolutionDialog({ open, title, description, currentNote, confir
     );
 }
 
-function DepositStatusCell({ dep, onPromiseChange, onWontPayChange }: {
+function DepositStatusCell({ dep, locked, onPromiseChange, onWontPayChange }: {
     dep: PrescriptionInfo;
+    locked: boolean;
     onPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
     onWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
 }) {
@@ -102,12 +103,14 @@ function DepositStatusCell({ dep, onPromiseChange, onWontPayChange }: {
         return (
             <div className="flex flex-col items-end gap-0.5">
                 <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Příslib zálohy</Badge>
-                <button
-                    onClick={() => { startRevoke(async () => onPromiseChange(dep.id, false, "")); }}
-                    disabled={revoking}
-                    className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
-                    {revoking ? "…" : "odvolat"}
-                </button>
+                {!locked && (
+                    <button
+                        onClick={() => { startRevoke(async () => onPromiseChange(dep.id, false, "")); }}
+                        disabled={revoking}
+                        className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
+                        {revoking ? "…" : "odvolat"}
+                    </button>
+                )}
             </div>
         );
     }
@@ -116,12 +119,14 @@ function DepositStatusCell({ dep, onPromiseChange, onWontPayChange }: {
         return (
             <div className="flex flex-col items-end gap-0.5">
                 <Badge className="bg-slate-200 text-slate-700 border-0 text-xs">Nebude platit zálohu</Badge>
-                <button
-                    onClick={() => { startRevoke(async () => onWontPayChange(dep.id, false, "")); }}
-                    disabled={revoking}
-                    className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
-                    {revoking ? "…" : "odvolat"}
-                </button>
+                {!locked && (
+                    <button
+                        onClick={() => { startRevoke(async () => onWontPayChange(dep.id, false, "")); }}
+                        disabled={revoking}
+                        className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
+                        {revoking ? "…" : "odvolat"}
+                    </button>
+                )}
             </div>
         );
     }
@@ -129,19 +134,21 @@ function DepositStatusCell({ dep, onPromiseChange, onWontPayChange }: {
     return (
         <div className="flex flex-col items-end gap-0.5">
             <Badge className="bg-red-100 text-red-700 border-0 text-xs">Nevyřešeno</Badge>
-            <div className="flex items-center gap-1.5">
-                <button
-                    onClick={() => setPromiseDialogOpen(true)}
-                    className="text-[10px] text-gray-400 hover:text-purple-600 transition-colors whitespace-nowrap">
-                    příslib
-                </button>
-                <span className="text-[10px] text-gray-300">·</span>
-                <button
-                    onClick={() => setWontPayDialogOpen(true)}
-                    className="text-[10px] text-gray-400 hover:text-slate-700 transition-colors whitespace-nowrap">
-                    nebude platit
-                </button>
-            </div>
+            {!locked && (
+                <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={() => setPromiseDialogOpen(true)}
+                        className="text-[10px] text-gray-400 hover:text-purple-600 transition-colors whitespace-nowrap">
+                        příslib
+                    </button>
+                    <span className="text-[10px] text-gray-300">·</span>
+                    <button
+                        onClick={() => setWontPayDialogOpen(true)}
+                        className="text-[10px] text-gray-400 hover:text-slate-700 transition-colors whitespace-nowrap">
+                        nebude platit
+                    </button>
+                </div>
+            )}
             <DepositResolutionDialog
                 open={promiseDialogOpen}
                 title="Příslib zálohy"
@@ -318,7 +325,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                                     {reg.depositPrescription && (
                                         <div className="flex items-center gap-1">
                                             <span className="text-xs text-gray-400">záloha</span>
-                                            <DepositStatusCell dep={reg.depositPrescription} onPromiseChange={onDepositPromiseChange} onWontPayChange={onDepositWontPayChange} />
+                                            <DepositStatusCell dep={reg.depositPrescription} locked={isPrescribed} onPromiseChange={onDepositPromiseChange} onWontPayChange={onDepositWontPayChange} />
                                         </div>
                                     )}
                                     <div className="inline-flex items-center gap-1">

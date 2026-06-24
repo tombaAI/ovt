@@ -1685,6 +1685,8 @@ export async function setDepositPromise(
         if (!p) return { error: "Předpis nenalezen" };
         if (p.type !== "deposit") return { error: "Příslib lze nastavit jen u zálohy" };
         if (p.status === "cancelled") return { error: "Záloha je zrušena — příslib nedává smysl" };
+        if ((await getEventLocks(db, p.eventId))?.lockForParticipants)
+            return { error: "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby)." };
 
         await db.update(eventPaymentPrescriptions)
             .set({
@@ -1729,6 +1731,8 @@ export async function setDepositWontPay(
         if (!p) return { error: "Předpis nenalezen" };
         if (p.type !== "deposit") return { error: "\"Nebude platit\" lze nastavit jen u zálohy" };
         if (p.status === "cancelled") return { error: "Záloha je zrušena — rozhodnutí nedává smysl" };
+        if ((await getEventLocks(db, p.eventId))?.lockForParticipants)
+            return { error: "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby)." };
 
         await db.update(eventPaymentPrescriptions)
             .set({
