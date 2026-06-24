@@ -1543,7 +1543,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
 
     return (
         <>
-            <div className="max-w-2xl mx-auto">
+            <div>
 
                 {/* ── Page header ── */}
                 <div className="flex items-center gap-3 mb-5">
@@ -1649,7 +1649,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                     </div>
 
                     {/* ── Tab: Detail ── */}
-                    <TabsContent value="detail" className="space-y-4 mt-0">
+                    <TabsContent value="detail" className="space-y-4 mt-0 max-w-2xl">
                         <div className="rounded-xl border px-4">
                             <InlineField label="Název" fieldId="name" type="text"
                                 value={event.name} placeholder="Název akce"
