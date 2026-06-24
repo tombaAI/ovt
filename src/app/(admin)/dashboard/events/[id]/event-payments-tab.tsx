@@ -303,9 +303,32 @@ function SendEmailModal({ open, title, description, onSend, onSkip, onClose, sen
 // i K zaplacení z řádku přihlášky (depositSharePerPerson × count = effectiveDeposit,
 // Σ(finalAmount − depositSharePerPerson) = settlementAmount).
 
-function ParticipantRow({ p, depositSharePerPerson }: { p: SettlementParticipant; depositSharePerPerson: number }) {
+function ParticipantRow({ p, reg, depositSharePerPerson }: { p: SettlementParticipant; reg: SettlementRegistrationRow; depositSharePerPerson: number }) {
     if (p.cancelledAt) {
-        const forfeit = p.depositForfeitPolicy ? FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy : null;
+        const forfeitLabel = p.depositForfeitPolicy ? FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy : null;
+        // Nevrácená část zálohy (skutečně zaplacená, jen se nevrátila) — čistě informativní
+        // zobrazení, na výpočet doplatku/celkového výsledku akce to nemá žádný vliv (ten už
+        // počítá s propadlou zálohou jinde, viz Krok 2 v ZADANI_VYPOCET_NAKLADU_AKCE.md).
+        const depositPerPerson = reg.depositPrescription ? reg.depositPrescription.amount / reg.personsCount : null;
+        const forfeitAmount = depositPerPerson != null ? Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)) : null;
+
+        if (forfeitAmount != null && forfeitAmount > 0) {
+            return (
+                <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+                    <td />
+                    <td className="py-1.5 pr-3 text-xs text-gray-400 line-through">{p.fullName}</td>
+                    <td className="py-1.5 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-orange-600">nejede</td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">
+                        {fmtCzk(forfeitAmount)}
+                        {forfeitLabel && <div className="text-[10px] text-gray-400 normal-case font-normal">({forfeitLabel})</div>}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(forfeitAmount)}</td>
+                    <td className="py-1.5 pr-3 text-right text-xs font-medium text-gray-800 tabular-nums">{fmtCzk(0)}</td>
+                    <td />
+                </tr>
+            );
+        }
         return (
             <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
                 <td />
@@ -313,7 +336,7 @@ function ParticipantRow({ p, depositSharePerPerson }: { p: SettlementParticipant
                     <p className="text-xs text-gray-400 line-through">{p.fullName}</p>
                     <p className="text-[11px] text-gray-400">
                         {p.depositRefundAmount != null && p.depositRefundAmount > 0 && <>vráceno {fmtCzk(p.depositRefundAmount)} · </>}
-                        {forfeit ?? "záloha nevyřešena"}
+                        {forfeitLabel ?? "záloha nevyřešena"}
                     </p>
                 </td>
                 <td className="py-1.5 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-orange-600">nejede</td>
@@ -428,7 +451,7 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
                 </td>
             </tr>
             {expanded && reg.participants.length > 0 && reg.participants.map(p => (
-                <ParticipantRow key={p.id > 0 ? p.id : p.fullName} p={p}
+                <ParticipantRow key={p.id > 0 ? p.id : p.fullName} p={p} reg={reg}
                     depositSharePerPerson={reg.activePersonsCount > 0 ? reg.effectiveDepositForSettlement / reg.activePersonsCount : 0} />
             ))}
             {expanded && reg.participants.length === 0 && (

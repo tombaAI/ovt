@@ -1085,7 +1085,17 @@ function buildSettlementEmailPayload(
         paymentDue: p.paymentDue,
         // cost = finalAmount + subsidyAmount (gross cena před dotací, odvozená ze zaokrouhleného finalAmount) —
         // ne raw totalCost, aby Cena/os. − Dotace v mailu vždy přesně dalo finalAmount (žádný zbytkový Kč navíc/míň).
-        participants: reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.finalAmount + pt.subsidyAmount })),
+        participants: [
+            ...reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.finalAmount + pt.subsidyAmount })),
+            // Odhlášení účastníci s nevrácenou (propadlou) zálohou — čistě informativní řádek,
+            // bez rozpisu/vysvětlení (na rozdíl od tabulky na záložce Platby). Na výpočet doplatku
+            // ani na celkový finanční výsledek akce to nemá žádný vliv.
+            ...reg.participants.filter(pt => pt.cancelledAt && reg.depositPrescription).map(pt => {
+                const depositPerPerson = reg.depositPrescription!.amount / reg.personsCount;
+                const forfeitAmount = Math.max(0, depositPerPerson - (pt.depositRefundAmount ?? 0));
+                return forfeitAmount > 0 ? { fullName: pt.fullName, isMember: pt.memberId !== null, cost: forfeitAmount } : null;
+            }).filter((row): row is { fullName: string; isMember: boolean; cost: number } => row !== null),
+        ],
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
         depositAmount: reg.effectiveDepositForSettlement,
