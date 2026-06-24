@@ -297,33 +297,49 @@ function SendEmailModal({ open, title, description, onSend, onSkip, onClose, sen
 }
 
 // ── Detail účastníků přihlášky (po rozbalení řádku) ───────────────────────────
+// Stejné sloupce jako řádek přihlášky. Záloha je záznam na celé přihlášce (jedna
+// platba za všechny osoby), proto se pro zobrazení rozpočítává rovným dílem mezi
+// aktivní účastníky — sečteno přes všechny účastníky to přesně sedí na Zálohu
+// i K zaplacení z řádku přihlášky (depositSharePerPerson × count = effectiveDeposit,
+// Σ(finalAmount − depositSharePerPerson) = settlementAmount).
 
-function ParticipantDetailRow({ p }: { p: SettlementParticipant }) {
+function ParticipantRow({ p, depositSharePerPerson }: { p: SettlementParticipant; depositSharePerPerson: number }) {
     if (p.cancelledAt) {
         const forfeit = p.depositForfeitPolicy ? FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy : null;
         return (
-            <div className="flex items-center gap-2 text-xs text-gray-500 flex-wrap">
-                <span className="line-through text-gray-400">{p.fullName}</span>
-                <span className="text-[10px] font-semibold uppercase tracking-wide text-orange-600">nejede</span>
-                {p.depositRefundAmount != null && p.depositRefundAmount > 0 && (
-                    <span>vráceno {fmtCzk(p.depositRefundAmount)}</span>
-                )}
-                {forfeit ? <span className="text-gray-400">({forfeit})</span> : <span className="text-gray-400">záloha nevyřešena</span>}
-            </div>
+            <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+                <td />
+                <td className="py-1.5 pr-3">
+                    <p className="text-xs text-gray-400 line-through">{p.fullName}</p>
+                    <p className="text-[11px] text-gray-400">
+                        {p.depositRefundAmount != null && p.depositRefundAmount > 0 && <>vráceno {fmtCzk(p.depositRefundAmount)} · </>}
+                        {forfeit ?? "záloha nevyřešena"}
+                    </p>
+                </td>
+                <td className="py-1.5 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-orange-600">nejede</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td />
+            </tr>
         );
     }
     return (
-        <div className="flex items-center justify-between gap-3 text-xs">
-            <span className="text-gray-700">
-                {p.fullName}
-                {p.memberId !== null && <span className="ml-1.5 text-[10px] font-medium uppercase tracking-wide text-emerald-600">člen</span>}
-            </span>
-            <span className="text-gray-500 tabular-nums whitespace-nowrap">
-                {fmtCzk(p.finalAmount + p.subsidyAmount)}
-                {p.subsidyAmount > 0 && <span className="text-emerald-600"> − {fmtCzk(p.subsidyAmount)}</span>}
-                {" = "}<span className="font-semibold text-gray-800">{fmtCzk(p.finalAmount)}</span>
-            </span>
-        </div>
+        <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+            <td />
+            <td className="py-1.5 pr-3 text-xs text-gray-700">{p.fullName}</td>
+            <td className="py-1.5 pr-3 text-right text-[11px]">
+                {p.memberId !== null
+                    ? <span className="font-medium uppercase tracking-wide text-emerald-600">člen</span>
+                    : <span className="text-gray-400">nečlen</span>}
+            </td>
+            <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(p.finalAmount + p.subsidyAmount)}</td>
+            <td className="py-1.5 pr-3 text-right text-xs text-emerald-600 tabular-nums">{p.subsidyAmount > 0 ? `−${fmtCzk(p.subsidyAmount)}` : "—"}</td>
+            <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(depositSharePerPerson)}</td>
+            <td className="py-1.5 pr-3 text-right text-xs font-medium text-gray-800 tabular-nums">{fmtCzk(p.finalAmount - depositSharePerPerson)}</td>
+            <td />
+        </tr>
     );
 }
 
@@ -411,19 +427,14 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
                     </div>
                 </td>
             </tr>
-            {expanded && (
+            {expanded && reg.participants.length > 0 && reg.participants.map(p => (
+                <ParticipantRow key={p.id > 0 ? p.id : p.fullName} p={p}
+                    depositSharePerPerson={reg.activePersonsCount > 0 ? reg.effectiveDepositForSettlement / reg.activePersonsCount : 0} />
+            ))}
+            {expanded && reg.participants.length === 0 && (
                 <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
                     <td />
-                    <td colSpan={7} className="py-2.5 pr-3">
-                        <div className="space-y-1.5">
-                            {reg.participants.map(p => (
-                                <ParticipantDetailRow key={p.id > 0 ? p.id : p.fullName} p={p} />
-                            ))}
-                            {reg.participants.length === 0 && (
-                                <p className="text-xs text-gray-400">Bez detailu účastníků.</p>
-                            )}
-                        </div>
-                    </td>
+                    <td colSpan={7} className="py-2.5 pr-3 text-xs text-gray-400">Bez detailu účastníků.</td>
                 </tr>
             )}
         </>
