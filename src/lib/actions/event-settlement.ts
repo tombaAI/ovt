@@ -62,7 +62,16 @@ export type PrescriptionInfo = {
     paymentDue: string | null;
     depositPromise: boolean;
     depositPromiseNote: string | null;
+    depositWontPay: boolean;
+    depositWontPayNote: string | null;
 };
+
+/** Záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude platit) — blokuje generování doplatku. */
+function isDepositUnresolved(dep: PrescriptionInfo | null): boolean {
+    if (!dep) return false; // přihláška bez zálohy (např. admin přidaná) — nic k vyřešení
+    if (dep.status === "matched" || dep.status === "paid" || dep.status === "cancelled") return false;
+    return !dep.depositPromise && !dep.depositWontPay;
+}
 
 /** Efektivní záloha pro výpočet doplatku — odečítáme jen co skutečně přišlo nebo je přislíbeno. */
 function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
@@ -267,6 +276,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 paymentDue: eventPaymentPrescriptions.paymentDue,
                 depositPromise: eventPaymentPrescriptions.depositPromise,
                 depositPromiseNote: eventPaymentPrescriptions.depositPromiseNote,
+                depositWontPay: eventPaymentPrescriptions.depositWontPay,
+                depositWontPayNote: eventPaymentPrescriptions.depositWontPayNote,
             })
             .from(eventPaymentPrescriptions)
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
@@ -465,6 +476,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 paymentDue: p.paymentDue,
                 depositPromise: p.depositPromise,
                 depositPromiseNote: p.depositPromiseNote,
+                depositWontPay: p.depositWontPay,
+                depositWontPayNote: p.depositWontPayNote,
             } : null;
 
         const depositPrescription = toPrescriptionInfo(depositRaw);
@@ -519,6 +532,16 @@ async function getEventLocks(db: ReturnType<typeof getDb>, eventId: number): Pro
 }
 
 /** Uzamkne billing: vygeneruje předpisy a přepne stav na 'prescribed'. */
+/**
+ * Seznam aktivních přihlášek, jejichž záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude
+ * platit) — generování doplatku je blokované, dokud admin každou z nich nevyřeší (záložka Platby).
+ */
+function findUnresolvedDeposits(settlement: Awaited<ReturnType<typeof getEventSettlement>>): string[] {
+    return settlement.registrations
+        .filter(reg => isDepositUnresolved(reg.depositPrescription))
+        .map(reg => `${reg.firstName} ${reg.lastName}`);
+}
+
 export async function lockBilling(eventId: number): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
@@ -526,6 +549,10 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         if (!event) return { error: "Akce nenalezena" };
 
         const settlement = await getEventSettlement(eventId);
+        const unresolved = findUnresolvedDeposits(settlement);
+        if (unresolved.length > 0) {
+            return { error: `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".` };
+        }
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
@@ -764,6 +791,10 @@ export async function regeneratePrescriptions(
         const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
         const settlement = await getEventSettlement(eventId);
+        const unresolved = findUnresolvedDeposits(settlement);
+        if (unresolved.length > 0) {
+            return { error: `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".` };
+        }
         const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
         revalidatePath(`/dashboard/events/${eventId}`);
         return result;
@@ -1661,6 +1692,8 @@ export async function setDepositPromise(
                 depositPromiseNote: promise ? (note || null) : null,
                 depositPromiseBy: promise ? session.user.email : null,
                 depositPromiseAt: promise ? new Date() : null,
+                // Příslib a "nebude platit" se vylučují — nastavení příslibu zruší případné "nebude platit".
+                ...(promise ? { depositWontPay: false, depositWontPayNote: null, depositWontPayBy: null, depositWontPayAt: null } : {}),
                 updatedAt: new Date(),
             })
             .where(eq(eventPaymentPrescriptions.id, prescriptionId));
@@ -1670,5 +1703,49 @@ export async function setDepositPromise(
     } catch (e) {
         console.error(e);
         return { error: "Nepodařilo se nastavit příslib zálohy" };
+    }
+}
+
+/** Explicitní rozhodnutí "záloha se nebude vybírat" — celá částka jde do doplatku. */
+export async function setDepositWontPay(
+    prescriptionId: number,
+    wontPay: boolean,
+    note: string,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const [p] = await db
+            .select({
+                type: eventPaymentPrescriptions.type,
+                status: eventPaymentPrescriptions.status,
+                eventId: eventPaymentPrescriptions.eventId,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        if (!p) return { error: "Předpis nenalezen" };
+        if (p.type !== "deposit") return { error: "\"Nebude platit\" lze nastavit jen u zálohy" };
+        if (p.status === "cancelled") return { error: "Záloha je zrušena — rozhodnutí nedává smysl" };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({
+                depositWontPay: wontPay,
+                depositWontPayNote: wontPay ? (note || null) : null,
+                depositWontPayBy: wontPay ? session.user.email : null,
+                depositWontPayAt: wontPay ? new Date() : null,
+                // Vzájemné vyloučení s příslibem.
+                ...(wontPay ? { depositPromise: false, depositPromiseNote: null, depositPromiseBy: null, depositPromiseAt: null } : {}),
+                updatedAt: new Date(),
+            })
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        revalidatePath(`/dashboard/events/${p.eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se nastavit rozhodnutí o záloze" };
     }
 }

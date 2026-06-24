@@ -512,6 +512,12 @@ export const eventPaymentPrescriptions = appSchema.table(
         depositPromiseNote: text("deposit_promise_note"),
         depositPromiseBy: text("deposit_promise_by"),
         depositPromiseAt: timestamp("deposit_promise_at", { withTimezone: true }),
+        // Explicitní rozhodnutí "záloha se nebude vybírat" — celá částka jde do doplatku.
+        // Vzájemně výlučné s depositPromise (nastavení jednoho vynuluje druhé).
+        depositWontPay: boolean("deposit_wont_pay").notNull().default(false),
+        depositWontPayNote: text("deposit_wont_pay_note"),
+        depositWontPayBy: text("deposit_wont_pay_by"),
+        depositWontPayAt: timestamp("deposit_wont_pay_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },

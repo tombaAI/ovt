@@ -983,6 +983,21 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                 <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
                                     {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
                                 </Badge>
+                                {r.depositStatus === "pending" && (
+                                    r.depositPromise ? (
+                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
+                                            příslib zálohy
+                                        </span>
+                                    ) : r.depositWontPay ? (
+                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-700">
+                                            nebude platit zálohu
+                                        </span>
+                                    ) : (
+                                        <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
+                                            záloha nevyřešena
+                                        </span>
+                                    )
+                                )}
                                 <span className="text-sm font-semibold text-slate-700 tabular-nums">
                                     {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
                                 </span>

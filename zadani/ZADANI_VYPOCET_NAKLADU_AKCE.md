@@ -160,6 +160,24 @@ Sčítají se **už zaokrouhlené `participantFinal` hodnoty jednotlivých úča
 
 ---
 
+## Vyřešení zálohy — povinný krok před generováním předpisů (od 2026-06-24)
+
+Samotná logika výpočtu (kroky 1–8 výše) se **nezměnila** — nevyřešená záloha se do doplatku stále počítá jako `effectiveDepositAmount = 0` (celá částka jde do doplatku), úplně stejně jako dřív. Co je nové: `lockBilling` a `regeneratePrescriptions` (`event-settlement.ts`) teď **odmítnou vygenerovat předpisy**, pokud má kterákoli aktivní přihláška se zálohou nevyřešený stav — tedy `status NOT IN ('matched','paid','cancelled')` a zároveň ani `depositPromise`, ani nově `depositWontPay` (viz níže).
+
+Pro každou zálohu existují po vyřešení přesně 3 stavy (zobrazené na záložce **Platby** i v záložce **Přihlášky**):
+
+| Stav | `effectiveDepositAmount` pro doplatek | Jak se nastaví |
+|---|---|---|
+| **Zaplaceno** | plná částka (`matchedAmount` nebo `amount`) | automaticky, spárováním s bankou (`status = 'matched'/'paid'`) |
+| **Příslib zaplacení** | plná částka, počítá se jako zaplacená | admin manuálně, `setDepositPromise(id, true, note)` — `depositPromise = true` |
+| **Nebude platit zálohu** | `0` — celá částka jde do doplatku | admin manuálně, `setDepositWontPay(id, true, note)` — `depositWontPay = true` |
+
+`depositPromise` a `depositWontPay` jsou vzájemně výlučné — nastavení jednoho vynuluje druhé (včetně poznámky/kdo/kdy). Přihláška bez zálohy vůbec (např. admin přidaná bez deposit prescription) gate neblokuje — nic k vyřešení není.
+
+Dokud žádný ze 3 stavů není nastavený, záloha je **„Nevyřešeno"** (červený badge) a blokuje `lockBilling`/`regeneratePrescriptions` s chybou vypisující jména dotčených přihlášek.
+
+---
+
 ## Zobrazení (UI)
 
 Všechny mezivýsledky (efektivní částka nákladu, cena/jednotka, náklad na osobu před zaokrouhlením, dotace na člena) se v UI zobrazují **zaokrouhlené na 2 desetinná místa matematicky** (round-half-up), čistě pro čitelnost. Tato zobrazená hodnota se nikdy nevrací do výpočtu — interní reprezentace zůstává plná přesnost (float/decimal) po celou dobu průchodu kroky 1–7.

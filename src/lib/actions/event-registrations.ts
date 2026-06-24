@@ -1181,6 +1181,8 @@ export type EventRegistrationAdminRow = {
     matchedLedgerId: number | null;
     depositAmount: number | null;   // záloha (deposit prescription amount), null pokud neexistuje
     depositStatus: EventPaymentPrescriptionStatus | null;
+    depositPromise: boolean;   // příslib zálohy — pro doplatek se počítá jako zaplaceno
+    depositWontPay: boolean;   // explicitní rozhodnutí "záloha se nebude vybírat" — jde do doplatku
     settlementAmount: number | null;   // doplatek (settlement prescription amount), null pokud neexistuje
     settlementStatus: EventPaymentPrescriptionStatus | null;
 };
@@ -1216,6 +1218,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
             depositAmount: depositPresc.amount,
             depositStatus: depositPresc.status,
+            depositPromise: depositPresc.depositPromise,
+            depositWontPay: depositPresc.depositWontPay,
             settlementAmount: settlementPresc.amount,
             settlementStatus: settlementPresc.status,
         })
@@ -1314,6 +1318,8 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         matchedLedgerId: row.matchedLedgerId,
         depositAmount: row.depositAmount ? Number(row.depositAmount) : null,
         depositStatus: row.depositStatus as EventPaymentPrescriptionStatus | null,
+        depositPromise: row.depositPromise ?? false,
+        depositWontPay: row.depositWontPay ?? false,
         settlementAmount: row.settlementAmount ? Number(row.settlementAmount) : null,
         settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
         };
