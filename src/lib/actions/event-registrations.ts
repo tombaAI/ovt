@@ -1181,6 +1181,7 @@ export type EventRegistrationAdminRow = {
     paymentStatus: EventPaymentPrescriptionStatus | null;
     matchedLedgerId: number | null;
     depositId: number | null;   // id deposit prescription — pro setDepositPromise/setDepositWontPay
+    depositCodeLabel: string | null;
     depositAmount: number | null;   // záloha (deposit prescription amount), null pokud neexistuje
     depositStatus: EventPaymentPrescriptionStatus | null;
     depositMatchedAmount: number | null;
@@ -1189,6 +1190,7 @@ export type EventRegistrationAdminRow = {
     depositWontPay: boolean;   // explicitní rozhodnutí "záloha se nebude vybírat" — jde do doplatku
     depositWontPayNote: string | null;
     settlementAmount: number | null;   // doplatek (settlement prescription amount), null pokud neexistuje
+    settlementCodeLabel: string | null;
     settlementStatus: EventPaymentPrescriptionStatus | null;
     settlementMatchedAmount: number | null;
     settlementEmailSentAt: Date | null;   // kdy byl naposledy odeslán e-mail s předpisem doplatku
@@ -1225,6 +1227,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             paymentStatus: sql<string | null>`COALESCE(${depositPresc.status}, ${settlementPresc.status})`,
             matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
             depositId: depositPresc.id,
+            depositCode: depositPresc.prescriptionCode,
             depositAmount: depositPresc.amount,
             depositStatus: depositPresc.status,
             depositMatchedAmount: depositPresc.matchedAmount,
@@ -1232,6 +1235,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             depositPromiseNote: depositPresc.depositPromiseNote,
             depositWontPay: depositPresc.depositWontPay,
             depositWontPayNote: depositPresc.depositWontPayNote,
+            settlementCode: settlementPresc.prescriptionCode,
             settlementAmount: settlementPresc.amount,
             settlementStatus: settlementPresc.status,
             settlementMatchedAmount: settlementPresc.matchedAmount,
@@ -1339,6 +1343,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         paymentStatus: row.paymentStatus as EventPaymentPrescriptionStatus | null,
         matchedLedgerId: row.matchedLedgerId,
         depositId: row.depositId,
+        depositCodeLabel: row.depositCode ? formatForeignWaterCode(row.depositCode) : null,
         depositAmount: row.depositAmount ? Number(row.depositAmount) : null,
         depositStatus: row.depositStatus as EventPaymentPrescriptionStatus | null,
         depositMatchedAmount: row.depositMatchedAmount ? Number(row.depositMatchedAmount) : null,
@@ -1346,6 +1351,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         depositPromiseNote: row.depositPromiseNote,
         depositWontPay: row.depositWontPay ?? false,
         depositWontPayNote: row.depositWontPayNote,
+        settlementCodeLabel: row.settlementCode ? formatForeignWaterCode(row.settlementCode) : null,
         settlementAmount: liveByRegistration.get(row.registrationId)?.settlementAmount ?? (row.settlementAmount ? Number(row.settlementAmount) : null),
         settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
         settlementMatchedAmount: row.settlementMatchedAmount ? Number(row.settlementMatchedAmount) : null,

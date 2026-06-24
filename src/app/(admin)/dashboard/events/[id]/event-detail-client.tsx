@@ -1076,7 +1076,18 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
     const [cancelParticipantTarget, setCancelParticipantTarget] = useState<{ id: number; fullName: string } | null>(null);
     const [expanded, setExpanded] = useState(false);
 
-    const hasPaymentDetails = !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
+    // Co se momentálně platí — záloha v době vybírání záloh, doplatek v době vybírání doplatků.
+    // Vybírání doplatků začíná vygenerováním předpisů (isPrescribed), nečeká se na odeslání e-mailu.
+    // Pokud aktuální fáze nemá co vybírat (zálohu už vyřešili / doplatek je zaplacený), platební
+    // údaje se nezobrazují vůbec — nejsou tam k ničemu.
+    const activePayment = isPrescribed
+        ? (r.settlementStatus === "pending" && r.settlementAmount != null && r.settlementAmount > 0
+            ? { kind: "doplatek" as const, amount: r.settlementAmount, codeLabel: r.settlementCodeLabel }
+            : null)
+        : (r.depositStatus === "pending" && !r.depositPromise && !r.depositWontPay && r.depositAmount != null
+            ? { kind: "záloha" as const, amount: r.depositAmount, codeLabel: r.depositCodeLabel }
+            : null);
+    const hasPaymentDetails = activePayment != null && !!r.paymentVariableSymbol && !!r.paymentAccount;
     const lifecycle = computeRegistrationLifecycle(r, isPrescribed);
 
     async function handleSendEmail() {
@@ -1217,8 +1228,8 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                 {!isCancelled && (
                     <div className="grid gap-2 sm:grid-cols-3 text-xs">
                         <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                            <p className="text-slate-400">Předpis</p>
-                            <p className="font-medium text-slate-700">{r.paymentCodeLabel}</p>
+                            <p className="text-slate-400">Předpis{activePayment && ` (${activePayment.kind})`}</p>
+                            <p className="font-medium text-slate-700">{activePayment?.codeLabel ?? "—"}</p>
                         </div>
                         <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
                             <p className="text-slate-400">Variabilní symbol</p>
@@ -1267,7 +1278,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                             className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 transition-colors rounded-lg"
                         >
                             <span className="flex items-center gap-1.5 font-medium">
-                                <QrCode size={12} /> Platební údaje
+                                <QrCode size={12} /> Platební údaje <span className="text-slate-400 font-normal">({activePayment!.kind})</span>
                             </span>
                             {showQr ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
@@ -1276,7 +1287,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                 <div className="flex flex-col sm:flex-row gap-4 items-start pt-3">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
-                                        src={buildPayliboUrl(r.paymentAmount, r.paymentVariableSymbol!, r.paymentAccount!, eventName)}
+                                        src={buildPayliboUrl(activePayment!.amount, r.paymentVariableSymbol!, r.paymentAccount!, eventName)}
                                         alt="QR kód pro platbu"
                                         width={140}
                                         height={140}
@@ -1293,7 +1304,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                                         </div>
                                         <div>
                                             <p className="text-slate-400">Částka</p>
-                                            <p className="font-semibold text-[#327600]">{new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč</p>
+                                            <p className="font-semibold text-[#327600]">{new Intl.NumberFormat("cs-CZ").format(activePayment!.amount)} Kč</p>
                                         </div>
                                         {isPrescribed && (
                                             <>
