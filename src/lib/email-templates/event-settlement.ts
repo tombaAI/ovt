@@ -46,8 +46,7 @@ export type EventSettlementEmailData = {
     amount:           number;  // doplatek (settlement) = totalAmount − depositAmount
     bankAccount:      string;
     paymentDue:       string | null;
-    unitPrice:        number;
-    participants:     { fullName: string; isMember: boolean }[];
+    participants:     { fullName: string; isMember: boolean; cost: number }[];
     memberCount:      number;
     subsidy:          number;
     depositAmount?:   number;  // záloha, která již byla vyměřena při přihlášce (informativně)
@@ -73,7 +72,7 @@ export function buildEventSettlementEmail(
                 ? `<span style="color:#15803d;font-size:13px;font-weight:600;">ano</span>`
                 : `<span style="color:#6b7280;font-size:13px;">ne</span>`}
           </td>
-          <td style="padding:6px 0;font-size:13px;text-align:right;color:#374151;white-space:nowrap;">${fmt(data.unitPrice)}</td>
+          <td style="padding:6px 0;font-size:13px;text-align:right;color:#374151;white-space:nowrap;">${fmt(Math.round(p.cost))}</td>
         </tr>`).join("");
 
     const subsidyRow = data.subsidy > 0 ? `
