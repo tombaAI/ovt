@@ -30,7 +30,7 @@ import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
 import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
-import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail, cancelParticipant, restoreParticipant, getEventFinalExpenses } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail, cancelParticipant, restoreParticipant, getEventFinalExpenses, setDepositPromise, setDepositWontPay } from "@/lib/actions/event-settlement";
 import type { CancelParticipantData } from "@/lib/actions/event-settlement";
 
 interface Props {
@@ -201,6 +201,120 @@ function LifecycleBadge({ lifecycle }: { lifecycle: PaymentLifecycle }) {
         case "underpaid": return <Badge className="bg-red-100 text-red-700 border-0 text-[11px] font-medium">Nedoplatek ({fmtCzk(lifecycle.diff)})</Badge>;
         case "overpaid": return <Badge className="bg-purple-100 text-purple-700 border-0 text-[11px] font-medium">Přeplatek ({fmtCzk(lifecycle.diff)})</Badge>;
     }
+}
+
+// ── Vyřešení zálohy (příslib / nebude platit / odvolat) — jen v rozbalené přihlášce ──
+// Stejná logika a dialogy jako DepositStatusCell na záložce Platby, jen umístěné
+// v rozbalené kartě, ne v headeru (ten zůstává čistě informativní, viz DepositStatusInline).
+
+function DepositResolutionDialog({ open, title, description, currentNote, confirmLabel, accentClass, onSave, onClose, saving }: {
+    open: boolean;
+    title: string;
+    description: string;
+    currentNote: string | null;
+    confirmLabel: string;
+    accentClass: string;
+    onSave: (note: string) => void;
+    onClose: () => void;
+    saving: boolean;
+}) {
+    const [note, setNote] = useState(currentNote ?? "");
+    useEffect(() => { if (open) setNote(currentNote ?? ""); }, [open, currentNote]);
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v && !saving) onClose(); }}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+                <p className="text-sm text-gray-500 -mt-1">{description}</p>
+                <div className="space-y-1">
+                    <p className="text-xs font-medium text-gray-700">Poznámka <span className="text-gray-400 font-normal">(volitelné)</span></p>
+                    <Textarea
+                        placeholder="Např. účastník zaslal potvrzení platby…"
+                        value={note}
+                        onChange={e => setNote(e.target.value)}
+                        rows={3}
+                        className="resize-none text-sm"
+                        disabled={saving}
+                    />
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="ghost" size="sm" onClick={onClose} disabled={saving} className="text-gray-500">Zrušit</Button>
+                    <Button size="sm" onClick={() => onSave(note)} disabled={saving} className={accentClass}>
+                        {saving ? <><Loader2 size={13} className="animate-spin mr-1.5" />Ukládám…</> : confirmLabel}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function DepositResolutionActions({ r, locked, onChanged }: { r: EventRegistrationAdminRow; locked: boolean; onChanged: () => void }) {
+    const [promiseDialogOpen, setPromiseDialogOpen] = useState(false);
+    const [wontPayDialogOpen, setWontPayDialogOpen] = useState(false);
+    const [pending, startPending] = useTransition();
+
+    if (r.depositAmount == null || r.depositId == null || r.depositStatus !== "pending" || locked) return null;
+
+    function handlePromiseChange(promise: boolean, note: string) {
+        startPending(async () => { await setDepositPromise(r.depositId!, promise, note); onChanged(); });
+    }
+    function handleWontPayChange(wontPay: boolean, note: string) {
+        startPending(async () => { await setDepositWontPay(r.depositId!, wontPay, note); onChanged(); });
+    }
+
+    if (r.depositPromise) {
+        return (
+            <button onClick={() => handlePromiseChange(false, "")} disabled={pending}
+                className="text-[11px] text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+                {pending ? "…" : "odvolat příslib"}
+            </button>
+        );
+    }
+    if (r.depositWontPay) {
+        return (
+            <button onClick={() => handleWontPayChange(false, "")} disabled={pending}
+                className="text-[11px] text-gray-400 hover:text-red-500 transition-colors disabled:opacity-50">
+                {pending ? "…" : "odvolat"}
+            </button>
+        );
+    }
+
+    return (
+        <>
+            <div className="flex items-center gap-1.5">
+                <button onClick={() => setPromiseDialogOpen(true)} disabled={pending}
+                    className="text-[11px] text-gray-400 hover:text-purple-600 transition-colors whitespace-nowrap">
+                    příslib
+                </button>
+                <span className="text-[11px] text-gray-300">·</span>
+                <button onClick={() => setWontPayDialogOpen(true)} disabled={pending}
+                    className="text-[11px] text-gray-400 hover:text-slate-700 transition-colors whitespace-nowrap">
+                    nebude platit
+                </button>
+            </div>
+            <DepositResolutionDialog
+                open={promiseDialogOpen}
+                title="Příslib zálohy"
+                description="Záloha zatím nebyla spárována, ale je na cestě. Příslib se zohlední při výpočtu doplatku jako zaplaceno."
+                currentNote={r.depositPromiseNote}
+                confirmLabel="Uložit příslib"
+                accentClass="bg-purple-600 hover:bg-purple-700 text-white"
+                onSave={note => { setPromiseDialogOpen(false); handlePromiseChange(true, note); }}
+                onClose={() => setPromiseDialogOpen(false)}
+                saving={false}
+            />
+            <DepositResolutionDialog
+                open={wontPayDialogOpen}
+                title="Záloha se nebude vybírat"
+                description="Záloha se nebude požadovat samostatně — celá částka přejde do doplatku."
+                currentNote={r.depositWontPayNote}
+                confirmLabel="Uložit rozhodnutí"
+                accentClass="bg-slate-700 hover:bg-slate-800 text-white"
+                onSave={note => { setWontPayDialogOpen(false); handleWontPayChange(true, note); }}
+                onClose={() => setWontPayDialogOpen(false)}
+                saving={false}
+            />
+        </>
+    );
 }
 
 // ── Audit log dialog ──────────────────────────────────────────────────────────
@@ -1114,6 +1228,13 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { 
                             <p className="text-slate-400">Počet osob</p>
                             <p className="font-medium text-slate-700 tabular-nums">{r.personsCount}</p>
                         </div>
+                    </div>
+                )}
+
+                {!isCancelled && !isPrescribed && r.depositAmount != null && r.depositStatus === "pending" && (
+                    <div className="rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 flex items-center justify-between gap-3 flex-wrap">
+                        <span className="text-xs text-slate-400">Vyřešení zálohy</span>
+                        <DepositResolutionActions r={r} locked={isPrescribed} onChanged={onRefresh} />
                     </div>
                 )}
 
