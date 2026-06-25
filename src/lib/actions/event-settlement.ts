@@ -152,6 +152,20 @@ export type FinalExpenseRow = {
     participantCoefficients: Record<string, number> | null;
 };
 
+/**
+ * Aktivní účastník, který u některého with_coefficients nákladu NEMÁ explicitně nastavený
+ * koeficient (klíč chybí v participantCoefficients). Při výpočtu mu padne váha 0 (`?? 0`) —
+ * ale tiše, takže jeho reálný náklad se rozpustí mezi ostatní, aniž si toho kdokoli všimne
+ * (issue: Marie Blechová / Bivoj, akce Berounka, 2026-06-25). Proto se tyto případy hlásí
+ * jako blokující stav v lockBilling/regeneratePrescriptions — admin musí koeficient doplnit
+ * (0 = vědomě neplatí, 1 = platí jako ostatní). "Chybějící klíč" jde odlišit od explicitní 0.
+ */
+export type MissingCoefficientWarning = {
+    expenseId: number;
+    purposeText: string | null;
+    participants: { key: string; name: string }[];
+};
+
 export type EventSettlement = {
     eventId: number;
     subsidyTotal: number;           // celková dotace akce (uložena v events.subsidy_per_member)
@@ -162,6 +176,8 @@ export type EventSettlement = {
     registrations: SettlementRegistrationRow[];
     grandTotal: number;
     expensesSum: number;
+    /** Náklady s vlastními podíly, kde některý aktivní účastník nemá nastavený koeficient — blokuje generování předpisů. */
+    missingCoefficients: MissingCoefficientWarning[];
 };
 
 // ── Klíče osob — sdílená identifikace účastníka pro koeficienty/váhy ──────────
@@ -528,7 +544,30 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
     const grandTotal = registrationRows.reduce((s, r) => s + r.totalAmount, 0);
 
-    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses: finalExpenseRows, registrations: registrationRows, grandTotal, expensesSum };
+    // Jméno per personKey — stejná indexace jako activePersonKeysForRegistration (kvůli r{regId}-{i} fallbacku).
+    const nameByKey = new Map<string, string>();
+    for (const reg of regs) {
+        participants
+            .filter(p => p.registrationId === reg.id)
+            .forEach((p, i) => {
+                if (!p.cancelledAt) nameByKey.set(p.id > 0 ? `p${p.id}` : `r${reg.id}-${i}`, p.fullName);
+            });
+    }
+
+    // Aktivní účastníci bez explicitního koeficientu u with_coefficients nákladu (klíč chybí → tichá váha 0).
+    // participantCoefficients === null řešit nemusíme — tam výpočet padá na rovnoměrné váhy 1, ne na tiché 0.
+    const missingCoefficients: MissingCoefficientWarning[] = finalExpenseRows
+        .filter(e => e.allocationMethod === "with_coefficients" && e.participantCoefficients)
+        .map(e => ({
+            expenseId: e.id,
+            purposeText: e.purposeText,
+            participants: allPersonKeys
+                .filter(k => !Object.prototype.hasOwnProperty.call(e.participantCoefficients!, k.key))
+                .map(k => ({ key: k.key, name: nameByKey.get(k.key) ?? k.key })),
+        }))
+        .filter(w => w.participants.length > 0);
+
+    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses: finalExpenseRows, registrations: registrationRows, grandTotal, expensesSum, missingCoefficients };
 }
 
 // ── Billing status helpers ────────────────────────────────────────────────────
@@ -559,6 +598,19 @@ function findUnresolvedDeposits(settlement: Awaited<ReturnType<typeof getEventSe
         .map(reg => `${reg.firstName} ${reg.lastName}`);
 }
 
+/**
+ * Chybová hláška pro gate „nenastavený koeficient" — vrací null, když je vše doplněno.
+ * Brání generování předpisů, dokud má některý aktivní účastník u with_coefficients nákladu
+ * chybějící koeficient (tichá váha 0). Analogicky k findUnresolvedDeposits.
+ */
+function missingCoefficientsError(settlement: Awaited<ReturnType<typeof getEventSettlement>>): string | null {
+    if (settlement.missingCoefficients.length === 0) return null;
+    const detail = settlement.missingCoefficients
+        .map(m => `${m.purposeText ?? "náklad"} (${m.participants.map(p => p.name).join(", ")})`)
+        .join("; ");
+    return `Nenastavený koeficient u nákladů s vlastními podíly — ${detail}. U každého doplňte podíl v záložce Vyúčtování (0 = neplatí, 1 = platí jako ostatní).`;
+}
+
 export async function lockBilling(eventId: number): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
@@ -570,6 +622,8 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         if (unresolved.length > 0) {
             return { error: `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".` };
         }
+        const coefError = missingCoefficientsError(settlement);
+        if (coefError) return { error: coefError };
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
@@ -812,6 +866,8 @@ export async function regeneratePrescriptions(
         if (unresolved.length > 0) {
             return { error: `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".` };
         }
+        const coefError = missingCoefficientsError(settlement);
+        if (coefError) return { error: coefError };
         const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
         revalidatePath(`/dashboard/events/${eventId}`);
         return result;

@@ -720,6 +720,20 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                 {lockError && (
                     <p className="mt-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-1.5 border border-red-100">{lockError}</p>
                 )}
+                {!isPrescribed && settlement.missingCoefficients.length > 0 && (
+                    <div className="mt-2 text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-1.5 border border-amber-200">
+                        <p className="font-medium">Nenastavený koeficient — generování předpisů je zablokováno:</p>
+                        <ul className="mt-1 space-y-0.5">
+                            {settlement.missingCoefficients.map(m => (
+                                <li key={m.expenseId}>
+                                    <span className="font-medium">{m.purposeText ?? "náklad"}:</span>{" "}
+                                    {m.participants.map(p => p.name).join(", ")}
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-1 text-amber-700">Doplňte podíl v záložce Vyúčtování (0 = neplatí, 1 = platí jako ostatní).</p>
+                    </div>
+                )}
                 {sendFeedback && (
                     <p className="mt-2 text-xs text-gray-600 bg-white/70 rounded-lg px-3 py-1.5 border border-gray-100">{sendFeedback}</p>
                 )}

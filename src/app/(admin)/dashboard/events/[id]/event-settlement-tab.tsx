@@ -51,12 +51,14 @@ function coefLabel(v: number): string {
     return `${v}×`;
 }
 
-function CoefChip({ personKey, fullName, value, onChange, disabled }: {
+function CoefChip({ personKey, fullName, value, onChange, disabled, isUnset }: {
     personKey: string;
     fullName: string;
     value: number;
     onChange: (key: string, val: number) => void;
     disabled?: boolean;
+    /** Klíč chybí v uložených koeficientech (účastník přidaný po nastavení) — tichá váha 0, dokud admin nedoplní. */
+    isUnset?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState(String(value));
@@ -86,18 +88,21 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
                     disabled={disabled}
                     className={[
                         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
-                        isExcluded
-                            ? "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
-                            : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100",
+                        isUnset
+                            ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                            : isExcluded
+                                ? "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                                : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100",
                         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                     ].join(" ")}
+                    title={isUnset ? "Koeficient nenastaven — doplňte podíl (blokuje generování předpisů)" : undefined}
                 >
-                    <span className={isExcluded ? "line-through" : ""}>{fullName}</span>
+                    <span className={isExcluded && !isUnset ? "line-through" : ""}>{fullName}</span>
                     <span className={[
                         "font-mono text-[10px]",
-                        isExcluded ? "text-gray-300" : value === 1 ? "text-emerald-400" : "text-emerald-600 font-semibold",
+                        isUnset ? "text-amber-600 font-semibold" : isExcluded ? "text-gray-300" : value === 1 ? "text-emerald-400" : "text-emerald-600 font-semibold",
                     ].join(" ")}>
-                        {coefLabel(value)}
+                        {isUnset ? "?" : coefLabel(value)}
                     </span>
                 </button>
             </PopoverTrigger>
@@ -364,6 +369,7 @@ function ExpenseAllocationRow({
                                         value={coefficients[p.key] ?? 1}
                                         onChange={handleCoefChange}
                                         disabled={disabled}
+                                        isUnset={method === "with_coefficients" && !(p.key in coefficients)}
                                     />
                                 ))}
                             </div>
