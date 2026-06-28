@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw, UserX } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw, UserX, History } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -17,13 +17,13 @@ import {
     getEventGcalDiff, syncEventToGcal, acceptGcalField,
     getMembersForAutocomplete,
 } from "@/lib/actions/events";
-import { getEventRegistrationsForAdmin, getRegistrationAuditLog } from "@/lib/actions/event-registrations";
+import { getEventRegistrationsForAdmin, getRegistrationAuditLog, getEventFullAuditLog } from "@/lib/actions/event-registrations";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type {
     EventRow, EventType, EventStatus, EventAuditEntry,
     GcalDiffResult, GcalDiffField, MemberOption,
 } from "@/lib/actions/events";
-import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
+import type { EventRegistrationAdminRow, RegistrationAuditEntry, EventFullAuditEntry } from "@/lib/actions/event-registrations";
 import type { EventPaymentPrescriptionStatus } from "@/db/schema";
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
@@ -1045,6 +1045,81 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
     );
 }
 
+// ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
+
+const AUDIT_ACTION_META: Record<string, { label: string; cls: string }> = {
+    create: { label: "Vznik přihlášky", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    update: { label: "Úprava údajů", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    add_participant: { label: "Přidán účastník", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    remove_participant: { label: "Odebrán účastník", cls: "bg-red-50 text-red-600 border-red-200" },
+    rename_participant: { label: "Přejmenování účastníka", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    link_member: { label: "Propojení člena", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    cancel: { label: "Zrušení přihlášky", cls: "bg-red-50 text-red-600 border-red-200" },
+    cancel_participant: { label: "Odhlášení účastníka", cls: "bg-red-50 text-red-600 border-red-200" },
+    restore: { label: "Obnovení přihlášky", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+    restore_participant: { label: "Obnovení účastníka", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+    lock_billing: { label: "Uzamčení vyúčtování", cls: "bg-slate-100 text-slate-600 border-slate-200" },
+    unlock_billing: { label: "Odemčení vyúčtování", cls: "bg-red-50 text-red-600 border-red-200" },
+    regenerate_prescriptions: { label: "Přegenerování předpisů", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+};
+
+const AUDIT_EXTRA_LABELS: Record<string, string> = {
+    billingStatus: "Stav vyúčtování", treasurerApproved: "Souhlas hospodáře", collecting: "Vybírá platby",
+    created: "Vytvořeno", updated: "Aktualizováno", participant: "Účastník", memberId: "Člen (ID)", fullName: "Jméno",
+};
+
+function EventAuditTab({ eventId }: { eventId: number }) {
+    const [log, setLog] = useState<EventFullAuditEntry[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        getEventFullAuditLog(eventId)
+            .then(setLog)
+            .catch(e => setError(e instanceof Error ? e.message : "Nepodařilo se načíst audit"));
+    }, [eventId]);
+
+    if (error) return <p className="text-sm text-red-500 py-10 text-center">{error}</p>;
+    if (log === null) return <p className="text-sm text-gray-400 py-10 text-center">Načítám audit…</p>;
+    if (log.length === 0) return <p className="text-sm text-gray-400 py-10 text-center">Zatím žádné zaznamenané změny.</p>;
+
+    return (
+        <div className="space-y-3">
+            <p className="text-xs text-gray-400">
+                Položkový audit změn přihlášek a vyúčtování této akce ({log.length} záznamů, nejnovější nahoře). Viditelné jen hospodáři.
+            </p>
+            <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
+                {log.map(entry => {
+                    const meta = AUDIT_ACTION_META[entry.action] ?? { label: entry.action, cls: "bg-gray-50 text-gray-600 border-gray-200" };
+                    return (
+                        <div key={entry.id} className="px-4 py-2.5 text-xs space-y-1">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${meta.cls}`}>{meta.label}</span>
+                                    {entry.scope === "registration"
+                                        ? <span className="text-gray-700 font-medium">{entry.registrationName}</span>
+                                        : <span className="text-gray-400 italic">celá akce</span>}
+                                    <span className="text-gray-400">· {entry.changedBy}</span>
+                                </div>
+                                <span className="text-gray-400 shrink-0">{fmtDateTime(entry.changedAt)}</span>
+                            </div>
+                            {Object.entries(entry.changes).map(([field, diff]) => (
+                                <div key={field} className="flex gap-1 flex-wrap text-gray-500 pl-0.5">
+                                    <span className="text-gray-400">{REGISTRATION_FIELD_LABELS[field] ?? AUDIT_EXTRA_LABELS[field] ?? field}:</span>
+                                    {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
+                                    {diff.old !== null && diff.new !== null && <span className="text-gray-300">→</span>}
+                                    {diff.new !== null
+                                        ? <span className="text-green-600">{diff.new}</span>
+                                        : <span className="text-gray-400">(odstraněno)</span>}
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // ── Karta přihlášky ───────────────────────────────────────────────────────────
 
 function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventName: string): string {
@@ -1833,7 +1908,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                 {/* ── Tabs ── */}
                 <Tabs value={activeTab} onValueChange={tab => { setActiveTab(tab); sessionStorage.setItem(`event-${event.id}-tab`, tab); }} className="gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
-                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-5 gap-1.5 bg-transparent p-0">
+                        <TabsList className={`mb-0 !grid w-full !h-auto ${isTreasurer ? "grid-cols-6" : "grid-cols-5"} gap-1.5 bg-transparent p-0`}>
                             <TabsTrigger value="detail"
                                 className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
                                 <span className="inline-flex items-center gap-1.5">
@@ -1869,6 +1944,15 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                     <span className="font-semibold">Platby</span>
                                 </span>
                             </TabsTrigger>
+                            {isTreasurer && (
+                                <TabsTrigger value="audit"
+                                    className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <History size={14} />
+                                        <span className="font-semibold">Audit</span>
+                                    </span>
+                                </TabsTrigger>
+                            )}
                         </TabsList>
                     </div>
 
@@ -1992,6 +2076,13 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                             onBillingStatusChange={setBillingStatus}
                         />
                     </TabsContent>
+
+                    {/* ── Tab: Audit (jen hospodář) ── */}
+                    {isTreasurer && (
+                        <TabsContent value="audit" className="mt-0">
+                            <EventAuditTab eventId={event.id} />
+                        </TabsContent>
+                    )}
                 </Tabs>
 
             </div>

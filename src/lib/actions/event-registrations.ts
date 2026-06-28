@@ -13,7 +13,7 @@ import {
     members,
     type EventPaymentPrescriptionStatus,
 } from "@/db/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
@@ -1387,4 +1387,61 @@ export async function getRegistrationAuditLog(registrationId: number): Promise<R
         .limit(50);
 
     return rows as unknown as RegistrationAuditEntry[];
+}
+
+// ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
+
+export type EventFullAuditEntry = {
+    id: number;
+    scope: "event" | "registration";
+    registrationId: number | null;
+    registrationName: string | null;
+    action: string;
+    changes: Record<string, { old: string | null; new: string | null }>;
+    changedBy: string;
+    changedAt: Date;
+};
+
+/**
+ * Položkový audit celé akce — záznamy na úrovni akce (lock/unlock/regenerate) i všech jejích
+ * přihlášek (vznik, úpravy, účastníci, propojení člena…). Jen pro hospodáře (TREASURER_EMAIL),
+ * protože jde o citlivý forenzní pohled „kdo co kdy s přihláškami udělal".
+ * (Pozn.: events.ts má jednodušší getEventAuditLog jen pro event-level pole v detailu akce.)
+ */
+export async function getEventFullAuditLog(eventId: number): Promise<EventFullAuditEntry[]> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
+    if (!treasurerEmail || session.user.email.toLowerCase() !== treasurerEmail) {
+        throw new Error("Audit akce je dostupný jen hospodáři.");
+    }
+
+    const db = getDb();
+    const regs = await db
+        .select({ id: eventRegistrations.id, firstName: eventRegistrations.firstName, lastName: eventRegistrations.lastName })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.eventId, eventId));
+    const nameById = new Map(regs.map(r => [r.id, `${r.firstName} ${r.lastName}`]));
+    const regIds = regs.map(r => r.id);
+
+    const rows = await db
+        .select()
+        .from(auditLog)
+        .where(or(
+            and(eq(auditLog.entityType, "event"), eq(auditLog.entityId, eventId)),
+            and(eq(auditLog.entityType, "event_registration"), inArray(auditLog.entityId, regIds.length > 0 ? regIds : [-1])),
+        ))
+        .orderBy(desc(auditLog.changedAt))
+        .limit(300);
+
+    return rows.map(r => ({
+        id: r.id,
+        scope: r.entityType === "event" ? "event" : "registration",
+        registrationId: r.entityType === "event_registration" ? r.entityId : null,
+        registrationName: r.entityType === "event_registration" ? (nameById.get(r.entityId) ?? `#${r.entityId}`) : null,
+        action: r.action,
+        changes: (r.changes ?? {}) as Record<string, { old: string | null; new: string | null }>,
+        changedBy: r.changedBy,
+        changedAt: r.changedAt as Date,
+    }));
 }

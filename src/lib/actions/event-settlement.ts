@@ -601,6 +601,33 @@ async function isEventCollecting(db: ReturnType<typeof getDb>, eventId: number):
     return (row?.n ?? 0) > 0;
 }
 
+function isTreasurer(email: string | null | undefined): boolean {
+    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
+    return !!treasurerEmail && !!email && email.toLowerCase() === treasurerEmail;
+}
+
+/**
+ * Jednotná brána pro úpravy přihlášek/účastníků akce. Vrací chybovou hlášku, nebo null když smí.
+ * Dva prahy:
+ *  - lockForParticipants (náklady uzamčeny) → blokováno pro všechny, napřed odemknout vyúčtování.
+ *  - akce už vybírá peníze (isEventCollecting) → smí jen hospodář; běžný admin dostane stopku
+ *    s informací, že to zvládne hospodář. Pokrývá i akci ve stavu draft, která už ale vybírá
+ *    (např. spárované zálohy) — tam zámek lockForParticipants nestačí.
+ */
+async function registrationEditBlock(
+    db: ReturnType<typeof getDb>,
+    eventId: number,
+    userEmail: string | null | undefined,
+): Promise<string | null> {
+    if ((await getEventLocks(db, eventId))?.lockForParticipants) {
+        return "Náklady jsou uzamčeny — pro úpravu nejdřív odemkněte vyúčtování (záložka Platby). Pokud už akce vybírá platby, odemkne ji jen hospodář.";
+    }
+    if (await isEventCollecting(db, eventId) && !isTreasurer(userEmail)) {
+        return "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — úpravu přihlášek může provést jen hospodář.";
+    }
+    return null;
+}
+
 async function getEventLocks(db: ReturnType<typeof getDb>, eventId: number): Promise<EventLocks | null> {
     const [row] = await db
         .select({ billingStatus: events.billingStatus, lockForParticipants: events.lockForParticipants, lockForReimbursement: events.lockForReimbursement })
@@ -1029,7 +1056,7 @@ export async function addAdminEventRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
-        if ((await getEventLocks(db, eventId))?.lockForParticipants) return { error: "Nelze přidávat přihlášky — náklady jsou uzamčeny." };
+        { const block = await registrationEditBlock(db, eventId, session.user.email); if (block) return { error: block }; }
 
         const publicToken = randomBytes(24).toString("hex");
 
@@ -1102,7 +1129,7 @@ export async function updateAdminRegistration(
             })
             .from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!reg) return { error: "Přihláška nenalezena" };
-        if ((await getEventLocks(db, reg.eventId))?.lockForParticipants) return { error: "Nelze měnit přihlášky — náklady jsou uzamčeny." };
+        { const block = await registrationEditBlock(db, reg.eventId, session.user.email); if (block) return { error: block }; }
         await db.update(eventRegistrations).set(input).where(eq(eventRegistrations.id, registrationId));
 
         // Audit jen reálně změněných polí (old → new).
@@ -1145,7 +1172,7 @@ export async function updateParticipantFullName(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow && (await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
         await db.update(eventRegistrationParticipants)
             .set({ fullName: fullName.trim() })
             .where(eq(eventRegistrationParticipants.id, participantId));
@@ -1179,7 +1206,7 @@ export async function linkParticipantToMember(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (pRow) {
             const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-            if (regRow && (await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+            if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
         }
         await db.update(eventRegistrationParticipants)
             .set({ memberId, personId: null })
@@ -1468,7 +1495,7 @@ export async function addParticipantToRegistration(
         const db = getDb();
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!regRow) return { error: "Přihláška nenalezena" };
-        if ((await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze přidávat účastníky — náklady jsou uzamčeny." };
+        { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
 
         let eventId: number | null = null;
 
@@ -1526,7 +1553,7 @@ export async function removeParticipantFromRegistration(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow && (await getEventLocks(db, regRow.eventId))?.lockForParticipants) return { error: "Nelze odebírat účastníky — náklady jsou uzamčeny." };
+        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
 
         let eventId: number | null = null;
 
@@ -1614,8 +1641,7 @@ export async function cancelParticipant(
             .from(eventRegistrationParticipants)
             .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
             .where(eq(eventRegistrationParticipants.id, participantId));
-        if (pre && (await getEventLocks(db, pre.eventId))?.lockForParticipants)
-            return { error: "Nelze odhlásit účastníka — náklady jsou uzamčeny. Pro úpravu musí hospodář odemknout vyúčtování." };
+        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
 
         await db.transaction(async tx => {
             const [participant] = await tx
@@ -1733,8 +1759,7 @@ export async function restoreParticipant(
             .from(eventRegistrationParticipants)
             .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
             .where(eq(eventRegistrationParticipants.id, participantId));
-        if (pre && (await getEventLocks(db, pre.eventId))?.lockForParticipants)
-            return { error: "Nelze obnovit účastníka — náklady jsou uzamčeny. Pro úpravu musí hospodář odemknout vyúčtování." };
+        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
 
         await db.transaction(async tx => {
             const [participant] = await tx
