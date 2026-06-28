@@ -922,99 +922,10 @@ export async function cancelForeignWaterRegistrationByToken(token: string): Prom
         return { error: "Neplatný odkaz přihlášky." };
     }
 
-    const db = getDb();
-    const now = new Date();
-    const result = await db.transaction(async (tx) => {
-        const [existing] = await tx
-            .select({
-                registrationId: eventRegistrations.id,
-                cancelledAt:    eventRegistrations.cancelledAt,
-                paymentStatus:  eventPaymentPrescriptions.status,
-                email:          eventRegistrations.email,
-            })
-            .from(eventRegistrations)
-            .innerJoin(
-                eventPaymentPrescriptions,
-                and(
-                    eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
-                    eq(eventPaymentPrescriptions.eventId, eventRegistrations.eventId),
-                ),
-            )
-            .where(and(
-                eq(eventRegistrations.publicToken, publicToken),
-                eq(eventRegistrations.formSlug, FOREIGN_WATER_FORM_SLUG),
-                eq(eventRegistrations.eventId, FOREIGN_WATER_EVENT_ID),
-            ))
-            .limit(1);
-
-        if (!existing) return null;
-
-        if (existing.paymentStatus === "paid") {
-            return { blocked: true as const };
-        }
-
-        if (existing.cancelledAt) {
-            return {
-                cancelledAt: (existing.cancelledAt as unknown as Date).toISOString(),
-            };
-        }
-
-        const [updated] = await tx
-            .update(eventRegistrations)
-            .set({
-                cancelledAt: now,
-            })
-            .where(eq(eventRegistrations.id, existing.registrationId))
-            .returning({
-                cancelledAt: eventRegistrations.cancelledAt,
-            });
-
-        await tx
-            .update(eventPaymentPrescriptions)
-            .set({
-                status: "cancelled",
-                updatedAt: now,
-            })
-            .where(and(
-                eq(eventPaymentPrescriptions.registrationId, existing.registrationId),
-                eq(eventPaymentPrescriptions.eventId, FOREIGN_WATER_EVENT_ID),
-            ));
-
-        // Odlinkovat členy — uvolní unique constraint pro jinou aktivní přihlášku téhož člena
-        await tx
-            .update(eventRegistrationParticipants)
-            .set({ memberId: null })
-            .where(eq(eventRegistrationParticipants.registrationId, existing.registrationId));
-
-        await tx.insert(auditLog).values({
-            entityType: "event_registration",
-            entityId:   existing.registrationId,
-            action:     "cancel",
-            changes:    { cancelledAt: { old: null, new: now.toISOString() } },
-            changedBy:  existing.email,
-        });
-
-        return {
-            cancelledAt: (updated.cancelledAt as unknown as Date).toISOString(),
-        };
-    });
-
-    if (!result) {
-        return { error: "Přihláška nebyla nalezena." };
-    }
-
-    if ("blocked" in result) {
-        return { error: "Přihlášku s uhrazenou platbou nelze automaticky zrušit. Kontaktuj prosím organizátora." };
-    }
-
-    revalidatePath(`/prihlaska/${FOREIGN_WATER_FORM_SLUG}/potvrzeni/${publicToken}`);
-    revalidatePath(`/prihlaska/${FOREIGN_WATER_FORM_SLUG}`);
-    revalidatePath("/dashboard/events");
-
-    return {
-        success: true,
-        cancelledAt: result.cancelledAt,
-    };
+    // Online zrušení přihlášky je natrvalo vypnuté. Zahraniční akce pracují s vybíranými zálohami
+    // a doplatky, kde má zrušení dopad na vyúčtování (propadlá záloha, přepočet podílů ostatních) —
+    // musí ho proto vyřídit organizátor ručně, se správnou logikou propadlé zálohy a auditní stopou.
+    return { error: "Zrušení přihlášky už nejde provést online. Napiš prosím organizátorovi akce, který tě odhlásí." };
 }
 
 export async function getForeignWaterRegistrationByToken(token: string): Promise<ForeignWaterRegistrationDetail | null> {
