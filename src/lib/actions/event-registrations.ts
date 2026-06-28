@@ -926,7 +926,35 @@ export async function cancelForeignWaterRegistrationByToken(token: string): Prom
     // Online zrušení přihlášky je natrvalo vypnuté. Zahraniční akce pracují s vybíranými zálohami
     // a doplatky, kde má zrušení dopad na vyúčtování (propadlá záloha, přepočet podílů ostatních) —
     // musí ho proto vyřídit organizátor ručně, se správnou logikou propadlé zálohy a auditní stopou.
-    return { error: "Zrušení přihlášky už nejde provést online. Napiš prosím organizátorovi akce, který tě odhlásí." };
+    const reason = "Zrušení přihlášky už nejde provést online. Napiš prosím organizátorovi akce, který tě odhlásí.";
+
+    // Zaloguj pokus (intent) — chceme vědět, že účastník chtěl zrušit, abychom na to mohli reagovat.
+    const db = getDb();
+    const [existing] = await db
+        .select({ id: eventRegistrations.id, email: eventRegistrations.email })
+        .from(eventRegistrations)
+        .where(and(
+            eq(eventRegistrations.publicToken, publicToken),
+            eq(eventRegistrations.formSlug, FOREIGN_WATER_FORM_SLUG),
+            eq(eventRegistrations.eventId, FOREIGN_WATER_EVENT_ID),
+        ))
+        .limit(1);
+    if (existing) {
+        try {
+            await db.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: existing.id,
+                action: "blocked",
+                changes: { reason: { old: null, new: reason } },
+                metadata: { blocked: true, attemptedAction: "self_cancel_registration", eventId: FOREIGN_WATER_EVENT_ID, registrationId: existing.id },
+                changedBy: existing.email ?? "public",
+            });
+        } catch (e) {
+            console.error("[public cancel audit]", e);
+        }
+    }
+
+    return { error: reason };
 }
 
 export async function getForeignWaterRegistrationByToken(token: string): Promise<ForeignWaterRegistrationDetail | null> {
@@ -1303,7 +1331,11 @@ export async function getRegistrationAuditLog(registrationId: number): Promise<R
 
 // ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
 
-export type AuditMetadata = { eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null; previousMemberId?: number | null };
+export type AuditMetadata = {
+    eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null; previousMemberId?: number | null;
+    /** Neúspěšný pokus — uživatel dostal stopku (např. úprava uzamčené akce). attemptedAction = co chtěl udělat. */
+    blocked?: boolean; attemptedAction?: string;
+};
 
 export type EventFullAuditEntry = {
     id: number;

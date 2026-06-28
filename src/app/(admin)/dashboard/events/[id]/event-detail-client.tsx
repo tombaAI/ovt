@@ -1066,6 +1066,18 @@ const AUDIT_ACTION_META: Record<string, { label: string; cls: string }> = {
 const AUDIT_EXTRA_LABELS: Record<string, string> = {
     billingStatus: "Stav vyúčtování", treasurerApproved: "Souhlas hospodáře", collecting: "Vybírá platby",
     created: "Vytvořeno", updated: "Aktualizováno", participant: "Účastník", memberId: "Člen (ID)", fullName: "Jméno",
+    reason: "Důvod",
+};
+
+// Co se uživatel pokusil udělat (u zablokovaných pokusů, action="blocked", metadata.attemptedAction).
+const AUDIT_ATTEMPT_LABELS: Record<string, string> = {
+    create_registration: "vytvořit přihlášku", update_registration: "upravit přihlášku",
+    add_participant: "přidat účastníka", remove_participant: "odebrat účastníka",
+    rename_participant: "přejmenovat účastníka", link_member: "propojit člena",
+    cancel_participant: "odhlásit účastníka", restore_participant: "obnovit účastníka",
+    cancel_registration: "zrušit přihlášku", restore_registration: "obnovit přihlášku",
+    unlock_billing: "odemknout vyúčtování", lock_billing: "uzamknout vyúčtování",
+    regenerate_prescriptions: "přegenerovat předpisy", self_cancel_registration: "zrušit přihlášku online",
 };
 
 function EventAuditTab({ eventId }: { eventId: number }) {
@@ -1089,7 +1101,11 @@ function EventAuditTab({ eventId }: { eventId: number }) {
             </p>
             <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
                 {log.map(entry => {
-                    const meta = AUDIT_ACTION_META[entry.action] ?? { label: entry.action, cls: "bg-gray-50 text-gray-600 border-gray-200" };
+                    const isBlocked = entry.action === "blocked";
+                    const attempt = entry.metadata.attemptedAction;
+                    const meta = isBlocked
+                        ? { label: `✗ Zablokováno: ${attempt ? (AUDIT_ATTEMPT_LABELS[attempt] ?? attempt) : "akce"}`, cls: "bg-red-100 text-red-700 border-red-300" }
+                        : AUDIT_ACTION_META[entry.action] ?? { label: entry.action, cls: "bg-gray-50 text-gray-600 border-gray-200" };
                     return (
                         <div key={entry.id} className="px-4 py-2.5 text-xs space-y-1">
                             <div className="flex items-center justify-between gap-2 flex-wrap">

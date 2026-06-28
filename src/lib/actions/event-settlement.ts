@@ -607,6 +607,52 @@ function isTreasurer(email: string | null | undefined): boolean {
 }
 
 /**
+ * Zaloguje NEÚSPĚŠNÝ pokus o akci (uživatel dostal stopku). Audit tak zachytí i to, co uživatelé
+ * chtěli udělat, ale systém jim to nedovolil — abychom na to mohli reagovat. action = "blocked",
+ * metadata.attemptedAction = co se pokoušeli udělat, changes.reason = proč to neprošlo.
+ */
+async function logBlockedAttempt(
+    db: ReturnType<typeof getDb>,
+    opts: { attemptedAction: string; reason: string; changedBy: string; eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null },
+): Promise<void> {
+    try {
+        await db.insert(auditLog).values({
+            entityType: opts.registrationId != null ? "event_registration" : "event",
+            entityId: opts.registrationId ?? opts.eventId ?? 0,
+            action: "blocked",
+            changes: { reason: { old: null, new: opts.reason } },
+            metadata: { blocked: true, attemptedAction: opts.attemptedAction, eventId: opts.eventId, registrationId: opts.registrationId, participantId: opts.participantId, memberId: opts.memberId },
+            changedBy: opts.changedBy,
+        });
+    } catch (e) {
+        // Audit blokace nesmí shodit samotnou (už tak odmítnutou) akci.
+        console.error("[logBlockedAttempt]", e);
+    }
+}
+
+/** Gate před generováním předpisů (nevyřešená záloha / nenastavený koeficient) — vrací chybu + zaloguje blokaci. */
+async function prescriptionGateError(
+    db: ReturnType<typeof getDb>,
+    eventId: number,
+    settlement: Awaited<ReturnType<typeof getEventSettlement>>,
+    attemptedAction: string,
+    changedBy: string,
+): Promise<string | null> {
+    const unresolved = findUnresolvedDeposits(settlement);
+    if (unresolved.length > 0) {
+        const reason = `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".`;
+        await logBlockedAttempt(db, { attemptedAction, reason, changedBy, eventId });
+        return reason;
+    }
+    const coefError = missingCoefficientsError(settlement);
+    if (coefError) {
+        await logBlockedAttempt(db, { attemptedAction, reason: coefError, changedBy, eventId });
+        return coefError;
+    }
+    return null;
+}
+
+/**
  * Jednotná brána pro úpravy přihlášek/účastníků akce. Vrací chybovou hlášku, nebo null když smí.
  * Dva prahy:
  *  - lockForParticipants (náklady uzamčeny) → blokováno pro všechny, napřed odemknout vyúčtování.
@@ -618,14 +664,21 @@ async function registrationEditBlock(
     db: ReturnType<typeof getDb>,
     eventId: number,
     userEmail: string | null | undefined,
+    attempt: { action: string; registrationId?: number; participantId?: number; memberId?: number | null },
 ): Promise<string | null> {
+    let reason: string | null = null;
     if ((await getEventLocks(db, eventId))?.lockForParticipants) {
-        return "Náklady jsou uzamčeny — pro úpravu nejdřív odemkněte vyúčtování (záložka Platby). Pokud už akce vybírá platby, odemkne ji jen hospodář.";
+        reason = "Náklady jsou uzamčeny — pro úpravu nejdřív odemkněte vyúčtování (záložka Platby). Pokud už akce vybírá platby, odemkne ji jen hospodář.";
+    } else if (await isEventCollecting(db, eventId) && !isTreasurer(userEmail)) {
+        reason = "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — úpravu přihlášek může provést jen hospodář.";
     }
-    if (await isEventCollecting(db, eventId) && !isTreasurer(userEmail)) {
-        return "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — úpravu přihlášek může provést jen hospodář.";
+    if (reason) {
+        await logBlockedAttempt(db, {
+            attemptedAction: attempt.action, reason, changedBy: userEmail ?? "unknown",
+            eventId, registrationId: attempt.registrationId, participantId: attempt.participantId, memberId: attempt.memberId,
+        });
     }
-    return null;
+    return reason;
 }
 
 async function getEventLocks(db: ReturnType<typeof getDb>, eventId: number): Promise<EventLocks | null> {
@@ -670,12 +723,8 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         if (!event) return { error: "Akce nenalezena" };
 
         const settlement = await getEventSettlement(eventId);
-        const unresolved = findUnresolvedDeposits(settlement);
-        if (unresolved.length > 0) {
-            return { error: `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".` };
-        }
-        const coefError = missingCoefficientsError(settlement);
-        if (coefError) return { error: coefError };
+        const gateError = await prescriptionGateError(db, eventId, settlement, "lock_billing", session.user.email);
+        if (gateError) return { error: gateError };
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
@@ -721,7 +770,9 @@ export async function unlockBilling(
         if (collecting) {
             const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
             if (!treasurerEmail || session.user.email.toLowerCase() !== treasurerEmail) {
-                return { error: "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — odemknout může jen hospodář." };
+                const reason = "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — odemknout může jen hospodář.";
+                await logBlockedAttempt(db, { attemptedAction: "unlock_billing", reason, changedBy: session.user.email, eventId });
+                return { error: reason };
             }
             if (!opts?.confirmed) {
                 return { error: "Odemčení vyžaduje potvrzení — tato akce už vybírá peníze a změna ovlivní vystavené předpisy." };
@@ -963,12 +1014,8 @@ export async function regeneratePrescriptions(
         const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
         const settlement = await getEventSettlement(eventId);
-        const unresolved = findUnresolvedDeposits(settlement);
-        if (unresolved.length > 0) {
-            return { error: `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".` };
-        }
-        const coefError = missingCoefficientsError(settlement);
-        if (coefError) return { error: coefError };
+        const gateError = await prescriptionGateError(db, eventId, settlement, "regenerate_prescriptions", session.user.email);
+        if (gateError) return { error: gateError };
         const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
         await db.insert(auditLog).values({
             entityType: "event",
@@ -1059,7 +1106,7 @@ export async function addAdminEventRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
-        { const block = await registrationEditBlock(db, eventId, session.user.email); if (block) return { error: block }; }
+        { const block = await registrationEditBlock(db, eventId, session.user.email, { action: "create_registration" }); if (block) return { error: block }; }
 
         const publicToken = randomBytes(24).toString("hex");
 
@@ -1133,7 +1180,7 @@ export async function updateAdminRegistration(
             })
             .from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!reg) return { error: "Přihláška nenalezena" };
-        { const block = await registrationEditBlock(db, reg.eventId, session.user.email); if (block) return { error: block }; }
+        { const block = await registrationEditBlock(db, reg.eventId, session.user.email, { action: "update_registration", registrationId }); if (block) return { error: block }; }
         await db.update(eventRegistrations).set(input).where(eq(eventRegistrations.id, registrationId));
 
         // Audit jen reálně změněných polí (old → new).
@@ -1177,7 +1224,7 @@ export async function updateParticipantFullName(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
+        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "rename_participant", registrationId: pRow.registrationId, participantId }); if (block) return { error: block }; }
         await db.update(eventRegistrationParticipants)
             .set({ fullName: fullName.trim() })
             .where(eq(eventRegistrationParticipants.id, participantId));
@@ -1212,7 +1259,7 @@ export async function linkParticipantToMember(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (pRow) {
             const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-            if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
+            if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "link_member", registrationId: pRow.registrationId, participantId, memberId }); if (block) return { error: block }; }
         }
         await db.update(eventRegistrationParticipants)
             .set({ memberId, personId: null })
@@ -1502,7 +1549,7 @@ export async function addParticipantToRegistration(
         const db = getDb();
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!regRow) return { error: "Přihláška nenalezena" };
-        { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
+        { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "add_participant", registrationId }); if (block) return { error: block }; }
 
         let eventId: number | null = null;
 
@@ -1561,7 +1608,7 @@ export async function removeParticipantFromRegistration(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email); if (block) return { error: block }; }
+        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "remove_participant", registrationId: pRow.registrationId, participantId }); if (block) return { error: block }; }
 
         let eventId: number | null = null;
 
@@ -1646,11 +1693,11 @@ export async function cancelParticipant(
         // (lockForParticipants) je proto blokované úplně stejně jako přidání/odebrání — jinak by
         // tahle cesta tiše přepočítala a přepsala už vystavené (i zaplacené) předpisy.
         const [pre] = await db
-            .select({ eventId: eventRegistrations.eventId })
+            .select({ eventId: eventRegistrations.eventId, registrationId: eventRegistrationParticipants.registrationId })
             .from(eventRegistrationParticipants)
             .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
             .where(eq(eventRegistrationParticipants.id, participantId));
-        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
+        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "cancel_participant", registrationId: pre.registrationId, participantId }); if (block) return { error: block }; }
 
         await db.transaction(async tx => {
             const [participant] = await tx
@@ -1767,11 +1814,11 @@ export async function restoreParticipant(
 
         // Zámek — stejně jako u cancelParticipant: obnovení účastníka mění vyúčtování, po uzamčení blokováno.
         const [pre] = await db
-            .select({ eventId: eventRegistrations.eventId })
+            .select({ eventId: eventRegistrations.eventId, registrationId: eventRegistrationParticipants.registrationId })
             .from(eventRegistrationParticipants)
             .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
             .where(eq(eventRegistrationParticipants.id, participantId));
-        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
+        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "restore_participant", registrationId: pre.registrationId, participantId }); if (block) return { error: block }; }
 
         await db.transaction(async tx => {
             const [participant] = await tx
@@ -1884,7 +1931,7 @@ export async function cancelAdminRegistration(
 
         {
             const [pre] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
-            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
+            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "cancel_registration", registrationId }); if (block) return { error: block }; }
         }
 
         await db.transaction(async tx => {
@@ -1950,7 +1997,7 @@ export async function restoreAdminRegistration(
 
         {
             const [pre] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
-            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
+            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "restore_registration", registrationId }); if (block) return { error: block }; }
         }
 
         await db.transaction(async tx => {
