@@ -687,6 +687,7 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
             entityId: eventId,
             action: "lock_billing",
             changes: { billingStatus: { old: "draft", new: "prescribed" } },
+            metadata: { eventId },
             changedBy: session.user.email,
         });
 
@@ -745,6 +746,7 @@ export async function unlockBilling(
                 changes: collecting
                     ? { billingStatus: { old: "prescribed", new: "draft" }, collecting: { old: "true", new: "true" }, treasurerApproved: { old: "true", new: "false" } }
                     : { billingStatus: { old: "prescribed", new: "draft" } },
+                metadata: { eventId },
                 changedBy: session.user!.email!,
             });
         });
@@ -973,6 +975,7 @@ export async function regeneratePrescriptions(
             entityId: eventId,
             action: "regenerate_prescriptions",
             changes: { created: { old: null, new: String(result.created) }, updated: { old: null, new: String(result.updated) } },
+            metadata: { eventId },
             changedBy: session.user.email,
         });
         revalidatePath(`/dashboard/events/${eventId}`);
@@ -1097,6 +1100,7 @@ export async function addAdminEventRegistration(
                 entityId: reg.id,
                 action: "create",
                 changes: { created: { old: null, new: `${input.firstName} ${input.lastName} (${input.participants.length} os.)` } },
+                metadata: { eventId, registrationId: reg.id },
                 changedBy: session.user!.email!,
             });
 
@@ -1148,6 +1152,7 @@ export async function updateAdminRegistration(
                 entityId: registrationId,
                 action: "update",
                 changes,
+                metadata: { eventId: reg.eventId, registrationId },
                 changedBy: session.user.email,
             });
         }
@@ -1182,6 +1187,7 @@ export async function updateParticipantFullName(
                 entityId: pRow.registrationId,
                 action: "rename_participant",
                 changes: { fullName: { old: pRow.oldName, new: fullName.trim() } },
+                metadata: { eventId: regRow?.eventId, registrationId: pRow.registrationId, participantId },
                 changedBy: session.user.email,
             });
         }
@@ -1219,6 +1225,7 @@ export async function linkParticipantToMember(
                 entityId: pRow.registrationId,
                 action: "link_member",
                 changes: { memberId: { old: pRow.oldMemberId != null ? String(pRow.oldMemberId) : null, new: memberId != null ? String(memberId) : null } },
+                metadata: { registrationId: pRow.registrationId, participantId, memberId, previousMemberId: pRow.oldMemberId },
                 changedBy: session.user.email,
             });
         }
@@ -1505,14 +1512,14 @@ export async function addParticipantToRegistration(
                 .from(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.registrationId, registrationId));
 
-            await tx.insert(eventRegistrationParticipants).values({
+            const [newParticipant] = await tx.insert(eventRegistrationParticipants).values({
                 registrationId,
                 eventId: regRow.eventId,
                 participantOrder: nextOrder,
                 fullName: participant.fullName.trim(),
                 isPrimary: false,
                 memberId: participant.memberId ?? null,
-            });
+            }).returning({ id: eventRegistrationParticipants.id });
 
             await tx.update(eventRegistrations)
                 .set({ personsCount: sql`${eventRegistrations.personsCount} + 1` })
@@ -1523,6 +1530,7 @@ export async function addParticipantToRegistration(
                 entityId: registrationId,
                 action: "add_participant",
                 changes: { participant: { old: null, new: participant.fullName.trim() } },
+                metadata: { eventId: regRow.eventId, registrationId, participantId: newParticipant.id, memberId: participant.memberId ?? null },
                 changedBy: session.user!.email!,
             });
 
@@ -1559,7 +1567,7 @@ export async function removeParticipantFromRegistration(
 
         await db.transaction(async tx => {
             const [p] = await tx
-                .select({ registrationId: eventRegistrationParticipants.registrationId, fullName: eventRegistrationParticipants.fullName })
+                .select({ registrationId: eventRegistrationParticipants.registrationId, fullName: eventRegistrationParticipants.fullName, memberId: eventRegistrationParticipants.memberId })
                 .from(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.id, participantId));
 
@@ -1584,6 +1592,7 @@ export async function removeParticipantFromRegistration(
                 entityId: p.registrationId,
                 action: "remove_participant",
                 changes: { participant: { old: p.fullName, new: null } },
+                metadata: { eventId: regRow?.eventId, registrationId: p.registrationId, participantId, memberId: p.memberId },
                 changedBy: session.user!.email!,
             });
 
@@ -1649,6 +1658,7 @@ export async function cancelParticipant(
                     id: eventRegistrationParticipants.id,
                     registrationId: eventRegistrationParticipants.registrationId,
                     fullName: eventRegistrationParticipants.fullName,
+                    memberId: eventRegistrationParticipants.memberId,
                     cancelledAt: eventRegistrationParticipants.cancelledAt,
                 })
                 .from(eventRegistrationParticipants)
@@ -1703,6 +1713,7 @@ export async function cancelParticipant(
                     entityId: participant.registrationId,
                     action: "cancel",
                     changes: { cancelledAt: { old: null, new: now.toISOString() }, reason: { old: null, new: "Všichni účastníci odhlášeni" } },
+                    metadata: { eventId: reg.eventId, registrationId: participant.registrationId },
                     changedBy: session.user!.email!,
                 });
             }
@@ -1717,6 +1728,7 @@ export async function cancelParticipant(
                     ...(data.depositRefundAmount != null ? { depositRefundAmount: { old: null, new: String(data.depositRefundAmount) } } : {}),
                     ...(data.depositForfeitPolicy ? { depositForfeitPolicy: { old: null, new: data.depositForfeitPolicy } } : {}),
                 },
+                metadata: { eventId: reg.eventId, registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId },
                 changedBy: session.user!.email!,
             });
         });
@@ -1767,6 +1779,7 @@ export async function restoreParticipant(
                     id: eventRegistrationParticipants.id,
                     registrationId: eventRegistrationParticipants.registrationId,
                     fullName: eventRegistrationParticipants.fullName,
+                    memberId: eventRegistrationParticipants.memberId,
                     cancelledAt: eventRegistrationParticipants.cancelledAt,
                 })
                 .from(eventRegistrationParticipants)
@@ -1823,6 +1836,7 @@ export async function restoreParticipant(
                     entityId: participant.registrationId,
                     action: "restore",
                     changes: { cancelledAt: { old: reg.cancelledAt!.toISOString(), new: null } },
+                    metadata: { eventId: reg.eventId, registrationId: participant.registrationId },
                     changedBy: session.user!.email!,
                 });
             }
@@ -1835,6 +1849,7 @@ export async function restoreParticipant(
                     participant: { old: participant.fullName, new: null },
                     cancelledAt: { old: participant.cancelledAt.toISOString(), new: null },
                 },
+                metadata: { eventId: reg.eventId, registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId },
                 changedBy: session.user!.email!,
             });
         });
@@ -1911,6 +1926,7 @@ export async function cancelAdminRegistration(
                 entityId: registrationId,
                 action: "cancel",
                 changes: { cancelledAt: { old: null, new: now.toISOString() } },
+                metadata: { eventId: reg.eventId, registrationId },
                 changedBy: session.user!.email!,
             });
         });
@@ -1965,6 +1981,7 @@ export async function restoreAdminRegistration(
                 entityId: registrationId,
                 action: "restore",
                 changes: { cancelledAt: { old: reg.cancelledAt.toISOString(), new: null } },
+                metadata: { eventId: reg.eventId, registrationId },
                 changedBy: session.user!.email!,
             });
         });

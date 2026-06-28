@@ -622,6 +622,7 @@ export async function updateEventField(
             entityId: id,
             action: "update_field",
             changes: { [field]: { old: oldVal || null, new: newVal || null } },
+            metadata: { eventId: id },
             changedBy: session.user.email,
         });
     }
@@ -744,6 +745,7 @@ export async function acceptGcalField(id: number, field: string, gcalValue: stri
         entityId: id,
         action: "accept_from_gcal",
         changes: { [field]: { old: null, new: gcalValue } },
+        metadata: { eventId: id },
         changedBy: session?.user?.email ?? "unknown",
     }).onConflictDoNothing();
 

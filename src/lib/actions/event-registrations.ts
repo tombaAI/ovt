@@ -704,6 +704,7 @@ export async function submitForeignWaterRegistration(
                     entityId:   registration.id,
                     action:     "update",
                     changes:    auditChanges,
+                    metadata:   { eventId: FOREIGN_WATER_EVENT_ID, registrationId: registration.id },
                     changedBy:  email,
                 });
             }
@@ -1302,6 +1303,8 @@ export async function getRegistrationAuditLog(registrationId: number): Promise<R
 
 // ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
 
+export type AuditMetadata = { eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null; previousMemberId?: number | null };
+
 export type EventFullAuditEntry = {
     id: number;
     scope: "event" | "registration";
@@ -1309,6 +1312,8 @@ export type EventFullAuditEntry = {
     registrationName: string | null;
     action: string;
     changes: Record<string, { old: string | null; new: string | null }>;
+    /** Strukturovaná ID dotčených objektů — pro úplný replay i budoucí pohledy (audit per člen apod.). */
+    metadata: AuditMetadata;
     changedBy: string;
     changedAt: Date;
 };
@@ -1352,6 +1357,7 @@ export async function getEventFullAuditLog(eventId: number): Promise<EventFullAu
         registrationName: r.entityType === "event_registration" ? (nameById.get(r.entityId) ?? `#${r.entityId}`) : null,
         action: r.action,
         changes: (r.changes ?? {}) as Record<string, { old: string | null; new: string | null }>,
+        metadata: (r.metadata ?? {}) as AuditMetadata,
         changedBy: r.changedBy,
         changedAt: r.changedAt as Date,
     }));

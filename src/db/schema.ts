@@ -169,6 +169,9 @@ export const auditLog = appSchema.table(
         entityId: integer("entity_id").notNull(),
         action: text("action").notNull(),
         changes: jsonb("changes").notNull().default({}),
+        // Strukturovaná ID dotčených objektů { eventId?, registrationId?, participantId?, memberId? }
+        // — pro úplný replay a budoucí pohledy (audit per člen apod.). Staré záznamy {}.
+        metadata: jsonb("metadata").notNull().default({}),
         changedBy: text("changed_by").notNull(),
         changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
     },
