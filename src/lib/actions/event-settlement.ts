@@ -630,6 +630,29 @@ async function logBlockedAttempt(
     }
 }
 
+/**
+ * Stopka uvnitř transakce. Vyhozením se transakce vrátí (rollback), proto se neloguje hned —
+ * zaloguje se až v catch přes blockedOrError (mimo rollback, samostatným zápisem).
+ */
+type BlockedAttempt = { attemptedAction: string; eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null };
+class BlockedError extends Error {
+    attempt: BlockedAttempt;
+    constructor(message: string, attempt: BlockedAttempt) {
+        super(message);
+        this.name = "BlockedError";
+        this.attempt = attempt;
+    }
+}
+
+/** V catch: BlockedError = vědomá stopka → zaloguj a vrať její hlášku; jinak běžná chyba s fallbackem. */
+async function blockedOrError(e: unknown, db: ReturnType<typeof getDb>, changedBy: string, fallback: string): Promise<{ error: string }> {
+    if (e instanceof BlockedError) {
+        await logBlockedAttempt(db, { ...e.attempt, reason: e.message, changedBy });
+        return { error: e.message };
+    }
+    return { error: e instanceof Error ? e.message : fallback };
+}
+
 /** Gate před generováním předpisů (nevyřešená záloha / nenastavený koeficient) — vrací chybu + zaloguje blokaci. */
 async function prescriptionGateError(
     db: ReturnType<typeof getDb>,
@@ -1625,7 +1648,7 @@ export async function removeParticipantFromRegistration(
                 .from(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.registrationId, p.registrationId));
 
-            if (cnt <= 1) throw new Error("Přihláška musí mít alespoň jednoho účastníka. Pro zrušení přihlášky použijte tlačítko Zrušit přihlášku.");
+            if (cnt <= 1) throw new BlockedError("Přihláška musí mít alespoň jednoho účastníka. Pro zrušení přihlášky použijte tlačítko Zrušit přihlášku.", { attemptedAction: "remove_participant", eventId: regRow?.eventId, registrationId: p.registrationId, participantId, memberId: p.memberId });
 
             await tx.delete(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.id, participantId));
@@ -1652,7 +1675,7 @@ export async function removeParticipantFromRegistration(
         if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se odebrat účastníka" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se odebrat účastníka");
     }
 }
 
@@ -1712,7 +1735,7 @@ export async function cancelParticipant(
                 .where(eq(eventRegistrationParticipants.id, participantId));
 
             if (!participant) throw new Error("Účastník nenalezen");
-            if (participant.cancelledAt) throw new Error("Účastník je již odhlášen");
+            if (participant.cancelledAt) throw new BlockedError("Účastník je již odhlášen", { attemptedAction: "cancel_participant", registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId });
 
             const [reg] = await tx
                 .select({ id: eventRegistrations.id, eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt, personsCount: eventRegistrations.personsCount })
@@ -1720,7 +1743,7 @@ export async function cancelParticipant(
                 .where(eq(eventRegistrations.id, participant.registrationId));
 
             if (!reg) throw new Error("Přihláška nenalezena");
-            if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
+            if (reg.cancelledAt) throw new BlockedError("Přihláška je již zrušena", { attemptedAction: "cancel_participant", eventId: reg.eventId, registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId });
 
             eventId = reg.eventId;
 
@@ -1798,7 +1821,7 @@ export async function cancelParticipant(
         }
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se odhlásit účastníka" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se odhlásit účastníka");
     }
 }
 
@@ -1833,7 +1856,7 @@ export async function restoreParticipant(
                 .where(eq(eventRegistrationParticipants.id, participantId));
 
             if (!participant) throw new Error("Účastník nenalezen");
-            if (!participant.cancelledAt) throw new Error("Účastník není odhlášen");
+            if (!participant.cancelledAt) throw new BlockedError("Účastník není odhlášen", { attemptedAction: "restore_participant", registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId });
 
             const [reg] = await tx
                 .select({ id: eventRegistrations.id, eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
@@ -1914,7 +1937,7 @@ export async function restoreParticipant(
         }
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se obnovit účastníka" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se obnovit účastníka");
     }
 }
 
@@ -1941,7 +1964,7 @@ export async function cancelAdminRegistration(
                 .where(eq(eventRegistrations.id, registrationId));
 
             if (!reg) throw new Error("Přihláška nenalezena");
-            if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
+            if (reg.cancelledAt) throw new BlockedError("Přihláška je již zrušena", { attemptedAction: "cancel_registration", eventId: reg.eventId, registrationId });
 
             const [paidPrescription] = await tx
                 .select({ id: eventPaymentPrescriptions.id })
@@ -1951,7 +1974,7 @@ export async function cancelAdminRegistration(
                     inArray(eventPaymentPrescriptions.status, ["matched", "paid"]),
                 ))
                 .limit(1);
-            if (paidPrescription) throw new Error("Nelze zrušit přihlášku — záloha byla přijata. Pro ruční storno kontaktuj pokladníka.");
+            if (paidPrescription) throw new BlockedError("Nelze zrušit přihlášku — záloha byla přijata. Pro ruční storno kontaktuj pokladníka.", { attemptedAction: "cancel_registration", eventId: reg.eventId, registrationId });
 
             eventId = reg.eventId;
 
@@ -1981,7 +2004,7 @@ export async function cancelAdminRegistration(
         if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se zrušit přihlášku" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se zrušit přihlášku");
     }
 }
 
@@ -2007,7 +2030,7 @@ export async function restoreAdminRegistration(
                 .where(eq(eventRegistrations.id, registrationId));
 
             if (!reg) throw new Error("Přihláška nenalezena");
-            if (!reg.cancelledAt) throw new Error("Přihláška není zrušena");
+            if (!reg.cancelledAt) throw new BlockedError("Přihláška není zrušena", { attemptedAction: "restore_registration", eventId: reg.eventId, registrationId });
 
             eventId = reg.eventId;
 
@@ -2036,7 +2059,7 @@ export async function restoreAdminRegistration(
         if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se obnovit přihlášku" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se obnovit přihlášku");
     }
 }
 
