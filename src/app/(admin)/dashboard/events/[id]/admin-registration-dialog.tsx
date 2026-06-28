@@ -482,7 +482,7 @@ export function AddParticipantDialog({ registrationId, open, onClose, onAdded }:
 // ── Párování účastníka s členem ───────────────────────────────────────────────
 
 interface LinkParticipantDialogProps {
-    participant: SettlementParticipant & { registrationId: number };
+    participant: Pick<SettlementParticipant, "id" | "fullName" | "memberId" | "memberName">;
     open: boolean;
     onClose: () => void;
     onLinked: () => void;

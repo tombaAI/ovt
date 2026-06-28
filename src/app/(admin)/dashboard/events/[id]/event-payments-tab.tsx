@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
-import { Loader2, Check, Info, Mail } from "lucide-react";
+import { Loader2, Check, Info, Mail, ChevronDown, ChevronRight } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import {
     getEventSettlement,
@@ -16,8 +16,10 @@ import {
     sendEventSettlementEmails,
     sendSingleRegistrationEmail,
     getEventSettlementEmailLog,
+    setDepositPromise,
+    setDepositWontPay,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow, EmailSendLogEntry } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, SettlementParticipant, PrescriptionInfo, EmailSendLogEntry } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -29,23 +31,211 @@ function fmtDateTime(d: Date) {
     return new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric", hour: "2-digit", minute: "2-digit" }).format(new Date(d));
 }
 
-function recomputeSettlement(s: EventSettlement, newSubsidyTotal: number): EventSettlement {
-    const newRegs = s.registrations.map(reg => {
-        const subsidy = s.totalMemberParticipants > 0
-            ? Math.round(newSubsidyTotal * reg.memberCount / s.totalMemberParticipants)
-            : 0;
-        return { ...reg, subsidy, totalAmount: Math.max(0, reg.expensesTotal - subsidy) };
-    });
-    return { ...s, subsidyTotal: newSubsidyTotal, registrations: newRegs, grandTotal: newRegs.reduce((sum, r) => sum + r.totalAmount, 0) };
+const FORFEIT_POLICY_LABELS: Record<string, string> = {
+    forfeit_to_expense: "napočítáno na náklad",
+    forfeit_split: "rozděleno na náklady",
+    forfeit_to_club: "propadlo oddílu",
+};
+
+/**
+ * Součet nevrácených (propadlých) částí zálohy přes odhlášené účastníky s rozhodnutou
+ * politikou — stejná čísla, co se zobrazují per účastník v ParticipantRow. Přidává se
+ * k zobrazené Ceně akce i Záloze v souhrnném řádku přihlášky (a v součtu dole), aby
+ * sloupce souhlasily se součtem řádků účastníků. K zaplacení se nemění — forfeit se
+ * v něm odečte i přičte, takže se vykrátí (totalAmount − effectiveDeposit zůstává stejné).
+ */
+function registrationForfeitTotal(reg: SettlementRegistrationRow): number {
+    if (!reg.depositPrescription) return 0;
+    const depositPerPerson = reg.depositPrescription.amount / reg.personsCount;
+    return reg.participants
+        .filter(p => p.cancelledAt && p.depositForfeitPolicy)
+        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
+
+// ── Stav platby přihlášky (krok navíc nad samotným doplatkem/zálohou) ────────
+// "Cena akce / Dotace / K zaplacení" se nemění — toto je jen odvozený životní cyklus
+// plateb pro zobrazení, nepoužívá se nikde ve výpočtu doplatku.
+
+type PaymentLifecycle =
+    | { kind: "not_yet" }
+    | { kind: "send_prescription" }
+    | { kind: "awaiting" }
+    | { kind: "paid" }
+    | { kind: "underpaid"; diff: number }
+    | { kind: "overpaid"; diff: number };
+
+function paidAmountOf(p: PrescriptionInfo | null): number {
+    if (!p) return 0;
+    if (p.status === "matched" || p.status === "paid") return p.matchedAmount ?? p.amount;
+    return 0;
+}
+
+function computeLifecycle(reg: SettlementRegistrationRow, isPrescribed: boolean): PaymentLifecycle {
+    if (!isPrescribed) return { kind: "not_yet" };
+    const owedTotal = reg.totalAmount;
+    const paidTotal = paidAmountOf(reg.depositPrescription) + paidAmountOf(reg.settlementPrescription);
+    const diff = paidTotal - owedTotal;
+    if (Math.abs(diff) < 0.5) return { kind: "paid" };
+    if (diff > 0) return { kind: "overpaid", diff };
+    if (!reg.settlementPrescription?.emailSentAt) return { kind: "send_prescription" };
+    const settlementHasMatch = reg.settlementPrescription.status === "matched" || reg.settlementPrescription.status === "paid";
+    if (settlementHasMatch) return { kind: "underpaid", diff: -diff };
+    return { kind: "awaiting" };
+}
+
+function LifecycleBadge({ lifecycle }: { lifecycle: PaymentLifecycle }) {
+    switch (lifecycle.kind) {
+        case "not_yet": return <Badge className="bg-gray-100 text-gray-500 border-0 text-xs">Ještě není k placení</Badge>;
+        case "send_prescription": return <Badge className="bg-orange-100 text-orange-700 border-0 text-xs">Odeslat předpis</Badge>;
+        case "awaiting": return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">K zaplacení</Badge>;
+        case "paid": return <Badge className="bg-green-100 text-green-700 border-0 text-xs">Zaplaceno</Badge>;
+        case "underpaid": return <Badge className="bg-red-100 text-red-700 border-0 text-xs">Nedoplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+        case "overpaid": return <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Přeplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+    }
 }
 
 // ── Status badge ──────────────────────────────────────────────────────────────
 
-function StatusBadge({ status, matchedAmount }: { status: string; matchedAmount: number | null }) {
+function StatusBadge({ status, matchedAmount, compact }: { status: string; matchedAmount: number | null; compact?: boolean }) {
     if (status === "paid") return <Badge className="bg-green-100 text-green-700 border-0 text-xs">Zaplaceno</Badge>;
-    if (status === "matched") return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Spárováno ({fmtCzk(matchedAmount ?? 0)})</Badge>;
+    if (status === "matched") return <Badge className="bg-blue-100 text-blue-700 border-0 text-xs">Spárováno{!compact && ` (${fmtCzk(matchedAmount ?? 0)})`}</Badge>;
     if (status === "cancelled") return <Badge className="bg-gray-100 text-gray-500 border-0 text-xs">Zrušeno</Badge>;
     return <Badge className="bg-amber-100 text-amber-700 border-0 text-xs">Čeká na platbu</Badge>;
+}
+
+// ── Vyřešení zálohy: příslib / nebude platit ──────────────────────────────────
+// Před vygenerováním doplatku musí mít každá záloha jedno ze 3 rozhodnutí: zaplaceno
+// (automaticky, spárování s bankou), příslib (počítá se jako zaplaceno), nebo "nebude platit"
+// (celá částka jde do doplatku). Nevyřešená záloha generování blokuje (event-settlement.ts).
+
+function DepositResolutionDialog({ open, title, description, currentNote, confirmLabel, accentClass, onSave, onClose, saving }: {
+    open: boolean;
+    title: string;
+    description: string;
+    currentNote: string | null;
+    confirmLabel: string;
+    accentClass: string;
+    onSave: (note: string) => void;
+    onClose: () => void;
+    saving: boolean;
+}) {
+    const [note, setNote] = useState(currentNote ?? "");
+    useEffect(() => { if (open) setNote(currentNote ?? ""); }, [open, currentNote]);
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v && !saving) onClose(); }}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+                <p className="text-sm text-gray-500 -mt-1">{description}</p>
+                <div className="space-y-1">
+                    <p className="text-xs font-medium text-gray-700">Poznámka <span className="text-gray-400 font-normal">(volitelné)</span></p>
+                    <Textarea
+                        placeholder="Např. účastník zaslal potvrzení platby…"
+                        value={note}
+                        onChange={e => setNote(e.target.value)}
+                        rows={3}
+                        className="resize-none text-sm"
+                        disabled={saving}
+                    />
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="ghost" size="sm" onClick={onClose} disabled={saving} className="text-gray-500">Zrušit</Button>
+                    <Button size="sm" onClick={() => onSave(note)} disabled={saving} className={accentClass}>
+                        {saving ? <><Loader2 size={13} className="animate-spin mr-1.5" />Ukládám…</> : confirmLabel}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function DepositStatusCell({ dep, locked, onPromiseChange, onWontPayChange }: {
+    dep: PrescriptionInfo;
+    locked: boolean;
+    onPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
+    onWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
+}) {
+    const [promiseDialogOpen, setPromiseDialogOpen] = useState(false);
+    const [wontPayDialogOpen, setWontPayDialogOpen] = useState(false);
+    const [revoking, startRevoke] = useTransition();
+
+    if (dep.status !== "pending") {
+        return <StatusBadge status={dep.status} matchedAmount={dep.matchedAmount} compact />;
+    }
+
+    if (dep.depositPromise) {
+        return (
+            <div className="flex flex-col items-end gap-0.5">
+                <Badge className="bg-purple-100 text-purple-700 border-0 text-xs">Příslib zálohy</Badge>
+                {!locked && (
+                    <button
+                        onClick={() => { startRevoke(async () => onPromiseChange(dep.id, false, "")); }}
+                        disabled={revoking}
+                        className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
+                        {revoking ? "…" : "odvolat"}
+                    </button>
+                )}
+            </div>
+        );
+    }
+
+    if (dep.depositWontPay) {
+        return (
+            <div className="flex flex-col items-end gap-0.5">
+                <Badge className="bg-slate-200 text-slate-700 border-0 text-xs">Nebude platit zálohu</Badge>
+                {!locked && (
+                    <button
+                        onClick={() => { startRevoke(async () => onWontPayChange(dep.id, false, "")); }}
+                        disabled={revoking}
+                        className="text-[10px] text-gray-400 hover:text-red-500 transition-colors">
+                        {revoking ? "…" : "odvolat"}
+                    </button>
+                )}
+            </div>
+        );
+    }
+
+    return (
+        <div className="flex flex-col items-end gap-0.5">
+            <Badge className="bg-red-100 text-red-700 border-0 text-xs">Nevyřešeno</Badge>
+            {!locked && (
+                <div className="flex items-center gap-1.5">
+                    <button
+                        onClick={() => setPromiseDialogOpen(true)}
+                        className="text-[10px] text-gray-400 hover:text-purple-600 transition-colors whitespace-nowrap">
+                        příslib
+                    </button>
+                    <span className="text-[10px] text-gray-300">·</span>
+                    <button
+                        onClick={() => setWontPayDialogOpen(true)}
+                        className="text-[10px] text-gray-400 hover:text-slate-700 transition-colors whitespace-nowrap">
+                        nebude platit
+                    </button>
+                </div>
+            )}
+            <DepositResolutionDialog
+                open={promiseDialogOpen}
+                title="Příslib zálohy"
+                description="Záloha zatím nebyla spárována, ale je na cestě. Příslib se zohlední při výpočtu doplatku jako zaplaceno."
+                currentNote={dep.depositPromiseNote}
+                confirmLabel="Uložit příslib"
+                accentClass="bg-purple-600 hover:bg-purple-700 text-white"
+                onSave={note => { setPromiseDialogOpen(false); onPromiseChange(dep.id, true, note); }}
+                onClose={() => setPromiseDialogOpen(false)}
+                saving={false}
+            />
+            <DepositResolutionDialog
+                open={wontPayDialogOpen}
+                title="Záloha se nebude vybírat"
+                description="Záloha se nebude požadovat samostatně — celá částka přejde do doplatku."
+                currentNote={dep.depositWontPayNote}
+                confirmLabel="Uložit rozhodnutí"
+                accentClass="bg-slate-700 hover:bg-slate-800 text-white"
+                onSave={note => { setWontPayDialogOpen(false); onWontPayChange(dep.id, true, note); }}
+                onClose={() => setWontPayDialogOpen(false)}
+                saving={false}
+            />
+        </div>
+    );
 }
 
 // ── Dotace ────────────────────────────────────────────────────────────────────
@@ -75,7 +265,7 @@ function SubsidyField({ eventId, value, totalMemberParticipants, onChange, disab
                     {value > 0 ? fmtCzk(value) : <span className="text-gray-400 italic">Nezadána</span>}
                 </button>
                 {value > 0 && totalMemberParticipants > 0 && (
-                    <p className="text-xs text-gray-400 mt-0.5">= {fmtCzk(Math.round(value / totalMemberParticipants))}/člen ({totalMemberParticipants} členů)</p>
+                    <p className="text-xs text-gray-400 mt-0.5">= {fmtCzk(Math.floor(value / totalMemberParticipants))}/člen ({totalMemberParticipants} členů)</p>
                 )}
             </div>
         );
@@ -121,18 +311,198 @@ function SendEmailModal({ open, title, description, onSend, onSkip, onClose, sen
     );
 }
 
+// ── Detail účastníků přihlášky (po rozbalení řádku) ───────────────────────────
+// Stejné sloupce jako řádek přihlášky. Záloha je záznam na celé přihlášce (jedna
+// platba za všechny osoby), proto se pro zobrazení rozpočítává rovným dílem mezi
+// aktivní účastníky — sečteno přes všechny účastníky to přesně sedí na Zálohu
+// i K zaplacení z řádku přihlášky (depositSharePerPerson × count = effectiveDeposit,
+// Σ(finalAmount − depositSharePerPerson) = settlementAmount).
+
+function ParticipantRow({ p, reg, depositSharePerPerson }: { p: SettlementParticipant; reg: SettlementRegistrationRow; depositSharePerPerson: number }) {
+    if (p.cancelledAt) {
+        const forfeitLabel = p.depositForfeitPolicy ? FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy : null;
+        // Nevrácená část zálohy (skutečně zaplacená, jen se nevrátila) — čistě informativní
+        // zobrazení, na výpočet doplatku/celkového výsledku akce to nemá žádný vliv (ten už
+        // počítá s propadlou zálohou jinde, viz Krok 2 v ZADANI_VYPOCET_NAKLADU_AKCE.md).
+        const depositPerPerson = reg.depositPrescription ? reg.depositPrescription.amount / reg.personsCount : null;
+        const forfeitAmount = depositPerPerson != null ? Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)) : null;
+
+        if (p.depositForfeitPolicy && forfeitAmount != null && forfeitAmount > 0) {
+            return (
+                <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+                    <td />
+                    <td className="py-1.5 pr-3 text-xs text-gray-400 line-through">{p.fullName}</td>
+                    <td className="py-1.5 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-orange-600">nejede</td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">
+                        {fmtCzk(forfeitAmount)}
+                        {forfeitLabel && <div className="text-[10px] text-gray-400 normal-case font-normal">({forfeitLabel})</div>}
+                    </td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                    <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(forfeitAmount)}</td>
+                    <td className="py-1.5 pr-3 text-right text-xs font-medium text-gray-800 tabular-nums">{fmtCzk(0)}</td>
+                    <td />
+                </tr>
+            );
+        }
+        return (
+            <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+                <td />
+                <td className="py-1.5 pr-3">
+                    <p className="text-xs text-gray-400 line-through">{p.fullName}</p>
+                    <p className="text-[11px] text-gray-400">
+                        {p.depositRefundAmount != null && p.depositRefundAmount > 0 && <>vráceno {fmtCzk(p.depositRefundAmount)} · </>}
+                        {forfeitLabel ?? "záloha nevyřešena"}
+                    </p>
+                </td>
+                <td className="py-1.5 pr-3 text-right text-[11px] font-semibold uppercase tracking-wide text-orange-600">nejede</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td className="py-1.5 pr-3 text-right text-xs text-gray-300">—</td>
+                <td />
+            </tr>
+        );
+    }
+    return (
+        <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+            <td />
+            <td className="py-1.5 pr-3 text-xs text-gray-700">{p.fullName}</td>
+            <td className="py-1.5 pr-3 text-right text-[11px]">
+                {p.memberId !== null
+                    ? <span className="font-medium uppercase tracking-wide text-emerald-600">člen</span>
+                    : <span className="text-gray-400">nečlen</span>}
+            </td>
+            <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(p.finalAmount + p.subsidyAmount)}</td>
+            <td className="py-1.5 pr-3 text-right text-xs text-emerald-600 tabular-nums">{p.subsidyAmount > 0 ? `−${fmtCzk(p.subsidyAmount)}` : "—"}</td>
+            <td className="py-1.5 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(depositSharePerPerson)}</td>
+            <td className="py-1.5 pr-3 text-right text-xs font-medium text-gray-800 tabular-nums">{fmtCzk(p.finalAmount - depositSharePerPerson)}</td>
+            <td />
+        </tr>
+    );
+}
+
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail }: {
+function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange }: {
+    reg: SettlementRegistrationRow; hasPerReg: boolean;
+    isPrescribed: boolean; treasurerApproved: boolean;
+    onSendEmail: (registrationId: number, name: string) => void;
+    onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
+    onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
+}) {
+    const [expanded, setExpanded] = useState(false);
+    const lifecycle = computeLifecycle(reg, isPrescribed);
+    const canSend = isPrescribed && treasurerApproved && !!reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled";
+    // Propadlá záloha se v souhrnu přičítá k Ceně akce i Záloze (vykrátí se), aby tyhle dva
+    // sloupce souhlasily se součtem rozbalených řádků účastníků — viz registrationForfeitTotal.
+    const forfeitTotal = registrationForfeitTotal(reg);
+    const displayCenaAkce = reg.totalAmount + reg.subsidy + forfeitTotal;
+    const displayZaloha = reg.effectiveDepositForSettlement + forfeitTotal;
+
+    return (
+        <>
+            <tr className="border-b border-gray-100 last:border-0 hover:bg-gray-50/60 cursor-pointer" onClick={() => setExpanded(v => !v)}>
+                <td className="py-2 pl-1 pr-1 text-gray-300">
+                    {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </td>
+                <td className="py-2 pr-3">
+                    <p className="font-medium text-gray-800">{reg.firstName} {reg.lastName}</p>
+                    <p className="text-xs text-gray-400">{reg.email}</p>
+                    {reg.depositPrescription && <p className="text-xs font-mono text-gray-400 mt-0.5">záloha C{reg.depositPrescription.prescriptionCode}</p>}
+                    {reg.settlementPrescription && <p className="text-xs font-mono text-gray-500 mt-0">doplatek C{reg.settlementPrescription.prescriptionCode}</p>}
+                </td>
+                <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
+                    {reg.personsCount}
+                    {reg.memberCount > 0 && <span className="text-xs text-emerald-600 ml-1">({reg.memberCount} čl.)</span>}
+                </td>
+                <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
+                    <div className="inline-flex items-center justify-end gap-1" onClick={e => e.stopPropagation()}>
+                        {fmtCzk(displayCenaAkce)}
+                        {(hasPerReg || reg.expenses.length > 1 || forfeitTotal > 0) && (
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <button className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"><Info size={13} /></button>
+                                </PopoverTrigger>
+                                <PopoverContent side="left" align="start" className="w-64 p-3 text-xs space-y-2">
+                                    <p className="font-semibold text-gray-700">Rozpad ceny akce</p>
+                                    {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => {
+                                        const up = e.allocationMethod === "split_all" && reg.personsCount > 1 ? e.allocatedAmount / reg.personsCount : null;
+                                        return (
+                                            <div key={e.expenseId} className="space-y-0.5">
+                                                <div className="flex justify-between gap-3 text-gray-700">
+                                                    <span className="truncate font-medium">{e.purposeText ?? "—"}</span>
+                                                    <span className="tabular-nums shrink-0">{fmtCzk(e.allocatedAmount)}</span>
+                                                </div>
+                                                {up !== null && <p className="text-gray-400 tabular-nums">{fmtCzk(up)}/os. × {reg.personsCount} os.</p>}
+                                            </div>
+                                        );
+                                    })}
+                                    {forfeitTotal > 0 && (
+                                        <div className="flex justify-between gap-3 text-gray-700">
+                                            <span className="truncate font-medium">Propadlá záloha (nejede)</span>
+                                            <span className="tabular-nums shrink-0">{fmtCzk(forfeitTotal)}</span>
+                                        </div>
+                                    )}
+                                    <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
+                                        <span>Celkem</span><span className="tabular-nums">{fmtCzk(displayCenaAkce)}</span>
+                                    </div>
+                                </PopoverContent>
+                            </Popover>
+                        )}
+                    </div>
+                </td>
+                <td className="py-2 pr-3 text-right text-emerald-600 tabular-nums">
+                    {reg.subsidy > 0 ? `−${fmtCzk(reg.subsidy)}` : "—"}
+                </td>
+                <td className="py-2 pr-3 text-right text-gray-700 tabular-nums" onClick={e => e.stopPropagation()}>
+                    <div className="flex flex-col items-end gap-0.5">
+                        <span>{fmtCzk(displayZaloha)}</span>
+                        {reg.depositPrescription && (
+                            <DepositStatusCell dep={reg.depositPrescription} locked={isPrescribed} onPromiseChange={onDepositPromiseChange} onWontPayChange={onDepositWontPayChange} />
+                        )}
+                    </div>
+                </td>
+                <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.settlementAmount)}</td>
+                <td className="py-2 text-right" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-end gap-1.5">
+                        <LifecycleBadge lifecycle={lifecycle} />
+                        {canSend && (
+                            <button onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
+                                title="Odeslat/přeposlat předpis e-mailem"
+                                className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
+                                <Mail size={13} />
+                            </button>
+                        )}
+                    </div>
+                </td>
+            </tr>
+            {expanded && reg.participants.length > 0 && reg.participants.map(p => (
+                <ParticipantRow key={p.id > 0 ? p.id : p.fullName} p={p} reg={reg}
+                    depositSharePerPerson={reg.activePersonsCount > 0 ? reg.effectiveDepositForSettlement / reg.activePersonsCount : 0} />
+            ))}
+            {expanded && reg.participants.length === 0 && (
+                <tr className="border-b border-gray-100 last:border-0 bg-gray-50/40">
+                    <td />
+                    <td colSpan={7} className="py-2.5 pr-3 text-xs text-gray-400">Bez detailu účastníků.</td>
+                </tr>
+            )}
+        </>
+    );
+}
+
+function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange }: {
     rows: SettlementRegistrationRow[]; unitPrice: number; hasPerReg: boolean;
     isPrescribed: boolean; treasurerApproved: boolean;
     onSendEmail: (registrationId: number, name: string) => void;
+    onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
+    onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
 }) {
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-sm">
                 <thead>
                     <tr className="border-b border-gray-200">
+                        <th className="w-5" />
                         <th className="text-left py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Přihláška</th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Osoby</th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">
@@ -140,94 +510,27 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                             {unitPrice > 0 && !hasPerReg && <span className="block text-gray-400 font-normal">{fmtCzk(unitPrice)}/os.</span>}
                         </th>
                         <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Dotace</th>
+                        <th className="text-right py-2 pr-3 text-xs font-medium text-gray-500 font-normal">Záloha</th>
                         <th className="text-right py-2 pr-3 text-xs font-semibold text-gray-800">K zaplacení</th>
                         <th className="text-right py-2 text-xs font-medium text-gray-500 font-normal">Stav</th>
                     </tr>
                 </thead>
                 <tbody>
                     {rows.map(reg => (
-                        <tr key={reg.registrationId} className="border-b border-gray-100 last:border-0">
-                            <td className="py-2 pr-3">
-                                <p className="font-medium text-gray-800">{reg.firstName} {reg.lastName}</p>
-                                <p className="text-xs text-gray-400">{reg.email}</p>
-                                {reg.depositPrescription && <p className="text-xs font-mono text-gray-400 mt-0.5">záloha C{reg.depositPrescription.prescriptionCode}</p>}
-                                {reg.settlementPrescription && <p className="text-xs font-mono text-gray-500 mt-0">doplatek C{reg.settlementPrescription.prescriptionCode}</p>}
-                            </td>
-                            <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
-                                {reg.personsCount}
-                                {reg.memberCount > 0 && <span className="text-xs text-emerald-600 ml-1">({reg.memberCount} čl.)</span>}
-                            </td>
-                            <td className="py-2 pr-3 text-right text-gray-600 tabular-nums">
-                                <div className="inline-flex items-center justify-end gap-1">
-                                    {fmtCzk(reg.expensesTotal)}
-                                    {(hasPerReg || reg.expenses.length > 1) && (
-                                        <Popover>
-                                            <PopoverTrigger asChild>
-                                                <button className="text-gray-300 hover:text-gray-500 transition-colors shrink-0"><Info size={13} /></button>
-                                            </PopoverTrigger>
-                                            <PopoverContent side="left" align="start" className="w-64 p-3 text-xs space-y-2">
-                                                <p className="font-semibold text-gray-700">Rozpad ceny akce</p>
-                                                {reg.expenses.filter(e => e.allocatedAmount > 0).map(e => {
-                                                    const up = e.allocationMethod === "split_all" && reg.personsCount > 1 ? e.allocatedAmount / reg.personsCount : null;
-                                                    return (
-                                                        <div key={e.expenseId} className="space-y-0.5">
-                                                            <div className="flex justify-between gap-3 text-gray-700">
-                                                                <span className="truncate font-medium">{e.purposeText ?? "—"}</span>
-                                                                <span className="tabular-nums shrink-0">{fmtCzk(e.allocatedAmount)}</span>
-                                                            </div>
-                                                            {up !== null && <p className="text-gray-400 tabular-nums">{fmtCzk(up)}/os. × {reg.personsCount} os.</p>}
-                                                        </div>
-                                                    );
-                                                })}
-                                                <div className="border-t pt-1.5 flex justify-between font-semibold text-gray-800">
-                                                    <span>Celkem</span><span className="tabular-nums">{fmtCzk(reg.expensesTotal)}</span>
-                                                </div>
-                                            </PopoverContent>
-                                        </Popover>
-                                    )}
-                                </div>
-                            </td>
-                            <td className="py-2 pr-3 text-right text-emerald-600 tabular-nums">
-                                {reg.subsidy > 0 ? `−${fmtCzk(reg.subsidy)}` : "—"}
-                            </td>
-                            <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.totalAmount)}</td>
-                            <td className="py-2 text-right">
-                                <div className="flex flex-col items-end gap-1">
-                                    {reg.depositPrescription && (
-                                        <div className="flex items-center gap-1">
-                                            <span className="text-xs text-gray-400">záloha</span>
-                                            <StatusBadge status={reg.depositPrescription.status} matchedAmount={reg.depositPrescription.matchedAmount} />
-                                        </div>
-                                    )}
-                                    <div className="inline-flex items-center gap-1">
-                                        {(reg.depositPrescription || reg.settlementPrescription) && (
-                                            <span className="text-xs text-gray-400">doplatek</span>
-                                        )}
-                                        {reg.settlementPrescription ? (
-                                            <StatusBadge status={reg.settlementPrescription.status} matchedAmount={reg.settlementPrescription.matchedAmount} />
-                                        ) : (
-                                            <span className="text-xs text-gray-400">—</span>
-                                        )}
-                                        {isPrescribed && treasurerApproved && reg.settlementPrescription && reg.settlementPrescription.status !== "cancelled" && (
-                                            <button onClick={() => onSendEmail(reg.registrationId, `${reg.firstName} ${reg.lastName}`)}
-                                                title="Odeslat doplatek e-mailem"
-                                                className="text-gray-300 hover:text-[#327600] transition-colors shrink-0">
-                                                <Mail size={13} />
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                            </td>
-                        </tr>
+                        <RegistrationRow key={reg.registrationId} reg={reg} hasPerReg={hasPerReg}
+                            isPrescribed={isPrescribed} treasurerApproved={treasurerApproved}
+                            onSendEmail={onSendEmail} onDepositPromiseChange={onDepositPromiseChange} onDepositWontPayChange={onDepositWontPayChange} />
                     ))}
                 </tbody>
                 <tfoot>
                     <tr className="border-t border-gray-300">
+                        <td />
                         <td className="pt-2 text-xs font-medium text-gray-500">Celkem</td>
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{rows.reduce((s, r) => s + r.personsCount, 0)} os.</td>
-                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.expensesTotal, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount + r.subsidy + registrationForfeitTotal(r), 0))}</td>
                         <td className="pt-2 pr-3 text-right text-xs text-emerald-600 tabular-nums">−{fmtCzk(rows.reduce((s, r) => s + r.subsidy, 0))}</td>
-                        <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.effectiveDepositForSettlement + registrationForfeitTotal(r), 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.settlementAmount, 0))}</td>
                         <td />
                     </tr>
                 </tfoot>
@@ -266,14 +569,20 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
             .finally(() => setLoading(false));
     }
 
+    function silentReload() {
+        getEventSettlement(eventId).then(s => { setSettlement(s); setSubsidyTotal(s.subsidyTotal); });
+    }
+
     function loadLog() { getEventSettlementEmailLog(eventId).then(setEmailLog); }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { load(); loadLog(); }, [eventId]);
 
     function handleSubsidyChange(newSubsidy: number) {
+        // Dotace se rozpočítává per člen a zaokrouhluje per účastník na serveru (getEventSettlement) —
+        // klient čísla neaproximuje, jen po uložení tiše dotáhne čerstvá data.
         setSubsidyTotal(newSubsidy);
-        setSettlement(s => s ? recomputeSettlement(s, newSubsidy) : null);
+        silentReload();
     }
 
     function handleLock() {
@@ -290,8 +599,11 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
 
     function handleUnlock() {
         setUnlockInfo(null);
+        if (settlement?.isCollecting && !window.confirm(
+            "Tato akce už vybírá peníze (odeslané předpisy nebo přijaté platby). Odemčením se vrátí do přípravy, ovlivní to vystavené předpisy a hospodář bude muset znovu schválit vyúčtování. Odemknout může jen hospodář. Pokračovat?"
+        )) return;
         startUnlock(async () => {
-            const res = await unlockBilling(eventId);
+            const res = await unlockBilling(eventId, { confirmed: true });
             if ("error" in res) { setLockError(res.error); return; }
             setBillingStatus("draft");
             onBillingStatusChange("draft");
@@ -311,6 +623,20 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                 setSendFeedback(`Odesláno ${res.sent} e-mailů${res.skipped > 0 ? `, přeskočeno ${res.skipped}` : ""}${res.failed.length > 0 ? `, ${res.failed.length} selhalo` : ""}.`);
                 loadLog();
             }
+        });
+    }
+
+    function handleDepositPromiseChange(prescriptionId: number, promise: boolean, note: string) {
+        setDepositPromise(prescriptionId, promise, note).then(res => {
+            if ("error" in res) setSendFeedback(`Chyba: ${res.error}`);
+            else load();
+        });
+    }
+
+    function handleDepositWontPayChange(prescriptionId: number, wontPay: boolean, note: string) {
+        setDepositWontPay(prescriptionId, wontPay, note).then(res => {
+            if ("error" in res) setSendFeedback(`Chyba: ${res.error}`);
+            else load();
         });
     }
 
@@ -369,7 +695,6 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                         )}
                     </div>
                     <div className="flex items-center gap-2 shrink-0 flex-wrap">
-                        {lockError && <p className="text-xs text-red-600">{lockError}</p>}
                         {unlockInfo && <p className="text-xs text-gray-500">{unlockInfo}</p>}
                         {isPrescribed ? (
                             <>
@@ -394,6 +719,23 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                 </div>
                 {isPrescribed && !treasurerApproved && (
                     <p className="mt-2 text-xs text-red-600">Předpisy nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním.</p>
+                )}
+                {lockError && (
+                    <p className="mt-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-1.5 border border-red-100">{lockError}</p>
+                )}
+                {!isPrescribed && settlement.missingCoefficients.length > 0 && (
+                    <div className="mt-2 text-xs text-amber-800 bg-amber-50 rounded-lg px-3 py-1.5 border border-amber-200">
+                        <p className="font-medium">Nenastavený koeficient — generování předpisů je zablokováno:</p>
+                        <ul className="mt-1 space-y-0.5">
+                            {settlement.missingCoefficients.map(m => (
+                                <li key={m.expenseId}>
+                                    <span className="font-medium">{m.purposeText ?? "náklad"}:</span>{" "}
+                                    {m.participants.map(p => p.name).join(", ")}
+                                </li>
+                            ))}
+                        </ul>
+                        <p className="mt-1 text-amber-700">Doplňte podíl v záložce Vyúčtování (0 = neplatí, 1 = platí jako ostatní).</p>
+                    </div>
                 )}
                 {sendFeedback && (
                     <p className="mt-2 text-xs text-gray-600 bg-white/70 rounded-lg px-3 py-1.5 border border-gray-100">{sendFeedback}</p>
@@ -463,6 +805,8 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                         isPrescribed={isPrescribed}
                         treasurerApproved={treasurerApproved}
                         onSendEmail={(id, name) => { setSendFeedback(null); setIndividualTarget({ registrationId: id, name }); }}
+                        onDepositPromiseChange={handleDepositPromiseChange}
+                        onDepositWontPayChange={handleDepositWontPayChange}
                     />
                 )}
             </div>

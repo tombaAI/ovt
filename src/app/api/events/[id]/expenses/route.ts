@@ -6,12 +6,15 @@ import { eventExpenses, events, members, people } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import { eq } from "drizzle-orm";
 
-async function assertNotPrescribed(db: ReturnType<typeof getDb>, eventId: number): Promise<NextResponse | null> {
-    const [row] = await db.select({ billingStatus: events.billingStatus }).from(events).where(eq(events.id, eventId));
-    if (row?.billingStatus === "prescribed") {
-        return NextResponse.json({ error: "Vyúčtování je uzamčeno — nejdřív odemkněte" }, { status: 409 });
-    }
-    return null;
+type ExpenseLocks = { lockedForParticipants: boolean; lockedForReimbursement: boolean };
+
+async function getExpenseLocks(db: ReturnType<typeof getDb>, eventId: number): Promise<ExpenseLocks | null> {
+    const [row] = await db
+        .select({ lockForParticipants: events.lockForParticipants, lockForReimbursement: events.lockForReimbursement })
+        .from(events)
+        .where(eq(events.id, eventId));
+    if (!row) return null;
+    return { lockedForParticipants: row.lockForParticipants, lockedForReimbursement: row.lockForReimbursement };
 }
 
 const ALLOWED_MIME = new Set([
@@ -116,8 +119,11 @@ export async function POST(
         }
 
         const db = getDb();
-        const blocked = await assertNotPrescribed(db, eventId);
-        if (blocked) return blocked;
+        const locks = await getExpenseLocks(db, eventId);
+        if (!locks) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        if (locks.lockedForParticipants || locks.lockedForReimbursement) {
+            return NextResponse.json({ error: "Nelze přidávat náklady — akce je uzamčena" }, { status: 409 });
+        }
 
         const formData = await request.formData();
         const statusRaw = String(formData.get("status") ?? "final");
@@ -219,8 +225,8 @@ export async function PATCH(
         }
 
         const db = getDb();
-        const blocked = await assertNotPrescribed(db, eventId);
-        if (blocked) return blocked;
+        const locks = await getExpenseLocks(db, eventId);
+        if (!locks) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
 
         const body = await request.json() as {
             expenseId?: unknown;
@@ -246,8 +252,10 @@ export async function PATCH(
             return NextResponse.json({ error: "Doklad nenalezen" }, { status: 404 });
         }
 
-        // Quick toggle: only isPaid provided
-        if (body.isPaid !== undefined && body.amount === undefined) {
+        // Quick toggle: only isPaid — not blocked by any lock
+        if (body.isPaid !== undefined && body.amount === undefined && body.purposeCategory === undefined
+            && body.purposeText === undefined && body.reimbursementPersonId === undefined
+            && body.invoicePayeeName === undefined) {
             const isPaid = body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
             await db.update(eventExpenses)
                 .set({ isPaid })
@@ -255,45 +263,74 @@ export async function PATCH(
             return NextResponse.json({ success: true });
         }
 
-        // Full update
-        const amountStr = String(body.amount ?? "").replace(",", ".");
-        const purposeText = String(body.purposeText ?? "").trim();
-        const purposeCategory = String(body.purposeCategory ?? "");
-        const reimbursementPersonIdRaw = body.reimbursementPersonId === null || body.reimbursementPersonId === undefined
-            ? ""
-            : String(body.reimbursementPersonId).trim();
-        const reimbursementMemberIdRaw = body.reimbursementMemberId === null || body.reimbursementMemberId === undefined
-            ? ""
-            : String(body.reimbursementMemberId).trim();
-        const isPaid = body.isPaid === undefined ? true : body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
-        const invoicePayeeName = body.invoicePayeeName !== undefined && body.invoicePayeeName !== null
-            ? String(body.invoicePayeeName).trim() || null
-            : null;
-
-        const amount = parseFloat(amountStr);
-        if (isNaN(amount) || amount <= 0) {
-            return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
-        }
-        if (!purposeText) {
-            return NextResponse.json({ error: "Chybí účel" }, { status: 400 });
-        }
-        if (!(expenseCategoryEnum as readonly string[]).includes(purposeCategory)) {
-            return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
+        // Amount — blocked by either lock
+        if (body.amount !== undefined && (locks.lockedForParticipants || locks.lockedForReimbursement)) {
+            return NextResponse.json({ error: "Nelze měnit částku — akce je uzamčena" }, { status: 409 });
         }
 
-        const reimbursement = await resolveReimbursementTarget(db, reimbursementPersonIdRaw, reimbursementMemberIdRaw);
-        if ("error" in reimbursement) return reimbursement.error;
+        // Metadata (kategorie, popis, příjemce, invoicePayeeName) — blocked by lock_for_reimbursement
+        const hasMetadataChange = body.purposeCategory !== undefined || body.purposeText !== undefined
+            || body.reimbursementPersonId !== undefined || body.invoicePayeeName !== undefined;
+        if (hasMetadataChange && locks.lockedForReimbursement) {
+            return NextResponse.json({ error: "Nelze měnit doklad — výdajový zámek je aktivní" }, { status: 409 });
+        }
+
+        // Build update from provided fields
+        let amount: number | undefined;
+        let purposeText: string | undefined;
+        let purposeCategory: typeof expenseCategoryEnum[number] | undefined;
+        let isPaid: boolean | undefined;
+        let invoicePayeeName: string | null | undefined;
+        let reimbursementPersonId: number | null | undefined;
+        let reimbursementMemberId: number | null | undefined;
+
+        if (body.amount !== undefined) {
+            const parsed = parseFloat(String(body.amount ?? "").replace(",", "."));
+            if (isNaN(parsed) || parsed <= 0) return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
+            amount = parsed;
+        }
+
+        if (body.purposeText !== undefined) {
+            purposeText = String(body.purposeText ?? "").trim();
+            if (!purposeText) return NextResponse.json({ error: "Chybí účel" }, { status: 400 });
+        }
+
+        if (body.purposeCategory !== undefined) {
+            const cat = String(body.purposeCategory ?? "");
+            if (!(expenseCategoryEnum as readonly string[]).includes(cat)) {
+                return NextResponse.json({ error: "Neplatná kategorie" }, { status: 400 });
+            }
+            purposeCategory = cat as typeof expenseCategoryEnum[number];
+        }
+
+        if (body.isPaid !== undefined) {
+            isPaid = body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
+        }
+
+        if (body.invoicePayeeName !== undefined) {
+            invoicePayeeName = body.invoicePayeeName !== null ? String(body.invoicePayeeName).trim() || null : null;
+        }
+
+        if (body.reimbursementPersonId !== undefined || body.reimbursementMemberId !== undefined) {
+            const personIdRaw = body.reimbursementPersonId === null || body.reimbursementPersonId === undefined
+                ? "" : String(body.reimbursementPersonId).trim();
+            const memberIdRaw = body.reimbursementMemberId === null || body.reimbursementMemberId === undefined
+                ? "" : String(body.reimbursementMemberId).trim();
+            const reimbursement = await resolveReimbursementTarget(db, personIdRaw, memberIdRaw);
+            if ("error" in reimbursement) return reimbursement.error;
+            reimbursementPersonId = reimbursement.value.reimbursementPersonId;
+            reimbursementMemberId = reimbursement.value.reimbursementMemberId;
+        }
 
         await db.update(eventExpenses)
             .set({
-                status: "final",
-                amount: String(amount),
-                purposeText,
-                purposeCategory: purposeCategory as typeof expenseCategoryEnum[number],
-                reimbursementPersonId: reimbursement.value.reimbursementPersonId,
-                reimbursementMemberId: reimbursement.value.reimbursementMemberId,
-                isPaid,
-                invoicePayeeName: isPaid ? null : invoicePayeeName,
+                ...(amount !== undefined && { amount: String(amount), status: "final" }),
+                ...(purposeText !== undefined && { purposeText }),
+                ...(purposeCategory !== undefined && { purposeCategory }),
+                ...(isPaid !== undefined && { isPaid }),
+                ...(invoicePayeeName !== undefined && { invoicePayeeName }),
+                ...(reimbursementPersonId !== undefined && { reimbursementPersonId }),
+                ...(reimbursementMemberId !== undefined && { reimbursementMemberId }),
             })
             .where(eq(eventExpenses.id, expenseId));
 
@@ -324,18 +361,21 @@ export async function DELETE(
         const eventId = Number(id);
 
         const db = getDb();
-        const blocked = await assertNotPrescribed(db, eventId);
-        if (blocked) return blocked;
+        const locks = await getExpenseLocks(db, eventId);
+        if (!locks) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        if (locks.lockedForParticipants || locks.lockedForReimbursement) {
+            return NextResponse.json({ error: "Nelze mazat náklady — akce je uzamčena" }, { status: 409 });
+        }
 
-        const [row] = await db.select().from(eventExpenses)
+        const [expRow] = await db.select().from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
 
-        if (!row || row.eventId !== eventId) {
+        if (!expRow || expRow.eventId !== eventId) {
             return NextResponse.json({ error: "Doklad nenalezen" }, { status: 404 });
         }
 
-        if (row.fileUrl) {
-            await del(row.fileUrl);
+        if (expRow.fileUrl) {
+            await del(expRow.fileUrl);
         }
 
         await db.delete(eventExpenses).where(eq(eventExpenses.id, expenseId));

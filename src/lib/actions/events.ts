@@ -29,6 +29,8 @@ export type EventRow = {
     leaderCskNumber: string | null;
     status: EventStatus;
     billingStatus: "draft" | "prescribed";
+    lockForParticipants: boolean;
+    lockForReimbursement: boolean;
     treasurerApproved: boolean;
     description: string | null;
     externalUrl: string | null;
@@ -80,6 +82,8 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             leaderCskNumber: members.cskNumber,
             status: events.status,
             billingStatus: events.billingStatus,
+            lockForParticipants: events.lockForParticipants,
+            lockForReimbursement: events.lockForReimbursement,
             treasurerApproved: events.treasurerApproved,
             description: events.description,
             externalUrl: events.externalUrl,
@@ -155,6 +159,8 @@ export async function getEventById(id: number): Promise<EventRow | null> {
             leaderCskNumber: members.cskNumber,
             status: events.status,
             billingStatus: events.billingStatus,
+            lockForParticipants: events.lockForParticipants,
+            lockForReimbursement: events.lockForReimbursement,
             treasurerApproved: events.treasurerApproved,
             description: events.description,
             externalUrl: events.externalUrl,
@@ -616,6 +622,7 @@ export async function updateEventField(
             entityId: id,
             action: "update_field",
             changes: { [field]: { old: oldVal || null, new: newVal || null } },
+            metadata: { eventId: id },
             changedBy: session.user.email,
         });
     }
@@ -738,6 +745,7 @@ export async function acceptGcalField(id: number, field: string, gcalValue: stri
         entityId: id,
         action: "accept_from_gcal",
         changes: { [field]: { old: null, new: gcalValue } },
+        metadata: { eventId: id },
         changedBy: session?.user?.email ?? "unknown",
     }).onConflictDoNothing();
 

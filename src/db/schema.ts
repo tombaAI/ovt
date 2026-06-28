@@ -169,6 +169,9 @@ export const auditLog = appSchema.table(
         entityId: integer("entity_id").notNull(),
         action: text("action").notNull(),
         changes: jsonb("changes").notNull().default({}),
+        // Strukturovaná ID dotčených objektů { eventId?, registrationId?, participantId?, memberId? }
+        // — pro úplný replay a budoucí pohledy (audit per člen apod.). Staré záznamy {}.
+        metadata: jsonb("metadata").notNull().default({}),
         changedBy: text("changed_by").notNull(),
         changedAt: timestamp("changed_at", { withTimezone: true }).notNull().defaultNow(),
     },
@@ -410,6 +413,8 @@ export const events = appSchema.table(
         note: text("note"),
         subsidyPerMember: numeric("subsidy_per_member", { precision: 10, scale: 2 }),
         billingStatus: text("billing_status", { enum: eventBillingStatusEnum }).notNull().default("draft"),
+        lockForParticipants: boolean("lock_for_participants").notNull().default(false),
+        lockForReimbursement: boolean("lock_for_reimbursement").notNull().default(false),
         treasurerApproved: boolean("treasurer_approved").notNull().default(false),
         createdBy: text("created_by").notNull(),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -465,6 +470,14 @@ export const eventRegistrationParticipants = appSchema.table(
         memberId: integer("member_id").references(() => members.id, { onDelete: "set null" }),
         personId: integer("person_id").references(() => people.id, { onDelete: "set null" }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+        // Propadlá záloha per účastník — vyplněno při odhlášení konkrétního účastníka
+        cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+        depositRefundAmount: numeric("deposit_refund_amount", { precision: 10, scale: 2 }),
+        depositForfeitPolicy: text("deposit_forfeit_policy", {
+            enum: ["forfeit_to_expense", "forfeit_split", "forfeit_to_club"] as const,
+        }),
+        depositForfeitExpenseId: integer("deposit_forfeit_expense_id")
+            .references(() => eventExpenses.id, { onDelete: "set null" }),
     },
     (t) => [
         index("event_reg_participants_registration_idx").on(t.registrationId),
@@ -498,6 +511,20 @@ export const eventPaymentPrescriptions = appSchema.table(
         matchedAt: timestamp("matched_at", { withTimezone: true }),
         paymentDue: date("payment_due"),
         note: text("note"),
+        depositPromise: boolean("deposit_promise").notNull().default(false),
+        depositPromiseNote: text("deposit_promise_note"),
+        depositPromiseBy: text("deposit_promise_by"),
+        depositPromiseAt: timestamp("deposit_promise_at", { withTimezone: true }),
+        // Explicitní rozhodnutí "záloha se nebude vybírat" — celá částka jde do doplatku.
+        // Vzájemně výlučné s depositPromise (nastavení jednoho vynuluje druhé).
+        depositWontPay: boolean("deposit_wont_pay").notNull().default(false),
+        depositWontPayNote: text("deposit_wont_pay_note"),
+        depositWontPayBy: text("deposit_wont_pay_by"),
+        depositWontPayAt: timestamp("deposit_wont_pay_at", { withTimezone: true }),
+        // Kdy byl tomuto konkrétnímu předpisu (typicky settlement) naposledy úspěšně odeslán
+        // e-mail s předpisem — rozlišuje stav "odeslat předpis" vs. "k zaplacení" na záložce Platby.
+        // Nastavuje se jen při úspěšném odeslání (ne při skip/fail v batch rozeslání).
+        emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },

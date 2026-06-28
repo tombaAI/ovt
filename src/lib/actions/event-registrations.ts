@@ -13,10 +13,11 @@ import {
     members,
     type EventPaymentPrescriptionStatus,
 } from "@/db/schema";
-import { and, asc, desc, eq, inArray, sql } from "drizzle-orm";
+import { and, asc, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { alias } from "drizzle-orm/pg-core";
 import { headers } from "next/headers";
 import { revalidatePath } from "next/cache";
+import { getEventSettlement } from "@/lib/actions/event-settlement";
 
 const FOREIGN_WATER_FORM_SLUG = "zahranicnivoda";
 const FOREIGN_WATER_EVENT_ID = 4;
@@ -703,6 +704,7 @@ export async function submitForeignWaterRegistration(
                     entityId:   registration.id,
                     action:     "update",
                     changes:    auditChanges,
+                    metadata:   { eventId: FOREIGN_WATER_EVENT_ID, registrationId: registration.id },
                     changedBy:  email,
                 });
             }
@@ -871,6 +873,10 @@ export type ForeignWaterRegistrationParticipant = {
     isMember: boolean;
     memberId?: number | null;
     memberName?: string | null;
+    cancelledAt?: Date | null;
+    depositRefundAmount?: number | null;
+    depositForfeitPolicy?: string | null;
+    depositForfeitExpenseId?: number | null;
 };
 
 export type ForeignWaterRegistrationDetail = {
@@ -917,99 +923,38 @@ export async function cancelForeignWaterRegistrationByToken(token: string): Prom
         return { error: "Neplatný odkaz přihlášky." };
     }
 
+    // Online zrušení přihlášky je natrvalo vypnuté. Zahraniční akce pracují s vybíranými zálohami
+    // a doplatky, kde má zrušení dopad na vyúčtování (propadlá záloha, přepočet podílů ostatních) —
+    // musí ho proto vyřídit organizátor ručně, se správnou logikou propadlé zálohy a auditní stopou.
+    const reason = "Zrušení přihlášky už nejde provést online. Napiš prosím organizátorovi akce, který tě odhlásí.";
+
+    // Zaloguj pokus (intent) — chceme vědět, že účastník chtěl zrušit, abychom na to mohli reagovat.
     const db = getDb();
-    const now = new Date();
-    const result = await db.transaction(async (tx) => {
-        const [existing] = await tx
-            .select({
-                registrationId: eventRegistrations.id,
-                cancelledAt:    eventRegistrations.cancelledAt,
-                paymentStatus:  eventPaymentPrescriptions.status,
-                email:          eventRegistrations.email,
-            })
-            .from(eventRegistrations)
-            .innerJoin(
-                eventPaymentPrescriptions,
-                and(
-                    eq(eventPaymentPrescriptions.registrationId, eventRegistrations.id),
-                    eq(eventPaymentPrescriptions.eventId, eventRegistrations.eventId),
-                ),
-            )
-            .where(and(
-                eq(eventRegistrations.publicToken, publicToken),
-                eq(eventRegistrations.formSlug, FOREIGN_WATER_FORM_SLUG),
-                eq(eventRegistrations.eventId, FOREIGN_WATER_EVENT_ID),
-            ))
-            .limit(1);
-
-        if (!existing) return null;
-
-        if (existing.paymentStatus === "paid") {
-            return { blocked: true as const };
-        }
-
-        if (existing.cancelledAt) {
-            return {
-                cancelledAt: (existing.cancelledAt as unknown as Date).toISOString(),
-            };
-        }
-
-        const [updated] = await tx
-            .update(eventRegistrations)
-            .set({
-                cancelledAt: now,
-            })
-            .where(eq(eventRegistrations.id, existing.registrationId))
-            .returning({
-                cancelledAt: eventRegistrations.cancelledAt,
+    const [existing] = await db
+        .select({ id: eventRegistrations.id, email: eventRegistrations.email })
+        .from(eventRegistrations)
+        .where(and(
+            eq(eventRegistrations.publicToken, publicToken),
+            eq(eventRegistrations.formSlug, FOREIGN_WATER_FORM_SLUG),
+            eq(eventRegistrations.eventId, FOREIGN_WATER_EVENT_ID),
+        ))
+        .limit(1);
+    if (existing) {
+        try {
+            await db.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: existing.id,
+                action: "blocked",
+                changes: { reason: { old: null, new: reason } },
+                metadata: { blocked: true, attemptedAction: "self_cancel_registration", eventId: FOREIGN_WATER_EVENT_ID, registrationId: existing.id },
+                changedBy: existing.email ?? "public",
             });
-
-        await tx
-            .update(eventPaymentPrescriptions)
-            .set({
-                status: "cancelled",
-                updatedAt: now,
-            })
-            .where(and(
-                eq(eventPaymentPrescriptions.registrationId, existing.registrationId),
-                eq(eventPaymentPrescriptions.eventId, FOREIGN_WATER_EVENT_ID),
-            ));
-
-        // Odlinkovat členy — uvolní unique constraint pro jinou aktivní přihlášku téhož člena
-        await tx
-            .update(eventRegistrationParticipants)
-            .set({ memberId: null })
-            .where(eq(eventRegistrationParticipants.registrationId, existing.registrationId));
-
-        await tx.insert(auditLog).values({
-            entityType: "event_registration",
-            entityId:   existing.registrationId,
-            action:     "cancel",
-            changes:    { cancelledAt: { old: null, new: now.toISOString() } },
-            changedBy:  existing.email,
-        });
-
-        return {
-            cancelledAt: (updated.cancelledAt as unknown as Date).toISOString(),
-        };
-    });
-
-    if (!result) {
-        return { error: "Přihláška nebyla nalezena." };
+        } catch (e) {
+            console.error("[public cancel audit]", e);
+        }
     }
 
-    if ("blocked" in result) {
-        return { error: "Přihlášku s uhrazenou platbou nelze automaticky zrušit. Kontaktuj prosím organizátora." };
-    }
-
-    revalidatePath(`/prihlaska/${FOREIGN_WATER_FORM_SLUG}/potvrzeni/${publicToken}`);
-    revalidatePath(`/prihlaska/${FOREIGN_WATER_FORM_SLUG}`);
-    revalidatePath("/dashboard/events");
-
-    return {
-        success: true,
-        cancelledAt: result.cancelledAt,
-    };
+    return { error: reason };
 }
 
 export async function getForeignWaterRegistrationByToken(token: string): Promise<ForeignWaterRegistrationDetail | null> {
@@ -1175,6 +1120,21 @@ export type EventRegistrationAdminRow = {
     paymentMessageForRecipient: string | null;
     paymentStatus: EventPaymentPrescriptionStatus | null;
     matchedLedgerId: number | null;
+    depositId: number | null;   // id deposit prescription — pro setDepositPromise/setDepositWontPay
+    depositCodeLabel: string | null;
+    depositAmount: number | null;   // záloha (deposit prescription amount), null pokud neexistuje
+    depositStatus: EventPaymentPrescriptionStatus | null;
+    depositMatchedAmount: number | null;
+    depositPromise: boolean;   // příslib zálohy — pro doplatek se počítá jako zaplaceno
+    depositPromiseNote: string | null;
+    depositWontPay: boolean;   // explicitní rozhodnutí "záloha se nebude vybírat" — jde do doplatku
+    depositWontPayNote: string | null;
+    settlementAmount: number | null;   // doplatek (settlement prescription amount), null pokud neexistuje
+    settlementCodeLabel: string | null;
+    settlementStatus: EventPaymentPrescriptionStatus | null;
+    settlementMatchedAmount: number | null;
+    settlementEmailSentAt: Date | null;   // kdy byl naposledy odeslán e-mail s předpisem doplatku
+    totalAmount: number | null;   // živě počítaná cena akce po dotaci (getEventSettlement) — null u zrušených přihlášek
 };
 
 export async function getEventRegistrationsForAdmin(eventId: number): Promise<EventRegistrationAdminRow[]> {
@@ -1206,6 +1166,20 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             paymentMessageForRecipient: sql<string | null>`COALESCE(${depositPresc.messageForRecipient}, ${settlementPresc.messageForRecipient})`,
             paymentStatus: sql<string | null>`COALESCE(${depositPresc.status}, ${settlementPresc.status})`,
             matchedLedgerId: sql<number | null>`COALESCE(${depositPresc.matchedLedgerId}, ${settlementPresc.matchedLedgerId})`,
+            depositId: depositPresc.id,
+            depositCode: depositPresc.prescriptionCode,
+            depositAmount: depositPresc.amount,
+            depositStatus: depositPresc.status,
+            depositMatchedAmount: depositPresc.matchedAmount,
+            depositPromise: depositPresc.depositPromise,
+            depositPromiseNote: depositPresc.depositPromiseNote,
+            depositWontPay: depositPresc.depositWontPay,
+            depositWontPayNote: depositPresc.depositWontPayNote,
+            settlementCode: settlementPresc.prescriptionCode,
+            settlementAmount: settlementPresc.amount,
+            settlementStatus: settlementPresc.status,
+            settlementMatchedAmount: settlementPresc.matchedAmount,
+            settlementEmailSentAt: settlementPresc.emailSentAt,
         })
         .from(eventRegistrations)
         .leftJoin(depositPresc, and(
@@ -1231,6 +1205,10 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
                 isMember: eventRegistrationParticipants.isMember,
                 memberId: eventRegistrationParticipants.memberId,
                 memberName: members.fullName,
+                cancelledAt: eventRegistrationParticipants.cancelledAt,
+                depositRefundAmount: eventRegistrationParticipants.depositRefundAmount,
+                depositForfeitPolicy: eventRegistrationParticipants.depositForfeitPolicy,
+                depositForfeitExpenseId: eventRegistrationParticipants.depositForfeitExpenseId,
             })
             .from(eventRegistrationParticipants)
             .leftJoin(members, eq(eventRegistrationParticipants.memberId, members.id))
@@ -1252,9 +1230,21 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
             isMember: participantRow.isMember,
             memberId: participantRow.memberId,
             memberName: participantRow.memberName,
+            cancelledAt: participantRow.cancelledAt as Date | null,
+            depositRefundAmount: participantRow.depositRefundAmount ? parseFloat(participantRow.depositRefundAmount) : null,
+            depositForfeitPolicy: participantRow.depositForfeitPolicy,
+            depositForfeitExpenseId: participantRow.depositForfeitExpenseId,
         });
         participantsByRegistration.set(participantRow.registrationId, list);
     }
+
+    // Doplatek uložený v prescription se nepřepočítává automaticky při každé změně
+    // (příslib/nebude platit zálohy, spárování platby, úprava dotace…) — jen při
+    // lockBilling/regeneratePrescriptions/odeslání e-mailu. Aby tahle admin tabulka
+    // neukazovala zastaralé číslo, doplatek (a totalAmount pro stav plateb) se vždy
+    // dotáhne živě ze stejného zdroje jako záložka Platby (getEventSettlement).
+    const liveSettlement = await getEventSettlement(eventId);
+    const liveByRegistration = new Map(liveSettlement.registrations.map(sr => [sr.registrationId, sr]));
 
     return rows.map((row) => {
         const fallbackParticipants = parseParticipantNames(
@@ -1292,6 +1282,21 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         paymentMessageForRecipient: row.paymentMessageForRecipient,
         paymentStatus: row.paymentStatus as EventPaymentPrescriptionStatus | null,
         matchedLedgerId: row.matchedLedgerId,
+        depositId: row.depositId,
+        depositCodeLabel: row.depositCode ? formatForeignWaterCode(row.depositCode) : null,
+        depositAmount: row.depositAmount ? Number(row.depositAmount) : null,
+        depositStatus: row.depositStatus as EventPaymentPrescriptionStatus | null,
+        depositMatchedAmount: row.depositMatchedAmount ? Number(row.depositMatchedAmount) : null,
+        depositPromise: row.depositPromise ?? false,
+        depositPromiseNote: row.depositPromiseNote,
+        depositWontPay: row.depositWontPay ?? false,
+        depositWontPayNote: row.depositWontPayNote,
+        settlementCodeLabel: row.settlementCode ? formatForeignWaterCode(row.settlementCode) : null,
+        settlementAmount: liveByRegistration.get(row.registrationId)?.settlementAmount ?? (row.settlementAmount ? Number(row.settlementAmount) : null),
+        settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
+        settlementMatchedAmount: row.settlementMatchedAmount ? Number(row.settlementMatchedAmount) : null,
+        settlementEmailSentAt: row.settlementEmailSentAt as unknown as Date | null,
+        totalAmount: liveByRegistration.get(row.registrationId)?.totalAmount ?? null,
         };
     });
 }
@@ -1322,4 +1327,70 @@ export async function getRegistrationAuditLog(registrationId: number): Promise<R
         .limit(50);
 
     return rows as unknown as RegistrationAuditEntry[];
+}
+
+// ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
+
+export type AuditMetadata = {
+    eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null; previousMemberId?: number | null;
+    /** Neúspěšný pokus — uživatel dostal stopku (např. úprava uzamčené akce). attemptedAction = co chtěl udělat. */
+    blocked?: boolean; attemptedAction?: string;
+};
+
+export type EventFullAuditEntry = {
+    id: number;
+    scope: "event" | "registration";
+    registrationId: number | null;
+    registrationName: string | null;
+    action: string;
+    changes: Record<string, { old: string | null; new: string | null }>;
+    /** Strukturovaná ID dotčených objektů — pro úplný replay i budoucí pohledy (audit per člen apod.). */
+    metadata: AuditMetadata;
+    changedBy: string;
+    changedAt: Date;
+};
+
+/**
+ * Položkový audit celé akce — záznamy na úrovni akce (lock/unlock/regenerate) i všech jejích
+ * přihlášek (vznik, úpravy, účastníci, propojení člena…). Jen pro hospodáře (TREASURER_EMAIL),
+ * protože jde o citlivý forenzní pohled „kdo co kdy s přihláškami udělal".
+ * (Pozn.: events.ts má jednodušší getEventAuditLog jen pro event-level pole v detailu akce.)
+ */
+export async function getEventFullAuditLog(eventId: number): Promise<EventFullAuditEntry[]> {
+    const session = await auth();
+    if (!session?.user?.email) throw new Error("Nepřihlášen");
+    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
+    if (!treasurerEmail || session.user.email.toLowerCase() !== treasurerEmail) {
+        throw new Error("Audit akce je dostupný jen hospodáři.");
+    }
+
+    const db = getDb();
+    const regs = await db
+        .select({ id: eventRegistrations.id, firstName: eventRegistrations.firstName, lastName: eventRegistrations.lastName })
+        .from(eventRegistrations)
+        .where(eq(eventRegistrations.eventId, eventId));
+    const nameById = new Map(regs.map(r => [r.id, `${r.firstName} ${r.lastName}`]));
+    const regIds = regs.map(r => r.id);
+
+    const rows = await db
+        .select()
+        .from(auditLog)
+        .where(or(
+            and(eq(auditLog.entityType, "event"), eq(auditLog.entityId, eventId)),
+            and(eq(auditLog.entityType, "event_registration"), inArray(auditLog.entityId, regIds.length > 0 ? regIds : [-1])),
+        ))
+        .orderBy(desc(auditLog.changedAt))
+        .limit(300);
+
+    return rows.map(r => ({
+        id: r.id,
+        scope: r.entityType === "event" ? "event" : "registration",
+        registrationId: r.entityType === "event_registration" ? r.entityId : null,
+        registrationName: r.entityType === "event_registration" ? (nameById.get(r.entityId) ?? `#${r.entityId}`) : null,
+        action: r.action,
+        changes: (r.changes ?? {}) as Record<string, { old: string | null; new: string | null }>,
+        metadata: (r.metadata ?? {}) as AuditMetadata,
+        changedBy: r.changedBy,
+        changedAt: r.changedAt as Date,
+    }));
 }

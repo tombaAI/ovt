@@ -2,12 +2,13 @@
 
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw } from "lucide-react";
+import { ChevronLeft, Download, FileText, MoreHorizontal, Users, Wallet, Calculator, UserCheck, Trash2, UserPlus, Ban, Pencil, QrCode, Mail, ChevronDown, ChevronUp, Loader2, RotateCcw, UserX, History } from "lucide-react";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { InlineField } from "@/app/(admin)/dashboard/members/inline-field";
@@ -16,19 +17,21 @@ import {
     getEventGcalDiff, syncEventToGcal, acceptGcalField,
     getMembersForAutocomplete,
 } from "@/lib/actions/events";
-import { getEventRegistrationsForAdmin, getRegistrationAuditLog } from "@/lib/actions/event-registrations";
+import { getEventRegistrationsForAdmin, getRegistrationAuditLog, getEventFullAuditLog } from "@/lib/actions/event-registrations";
 import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type {
     EventRow, EventType, EventStatus, EventAuditEntry,
     GcalDiffResult, GcalDiffField, MemberOption,
 } from "@/lib/actions/events";
-import type { EventRegistrationAdminRow, RegistrationAuditEntry } from "@/lib/actions/event-registrations";
+import type { EventRegistrationAdminRow, RegistrationAuditEntry, EventFullAuditEntry } from "@/lib/actions/event-registrations";
+import type { EventPaymentPrescriptionStatus } from "@/db/schema";
 import { EventExpensesTab } from "./event-expenses-tab";
 import { EventSettlementTab } from "./event-settlement-tab";
 import { EventPaymentsTab } from "./event-payments-tab";
 import { AddRegistrationDialog, LinkParticipantDialog, AddParticipantDialog, EditRegistrationDialog } from "./admin-registration-dialog";
 import type { SettlementParticipant } from "@/lib/actions/event-settlement";
-import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail } from "@/lib/actions/event-settlement";
+import { removeParticipantFromRegistration, cancelAdminRegistration, restoreAdminRegistration, sendSingleRegistrationEmail, cancelParticipant, restoreParticipant, getEventFinalExpenses, setDepositPromise, setDepositWontPay } from "@/lib/actions/event-settlement";
+import type { CancelParticipantData } from "@/lib/actions/event-settlement";
 
 interface Props {
     event: EventRow;
@@ -119,6 +122,200 @@ const PAYMENT_STATUS_BAR_COLORS: Record<string, string> = {
     paid: "from-green-200 via-green-300 to-green-400",
     cancelled: "from-rose-200 via-rose-300 to-rose-400",
 };
+
+function fmtCzk(amount: number) {
+    return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 0 }).format(amount) + " Kč";
+}
+
+// ── Stav doplatku (životní cyklus) — analogicky k záložce Platby ─────────────
+// Stejná logika jako computeLifecycle v event-payments-tab.tsx. r.totalAmount i
+// r.settlementAmount (viz getEventRegistrationsForAdmin) jsou živě dotažené z
+// getEventSettlement, ne jen uložená (a snadno zastaralá) hodnota z prescription —
+// jinak by se po příslibu/spárování zálohy bez přegenerování předpisů ukazovalo
+// staré číslo doplatku (issue nahlášený uživatelem 2026-06-24, Filip Havlíček).
+
+type PaymentLifecycle =
+    | { kind: "not_yet" }
+    | { kind: "send_prescription" }
+    | { kind: "awaiting" }
+    | { kind: "paid" }
+    | { kind: "underpaid"; diff: number }
+    | { kind: "overpaid"; diff: number };
+
+function computeRegistrationLifecycle(r: EventRegistrationAdminRow, isPrescribed: boolean): PaymentLifecycle {
+    if (!isPrescribed) return { kind: "not_yet" };
+    const paidOf = (status: EventPaymentPrescriptionStatus | null, amount: number | null, matched: number | null) =>
+        (status === "matched" || status === "paid") ? (matched ?? amount ?? 0) : 0;
+    const owedTotal = r.totalAmount ?? ((r.depositAmount ?? 0) + (r.settlementAmount ?? 0));
+    const paidTotal = paidOf(r.depositStatus, r.depositAmount, r.depositMatchedAmount) + paidOf(r.settlementStatus, r.settlementAmount, r.settlementMatchedAmount);
+    const diff = paidTotal - owedTotal;
+    if (Math.abs(diff) < 0.5) return { kind: "paid" };
+    if (diff > 0) return { kind: "overpaid", diff };
+    if (!r.settlementEmailSentAt) return { kind: "send_prescription" };
+    if (r.settlementStatus === "matched" || r.settlementStatus === "paid") return { kind: "underpaid", diff: -diff };
+    return { kind: "awaiting" };
+}
+
+/** Badge(y) stavu zálohy — sdílené mezi sbaleným headerem karty a jejím rozbaleným obsahem. */
+function DepositStatusInline({ r }: { r: EventRegistrationAdminRow }) {
+    if (r.depositAmount == null) {
+        // Admin přihláška bez zálohy (addAdminEventRegistration ji nikdy nevytváří) —
+        // doplatek se tu nezobrazuje, takže tu není co řešit ani ukazovat.
+        return <Badge className="bg-slate-50 text-slate-400 border-0 text-[11px] font-medium">Bez zálohy</Badge>;
+    }
+    return (
+        <>
+            {/* "Nebude platit zálohu" je definitivní rozhodnutí — badge "čeká" by tu mátlo, na nic se nečeká. */}
+            {!(r.depositStatus === "pending" && r.depositWontPay) && (
+                <Badge className={`${PAYMENT_STATUS_COLORS[r.depositStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
+                    {PAYMENT_STATUS_LABELS[r.depositStatus ?? "pending"] ?? r.depositStatus}
+                </Badge>
+            )}
+            {r.depositStatus === "pending" && (
+                r.depositPromise ? (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-purple-200 bg-purple-50 text-purple-700">
+                        příslib zálohy
+                    </span>
+                ) : r.depositWontPay ? (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-slate-300 bg-slate-100 text-slate-700">
+                        nebude platit zálohu
+                    </span>
+                ) : (
+                    <span className="text-[11px] font-medium px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700">
+                        záloha nevyřešena
+                    </span>
+                )
+            )}
+            <span className="text-sm font-semibold text-slate-700 tabular-nums">
+                {fmtCzk(r.depositAmount)}
+            </span>
+        </>
+    );
+}
+
+function LifecycleBadge({ lifecycle }: { lifecycle: PaymentLifecycle }) {
+    switch (lifecycle.kind) {
+        case "not_yet": return <Badge className="bg-gray-100 text-gray-500 border-0 text-[11px] font-medium">Ještě není k placení</Badge>;
+        case "send_prescription": return <Badge className="bg-orange-100 text-orange-700 border-0 text-[11px] font-medium">Odeslat předpis</Badge>;
+        case "awaiting": return <Badge className="bg-blue-100 text-blue-700 border-0 text-[11px] font-medium">K zaplacení</Badge>;
+        case "paid": return <Badge className="bg-green-100 text-green-700 border-0 text-[11px] font-medium">Zaplaceno</Badge>;
+        case "underpaid": return <Badge className="bg-red-100 text-red-700 border-0 text-[11px] font-medium">Nedoplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+        case "overpaid": return <Badge className="bg-purple-100 text-purple-700 border-0 text-[11px] font-medium">Přeplatek ({fmtCzk(lifecycle.diff)})</Badge>;
+    }
+}
+
+// ── Vyřešení zálohy (příslib / nebude platit / odvolat) — jen v rozbalené přihlášce ──
+// Stejná logika a dialogy jako DepositStatusCell na záložce Platby, jen umístěné
+// v rozbalené kartě, ne v headeru (ten zůstává čistě informativní, viz DepositStatusInline).
+
+function DepositResolutionDialog({ open, title, description, currentNote, confirmLabel, accentClass, onSave, onClose, saving }: {
+    open: boolean;
+    title: string;
+    description: string;
+    currentNote: string | null;
+    confirmLabel: string;
+    accentClass: string;
+    onSave: (note: string) => void;
+    onClose: () => void;
+    saving: boolean;
+}) {
+    const [note, setNote] = useState(currentNote ?? "");
+    useEffect(() => { if (open) setNote(currentNote ?? ""); }, [open, currentNote]);
+    return (
+        <Dialog open={open} onOpenChange={v => { if (!v && !saving) onClose(); }}>
+            <DialogContent className="sm:max-w-sm">
+                <DialogHeader><DialogTitle>{title}</DialogTitle></DialogHeader>
+                <p className="text-sm text-gray-500 -mt-1">{description}</p>
+                <div className="space-y-1">
+                    <p className="text-xs font-medium text-gray-700">Poznámka <span className="text-gray-400 font-normal">(volitelné)</span></p>
+                    <Textarea
+                        placeholder="Např. účastník zaslal potvrzení platby…"
+                        value={note}
+                        onChange={e => setNote(e.target.value)}
+                        rows={3}
+                        className="resize-none text-sm"
+                        disabled={saving}
+                    />
+                </div>
+                <DialogFooter className="gap-2">
+                    <Button variant="ghost" size="sm" onClick={onClose} disabled={saving} className="text-gray-500">Zrušit</Button>
+                    <Button size="sm" onClick={() => onSave(note)} disabled={saving} className={accentClass}>
+                        {saving ? <><Loader2 size={13} className="animate-spin mr-1.5" />Ukládám…</> : confirmLabel}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+function DepositResolutionActions({ r, locked, onChanged }: { r: EventRegistrationAdminRow; locked: boolean; onChanged: () => void }) {
+    const [promiseDialogOpen, setPromiseDialogOpen] = useState(false);
+    const [wontPayDialogOpen, setWontPayDialogOpen] = useState(false);
+    const [pending, startPending] = useTransition();
+
+    if (r.depositAmount == null || r.depositId == null || r.depositStatus !== "pending" || locked) return null;
+
+    function handlePromiseChange(promise: boolean, note: string) {
+        startPending(async () => { await setDepositPromise(r.depositId!, promise, note); onChanged(); });
+    }
+    function handleWontPayChange(wontPay: boolean, note: string) {
+        startPending(async () => { await setDepositWontPay(r.depositId!, wontPay, note); onChanged(); });
+    }
+
+    if (r.depositPromise) {
+        return (
+            <Button size="sm" variant="outline" onClick={() => handlePromiseChange(false, "")} disabled={pending}
+                className="h-7 text-xs border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200">
+                {pending ? "…" : "odvolat příslib"}
+            </Button>
+        );
+    }
+    if (r.depositWontPay) {
+        return (
+            <Button size="sm" variant="outline" onClick={() => handleWontPayChange(false, "")} disabled={pending}
+                className="h-7 text-xs border-gray-300 text-gray-500 hover:bg-red-50 hover:text-red-600 hover:border-red-200">
+                {pending ? "…" : "odvolat"}
+            </Button>
+        );
+    }
+
+    return (
+        <>
+            <div className="flex items-center gap-1.5">
+                <Button size="sm" onClick={() => setPromiseDialogOpen(true)} disabled={pending}
+                    className="h-7 text-xs bg-purple-600 hover:bg-purple-700 text-white">
+                    Příslib
+                </Button>
+                <Button size="sm" variant="outline" onClick={() => setWontPayDialogOpen(true)} disabled={pending}
+                    className="h-7 text-xs border-slate-300 text-slate-600 hover:bg-slate-100">
+                    Nebude platit
+                </Button>
+            </div>
+            <DepositResolutionDialog
+                open={promiseDialogOpen}
+                title="Příslib zálohy"
+                description="Záloha zatím nebyla spárována, ale je na cestě. Příslib se zohlední při výpočtu doplatku jako zaplaceno."
+                currentNote={r.depositPromiseNote}
+                confirmLabel="Uložit příslib"
+                accentClass="bg-purple-600 hover:bg-purple-700 text-white"
+                onSave={note => { setPromiseDialogOpen(false); handlePromiseChange(true, note); }}
+                onClose={() => setPromiseDialogOpen(false)}
+                saving={false}
+            />
+            <DepositResolutionDialog
+                open={wontPayDialogOpen}
+                title="Záloha se nebude vybírat"
+                description="Záloha se nebude požadovat samostatně — celá částka přejde do doplatku."
+                currentNote={r.depositWontPayNote}
+                confirmLabel="Uložit rozhodnutí"
+                accentClass="bg-slate-700 hover:bg-slate-800 text-white"
+                onSave={note => { setWontPayDialogOpen(false); handleWontPayChange(true, note); }}
+                onClose={() => setWontPayDialogOpen(false)}
+                saving={false}
+            />
+        </>
+    );
+}
 
 // ── Audit log dialog ──────────────────────────────────────────────────────────
 
@@ -597,6 +794,191 @@ const REGISTRATION_FIELD_LABELS: Record<string, string> = {
     cancelledAt: "Zrušení přihlášky",
 };
 
+// ── Dialog: označit účastníka jako nejede ─────────────────────────────────────
+
+const FORFEIT_POLICY_LABELS: Record<string, string> = {
+    forfeit_to_expense: "Napočítat na náklad",
+    forfeit_split: "Rozdělit na náklady",
+    forfeit_to_club: "Propadne oddílu",
+};
+
+function CancelParticipantDialog({
+    open,
+    onOpenChange,
+    participantId,
+    participantName,
+    eventId,
+    depositAmount,
+    depositStatus,
+    personsCount,
+    onCancelled,
+}: {
+    open: boolean;
+    onOpenChange: (v: boolean) => void;
+    participantId: number;
+    participantName: string;
+    eventId: number;
+    depositAmount: number | null;
+    depositStatus: string | null;
+    personsCount: number;
+    onCancelled: () => void;
+}) {
+    const depositPerPerson = depositAmount != null && personsCount > 0
+        ? Math.round(depositAmount / personsCount * 100) / 100
+        : null;
+    const hasDeposit = depositPerPerson != null && depositPerPerson > 0 && (depositStatus === "matched" || depositStatus === "paid");
+
+    const [refundAmount, setRefundAmount] = useState("0");
+    const [policy, setPolicy] = useState<"forfeit_to_expense" | "forfeit_split" | "forfeit_to_club">("forfeit_to_expense");
+    const [expenseId, setExpenseId] = useState<number | null>(null);
+    const [expenses, setExpenses] = useState<{ id: number; purposeText: string | null; amount: number }[]>([]);
+    const [loadingExpenses, setLoadingExpenses] = useState(false);
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) return;
+        setRefundAmount("0");
+        setPolicy("forfeit_to_expense");
+        setExpenseId(null);
+        setError(null);
+        if (hasDeposit) {
+            setLoadingExpenses(true);
+            getEventFinalExpenses(eventId)
+                .then(list => { setExpenses(list); if (list.length > 0) setExpenseId(list[0].id); })
+                .finally(() => setLoadingExpenses(false));
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [open]);
+
+    async function handleSave() {
+        setSaving(true);
+        setError(null);
+        const data: CancelParticipantData = {};
+        if (hasDeposit) {
+            const parsed = parseFloat(refundAmount.replace(",", "."));
+            data.depositRefundAmount = isNaN(parsed) ? 0 : Math.min(parsed, depositPerPerson!);
+            data.depositForfeitPolicy = policy;
+            if (policy === "forfeit_to_expense") data.depositForfeitExpenseId = expenseId;
+        }
+        const res = await cancelParticipant(participantId, data);
+        setSaving(false);
+        if ("error" in res) { setError(res.error); return; }
+        onOpenChange(false);
+        onCancelled();
+    }
+
+    const refundParsed = parseFloat(refundAmount.replace(",", ".")) || 0;
+    const forfeitAmount = depositPerPerson != null ? Math.max(0, depositPerPerson - Math.min(refundParsed, depositPerPerson)) : 0;
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="sm:max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Označit jako nejede</DialogTitle>
+                </DialogHeader>
+
+                <div className="space-y-4 py-1">
+                    <p className="text-sm text-gray-700">
+                        <span className="font-medium">{participantName}</span> se akce nezúčastní.
+                        Přihláška zůstane aktivní pro ostatní účastníky.
+                    </p>
+
+                    {hasDeposit && (
+                        <div className="rounded-xl border border-amber-100 bg-amber-50/60 px-4 py-3 space-y-3">
+                            <div className="flex items-baseline justify-between">
+                                <p className="text-xs font-medium text-amber-800">Záloha za tohoto účastníka</p>
+                                <p className="text-sm font-semibold text-amber-900 tabular-nums">
+                                    {new Intl.NumberFormat("cs-CZ").format(depositPerPerson!)} Kč
+                                </p>
+                            </div>
+
+                            <div className="space-y-1">
+                                <label className="text-xs text-gray-600">Vrátit (Kč)</label>
+                                <Input
+                                    type="number"
+                                    min="0"
+                                    max={depositPerPerson!}
+                                    step="1"
+                                    value={refundAmount}
+                                    onChange={e => setRefundAmount(e.target.value)}
+                                    className="h-8 text-sm"
+                                />
+                                {forfeitAmount > 0 && (
+                                    <p className="text-xs text-gray-500">
+                                        Propadne: <span className="font-medium text-red-600">{new Intl.NumberFormat("cs-CZ").format(forfeitAmount)} Kč</span>
+                                    </p>
+                                )}
+                            </div>
+
+                            {forfeitAmount > 0 && (
+                                <div className="space-y-2">
+                                    <p className="text-xs text-gray-600">Co se stane s propadlou zálohou</p>
+                                    <div className="space-y-1.5">
+                                        <label className="flex items-center gap-2 cursor-pointer">
+                                            <input type="radio" name="forfeitPolicy" value="forfeit_to_expense"
+                                                checked={policy === "forfeit_to_expense"}
+                                                onChange={() => setPolicy("forfeit_to_expense")}
+                                                className="accent-[#327600]"
+                                            />
+                                            <span className="text-xs">Napočítat na náklad</span>
+                                        </label>
+                                        {policy === "forfeit_to_expense" && (
+                                            <div className="ml-5">
+                                                {loadingExpenses ? (
+                                                    <span className="text-xs text-gray-400">Načítám náklady…</span>
+                                                ) : expenses.length === 0 ? (
+                                                    <span className="text-xs text-amber-600">Žádné finální náklady na akci</span>
+                                                ) : (
+                                                    <select
+                                                        value={expenseId ?? ""}
+                                                        onChange={e => setExpenseId(Number(e.target.value))}
+                                                        className="w-full h-8 rounded-md border border-input bg-background px-2 text-xs shadow-sm"
+                                                    >
+                                                        {expenses.map(exp => (
+                                                            <option key={exp.id} value={exp.id}>
+                                                                {exp.purposeText ?? "Bez názvu"} – {new Intl.NumberFormat("cs-CZ").format(exp.amount)} Kč
+                                                            </option>
+                                                        ))}
+                                                    </select>
+                                                )}
+                                            </div>
+                                        )}
+                                        <label className="flex items-center gap-2 cursor-not-allowed opacity-50">
+                                            <input type="radio" disabled name="forfeitPolicy" value="forfeit_split" className="accent-[#327600]" />
+                                            <span className="text-xs">Rozdělit na náklady <span className="text-gray-400">(bude doplněno)</span></span>
+                                        </label>
+                                        <label className="flex items-center gap-2 cursor-not-allowed opacity-50">
+                                            <input type="radio" disabled name="forfeitPolicy" value="forfeit_to_club" className="accent-[#327600]" />
+                                            <span className="text-xs">Propadne oddílu <span className="text-gray-400">(bude doplněno)</span></span>
+                                        </label>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+
+                    {!hasDeposit && depositPerPerson == null && (
+                        <p className="text-xs text-gray-400">Přihláška nemá zálohu — žádné záložní nastavení není potřeba.</p>
+                    )}
+                    {!hasDeposit && depositPerPerson != null && (
+                        <p className="text-xs text-amber-600">Záloha zatím nebyla přijata (není spárována) — propadnutí bude bez efektu na vyúčtování.</p>
+                    )}
+
+                    {error && <p className="text-xs text-red-600">{error}</p>}
+                </div>
+
+                <DialogFooter>
+                    <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>Zrušit</Button>
+                    <Button size="sm" onClick={handleSave} disabled={saving || (policy === "forfeit_to_expense" && forfeitAmount > 0 && !expenseId)}>
+                        {saving ? <><Loader2 size={13} className="animate-spin mr-1" /> Ukládám…</> : "Potvrdit"}
+                    </Button>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
 function RegistrationHistory({ registrationId }: { registrationId: number }) {
     const [open, setOpen] = useState(false);
     const [log, setLog] = useState<RegistrationAuditEntry[] | null>(null);
@@ -631,11 +1013,16 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
                             <div className="flex items-center justify-between gap-2 text-gray-400 flex-wrap">
                                 <div className="flex items-center gap-1.5">
                                     <span className="font-medium text-gray-600">{entry.changedBy}</span>
-                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${entry.action === "cancel"
+                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${
+                                        entry.action === "cancel" || entry.action === "cancel_participant"
                                             ? "bg-red-50 text-red-600 border-red-200"
+                                            : entry.action === "restore" || entry.action === "restore_participant"
+                                            ? "bg-emerald-50 text-emerald-600 border-emerald-200"
                                             : "bg-amber-50 text-amber-600 border-amber-200"
                                         }`}>
-                                        {entry.action === "cancel" ? "zrušení" : "úprava"}
+                                        {entry.action === "cancel" || entry.action === "cancel_participant" ? "odhlášení"
+                                            : entry.action === "restore" || entry.action === "restore_participant" ? "obnovení"
+                                            : "úprava"}
                                     </span>
                                 </div>
                                 <span>{fmtDateTime(entry.changedAt)}</span>
@@ -658,6 +1045,97 @@ function RegistrationHistory({ registrationId }: { registrationId: number }) {
     );
 }
 
+// ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
+
+const AUDIT_ACTION_META: Record<string, { label: string; cls: string }> = {
+    create: { label: "Vznik přihlášky", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    update: { label: "Úprava údajů", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    add_participant: { label: "Přidán účastník", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    remove_participant: { label: "Odebrán účastník", cls: "bg-red-50 text-red-600 border-red-200" },
+    rename_participant: { label: "Přejmenování účastníka", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    link_member: { label: "Propojení člena", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    cancel: { label: "Zrušení přihlášky", cls: "bg-red-50 text-red-600 border-red-200" },
+    cancel_participant: { label: "Odhlášení účastníka", cls: "bg-red-50 text-red-600 border-red-200" },
+    restore: { label: "Obnovení přihlášky", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+    restore_participant: { label: "Obnovení účastníka", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+    lock_billing: { label: "Uzamčení vyúčtování", cls: "bg-slate-100 text-slate-600 border-slate-200" },
+    unlock_billing: { label: "Odemčení vyúčtování", cls: "bg-red-50 text-red-600 border-red-200" },
+    regenerate_prescriptions: { label: "Přegenerování předpisů", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+};
+
+const AUDIT_EXTRA_LABELS: Record<string, string> = {
+    billingStatus: "Stav vyúčtování", treasurerApproved: "Souhlas hospodáře", collecting: "Vybírá platby",
+    created: "Vytvořeno", updated: "Aktualizováno", participant: "Účastník", memberId: "Člen (ID)", fullName: "Jméno",
+    reason: "Důvod",
+};
+
+// Co se uživatel pokusil udělat (u zablokovaných pokusů, action="blocked", metadata.attemptedAction).
+const AUDIT_ATTEMPT_LABELS: Record<string, string> = {
+    create_registration: "vytvořit přihlášku", update_registration: "upravit přihlášku",
+    add_participant: "přidat účastníka", remove_participant: "odebrat účastníka",
+    rename_participant: "přejmenovat účastníka", link_member: "propojit člena",
+    cancel_participant: "odhlásit účastníka", restore_participant: "obnovit účastníka",
+    cancel_registration: "zrušit přihlášku", restore_registration: "obnovit přihlášku",
+    unlock_billing: "odemknout vyúčtování", lock_billing: "uzamknout vyúčtování",
+    regenerate_prescriptions: "přegenerovat předpisy", self_cancel_registration: "zrušit přihlášku online",
+};
+
+function EventAuditTab({ eventId }: { eventId: number }) {
+    const [log, setLog] = useState<EventFullAuditEntry[] | null>(null);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        getEventFullAuditLog(eventId)
+            .then(setLog)
+            .catch(e => setError(e instanceof Error ? e.message : "Nepodařilo se načíst audit"));
+    }, [eventId]);
+
+    if (error) return <p className="text-sm text-red-500 py-10 text-center">{error}</p>;
+    if (log === null) return <p className="text-sm text-gray-400 py-10 text-center">Načítám audit…</p>;
+    if (log.length === 0) return <p className="text-sm text-gray-400 py-10 text-center">Zatím žádné zaznamenané změny.</p>;
+
+    return (
+        <div className="space-y-3">
+            <p className="text-xs text-gray-400">
+                Položkový audit změn přihlášek a vyúčtování této akce ({log.length} záznamů, nejnovější nahoře). Viditelné jen hospodáři.
+            </p>
+            <div className="rounded-xl border border-gray-200 bg-white divide-y divide-gray-100">
+                {log.map(entry => {
+                    const isBlocked = entry.action === "blocked";
+                    const attempt = entry.metadata.attemptedAction;
+                    const meta = isBlocked
+                        ? { label: `✗ Zablokováno: ${attempt ? (AUDIT_ATTEMPT_LABELS[attempt] ?? attempt) : "akce"}`, cls: "bg-red-100 text-red-700 border-red-300" }
+                        : AUDIT_ACTION_META[entry.action] ?? { label: entry.action, cls: "bg-gray-50 text-gray-600 border-gray-200" };
+                    return (
+                        <div key={entry.id} className="px-4 py-2.5 text-xs space-y-1">
+                            <div className="flex items-center justify-between gap-2 flex-wrap">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${meta.cls}`}>{meta.label}</span>
+                                    {entry.scope === "registration"
+                                        ? <span className="text-gray-700 font-medium">{entry.registrationName}</span>
+                                        : <span className="text-gray-400 italic">celá akce</span>}
+                                    <span className="text-gray-400">· {entry.changedBy}</span>
+                                </div>
+                                <span className="text-gray-400 shrink-0">{fmtDateTime(entry.changedAt)}</span>
+                            </div>
+                            {Object.entries(entry.changes).map(([field, diff]) => (
+                                <div key={field} className="flex gap-1 flex-wrap text-gray-500 pl-0.5">
+                                    <span className="text-gray-400">{REGISTRATION_FIELD_LABELS[field] ?? AUDIT_EXTRA_LABELS[field] ?? field}:</span>
+                                    {diff.old !== null && <span className="line-through text-red-400">{diff.old}</span>}
+                                    {diff.old !== null && diff.new !== null && <span className="text-gray-300">→</span>}
+                                    {diff.new !== null
+                                        ? <span className="text-green-600">{diff.new}</span>
+                                        : <span className="text-gray-400">(odstraněno)</span>}
+                                </div>
+                            ))}
+                        </div>
+                    );
+                })}
+            </div>
+        </div>
+    );
+}
+
 // ── Karta přihlášky ───────────────────────────────────────────────────────────
 
 function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventName: string): string {
@@ -675,18 +1153,33 @@ function buildPayliboUrl(amount: number, vs: string, bankAccount: string, eventN
     );
 }
 
-function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string }) {
+function RegistrationCard({ r, onRefresh, isPrescribed, eventName, eventId }: { r: EventRegistrationAdminRow; onRefresh: () => void; isPrescribed: boolean; eventName: string; eventId: number }) {
     const [removingId, setRemovingId] = useState<number | null>(null);
+    const [restoringParticipantId, setRestoringParticipantId] = useState<number | null>(null);
     const [cancelling, setCancelling] = useState(false);
     const [restoring, setRestoring] = useState(false);
     const [addParticipantOpen, setAddParticipantOpen] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
-    const [linkTarget, setLinkTarget] = useState<(SettlementParticipant & { registrationId: number }) | null>(null);
+    const [linkTarget, setLinkTarget] = useState<Pick<SettlementParticipant, "id" | "fullName" | "memberId" | "memberName"> | null>(null);
     const [showQr, setShowQr] = useState(false);
     const [sendingEmail, setSendingEmail] = useState(false);
     const [emailFeedback, setEmailFeedback] = useState<string | null>(null);
+    const [cancelParticipantTarget, setCancelParticipantTarget] = useState<{ id: number; fullName: string } | null>(null);
+    const [expanded, setExpanded] = useState(false);
 
-    const hasPaymentDetails = !!r.paymentVariableSymbol && r.paymentAmount > 0 && !!r.paymentAccount;
+    // Co se momentálně platí — záloha v době vybírání záloh, doplatek v době vybírání doplatků.
+    // Vybírání doplatků začíná vygenerováním předpisů (isPrescribed), nečeká se na odeslání e-mailu.
+    // Pokud aktuální fáze nemá co vybírat (zálohu už vyřešili / doplatek je zaplacený), platební
+    // údaje se nezobrazují vůbec — nejsou tam k ničemu.
+    const activePayment = isPrescribed
+        ? (r.settlementStatus === "pending" && r.settlementAmount != null && r.settlementAmount > 0
+            ? { kind: "doplatek" as const, amount: r.settlementAmount, codeLabel: r.settlementCodeLabel }
+            : null)
+        : (r.depositStatus === "pending" && !r.depositPromise && !r.depositWontPay && r.depositAmount != null
+            ? { kind: "záloha" as const, amount: r.depositAmount, codeLabel: r.depositCodeLabel }
+            : null);
+    const hasPaymentDetails = activePayment != null && !!r.paymentVariableSymbol && !!r.paymentAccount;
+    const lifecycle = computeRegistrationLifecycle(r, isPrescribed);
 
     async function handleSendEmail() {
         setSendingEmail(true);
@@ -715,6 +1208,10 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
             participantOrder: i + 1,
             memberId: undefined as number | null | undefined,
             memberName: undefined as string | null | undefined,
+            cancelledAt: null as Date | null,
+            depositRefundAmount: null as number | null,
+            depositForfeitPolicy: null as string | null,
+            depositForfeitExpenseId: null as number | null,
         }));
 
     async function handleRemove(participantId: number, name: string) {
@@ -724,6 +1221,15 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
         if ("error" in res) alert(res.error);
         else onRefresh();
         setRemovingId(null);
+    }
+
+    async function handleRestoreParticipant(participantId: number, name: string) {
+        if (!confirm(`Obnovit účastníka „${name}" (zrušit stav Nejede)?`)) return;
+        setRestoringParticipantId(participantId);
+        const res = await restoreParticipant(participantId);
+        if ("error" in res) alert(res.error);
+        else onRefresh();
+        setRestoringParticipantId(null);
     }
 
     async function handleRestore() {
@@ -746,7 +1252,39 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
 
     return (
         <div className={`rounded-2xl border shadow-sm overflow-hidden ${isCancelled ? "border-red-100 bg-red-50/30 opacity-70" : "border-slate-200 bg-white"}`}>
-            <div className={`h-1 bg-gradient-to-r ${isCancelled ? "from-rose-300 via-rose-400 to-rose-500" : (PAYMENT_STATUS_BAR_COLORS[r.paymentStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400")}`} />
+            {/* ── Sbalený header — vždy viditelný, klik rozbalí/sbalí zbytek karty ── */}
+            <button type="button" onClick={() => setExpanded(v => !v)}
+                className="w-full flex items-center gap-3 px-4 sm:px-5 py-3 text-left hover:bg-slate-50/60 transition-colors">
+                {expanded ? <ChevronUp size={16} className="text-slate-400 shrink-0" /> : <ChevronDown size={16} className="text-slate-400 shrink-0" />}
+                <span className="font-semibold text-slate-900 text-sm shrink-0">{r.firstName} {r.lastName}</span>
+                <span className="text-xs text-slate-500 shrink-0 tabular-nums">
+                    {r.personsCount} {r.personsCount === 1 ? "osoba" : r.personsCount < 5 ? "osoby" : "osob"}
+                </span>
+                <span className="flex-1" />
+                {isCancelled ? (
+                    <span className="text-[11px] font-semibold px-2 py-0.5 rounded-full border border-red-200 bg-red-50 text-red-700 shrink-0">
+                        Zrušeno
+                    </span>
+                ) : (
+                    <div className="flex items-center gap-3 flex-wrap justify-end">
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wide">záloha</span>
+                            <DepositStatusInline r={r} />
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                            <span className="text-[10px] text-slate-400 uppercase tracking-wide">doplatek</span>
+                            {r.settlementAmount != null && r.settlementAmount > 0 && (
+                                <span className="text-sm font-semibold text-slate-700 tabular-nums">{fmtCzk(r.settlementAmount)}</span>
+                            )}
+                            <LifecycleBadge lifecycle={lifecycle} />
+                        </div>
+                    </div>
+                )}
+            </button>
+
+            {expanded && (
+            <>
+            <div className={`h-1 bg-gradient-to-r ${isCancelled ? "from-rose-300 via-rose-400 to-rose-500" : r.depositAmount == null ? "from-slate-200 via-slate-300 to-slate-400" : (PAYMENT_STATUS_BAR_COLORS[r.depositStatus ?? "pending"] ?? "from-slate-200 via-slate-300 to-slate-400")}`} />
 
             <div className="px-4 sm:px-5 py-3.5 border-b border-slate-100 space-y-3">
                 <div className="flex items-start justify-between gap-4 flex-wrap">
@@ -772,12 +1310,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                                         banka spárována
                                     </span>
                                 )}
-                                <Badge className={`${PAYMENT_STATUS_COLORS[r.paymentStatus ?? "pending"] ?? "bg-gray-50 text-gray-500"} border-0 text-[11px] font-medium`}>
-                                    {r.paymentStatus ? (PAYMENT_STATUS_LABELS[r.paymentStatus] ?? r.paymentStatus) : "Bez předpisu"}
-                                </Badge>
-                                <span className="text-sm font-semibold text-slate-700 tabular-nums">
-                                    {new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč
-                                </span>
+                                <DepositStatusInline r={r} />
                             </>
                         )}
                     </div>
@@ -786,8 +1319,8 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                 {!isCancelled && (
                     <div className="grid gap-2 sm:grid-cols-3 text-xs">
                         <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
-                            <p className="text-slate-400">Předpis</p>
-                            <p className="font-medium text-slate-700">{r.paymentCodeLabel}</p>
+                            <p className="text-slate-400">Předpis{activePayment && ` (${activePayment.kind})`}</p>
+                            <p className="font-medium text-slate-700">{activePayment?.codeLabel ?? "—"}</p>
                         </div>
                         <div className="rounded-lg border border-slate-100 bg-slate-50 px-2.5 py-1.5">
                             <p className="text-slate-400">Variabilní symbol</p>
@@ -797,6 +1330,20 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                             <p className="text-slate-400">Počet osob</p>
                             <p className="font-medium text-slate-700 tabular-nums">{r.personsCount}</p>
                         </div>
+                    </div>
+                )}
+
+                {!isCancelled && !isPrescribed && r.depositAmount != null && r.depositStatus === "pending" && (
+                    <div className={`rounded-lg border px-3 py-2.5 flex items-center justify-between gap-3 flex-wrap ${
+                        r.depositPromise || r.depositWontPay
+                            ? "border-slate-200 bg-slate-50"
+                            : "border-red-300 bg-red-50 ring-1 ring-red-200"
+                    }`}>
+                        <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-xs font-semibold text-slate-600">Záloha:</span>
+                            <DepositStatusInline r={r} />
+                        </div>
+                        <DepositResolutionActions r={r} locked={isPrescribed} onChanged={onRefresh} />
                     </div>
                 )}
 
@@ -822,7 +1369,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                             className="w-full flex items-center justify-between px-3 py-2 text-xs text-slate-600 hover:bg-slate-50 transition-colors rounded-lg"
                         >
                             <span className="flex items-center gap-1.5 font-medium">
-                                <QrCode size={12} /> Platební údaje
+                                <QrCode size={12} /> Platební údaje <span className="text-slate-400 font-normal">({activePayment!.kind})</span>
                             </span>
                             {showQr ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
                         </button>
@@ -831,7 +1378,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                                 <div className="flex flex-col sm:flex-row gap-4 items-start pt-3">
                                     {/* eslint-disable-next-line @next/next/no-img-element */}
                                     <img
-                                        src={buildPayliboUrl(r.paymentAmount, r.paymentVariableSymbol!, r.paymentAccount!, eventName)}
+                                        src={buildPayliboUrl(activePayment!.amount, r.paymentVariableSymbol!, r.paymentAccount!, eventName)}
                                         alt="QR kód pro platbu"
                                         width={140}
                                         height={140}
@@ -848,7 +1395,7 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                                         </div>
                                         <div>
                                             <p className="text-slate-400">Částka</p>
-                                            <p className="font-semibold text-[#327600]">{new Intl.NumberFormat("cs-CZ").format(r.paymentAmount)} Kč</p>
+                                            <p className="font-semibold text-[#327600]">{new Intl.NumberFormat("cs-CZ").format(activePayment!.amount)} Kč</p>
                                         </div>
                                         {isPrescribed && (
                                             <>
@@ -876,45 +1423,111 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                 )}
 
                 <div className="space-y-2">
-                    <p className="text-xs font-medium text-slate-500">Účastníci</p>
-                    <div className="flex flex-wrap gap-1.5">
-                        {participants.map(p => (
-                            <div key={p.participantOrder}
-                                className="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 pl-2 pr-1.5 py-1">
-                                <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
-                                <span className="text-xs text-slate-700">{p.fullName}</span>
-                                {p.isPrimary && (
-                                    <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
-                                        kontakt
-                                    </span>
-                                )}
-                                {!isPrescribed && (p.memberId ? (
-                                    <button
-                                        onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, isPrimary: p.isPrimary, memberId: p.memberId ?? null, personId: null, memberName: p.memberName ?? null, registrationId: r.registrationId })}
-                                        title={`Člen: ${p.memberName}`}
-                                        className="text-emerald-500 hover:text-emerald-700 transition-colors">
-                                        <UserCheck size={11} />
-                                    </button>
-                                ) : p.id ? (
-                                    <button
-                                        onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, isPrimary: p.isPrimary, memberId: null, personId: null, memberName: null, registrationId: r.registrationId })}
-                                        title="Spárovat s členem OVT"
-                                        className="text-gray-300 hover:text-emerald-500 transition-colors">
-                                        <UserCheck size={11} />
-                                    </button>
-                                ) : null)}
-                                {!isCancelled && !isPrescribed && p.id && (
-                                    <button
-                                        onClick={() => handleRemove(p.id!, p.fullName)}
-                                        disabled={removingId === p.id}
-                                        title="Odebrat účastníka"
-                                        className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors ml-0.5">
-                                        <Trash2 size={10} />
-                                    </button>
-                                )}
-                            </div>
-                        ))}
+                    <div className="flex items-center gap-2">
+                        <p className="text-xs font-medium text-slate-500">Účastníci</p>
+                        {!isCancelled && (() => {
+                            const cancelledCount = participants.filter(p => p.cancelledAt).length;
+                            return cancelledCount > 0 ? (
+                                <span className="text-[10px] font-semibold px-1.5 py-0.5 rounded-full border border-orange-200 bg-orange-50 text-orange-700">
+                                    {cancelledCount} {cancelledCount === 1 ? "nejede" : "nejedou"}
+                                </span>
+                            ) : null;
+                        })()}
                     </div>
+                    <div className="flex flex-wrap gap-1.5">
+                        {participants.map(p => {
+                            const isCancelledParticipant = !!p.cancelledAt;
+                            return (
+                                <div key={p.participantOrder}
+                                    className={`inline-flex items-center gap-1.5 rounded-full border pl-2 pr-1.5 py-1 ${isCancelledParticipant ? "border-orange-200 bg-orange-50/60" : "border-slate-200 bg-slate-50"}`}>
+                                    <span className="text-[11px] text-slate-400 tabular-nums">{p.participantOrder}.</span>
+                                    <span className={`text-xs ${isCancelledParticipant ? "line-through text-slate-400" : "text-slate-700"}`}>{p.fullName}</span>
+                                    {isCancelledParticipant && (
+                                        <>
+                                            <span className="text-[9px] font-semibold uppercase tracking-wide text-orange-600">nejede</span>
+                                            {!isCancelled && !isPrescribed && p.id && (
+                                                <button
+                                                    onClick={() => handleRestoreParticipant(p.id!, p.fullName)}
+                                                    disabled={restoringParticipantId === p.id}
+                                                    title="Zrušit stav Nejede"
+                                                    className="text-orange-300 hover:text-emerald-500 disabled:opacity-40 transition-colors">
+                                                    <RotateCcw size={10} />
+                                                </button>
+                                            )}
+                                        </>
+                                    )}
+                                    {!isCancelledParticipant && p.isPrimary && (
+                                        <span className="text-[10px] font-medium uppercase tracking-wide text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-full">
+                                            kontakt
+                                        </span>
+                                    )}
+                                    {!isCancelledParticipant && !isPrescribed && (p.memberId ? (
+                                        <button
+                                            onClick={() => p.id && setLinkTarget({ id: p.id, fullName: p.fullName, memberId: p.memberId ?? null, memberName: p.memberName ?? null })}
+                                            title={`Člen: ${p.memberName}`}
+                                            className="text-emerald-500 hover:text-emerald-700 transition-colors">
+                                            <UserCheck size={11} />
+                                        </button>
+                                    ) : p.id ? (
+                                        <button
+                                            onClick={() => setLinkTarget({ id: p.id!, fullName: p.fullName, memberId: null, memberName: null })}
+                                            title="Spárovat s členem OVT"
+                                            className="text-gray-300 hover:text-emerald-500 transition-colors">
+                                            <UserCheck size={11} />
+                                        </button>
+                                    ) : null)}
+                                    {!isCancelled && !isCancelledParticipant && !isPrescribed && p.id && (
+                                        <>
+                                            <button
+                                                onClick={() => setCancelParticipantTarget({ id: p.id!, fullName: p.fullName })}
+                                                title="Označit jako nejede"
+                                                className="text-gray-300 hover:text-orange-500 transition-colors">
+                                                <UserX size={10} />
+                                            </button>
+                                            <button
+                                                onClick={() => handleRemove(p.id!, p.fullName)}
+                                                disabled={removingId === p.id}
+                                                title="Odebrat účastníka"
+                                                className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors ml-0.5">
+                                                <Trash2 size={10} />
+                                            </button>
+                                        </>
+                                    )}
+                                </div>
+                            );
+                        })}
+                    </div>
+                    {/* Zobrazit forfeit info pro odhlášené účastníky */}
+                    {participants.some(p => p.cancelledAt) && (
+                        <div className="space-y-1 mt-1">
+                            {participants.filter(p => p.cancelledAt).map(p => {
+                                const depositPerPerson = r.depositAmount != null && r.personsCount > 0
+                                    ? r.depositAmount / r.personsCount : null;
+                                const forfeit = depositPerPerson != null && p.depositRefundAmount != null
+                                    ? depositPerPerson - p.depositRefundAmount
+                                    : depositPerPerson;
+                                return (
+                                    <div key={p.participantOrder} className="text-[11px] text-gray-500 flex items-center gap-1.5 flex-wrap">
+                                        <span className="text-orange-500">↳</span>
+                                        <span className="font-medium">{p.fullName}:</span>
+                                        {p.depositForfeitPolicy ? (
+                                            <>
+                                                {p.depositRefundAmount != null && p.depositRefundAmount > 0 && (
+                                                    <span>vráceno {new Intl.NumberFormat("cs-CZ").format(p.depositRefundAmount)} Kč,</span>
+                                                )}
+                                                {forfeit != null && forfeit > 0 && (
+                                                    <span>propadlo {new Intl.NumberFormat("cs-CZ").format(Math.round(forfeit))} Kč</span>
+                                                )}
+                                                <span className="text-gray-400">({FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy})</span>
+                                            </>
+                                        ) : (
+                                            <span className="text-gray-400">záloha nevyřešena</span>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
                     {!isCancelled && !isPrescribed && (
                         <button onClick={() => setAddParticipantOpen(true)}
                             className="flex items-center gap-1 text-xs text-gray-400 hover:text-emerald-600 transition-colors mt-1">
@@ -953,7 +1566,22 @@ function RegistrationCard({ r, onRefresh, isPrescribed, eventName }: { r: EventR
                 )}
             </div>
 
+            {cancelParticipantTarget && (
+                <CancelParticipantDialog
+                    open={!!cancelParticipantTarget}
+                    onOpenChange={v => { if (!v) setCancelParticipantTarget(null); }}
+                    participantId={cancelParticipantTarget.id}
+                    participantName={cancelParticipantTarget.fullName}
+                    eventId={eventId}
+                    depositAmount={r.depositAmount}
+                    depositStatus={r.depositStatus}
+                    personsCount={r.personsCount}
+                    onCancelled={onRefresh}
+                />
+            )}
             <RegistrationHistory registrationId={r.registrationId} />
+            </>
+            )}
 
             <EditRegistrationDialog
                 registrationId={r.registrationId}
@@ -990,6 +1618,7 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [addOpen, setAddOpen] = useState(false);
+    const [showCancelled, setShowCancelled] = useState(false);
 
     function load() {
         setLoading(true);
@@ -1020,15 +1649,31 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
         </div>
     );
 
+    const isReceived = (status: EventPaymentPrescriptionStatus | null) => status === "matched" || status === "paid";
+
     const activeRows = rows.filter(r => !r.cancelledAt);
     const cancelledRows = rows.filter(r => !!r.cancelledAt);
-    const totalPersons = activeRows.reduce((s, r) => s + r.personsCount, 0);
-    const cancelledPersons = cancelledRows.reduce((s, r) => s + r.personsCount, 0);
-    const totalAmount = activeRows.reduce((s, r) => s + r.paymentAmount, 0);
-    const paidCount = activeRows.filter(r => r.paymentStatus === "paid").length;
-    const unresolvedCount = activeRows.filter(r => r.paymentStatus === "pending" || r.paymentStatus === "matched").length;
+    // Záloha + doplatek zvlášť (ne COALESCE paymentAmount) — u admin přihlášky bez zálohy by
+    // COALESCE sečetl celý doplatek místo zálohy a smíchal tak dvě různé veličiny do jednoho čísla.
+    const totalAmount = activeRows.reduce((s, r) => s + (r.depositAmount ?? 0) + (r.settlementAmount ?? 0), 0);
 
-    const summaryCards = [
+    // Účastníci aktivních přihlášek: kdo jede vs. kdo se z přihlášky individuálně odhlásil ("nejede")
+    const goingPersons = activeRows.reduce((s, r) => s + (r.personsCount - r.participants.filter(p => p.cancelledAt).length), 0);
+    const notGoingPersons = activeRows.reduce((s, r) => s + r.participants.filter(p => p.cancelledAt).length, 0);
+
+    const depositRows = activeRows.filter(r => r.depositAmount != null);
+    const depositPaid = depositRows.filter(r => isReceived(r.depositStatus)).length;
+    // Doplatky (settlement) mají smysl zobrazovat až po vygenerování předpisů — předtím můžou
+    // existovat jen zastaralé řádky (admin přihláška bez zálohy, nebo dřívější odemčený billing).
+    const settlementRows = isPrescribed ? activeRows.filter(r => r.settlementAmount != null) : [];
+    const settlementPaid = settlementRows.filter(r => isReceived(r.settlementStatus)).length;
+
+    // Čeká na vyřešení = jen zálohy bez rozhodnutí (ne zaplaceno, ne příslib, ne "nebude platit").
+    const unresolvedCount = depositRows.filter(r =>
+        r.depositStatus === "pending" && !r.depositPromise && !r.depositWontPay
+    ).length;
+
+    const summaryCards: { label: string; value: string | number; suffix: string; tone: string; subtext?: string }[] = [
         {
             label: "Přihlášky",
             value: activeRows.length,
@@ -1038,16 +1683,22 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
         },
         {
             label: "Účastníci",
-            value: totalPersons,
-            suffix: totalPersons === 1 ? "osoba" : totalPersons < 5 ? "osoby" : "osob",
+            value: goingPersons,
+            suffix: goingPersons === 1 ? "jede" : "jedou",
             tone: "text-blue-700 bg-blue-50/80 border-blue-100",
-            subtext: cancelledPersons > 0 ? `${cancelledPersons} zrušeno` : undefined,
+            subtext: notGoingPersons > 0 ? `+${notGoingPersons} ${notGoingPersons === 1 ? "nejede" : "nejedou"} (zaplaceno)` : undefined,
         },
         {
-            label: "Zaplaceno",
-            value: paidCount,
-            suffix: paidCount === 1 ? "platba" : paidCount < 5 ? "platby" : "plateb",
+            label: "Zálohy",
+            value: `${depositPaid}/${depositRows.length}`,
+            suffix: "zaplaceno",
             tone: "text-emerald-700 bg-emerald-50/90 border-emerald-100",
+        },
+        {
+            label: "Doplatky",
+            value: settlementRows.length > 0 ? `${settlementPaid}/${settlementRows.length}` : "—",
+            suffix: settlementRows.length > 0 ? "zaplaceno" : "nevypsány",
+            tone: settlementRows.length > 0 ? "text-sky-700 bg-sky-50/90 border-sky-100" : "text-slate-400 bg-slate-50/80 border-slate-200",
         },
         {
             label: "Čeká řešení",
@@ -1077,7 +1728,7 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
                     </p>
                 </div>
 
-                <div className="mt-4 grid gap-2.5 sm:grid-cols-2 lg:grid-cols-4">
+                <div className="mt-4 grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-5">
                     {summaryCards.map(card => (
                         <div key={card.label} className={`rounded-xl border px-3 py-2.5 ${card.tone}`}>
                             <p className="text-[11px] uppercase tracking-wide opacity-80">{card.label}</p>
@@ -1095,10 +1746,32 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
             <AddRegistrationDialog eventId={eventId} open={addOpen} onClose={() => setAddOpen(false)} onAdded={load} />
 
             <div className="space-y-3">
-                {rows.map(r => (
-                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} />
+                {activeRows.map(r => (
+                    <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} eventId={eventId} />
                 ))}
             </div>
+
+            {cancelledRows.length > 0 && (
+                <div className="space-y-3">
+                    <button
+                        type="button"
+                        onClick={() => setShowCancelled(prev => !prev)}
+                        className="flex w-full items-center justify-between rounded-xl border border-red-100 bg-red-50/40 px-3.5 py-2.5 text-sm text-red-700 hover:bg-red-50/70 transition-colors"
+                    >
+                        <span className="font-medium">
+                            Zrušené přihlášky ({cancelledRows.length})
+                        </span>
+                        {showCancelled ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                    </button>
+                    {showCancelled && (
+                        <div className="space-y-3">
+                            {cancelledRows.map(r => (
+                                <RegistrationCard key={r.registrationId} r={r} onRefresh={load} isPrescribed={isPrescribed} eventName={eventName} eventId={eventId} />
+                            ))}
+                        </div>
+                    )}
+                </div>
+            )}
         </div>
     );
 }
@@ -1185,7 +1858,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
 
     return (
         <>
-            <div className="max-w-2xl mx-auto">
+            <div>
 
                 {/* ── Page header ── */}
                 <div className="flex items-center gap-3 mb-5">
@@ -1251,7 +1924,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                 {/* ── Tabs ── */}
                 <Tabs value={activeTab} onValueChange={tab => { setActiveTab(tab); sessionStorage.setItem(`event-${event.id}-tab`, tab); }} className="gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
-                        <TabsList className="mb-0 !grid w-full !h-auto grid-cols-5 gap-1.5 bg-transparent p-0">
+                        <TabsList className={`mb-0 !grid w-full !h-auto ${isTreasurer ? "grid-cols-6" : "grid-cols-5"} gap-1.5 bg-transparent p-0`}>
                             <TabsTrigger value="detail"
                                 className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
                                 <span className="inline-flex items-center gap-1.5">
@@ -1287,11 +1960,20 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                     <span className="font-semibold">Platby</span>
                                 </span>
                             </TabsTrigger>
+                            {isTreasurer && (
+                                <TabsTrigger value="audit"
+                                    className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <History size={14} />
+                                        <span className="font-semibold">Audit</span>
+                                    </span>
+                                </TabsTrigger>
+                            )}
                         </TabsList>
                     </div>
 
                     {/* ── Tab: Detail ── */}
-                    <TabsContent value="detail" className="space-y-4 mt-0">
+                    <TabsContent value="detail" className="space-y-4 mt-0 max-w-2xl">
                         <div className="rounded-xl border px-4">
                             <InlineField label="Název" fieldId="name" type="text"
                                 value={event.name} placeholder="Název akce"
@@ -1390,6 +2072,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                             leaderName={event.leaderName}
                             leaderCskNumber={event.leaderCskNumber}
                             billingStatus={event.billingStatus}
+                            lockForReimbursement={event.lockForReimbursement}
                             treasurerApproved={event.treasurerApproved}
                             isTreasurer={isTreasurer}
                         />
@@ -1409,6 +2092,13 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                             onBillingStatusChange={setBillingStatus}
                         />
                     </TabsContent>
+
+                    {/* ── Tab: Audit (jen hospodář) ── */}
+                    {isTreasurer && (
+                        <TabsContent value="audit" className="mt-0">
+                            <EventAuditTab eventId={event.id} />
+                        </TabsContent>
+                    )}
                 </Tabs>
 
             </div>

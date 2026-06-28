@@ -12,6 +12,7 @@ import type { EventExpenseRow } from "@/lib/actions/event-expenses";
 import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 import { setTreasurerApproval, getVyuctovaniActivityLog, type VyuctovaniActivity } from "@/lib/actions/events";
+import { lockForReimbursement, unlockForReimbursement } from "@/lib/actions/event-settlement";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
 import { Mail, Check } from "lucide-react";
@@ -755,6 +756,7 @@ function AddExpenseForm({
     const [reimbursementPersonId, setReimbursementPersonId] = useState("");
     const [isPaid, setIsPaid] = useState(true);
     const [invoicePayeeName, setInvoicePayeeName] = useState("");
+    const [showInvoiceDialog, setShowInvoiceDialog] = useState(false);
     const fileInputRef   = useRef<HTMLInputElement>(null);
     const cameraInputRef = useRef<HTMLInputElement>(null);
     const purposeRef     = useRef<HTMLInputElement>(null);
@@ -1035,35 +1037,236 @@ function AddExpenseForm({
 
     // Idle — upload area
     return (
-        <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-6 text-center space-y-3">
-            <div className="flex justify-center">
-                <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
-                    <Upload size={18} className="text-gray-400" />
+        <>
+            <div className="rounded-xl border-2 border-dashed border-gray-200 bg-white p-6 text-center space-y-3">
+                <div className="flex justify-center">
+                    <div className="w-10 h-10 rounded-full bg-gray-100 flex items-center justify-center">
+                        <Upload size={18} className="text-gray-400" />
+                    </div>
                 </div>
+                <div>
+                    <p className="text-sm font-medium text-gray-700">Nahrát doklad</p>
+                    <p className="text-xs text-gray-400 mt-0.5">PDF nebo fotka — Gemini automaticky vyčte částku a kategorii</p>
+                </div>
+                <div className="flex items-center justify-center gap-2 flex-wrap">
+                    <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md bg-[#327600] text-white text-sm font-medium hover:bg-[#2a6400] transition-colors">
+                        <Upload size={14} />
+                        <span>Vybrat soubor</span>
+                        <input ref={fileInputRef} type="file" accept="image/*,application/pdf"
+                            className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
+                    </label>
+                    <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors sm:hidden">
+                        <ImageIcon size={14} />
+                        <span>Vyfoť</span>
+                        <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
+                            className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
+                    </label>
+                </div>
+                {error && <p className="text-xs text-red-500">{error}</p>}
+                <p className="text-xs text-gray-400">
+                    Fotky jsou automaticky komprimovány (max {MAX_PX}px, JPEG {Math.round(JPEG_QUALITY * 100)}%)
+                </p>
+                <button type="button" onClick={() => setShowInvoiceDialog(true)}
+                    className="text-xs text-gray-400 hover:text-gray-600 underline underline-offset-2 transition-colors">
+                    Přidat fakturu (bez dokladu)
+                </button>
             </div>
-            <div>
-                <p className="text-sm font-medium text-gray-700">Nahrát doklad</p>
-                <p className="text-xs text-gray-400 mt-0.5">PDF nebo fotka — Gemini automaticky vyčte částku a kategorii</p>
-            </div>
-            <div className="flex items-center justify-center gap-2 flex-wrap">
-                <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md bg-[#327600] text-white text-sm font-medium hover:bg-[#2a6400] transition-colors">
-                    <Upload size={14} />
-                    <span>Vybrat soubor</span>
-                    <input ref={fileInputRef} type="file" accept="image/*,application/pdf"
-                        className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
-                </label>
-                <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors sm:hidden">
-                    <ImageIcon size={14} />
-                    <span>Vyfoť</span>
-                    <input ref={cameraInputRef} type="file" accept="image/*" capture="environment"
-                        className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
-                </label>
-            </div>
-            {error && <p className="text-xs text-red-500">{error}</p>}
-            <p className="text-xs text-gray-400">
-                Fotky jsou automaticky komprimovány (max {MAX_PX}px, JPEG {Math.round(JPEG_QUALITY * 100)}%)
-            </p>
-        </div>
+            <AddInvoiceWithoutDocDialog
+                eventId={eventId}
+                open={showInvoiceDialog}
+                onOpenChange={setShowInvoiceDialog}
+                onAdded={onAdded}
+            />
+        </>
+    );
+}
+
+// ── Add invoice without document dialog ──────────────────────────────────────
+
+function AddInvoiceWithoutDocDialog({
+    eventId,
+    open,
+    onOpenChange,
+    onAdded,
+}: {
+    eventId: number;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onAdded: () => void;
+}) {
+    const [amount, setAmount] = useState("");
+    const [category, setCategory] = useState<ExpenseCategory>("501/004");
+    const [purposeText, setPurposeText] = useState("");
+    const [invoicePayeeName, setInvoicePayeeName] = useState("");
+    const [saving, setSaving] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    useEffect(() => {
+        if (!open) { setAmount(""); setCategory("501/004"); setPurposeText(""); setInvoicePayeeName(""); setError(null); }
+    }, [open]);
+
+    async function handleSave() {
+        const amountNum = parseFloat(amount.replace(",", "."));
+        if (isNaN(amountNum) || amountNum <= 0) { setError("Zadej platnou částku"); return; }
+        if (!purposeText.trim()) { setError("Zadej účel / popis"); return; }
+
+        setSaving(true); setError(null);
+        try {
+            const fd = new FormData();
+            fd.append("status", "final");
+            fd.append("amount", String(amountNum));
+            fd.append("purposeText", purposeText.trim());
+            fd.append("purposeCategory", category);
+            fd.append("isPaid", "false");
+            if (invoicePayeeName.trim()) fd.append("invoicePayeeName", invoicePayeeName.trim());
+
+            const res = await fetch(`/api/events/${eventId}/expenses`, { method: "POST", body: fd });
+            const data = await res.json() as { error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Chyba uložení");
+
+            onOpenChange(false);
+            onAdded();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Chyba uložení");
+        } finally {
+            setSaving(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>Přidat fakturu bez dokladu</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 pt-1">
+                    <div className="grid grid-cols-2 gap-3">
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Částka (Kč) *</label>
+                            <input type="text" inputMode="decimal"
+                                value={amount} onChange={e => setAmount(e.target.value)}
+                                placeholder="8 000"
+                                disabled={saving}
+                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                            />
+                        </div>
+                        <div>
+                            <label className="text-xs text-gray-500 mb-1 block">Účetní kód *</label>
+                            <select value={category} onChange={e => setCategory(e.target.value as ExpenseCategory)}
+                                disabled={saving}
+                                className="w-full h-9 rounded-md border border-input bg-white px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
+                                {CATEGORIES.map(c => (
+                                    <option key={c} value={c}>{c} · {EXPENSE_CATEGORY_LABELS[c]}</option>
+                                ))}
+                            </select>
+                        </div>
+                    </div>
+                    <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Účel / popis *</label>
+                        <input type="text"
+                            placeholder="Např. doprava autobusem Praha–Brno"
+                            value={purposeText} onChange={e => setPurposeText(e.target.value)}
+                            onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); void handleSave(); } }}
+                            disabled={saving}
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+                    <div>
+                        <label className="text-xs text-gray-500 mb-1 block">Příjemce faktury</label>
+                        <input type="text"
+                            placeholder="Název firmy nebo osoby"
+                            value={invoicePayeeName} onChange={e => setInvoicePayeeName(e.target.value)}
+                            disabled={saving}
+                            className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                        />
+                    </div>
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+                    <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={saving}>
+                            Zrušit
+                        </Button>
+                        <Button size="sm" onClick={() => void handleSave()} disabled={saving}
+                            className="bg-[#327600] hover:bg-[#2a6400] text-white">
+                            {saving ? "Ukládám…" : "Přidat fakturu"}
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Attach file dialog ────────────────────────────────────────────────────────
+
+function AttachFileDialog({
+    expense,
+    eventId,
+    open,
+    onOpenChange,
+    onUpdated,
+}: {
+    expense: EventExpenseRow;
+    eventId: number;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onUpdated: () => void;
+}) {
+    const [uploading, setUploading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+    const fileInputRef = useRef<HTMLInputElement>(null);
+
+    useEffect(() => {
+        if (!open) { setError(null); if (fileInputRef.current) fileInputRef.current.value = ""; }
+    }, [open]);
+
+    async function handleFile(file: File | undefined) {
+        if (!file) return;
+        setUploading(true); setError(null);
+        try {
+            const fd = new FormData();
+            fd.append("file", file);
+            const res = await fetch(
+                `/api/events/${eventId}/expenses/${expense.id}/attach-file`,
+                { method: "POST", body: fd },
+            );
+            const data = await res.json() as { error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Chyba nahrávání");
+            onOpenChange(false);
+            onUpdated();
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Chyba nahrávání");
+        } finally {
+            setUploading(false);
+        }
+    }
+
+    return (
+        <Dialog open={open} onOpenChange={open => { if (!uploading) onOpenChange(open); }}>
+            <DialogContent className="max-w-sm">
+                <DialogHeader>
+                    <DialogTitle>Přiložit fakturu</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 pt-1">
+                    {expense.purposeText && (
+                        <p className="text-sm text-gray-600">{expense.purposeText}</p>
+                    )}
+                    <label className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 p-6 text-center cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+                        <Paperclip size={20} className="text-amber-500" />
+                        <span className="text-sm text-gray-700">{uploading ? "Nahrávám…" : "Vybrat soubor faktury"}</span>
+                        <span className="text-xs text-gray-400">PDF nebo fotka, max 10 MB</span>
+                        <input
+                            ref={fileInputRef}
+                            type="file"
+                            accept="image/*,application/pdf"
+                            className="sr-only"
+                            onChange={e => { void handleFile(e.target.files?.[0]); }}
+                            disabled={uploading}
+                        />
+                    </label>
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+                </div>
+            </DialogContent>
+        </Dialog>
     );
 }
 
@@ -1421,12 +1624,14 @@ function ExpenseEditDialog({
     onOpenChange,
     onPersonCreated,
     onSaved,
+    readonlyAmount,
 }: {
     expense: EventExpenseRow;
     eventId: number;
     open: boolean;
     people: PersonOption[];
     peopleLoaded: boolean;
+    readonlyAmount?: boolean;
     onOpenChange: (open: boolean) => void;
     onPersonCreated: (person: PersonOption) => void;
     onSaved: () => void | Promise<void>;
@@ -1457,22 +1662,27 @@ function ExpenseEditDialog({
         setError(null);
 
         try {
-            const amountNum = parseFloat(amount.replace(",", "."));
-            if (isNaN(amountNum) || amountNum <= 0) throw new Error("Oprav částku");
             if (!purposeText.trim()) throw new Error("Doplň účel dokladu");
+
+            const body: Record<string, unknown> = {
+                expenseId: expense.id,
+                purposeText: purposeText.trim(),
+                purposeCategory,
+                isPaid,
+                reimbursementPersonId: isPaid ? (reimbursementPersonId || null) : null,
+                invoicePayeeName: !isPaid ? (invoicePayeeName.trim() || null) : null,
+            };
+
+            if (!readonlyAmount) {
+                const amountNum = parseFloat(amount.replace(",", "."));
+                if (isNaN(amountNum) || amountNum <= 0) throw new Error("Oprav částku");
+                body.amount = amountNum;
+            }
 
             const response = await fetch(`/api/events/${eventId}/expenses`, {
                 method: "PATCH",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    expenseId: expense.id,
-                    amount: amountNum,
-                    purposeText: purposeText.trim(),
-                    purposeCategory,
-                    isPaid,
-                    reimbursementPersonId: isPaid ? (reimbursementPersonId || null) : null,
-                    invoicePayeeName: !isPaid ? (invoicePayeeName.trim() || null) : null,
-                }),
+                body: JSON.stringify(body),
             });
 
             const payload = await response.json() as { error?: string };
@@ -1498,18 +1708,25 @@ function ExpenseEditDialog({
                 </DialogHeader>
 
                 <form onSubmit={handleSubmit} className="space-y-4">
+                    {readonlyAmount && (
+                        <p className="text-xs text-amber-700 bg-amber-50 border border-amber-200 rounded px-3 py-2">
+                            Příjmový zámek je aktivní — částku nelze měnit. Lze upravit kategorii, popis a příjemce.
+                        </p>
+                    )}
                     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-                        <div className="space-y-1.5">
-                            <label className="text-xs text-gray-500">Částka (Kč) *</label>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={amount}
-                                onChange={event => setAmount(event.target.value)}
-                                className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
-                            />
-                        </div>
-                        <div className="space-y-1.5">
+                        {!readonlyAmount && (
+                            <div className="space-y-1.5">
+                                <label className="text-xs text-gray-500">Částka (Kč) *</label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={amount}
+                                    onChange={event => setAmount(event.target.value)}
+                                    className="w-full h-9 rounded-md border border-input bg-white px-3 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring"
+                                />
+                            </div>
+                        )}
+                        <div className={`space-y-1.5 ${readonlyAmount ? "sm:col-span-2" : ""}`}>
                             <label className="text-xs text-gray-500">Účetní kód *</label>
                             <select
                                 value={purposeCategory}
@@ -1595,7 +1812,8 @@ function ExpenseItem({
     onPersonCreated,
     onDeleted,
     onUpdated,
-    locked,
+    lockedForParticipants,
+    lockedForReimbursement,
 }: {
     expense: EventExpenseRow;
     eventId: number;
@@ -1604,7 +1822,8 @@ function ExpenseItem({
     onPersonCreated: (person: PersonOption) => void;
     onDeleted: () => void;
     onUpdated: () => void;
-    locked?: boolean;
+    lockedForParticipants?: boolean;
+    lockedForReimbursement?: boolean;
 }) {
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
@@ -1613,6 +1832,7 @@ function ExpenseItem({
     const [previewOpen, setPreviewOpen] = useState(false);
     const [sendingInstr, setSendingInstr] = useState(false);
     const [instrSentAt, setInstrSentAt] = useState(expense.invoicePaymentSentAt);
+    const [attachingFile, setAttachingFile] = useState(false);
     const [instrError, setInstrError] = useState<string | null>(null);
 
     const isDraft = expense.status === "draft";
@@ -1685,7 +1905,9 @@ function ExpenseItem({
                                     <FileText size={16} />
                                 </button>
                             )
-                            : <Paperclip size={16} />
+                            : (!expense.isPaid && !needsAction)
+                                ? <CircleAlert size={16} className="text-amber-400" />
+                                : <Paperclip size={16} />
                         }
                     </div>
                 )}
@@ -1733,7 +1955,26 @@ function ExpenseItem({
                         )}
                     </div>
                 )}
-                {!needsAction && !expense.isPaid && (
+                {!needsAction && !expense.isPaid && !expense.fileUrl && (
+                    <div className="flex flex-wrap items-center gap-2 mt-0.5">
+                        <span className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-px border text-amber-700 bg-amber-50 border-amber-300">
+                            Čeká na doklad
+                        </span>
+                        {expense.invoicePayeeName && (
+                            <span className="text-xs text-gray-700">{expense.invoicePayeeName}</span>
+                        )}
+                        {!lockedForReimbursement && (
+                            <button
+                                onClick={() => setAttachingFile(true)}
+                                className="text-[11px] font-medium text-amber-700 hover:text-amber-900 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-50 transition-colors flex items-center gap-1"
+                            >
+                                <Paperclip size={10} />
+                                Přiložit fakturu
+                            </button>
+                        )}
+                    </div>
+                )}
+                {!needsAction && !expense.isPaid && expense.fileUrl && (
                     <div className="flex flex-wrap items-center gap-2 mt-0.5">
                         <span className="text-[10px] font-semibold uppercase tracking-wide rounded px-1.5 py-px border text-orange-700 bg-orange-50 border-orange-200">
                             Faktura k úhradě
@@ -1749,8 +1990,8 @@ function ExpenseItem({
                         ) : (
                             <button
                                 onClick={handleSendInvoicePayment}
-                                disabled={sendingInstr || !expense.fileUrl}
-                                title={!expense.fileUrl ? "Nejdříve nahrajte soubor faktury" : "Odeslat pokyn k úhradě hospodáři TJ"}
+                                disabled={sendingInstr}
+                                title="Odeslat pokyn k úhradě hospodáři TJ"
                                 className="text-[11px] font-medium text-orange-700 hover:text-orange-900 border border-orange-200 rounded px-2 py-0.5 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
                             >
                                 <Send size={10} />
@@ -1777,14 +2018,14 @@ function ExpenseItem({
                         {isUnconfirmed ? "Potvrdit" : "Zpracovat"}
                     </button>
                 ) : null}
-                {!locked && (
+                {!lockedForReimbursement && (
                     <button onClick={() => needsAction ? setProcessing(true) : setEditing(true)}
                         className="text-gray-300 hover:text-gray-600 transition-colors"
                         title="Upravit">
                         <Pencil size={15} />
                     </button>
                 )}
-                {!locked && (
+                {!(lockedForParticipants || lockedForReimbursement) && (
                     <button onClick={handleDelete} disabled={deleting}
                         className="text-gray-300 hover:text-red-500 disabled:opacity-40 transition-colors"
                         title="Smazat doklad">
@@ -1812,6 +2053,7 @@ function ExpenseItem({
                 onOpenChange={setEditing}
                 onPersonCreated={onPersonCreated}
                 onSaved={onUpdated}
+                readonlyAmount={lockedForParticipants}
             />
             {isExternalPayee && (
                 <PersonEditDialog
@@ -1822,6 +2064,15 @@ function ExpenseItem({
                     open={editingPerson}
                     onOpenChange={setEditingPerson}
                     onSaved={onUpdated}
+                />
+            )}
+            {!expense.fileUrl && !expense.isPaid && (
+                <AttachFileDialog
+                    expense={expense}
+                    eventId={eventId}
+                    open={attachingFile}
+                    onOpenChange={setAttachingFile}
+                    onUpdated={onUpdated}
                 />
             )}
             {blobProxyUrl && (
@@ -2174,6 +2425,7 @@ export function EventExpensesTab({
     leaderName,
     leaderCskNumber,
     billingStatus,
+    lockForReimbursement: initialLockForReimbursement,
     treasurerApproved: initialTreasurerApproved,
     isTreasurer,
 }: {
@@ -2182,10 +2434,14 @@ export function EventExpensesTab({
     leaderName: string | null;
     leaderCskNumber: string | null;
     billingStatus: "draft" | "prescribed";
+    lockForReimbursement: boolean;
     treasurerApproved: boolean;
     isTreasurer: boolean;
 }) {
     const isPrescribed = billingStatus === "prescribed";
+    const lockedForParticipants = isPrescribed;
+    const [lockedForReimbursement, setLockedForReimbursement] = useState(initialLockForReimbursement);
+    const [reimbursementLocking, setReimbursementLocking] = useState(false);
     const [expenses, setExpenses] = useState<EventExpenseRow[] | null>(null);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -2228,6 +2484,17 @@ export function EventExpensesTab({
         setApprovalSaving(false);
     }
 
+    async function handleToggleReimbursementLock() {
+        setReimbursementLocking(true);
+        const res = lockedForReimbursement
+            ? await unlockForReimbursement(eventId)
+            : await lockForReimbursement(eventId);
+        if (!("error" in res)) {
+            setLockedForReimbursement(v => !v);
+        }
+        setReimbursementLocking(false);
+    }
+
     function handlePersonCreated(person: PersonOption) {
         setPersonOptions(prev => [...prev, person].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs")));
     }
@@ -2244,7 +2511,7 @@ export function EventExpensesTab({
                     {/* Status řádek */}
                     <p className="text-sm text-[#327600] flex items-center gap-2">
                         <span>🔒</span>
-                        <span>Náklady jsou uzamčeny — předpisy byly vygenerovány. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
+                        <span>Příjmový zámek je aktivní — předpisy byly vygenerovány. Částky a rozdělení nelze měnit. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
                     </p>
 
                     {/* Souhlas hospodáře */}
@@ -2315,7 +2582,37 @@ export function EventExpensesTab({
                     )}
                 </div>
             )}
-            {!isPrescribed && (
+
+            {/* Výdajový zámek */}
+            <div className={`rounded-xl border px-4 py-3 flex items-center justify-between gap-3 ${
+                lockedForReimbursement
+                    ? "border-orange-300 bg-orange-50"
+                    : "border-gray-200 bg-white"
+            }`}>
+                <div>
+                    <p className="text-sm font-medium text-gray-800">
+                        {lockedForReimbursement ? "🔒 Výdajový zámek aktivní" : "Výdajový zámek"}
+                    </p>
+                    <p className="text-xs text-gray-500 mt-0.5">
+                        {lockedForReimbursement
+                            ? "Nelze měnit kategorii, popis, příjemce ani přikládat soubory."
+                            : "Po uzamčení nelze měnit kategorii, popis, příjemce ani přikládat soubory k fakturám."}
+                    </p>
+                </div>
+                <button
+                    onClick={handleToggleReimbursementLock}
+                    disabled={reimbursementLocking}
+                    className={`shrink-0 text-sm font-medium px-3 py-1.5 rounded-lg border transition-colors disabled:opacity-40 ${
+                        lockedForReimbursement
+                            ? "border-orange-300 text-orange-700 bg-orange-100 hover:bg-orange-200"
+                            : "border-gray-300 text-gray-700 bg-white hover:bg-gray-50"
+                    }`}
+                >
+                    {reimbursementLocking ? "…" : lockedForReimbursement ? "Odemknout doklady" : "Uzamknout doklady"}
+                </button>
+            </div>
+
+            {!(lockedForParticipants || lockedForReimbursement) && (
                 <AddExpenseForm
                     eventId={eventId}
                     personOptions={personOptions}
@@ -2344,7 +2641,8 @@ export function EventExpensesTab({
                                     onPersonCreated={handlePersonCreated}
                                     onDeleted={load}
                                     onUpdated={load}
-                                    locked={isPrescribed}
+                                    lockedForParticipants={lockedForParticipants}
+                                    lockedForReimbursement={lockedForReimbursement}
                                 />
                             ))}
                         </div>

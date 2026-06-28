@@ -14,13 +14,15 @@ import {
     people,
     auditLog,
 } from "@/db/schema";
-import { eq, and, isNull, isNotNull, sql, inArray } from "drizzle-orm";
+import { eq, and, or, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
+
+export type DepositForfeitPolicy = "forfeit_to_expense" | "forfeit_split" | "forfeit_to_club";
 
 export type SettlementParticipant = {
     id: number;
@@ -29,6 +31,16 @@ export type SettlementParticipant = {
     memberId: number | null;
     personId: number | null;
     memberName: string | null;
+    cancelledAt: Date | null;
+    depositRefundAmount: number | null;
+    depositForfeitPolicy: DepositForfeitPolicy | null;
+    depositForfeitExpenseId: number | null;
+    /** Plnou přesností počítaný náklad přes všechny finální náklady (krok 4–5), 0 pro odhlášené. */
+    totalCost: number;
+    /** Dotace připsaná tomuto účastníkovi (0 pokud nečlen) — plná přesnost (krok 6). */
+    subsidyAmount: number;
+    /** Jediné místo zaokrouhlení v celém výpočtu — ceil(max(0, totalCost − subsidyAmount)) (krok 7). */
+    finalAmount: number;
 };
 
 export type SettlementExpenseRow = {
@@ -48,7 +60,60 @@ export type PrescriptionInfo = {
     amount: number;
     matchedAmount: number | null;
     paymentDue: string | null;
+    depositPromise: boolean;
+    depositPromiseNote: string | null;
+    depositWontPay: boolean;
+    depositWontPayNote: string | null;
+    emailSentAt: Date | null;
 };
+
+/** Záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude platit) — blokuje generování doplatku. */
+function isDepositUnresolved(dep: PrescriptionInfo | null): boolean {
+    if (!dep) return false; // přihláška bez zálohy (např. admin přidaná) — nic k vyřešení
+    if (dep.status === "matched" || dep.status === "paid" || dep.status === "cancelled") return false;
+    return !dep.depositPromise && !dep.depositWontPay;
+}
+
+/** Efektivní záloha pro výpočet doplatku — odečítáme jen co skutečně přišlo nebo je přislíbeno. */
+function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
+    if (!dep) return 0;
+    if (dep.status === "matched" || dep.status === "paid")
+        return dep.matchedAmount ?? dep.amount;
+    if (dep.depositPromise)
+        return dep.amount;
+    return 0;
+}
+
+/**
+ * Část zálohy téže přihlášky, která už propadla (forfeit_to_expense) a snížila effectiveAmount
+ * nějakého nákladu v kroku 2 — tu samou korunu nelze započítat podruhé jako "zaplaceno" proti
+ * doplatku zbylých (stále aktivních) účastníků téže přihlášky.
+ */
+function calcOwnForfeitedAmount(
+    personsCount: number | null,
+    depositAmount: number | null,
+    regParticipants: { cancelledAt: Date | null; depositForfeitPolicy: DepositForfeitPolicy | null; depositRefundAmount: number | null }[],
+): number {
+    if (!depositAmount) return 0;
+    const depositPerPerson = depositAmount / (personsCount ?? 1);
+    return regParticipants
+        .filter(p => p.cancelledAt !== null && p.depositForfeitPolicy === "forfeit_to_expense")
+        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
+
+/**
+ * Součet nevrácených (propadlých) částí zálohy přes odhlášené účastníky s rozhodnutou
+ * politikou — na rozdíl od calcOwnForfeitedAmount (jen forfeit_to_expense, používá se
+ * pro odpočet v Kroku 8) tady jde o JAKOUKOLI rozhodnutou politiku, čistě pro zobrazení
+ * (e-mail s vyúčtováním, tabulka na záložce Platby) — viz ZADANI_VYPOCET_NAKLADU_AKCE.md.
+ */
+function registrationForfeitTotal(reg: { depositPrescription: PrescriptionInfo | null; personsCount: number; participants: SettlementParticipant[] }): number {
+    if (!reg.depositPrescription) return 0;
+    const depositPerPerson = reg.depositPrescription.amount / reg.personsCount;
+    return reg.participants
+        .filter(p => p.cancelledAt && p.depositForfeitPolicy)
+        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
 
 export type SettlementRegistrationRow = {
     registrationId: number;
@@ -56,31 +121,98 @@ export type SettlementRegistrationRow = {
     lastName: string;
     email: string;
     personsCount: number;
+    activePersonsCount: number; // personsCount mínus individuálně odhlášení účastníci
     participants: SettlementParticipant[];
     memberCount: number;
     expenses: SettlementExpenseRow[];
     expensesTotal: number;
     subsidy: number;
     totalAmount: number;
+    /** Doplatek (krok 8) = max(0, totalAmount − effectiveDepositForSettlement) — počítáno živě, nezávisle na tom, zda už existuje settlementPrescription. */
+    settlementAmount: number;
+    /**
+     * Efektivní záloha použitá pro výpočet doplatku = effectiveDepositAmount minus ta část,
+     * která už propadla (forfeit_to_expense) a snížila náklad v kroku 2 — jinak by se stejná
+     * koruna započítala dvakrát (issue 2026-06-24, viz ZADANI_VYPOCET_NAKLADU_AKCE.md).
+     */
+    effectiveDepositForSettlement: number;
     /** Záloha — předpis platby vytvořený při podání přihlášky. Množství je fixní, billing ho nemění. */
     depositPrescription: PrescriptionInfo | null;
     /** Doplatek — předpis platby vytvořený při lockBilling. Částka = totalAmount − depositAmount. */
     settlementPrescription: PrescriptionInfo | null;
 };
 
+export type FinalExpenseRow = {
+    id: number;
+    purposeText: string | null;
+    amount: number;
+    effectiveAmount: number; // amount − propadlé zálohy napojené na tento náklad
+    totalForfeit: number;    // Kč propadlých záloh odečtených z tohoto nákladu
+    allocationMethod: "split_all" | "per_registration" | "with_coefficients";
+    participantCoefficients: Record<string, number> | null;
+};
+
+/**
+ * Aktivní účastník, který u některého with_coefficients nákladu NEMÁ explicitně nastavený
+ * koeficient (klíč chybí v participantCoefficients). Při výpočtu mu padne váha 0 (`?? 0`) —
+ * ale tiše, takže jeho reálný náklad se rozpustí mezi ostatní, aniž si toho kdokoli všimne
+ * (issue: Marie Blechová / Bivoj, akce Berounka, 2026-06-25). Proto se tyto případy hlásí
+ * jako blokující stav v lockBilling/regeneratePrescriptions — admin musí koeficient doplnit
+ * (0 = vědomě neplatí, 1 = platí jako ostatní). "Chybějící klíč" jde odlišit od explicitní 0.
+ */
+export type MissingCoefficientWarning = {
+    expenseId: number;
+    purposeText: string | null;
+    participants: { key: string; name: string }[];
+};
+
 export type EventSettlement = {
     eventId: number;
     subsidyTotal: number;           // celková dotace akce (uložena v events.subsidy_per_member)
-    unitPrice: number;              // cena per osoba = Math.ceil(expensesSum / totalParticipants)
-    totalParticipants: number;
+    unitPrice: number;              // cena per osoba = Math.ceil(efektivní splitAll / totalParticipants)
+    totalParticipants: number;      // počet aktivních (neodhlášených) účastníků
     totalMemberParticipants: number;
-    finalExpenses: { id: number; purposeText: string | null; amount: number; allocationMethod: "split_all" | "per_registration" | "with_coefficients"; participantCoefficients: Record<string, number> | null }[];
+    finalExpenses: FinalExpenseRow[];
     registrations: SettlementRegistrationRow[];
     grandTotal: number;
     expensesSum: number;
+    /** Náklady s vlastními podíly, kde některý aktivní účastník nemá nastavený koeficient — blokuje generování předpisů. */
+    missingCoefficients: MissingCoefficientWarning[];
+    /** Akce už vybírá peníze (odeslaný předpis nebo přijatá platba) — odemknout/upravovat smí jen hospodář. */
+    isCollecting: boolean;
 };
 
+// ── Klíče osob — sdílená identifikace účastníka pro koeficienty/váhy ──────────
+// "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné
+// (fallback dle personsCount, když přihláška nemá záznamy v event_registration_participants).
+// Stejná logika musí platit v getEventSettlement i při ukládání koeficientů (setExpenseParticipantCoefficients),
+// jinak se klíče v participantCoefficients neshodují s tím, co se čte při výpočtu.
+function activePersonKeysForRegistration(
+    regId: number,
+    personsCount: number | null,
+    regParticipants: { id: number; cancelledAt: Date | null }[],
+): string[] {
+    if (regParticipants.length > 0) {
+        return regParticipants
+            .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
+            .filter(pk => pk.active)
+            .map(pk => pk.key);
+    }
+    return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
+}
+
+/** Zaokrouhlení nahoru na celé Kč s tolerancí na chyby plovoucí desetinné čárky (krok 7 — jediné místo zaokrouhlení). */
+function ceilMoney(value: number): number {
+    return Math.ceil(value - 1e-9);
+}
+
 // ── Výpočet vyúčtování ────────────────────────────────────────────────────────
+//
+// Postup přesně dle zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md — počítá se s plnou
+// přesností (žádné mezivýsledkové Math.ceil/Math.round) a zaokrouhluje se
+// JEDNOU, na úplném konci, pro finální částku JEDNOHO ÚČASTNÍKA (krok 7).
+// Přihláška je jen platební obálka — její doplatek je součet už zaokrouhlených
+// částek jejích účastníků (krok 8), ne ceil() součtu celé přihlášky.
 
 export async function getEventSettlement(eventId: number): Promise<EventSettlement> {
     const db = getDb();
@@ -115,11 +247,12 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         participantCoefficients: (e.participantCoefficients as Record<string, number> | null) ?? null,
     }));
 
-    // Alokace per registrace pro per_registration + with_coefficients náklady
+    // Manuální Kč alokace per registrace — jen pro "per_registration" (bez koeficientů; "with_coefficients"
+    // se čte přímo z participantCoefficients výše, nepotřebuje derivovanou tabulku).
     const perRegExpenseIds = finalExpenses
-        .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
+        .filter(e => e.allocationMethod === "per_registration")
         .map(e => e.id);
-    const allocations = perRegExpenseIds.length > 0
+    const manualAllocations = perRegExpenseIds.length > 0
         ? await db
             .select({ expenseId: eventExpenseAllocations.expenseId, registrationId: eventExpenseAllocations.registrationId, amount: eventExpenseAllocations.amount })
             .from(eventExpenseAllocations)
@@ -138,7 +271,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         .from(eventRegistrations)
         .where(and(eq(eventRegistrations.eventId, eventId), isNull(eventRegistrations.cancelledAt)));
 
-    // Účastníci přihlášek
+    // Účastníci přihlášek — včetně individuálně odhlášených (cancelled_at NOT NULL)
     const regIds = regs.map(r => r.id);
     const participants = regIds.length > 0
         ? await db
@@ -150,6 +283,10 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 memberId: eventRegistrationParticipants.memberId,
                 personId: eventRegistrationParticipants.personId,
                 memberName: members.fullName,
+                cancelledAt: eventRegistrationParticipants.cancelledAt,
+                depositRefundAmount: eventRegistrationParticipants.depositRefundAmount,
+                depositForfeitPolicy: eventRegistrationParticipants.depositForfeitPolicy,
+                depositForfeitExpenseId: eventRegistrationParticipants.depositForfeitExpenseId,
             })
             .from(eventRegistrationParticipants)
             .leftJoin(members, eq(eventRegistrationParticipants.memberId, members.id))
@@ -170,65 +307,192 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 amount: eventPaymentPrescriptions.amount,
                 matchedAmount: eventPaymentPrescriptions.matchedAmount,
                 paymentDue: eventPaymentPrescriptions.paymentDue,
+                depositPromise: eventPaymentPrescriptions.depositPromise,
+                depositPromiseNote: eventPaymentPrescriptions.depositPromiseNote,
+                depositWontPay: eventPaymentPrescriptions.depositWontPay,
+                depositWontPayNote: eventPaymentPrescriptions.depositWontPayNote,
+                emailSentAt: eventPaymentPrescriptions.emailSentAt,
             })
             .from(eventPaymentPrescriptions)
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
         : [];
 
-    const totalParticipants = regs.reduce((s, r) => s + (r.personsCount ?? 1), 0);
-    const totalMemberParticipants = participants.filter(p => p.memberId !== null).length;
+    // ── Krok 1: klíče aktivních účastníků (per přihláška a globálně) ──────────
+    type PersonKey = { key: string; registrationId: number; memberId: number | null };
+    const personKeysByReg = new Map<number, PersonKey[]>();
+    for (const reg of regs) {
+        const regParts = participants.filter(p => p.registrationId === reg.id);
+        const keys = activePersonKeysForRegistration(reg.id, reg.personsCount, regParts);
+        personKeysByReg.set(
+            reg.id,
+            keys.map(key => {
+                const participant = regParts.find((p, i) => (p.id > 0 ? `p${p.id}` : `r${reg.id}-${i}`) === key);
+                return { key, registrationId: reg.id, memberId: participant?.memberId ?? null };
+            }),
+        );
+    }
+    const allPersonKeys = Array.from(personKeysByReg.values()).flat();
+
+    const totalParticipants = allPersonKeys.length;
+    const totalMemberParticipants = allPersonKeys.filter(k => k.memberId !== null).length;
 
     const expensesSum = finalExpenses.reduce((s, e) => s + e.amount, 0);
-    // unitPrice platí jen pro "split_all" náklady — rovnoměrné rozdělení na každého
-    const splitAllSum = finalExpenses.filter(e => e.allocationMethod === "split_all").reduce((s, e) => s + e.amount, 0);
-    const unitPrice = totalParticipants > 0 ? Math.ceil(splitAllSum / totalParticipants) : 0;
 
-    // Per_registration náklady, které mají alespoň jednu alokaci v DB.
-    // Pokud žádnou nemají → fallback: rovnoměrné rozdělení (všichni zahrnuti).
-    const expensesWithAllocs = new Set(allocations.map(a => a.expenseId));
+    // ── Krok 2: propadlé zálohy per náklad ─────────────────────────────────────
+    // depositPerParticipant = depositPrescription.amount / personsCount (fixní sazba)
+    function calcForfeitForExpense(expenseId: number): number {
+        return participants
+            .filter(p =>
+                p.cancelledAt !== null &&
+                p.depositForfeitPolicy === "forfeit_to_expense" &&
+                p.depositForfeitExpenseId === expenseId
+            )
+            .reduce((sum, p) => {
+                const reg = regs.find(r => r.id === p.registrationId);
+                const depositRaw = prescriptions.find(pr => pr.registrationId === p.registrationId && pr.type === "deposit");
+                if (!reg || !depositRaw) return sum;
+                const depositPerPerson = parseFloat(depositRaw.amount) / (reg.personsCount ?? 1);
+                const refund = parseFloat(p.depositRefundAmount ?? "0") || 0;
+                return sum + Math.max(0, depositPerPerson - refund);
+            }, 0);
+    }
 
-    const registrationRows: SettlementRegistrationRow[] = regs.map(reg => {
-        const regParticipants = participants.filter(p => p.registrationId === reg.id).map(p => ({
-            id: p.id,
-            fullName: p.fullName,
-            isPrimary: p.isPrimary,
-            memberId: p.memberId,
-            personId: p.personId,
-            memberName: p.memberName ?? null,
-        }));
-        const memberCount = regParticipants.filter(p => p.memberId !== null).length;
-        const personsCount = reg.personsCount ?? 1;
+    const finalExpenseRows: FinalExpenseRow[] = finalExpenses.map(e => {
+        const totalForfeit = calcForfeitForExpense(e.id);
+        return {
+            id: e.id,
+            purposeText: e.purposeText,
+            amount: e.amount,
+            effectiveAmount: Math.max(0, e.amount - totalForfeit),
+            totalForfeit,
+            allocationMethod: e.allocationMethod,
+            participantCoefficients: e.participantCoefficients,
+        };
+    });
 
-        // Podrobný rozpis nákladů — pro e-mail a zobrazení v záložce Náklady
-        const expenseRows: SettlementExpenseRow[] = finalExpenses.map(expense => {
-            let allocatedAmount = 0;
-            if (expense.allocationMethod === "split_all") {
-                allocatedAmount = totalParticipants > 0
-                    ? (expense.amount / totalParticipants) * personsCount
-                    : 0;
-            } else if (!expensesWithAllocs.has(expense.id)) {
-                // Žádné alokace v DB → fallback: rovnoměrné rozdělení na všechny (jako split_all)
-                allocatedAmount = totalParticipants > 0
-                    ? (expense.amount / totalParticipants) * personsCount
-                    : 0;
+    // ── Krok 1 (váhy) + krok 3 (cena za jednotku váhy) — per náklad, plná přesnost ──
+    const weightsByExpense = new Map<number, Map<string, number>>(); // expenseId -> personKey -> weight
+    const unitPriceByExpense = new Map<number, number>();
+
+    for (const expense of finalExpenseRows) {
+        const weights = new Map<string, number>();
+
+        if (expense.allocationMethod === "split_all") {
+            for (const k of allPersonKeys) weights.set(k.key, 1);
+        } else if (expense.allocationMethod === "with_coefficients") {
+            // Koeficienty jsou jediný zdroj pravdy — žádná derivovaná tabulka. Chybějící klíč
+            // (účastník přidaný po uložení koeficientů) = váha 0, dokud admin nedoplní.
+            // Bez koeficientů vůbec (teoretický stav, with_coefficients se vždy ukládá s nimi) → rovnoměrně.
+            const coeffs = expense.participantCoefficients;
+            for (const k of allPersonKeys) weights.set(k.key, coeffs ? (coeffs[k.key] ?? 0) : 1);
+        } else {
+            // per_registration (manuální Kč částka per přihláška, bez koeficientů): váha = částka
+            // z eventExpenseAllocations, rozpočtená rovným dílem na aktivní účastníky té přihlášky.
+            // Bez jakýchkoli zadaných alokací → fallback: rovnoměrně na všechny (jako split_all).
+            const allocsForExpense = manualAllocations.filter(a => a.expenseId === expense.id);
+            if (allocsForExpense.length === 0) {
+                for (const k of allPersonKeys) weights.set(k.key, 1);
             } else {
-                // per_registration nebo with_coefficients: čte předpočítané alokace z DB
-                const alloc = allocations.find(a => a.expenseId === expense.id && a.registrationId === reg.id);
-                allocatedAmount = alloc ? parseFloat(alloc.amount) : 0;
+                for (const [regId, keys] of personKeysByReg) {
+                    const alloc = allocsForExpense.find(a => a.registrationId === regId);
+                    const regWeight = alloc ? parseFloat(alloc.amount) : 0;
+                    const per = keys.length > 0 ? regWeight / keys.length : 0;
+                    for (const k of keys) weights.set(k.key, per);
+                }
             }
-            return { expenseId: expense.id, purposeText: expense.purposeText, amount: expense.amount, allocationMethod: expense.allocationMethod as "split_all" | "per_registration" | "with_coefficients", allocatedAmount };
+        }
+
+        weightsByExpense.set(expense.id, weights);
+        const totalWeight = allPersonKeys.reduce((s, k) => s + (weights.get(k.key) ?? 0), 0);
+        unitPriceByExpense.set(expense.id, totalWeight > 0 ? expense.effectiveAmount / totalWeight : 0);
+    }
+
+    // unitPrice — souhrnné informativní pole, jen pro "split_all" náklady. Plná přesnost (krok 3).
+    const splitAllSum = finalExpenseRows
+        .filter(e => e.allocationMethod === "split_all")
+        .reduce((s, e) => s + e.effectiveAmount, 0);
+    const unitPrice = totalParticipants > 0 ? splitAllSum / totalParticipants : 0;
+
+    // ── Krok 4–7: náklad na účastníka přes všechny náklady, dotace, JEDINÉ zaokrouhlení NAHORU ──
+    // Dotace na člena se zaokrouhluje DOLŮ na celé Kč už tady (výjimka z "zaokrouhli jen jednou") —
+    // součet skutečně přiznané dotace tak nikdy nepřekročí schválenou částku event.subsidyPerMember.
+    const subsidyPerMember = totalMemberParticipants > 0 ? Math.floor(subsidyTotal / totalMemberParticipants) : 0;
+
+    type ParticipantCalc = {
+        key: string;
+        registrationId: number;
+        memberId: number | null;
+        totalCost: number;
+        subsidyAmount: number;
+        finalAmount: number;
+        perExpense: Map<number, number>; // expenseId -> plná přesnost příspěvek (rozpis pro UI/e-mail)
+    };
+
+    const participantCalcs: ParticipantCalc[] = allPersonKeys.map(k => {
+        const perExpense = new Map<number, number>();
+        let totalCost = 0;
+        for (const expense of finalExpenseRows) {
+            const weight = weightsByExpense.get(expense.id)?.get(k.key) ?? 0;
+            const cost = (unitPriceByExpense.get(expense.id) ?? 0) * weight;
+            perExpense.set(expense.id, cost);
+            totalCost += cost;
+        }
+        const subsidyAmount = k.memberId !== null ? subsidyPerMember : 0;
+        const finalAmount = ceilMoney(Math.max(0, totalCost - subsidyAmount));
+        return { key: k.key, registrationId: k.registrationId, memberId: k.memberId, totalCost, subsidyAmount, finalAmount, perExpense };
+    });
+
+    const calcsByReg = new Map<number, ParticipantCalc[]>();
+    for (const c of participantCalcs) {
+        const arr = calcsByReg.get(c.registrationId) ?? [];
+        arr.push(c);
+        calcsByReg.set(c.registrationId, arr);
+    }
+
+    // ── Krok 8: doplatek přihlášky = součet už zaokrouhlených částek jejích účastníků ──
+    const registrationRows: SettlementRegistrationRow[] = regs.map(reg => {
+        const calcs = calcsByReg.get(reg.id) ?? [];
+
+        const regParticipants = participants.filter(p => p.registrationId === reg.id).map((p, i) => {
+            const key = p.id > 0 ? `p${p.id}` : `r${reg.id}-${i}`;
+            const calc = calcs.find(c => c.key === key);
+            return {
+                id: p.id,
+                fullName: p.fullName,
+                isPrimary: p.isPrimary,
+                memberId: p.memberId,
+                personId: p.personId,
+                memberName: p.memberName ?? null,
+                cancelledAt: p.cancelledAt as Date | null,
+                depositRefundAmount: p.depositRefundAmount ? parseFloat(p.depositRefundAmount) : null,
+                depositForfeitPolicy: p.depositForfeitPolicy as DepositForfeitPolicy | null,
+                depositForfeitExpenseId: p.depositForfeitExpenseId,
+                totalCost: calc?.totalCost ?? 0,
+                subsidyAmount: calc?.subsidyAmount ?? 0,
+                finalAmount: calc?.finalAmount ?? 0,
+            };
+        });
+        const memberCount = regParticipants.filter(p => p.memberId !== null && !p.cancelledAt).length;
+        const personsCount = reg.personsCount ?? 1;
+        const activePersonsCount = calcs.length > 0 ? calcs.length : personsCount;
+
+        // Rozpis nákladů pro zobrazení (Náklady/Platby tab, e-mail) — plná přesnost,
+        // sečteno přes aktivní účastníky této přihlášky. Informativní; doplatek (totalAmount)
+        // se počítá ze zaokrouhlených finalAmount jednotlivých účastníků, ne z tohoto součtu.
+        const expenseRows: SettlementExpenseRow[] = finalExpenseRows.map(expense => {
+            const allocatedAmount = calcs.reduce((s, c) => s + (c.perExpense.get(expense.id) ?? 0), 0);
+            return {
+                expenseId: expense.id,
+                purposeText: expense.purposeText,
+                amount: expense.amount,
+                allocationMethod: expense.allocationMethod,
+                allocatedAmount,
+            };
         });
 
-        // split_all: unitPrice × osoby (uniformní sazba); per_registration / with_coefficients: explicitní alokace
-        const perRegTotal = expenseRows
-            .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
-            .reduce((s, e) => s + e.allocatedAmount, 0);
-        const expensesTotal = unitPrice * personsCount + perRegTotal;
-        // Dotace: poměrná část celkové dotace podle počtu členů v přihlášce
-        const subsidy = totalMemberParticipants > 0
-            ? Math.round(subsidyTotal * memberCount / totalMemberParticipants)
-            : 0;
-        const totalAmount = Math.max(0, expensesTotal - subsidy);
+        const expensesTotal = calcs.reduce((s, c) => s + c.totalCost, 0);
+        const subsidy = calcs.reduce((s, c) => s + c.subsidyAmount, 0);
+        const totalAmount = calcs.reduce((s, c) => s + c.finalAmount, 0);
 
         const regPrescriptions = prescriptions.filter(p => p.registrationId === reg.id);
         const depositRaw = regPrescriptions.find(p => p.type === "deposit") ?? null;
@@ -244,7 +508,21 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 amount: parseFloat(p.amount),
                 matchedAmount: p.matchedAmount ? parseFloat(p.matchedAmount) : null,
                 paymentDue: p.paymentDue,
+                depositPromise: p.depositPromise,
+                depositPromiseNote: p.depositPromiseNote,
+                depositWontPay: p.depositWontPay,
+                depositWontPayNote: p.depositWontPayNote,
+                emailSentAt: p.emailSentAt,
             } : null;
+
+        const depositPrescription = toPrescriptionInfo(depositRaw);
+
+        const ownForfeitedAmount = calcOwnForfeitedAmount(
+            reg.personsCount,
+            depositRaw ? parseFloat(depositRaw.amount) : null,
+            regParticipants,
+        );
+        const effectiveDepositForSettlement = Math.max(0, effectiveDepositAmount(depositPrescription) - ownForfeitedAmount);
 
         return {
             registrationId: reg.id,
@@ -252,42 +530,238 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             lastName: reg.lastName,
             email: reg.email,
             personsCount,
+            activePersonsCount,
             participants: regParticipants,
             memberCount,
             expenses: expenseRows,
             expensesTotal,
             subsidy,
             totalAmount,
-            depositPrescription: toPrescriptionInfo(depositRaw),
+            settlementAmount: Math.max(0, totalAmount - effectiveDepositForSettlement),
+            effectiveDepositForSettlement,
+            depositPrescription,
             settlementPrescription: toPrescriptionInfo(settlementRaw),
         };
     });
 
     const grandTotal = registrationRows.reduce((s, r) => s + r.totalAmount, 0);
 
-    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses, registrations: registrationRows, grandTotal, expensesSum };
+    // Jméno per personKey — stejná indexace jako activePersonKeysForRegistration (kvůli r{regId}-{i} fallbacku).
+    const nameByKey = new Map<string, string>();
+    for (const reg of regs) {
+        participants
+            .filter(p => p.registrationId === reg.id)
+            .forEach((p, i) => {
+                if (!p.cancelledAt) nameByKey.set(p.id > 0 ? `p${p.id}` : `r${reg.id}-${i}`, p.fullName);
+            });
+    }
+
+    // Aktivní účastníci bez explicitního koeficientu u with_coefficients nákladu (klíč chybí → tichá váha 0).
+    // participantCoefficients === null řešit nemusíme — tam výpočet padá na rovnoměrné váhy 1, ne na tiché 0.
+    const missingCoefficients: MissingCoefficientWarning[] = finalExpenseRows
+        .filter(e => e.allocationMethod === "with_coefficients" && e.participantCoefficients)
+        .map(e => ({
+            expenseId: e.id,
+            purposeText: e.purposeText,
+            participants: allPersonKeys
+                .filter(k => !Object.prototype.hasOwnProperty.call(e.participantCoefficients!, k.key))
+                .map(k => ({ key: k.key, name: nameByKey.get(k.key) ?? k.key })),
+        }))
+        .filter(w => w.participants.length > 0);
+
+    const isCollecting = prescriptions.some(p => p.emailSentAt !== null || p.status === "matched" || p.status === "paid");
+
+    return { eventId, subsidyTotal, unitPrice, totalParticipants, totalMemberParticipants, finalExpenses: finalExpenseRows, registrations: registrationRows, grandTotal, expensesSum, missingCoefficients, isCollecting };
 }
 
 // ── Billing status helpers ────────────────────────────────────────────────────
 
-async function getBillingStatus(db: ReturnType<typeof getDb>, eventId: number): Promise<"draft" | "prescribed" | null> {
-    const [row] = await db.select({ billingStatus: events.billingStatus }).from(events).where(eq(events.id, eventId));
-    return (row?.billingStatus as "draft" | "prescribed") ?? null;
+type EventLocks = {
+    billingStatus: "draft" | "prescribed";
+    lockForParticipants: boolean;
+    lockForReimbursement: boolean;
+};
+
+/**
+ * "Akce už vybírá peníze" — alespoň jeden předpis byl odeslán (emailSentAt) NEBO je
+ * spárovaný/zaplacený (matched/paid). V tomto stavu smí odemknout/upravovat jen hospodář
+ * (TREASURER_EMAIL), protože změna by zasáhla do už vybíraných prostředků.
+ */
+async function isEventCollecting(db: ReturnType<typeof getDb>, eventId: number): Promise<boolean> {
+    const [row] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(eventPaymentPrescriptions)
+        .where(and(
+            eq(eventPaymentPrescriptions.eventId, eventId),
+            or(
+                isNotNull(eventPaymentPrescriptions.emailSentAt),
+                inArray(eventPaymentPrescriptions.status, ["matched", "paid"]),
+            ),
+        ));
+    return (row?.n ?? 0) > 0;
+}
+
+function isTreasurer(email: string | null | undefined): boolean {
+    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
+    return !!treasurerEmail && !!email && email.toLowerCase() === treasurerEmail;
+}
+
+/**
+ * Zaloguje NEÚSPĚŠNÝ pokus o akci (uživatel dostal stopku). Audit tak zachytí i to, co uživatelé
+ * chtěli udělat, ale systém jim to nedovolil — abychom na to mohli reagovat. action = "blocked",
+ * metadata.attemptedAction = co se pokoušeli udělat, changes.reason = proč to neprošlo.
+ */
+async function logBlockedAttempt(
+    db: ReturnType<typeof getDb>,
+    opts: { attemptedAction: string; reason: string; changedBy: string; eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null },
+): Promise<void> {
+    try {
+        await db.insert(auditLog).values({
+            entityType: opts.registrationId != null ? "event_registration" : "event",
+            entityId: opts.registrationId ?? opts.eventId ?? 0,
+            action: "blocked",
+            changes: { reason: { old: null, new: opts.reason } },
+            metadata: { blocked: true, attemptedAction: opts.attemptedAction, eventId: opts.eventId, registrationId: opts.registrationId, participantId: opts.participantId, memberId: opts.memberId },
+            changedBy: opts.changedBy,
+        });
+    } catch (e) {
+        // Audit blokace nesmí shodit samotnou (už tak odmítnutou) akci.
+        console.error("[logBlockedAttempt]", e);
+    }
+}
+
+/**
+ * Stopka uvnitř transakce. Vyhozením se transakce vrátí (rollback), proto se neloguje hned —
+ * zaloguje se až v catch přes blockedOrError (mimo rollback, samostatným zápisem).
+ */
+type BlockedAttempt = { attemptedAction: string; eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null };
+class BlockedError extends Error {
+    attempt: BlockedAttempt;
+    constructor(message: string, attempt: BlockedAttempt) {
+        super(message);
+        this.name = "BlockedError";
+        this.attempt = attempt;
+    }
+}
+
+/** V catch: BlockedError = vědomá stopka → zaloguj a vrať její hlášku; jinak běžná chyba s fallbackem. */
+async function blockedOrError(e: unknown, db: ReturnType<typeof getDb>, changedBy: string, fallback: string): Promise<{ error: string }> {
+    if (e instanceof BlockedError) {
+        await logBlockedAttempt(db, { ...e.attempt, reason: e.message, changedBy });
+        return { error: e.message };
+    }
+    return { error: e instanceof Error ? e.message : fallback };
+}
+
+/** Gate před generováním předpisů (nevyřešená záloha / nenastavený koeficient) — vrací chybu + zaloguje blokaci. */
+async function prescriptionGateError(
+    db: ReturnType<typeof getDb>,
+    eventId: number,
+    settlement: Awaited<ReturnType<typeof getEventSettlement>>,
+    attemptedAction: string,
+    changedBy: string,
+): Promise<string | null> {
+    const unresolved = findUnresolvedDeposits(settlement);
+    if (unresolved.length > 0) {
+        const reason = `Nevyřešená záloha u: ${unresolved.join(", ")}. Nejdřív v záložce Platby u každé označte příslib nebo "nebude platit".`;
+        await logBlockedAttempt(db, { attemptedAction, reason, changedBy, eventId });
+        return reason;
+    }
+    const coefError = missingCoefficientsError(settlement);
+    if (coefError) {
+        await logBlockedAttempt(db, { attemptedAction, reason: coefError, changedBy, eventId });
+        return coefError;
+    }
+    return null;
+}
+
+/**
+ * Jednotná brána pro úpravy přihlášek/účastníků akce. Vrací chybovou hlášku, nebo null když smí.
+ * Dva prahy:
+ *  - lockForParticipants (náklady uzamčeny) → blokováno pro všechny, napřed odemknout vyúčtování.
+ *  - akce už vybírá peníze (isEventCollecting) → smí jen hospodář; běžný admin dostane stopku
+ *    s informací, že to zvládne hospodář. Pokrývá i akci ve stavu draft, která už ale vybírá
+ *    (např. spárované zálohy) — tam zámek lockForParticipants nestačí.
+ */
+async function registrationEditBlock(
+    db: ReturnType<typeof getDb>,
+    eventId: number,
+    userEmail: string | null | undefined,
+    attempt: { action: string; registrationId?: number; participantId?: number; memberId?: number | null },
+): Promise<string | null> {
+    let reason: string | null = null;
+    if ((await getEventLocks(db, eventId))?.lockForParticipants) {
+        reason = "Náklady jsou uzamčeny — pro úpravu nejdřív odemkněte vyúčtování (záložka Platby). Pokud už akce vybírá platby, odemkne ji jen hospodář.";
+    } else if (await isEventCollecting(db, eventId) && !isTreasurer(userEmail)) {
+        reason = "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — úpravu přihlášek může provést jen hospodář.";
+    }
+    if (reason) {
+        await logBlockedAttempt(db, {
+            attemptedAction: attempt.action, reason, changedBy: userEmail ?? "unknown",
+            eventId, registrationId: attempt.registrationId, participantId: attempt.participantId, memberId: attempt.memberId,
+        });
+    }
+    return reason;
+}
+
+async function getEventLocks(db: ReturnType<typeof getDb>, eventId: number): Promise<EventLocks | null> {
+    const [row] = await db
+        .select({ billingStatus: events.billingStatus, lockForParticipants: events.lockForParticipants, lockForReimbursement: events.lockForReimbursement })
+        .from(events)
+        .where(eq(events.id, eventId));
+    if (!row) return null;
+    return { billingStatus: row.billingStatus as "draft" | "prescribed", lockForParticipants: row.lockForParticipants, lockForReimbursement: row.lockForReimbursement };
 }
 
 /** Uzamkne billing: vygeneruje předpisy a přepne stav na 'prescribed'. */
+/**
+ * Seznam aktivních přihlášek, jejichž záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude
+ * platit) — generování doplatku je blokované, dokud admin každou z nich nevyřeší (záložka Platby).
+ */
+function findUnresolvedDeposits(settlement: Awaited<ReturnType<typeof getEventSettlement>>): string[] {
+    return settlement.registrations
+        .filter(reg => isDepositUnresolved(reg.depositPrescription))
+        .map(reg => `${reg.firstName} ${reg.lastName}`);
+}
+
+/**
+ * Chybová hláška pro gate „nenastavený koeficient" — vrací null, když je vše doplněno.
+ * Brání generování předpisů, dokud má některý aktivní účastník u with_coefficients nákladu
+ * chybějící koeficient (tichá váha 0). Analogicky k findUnresolvedDeposits.
+ */
+function missingCoefficientsError(settlement: Awaited<ReturnType<typeof getEventSettlement>>): string | null {
+    if (settlement.missingCoefficients.length === 0) return null;
+    const detail = settlement.missingCoefficients
+        .map(m => `${m.purposeText ?? "náklad"} (${m.participants.map(p => p.name).join(", ")})`)
+        .join("; ");
+    return `Nenastavený koeficient u nákladů s vlastními podíly — ${detail}. U každého doplňte podíl v záložce Vyúčtování (0 = neplatí, 1 = platí jako ostatní).`;
+}
+
 export async function lockBilling(eventId: number): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
         const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
 
         const settlement = await getEventSettlement(eventId);
+        const gateError = await prescriptionGateError(db, eventId, settlement, "lock_billing", session.user.email);
+        if (gateError) return { error: gateError };
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
-            .set({ billingStatus: "prescribed", updatedAt: new Date() })
+            .set({ billingStatus: "prescribed", lockForParticipants: true, updatedAt: new Date() })
             .where(eq(events.id, eventId));
+
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId: eventId,
+            action: "lock_billing",
+            changes: { billingStatus: { old: "draft", new: "prescribed" } },
+            metadata: { eventId },
+            changedBy: session.user.email,
+        });
 
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
@@ -303,13 +777,53 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
  * bez ohledu na stav nákladů. Při dalším lockBilling upsertPrescriptionAmounts
  * existující předpisy aktualizuje (nepřepisuje kód, jen částku a splatnost).
  */
-export async function unlockBilling(eventId: number): Promise<{ success: true; deletedPrescriptions: number } | { error: string }> {
+export async function unlockBilling(
+    eventId: number,
+    opts?: { confirmed?: boolean },
+): Promise<{ success: true; deletedPrescriptions: number } | { error: string }> {
     try {
-        const db = getDb();
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
 
-        await db.update(events)
-            .set({ billingStatus: "draft", updatedAt: new Date() })
-            .where(eq(events.id, eventId));
+        const db = getDb();
+        const collecting = await isEventCollecting(db, eventId);
+
+        // Když už akce vybírá peníze, odemčení je citlivý zásah: smí ho udělat jen hospodář,
+        // s výslovným potvrzením, a odemčení zruší jeho souhlas (musí znovu schválit). Audit níže.
+        if (collecting) {
+            const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
+            if (!treasurerEmail || session.user.email.toLowerCase() !== treasurerEmail) {
+                const reason = "Akce už vybírá peníze (odeslané předpisy nebo přijaté platby) — odemknout může jen hospodář.";
+                await logBlockedAttempt(db, { attemptedAction: "unlock_billing", reason, changedBy: session.user.email, eventId });
+                return { error: reason };
+            }
+            if (!opts?.confirmed) {
+                return { error: "Odemčení vyžaduje potvrzení — tato akce už vybírá peníze a změna ovlivní vystavené předpisy." };
+            }
+        }
+
+        await db.transaction(async tx => {
+            await tx.update(events)
+                .set({
+                    billingStatus: "draft",
+                    lockForParticipants: false,
+                    // Po odemčení akce, která vybírá, padá souhlas hospodáře — po úpravách musí znovu schválit.
+                    ...(collecting ? { treasurerApproved: false } : {}),
+                    updatedAt: new Date(),
+                })
+                .where(eq(events.id, eventId));
+
+            await tx.insert(auditLog).values({
+                entityType: "event",
+                entityId: eventId,
+                action: "unlock_billing",
+                changes: collecting
+                    ? { billingStatus: { old: "prescribed", new: "draft" }, collecting: { old: "true", new: "true" }, treasurerApproved: { old: "true", new: "false" } }
+                    : { billingStatus: { old: "prescribed", new: "draft" } },
+                metadata: { eventId },
+                changedBy: session.user!.email!,
+            });
+        });
 
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true, deletedPrescriptions: 0 };
@@ -319,12 +833,42 @@ export async function unlockBilling(eventId: number): Promise<{ success: true; d
     }
 }
 
+/** Uzamkne doklady pro proplacení — zamkne metadata nákladů (kategorie, popis, příjemce, soubor). */
+export async function lockForReimbursement(eventId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+        const [ev] = await db.select({ id: events.id }).from(events).where(eq(events.id, eventId));
+        if (!ev) return { error: "Akce nenalezena" };
+        await db.update(events)
+            .set({ lockForReimbursement: true, updatedAt: new Date() })
+            .where(eq(events.id, eventId));
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Chyba při uzamčení dokladů" };
+    }
+}
+
+/** Odemkne doklady pro proplacení. */
+export async function unlockForReimbursement(eventId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const db = getDb();
+        await db.update(events)
+            .set({ lockForReimbursement: false, updatedAt: new Date() })
+            .where(eq(events.id, eventId));
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true };
+    } catch {
+        return { error: "Chyba při odemčení dokladů" };
+    }
+}
+
 // ── Dotace akce ───────────────────────────────────────────────────────────────
 
 export async function updateEventSubsidy(eventId: number, subsidyPerMember: number | null): Promise<{ success: true } | { error: string }> {
     try {
         const db = getDb();
-        if (await getBillingStatus(db, eventId) === "prescribed")
+        if ((await getEventLocks(db, eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
         await db.update(events)
             .set({ subsidyPerMember: subsidyPerMember !== null ? String(subsidyPerMember) : null, updatedAt: new Date() })
@@ -346,7 +890,7 @@ export async function updateExpenseAllocationMethod(
         const db = getDb();
         const [exp] = await db.select({ eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp) return { error: "Náklad nenalezen" };
-        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
         // participantCoefficients záměrně nezahazujeme — zachováme je pro obnovu při přepnutí zpět
@@ -376,7 +920,7 @@ export async function setExpenseRegistrationAllocations(
 
         const [exp] = await db.select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
-        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
 
         // Ověření, že součet sedí k částce nákladu
@@ -407,8 +951,13 @@ export async function setExpenseRegistrationAllocations(
 // ── Koeficienty účastníků ─────────────────────────────────────────────────────
 
 /**
- * Uloží koeficienty účastníků, přepočítá per-registrace alokace a přepne metodu na with_coefficients.
- * Klíče: "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné.
+ * Uloží koeficienty účastníků a přepne metodu na with_coefficients.
+ * Klíče: "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné —
+ * stejná identifikace jako activePersonKeysForRegistration v getEventSettlement.
+ *
+ * Žádná derivovaná Kč alokace se neukládá — getEventSettlement čte participantCoefficients
+ * přímo a počítá s plnou přesností (krok 1+3 v ZADANI_VYPOCET_NAKLADU_AKCE.md). Staré
+ * alokace (např. z dřívějšího per_registration) se smažou, aby nezůstaly jako mrtvá data.
  */
 export async function setExpenseParticipantCoefficients(
     expenseId: number,
@@ -422,58 +971,14 @@ export async function setExpenseParticipantCoefficients(
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
-        if (await getBillingStatus(db, exp.eventId) === "prescribed")
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
             return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
-
-        const expenseAmount = parseFloat(exp.amount);
-
-        // Načtení přihlášek a účastníků pro přepočet alokací
-        const regs = await db
-            .select({ id: eventRegistrations.id, personsCount: eventRegistrations.personsCount })
-            .from(eventRegistrations)
-            .where(and(eq(eventRegistrations.eventId, exp.eventId), isNull(eventRegistrations.cancelledAt)));
-
-        const regIds = regs.map(r => r.id);
-        const participants = regIds.length > 0
-            ? await db
-                .select({ id: eventRegistrationParticipants.id, registrationId: eventRegistrationParticipants.registrationId })
-                .from(eventRegistrationParticipants)
-                .where(inArray(eventRegistrationParticipants.registrationId, regIds))
-            : [];
-
-        // Generuje klíče osob pro přihlášku — stejná logika jako getPersonsForAlloc na klientu
-        function getPersonKeys(regId: number, personsCount: number | null): string[] {
-            const regParticipants = participants.filter(p => p.registrationId === regId);
-            if (regParticipants.length > 0) {
-                return regParticipants.map((p, i) => p.id > 0 ? `p${p.id}` : `r${regId}-${i}`);
-            }
-            return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
-        }
-
-        // Celková váha = součet koeficientů všech osob
-        const allKeys = regs.flatMap(r => getPersonKeys(r.id, r.personsCount));
-        const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-
-        // Alokace per přihláška
-        const allocations = regs.map(reg => {
-            const keys = getPersonKeys(reg.id, reg.personsCount);
-            const regWeight = keys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-            const amount = totalWeight > 0 ? Math.ceil(expenseAmount * regWeight / totalWeight) : 0;
-            return { registrationId: reg.id, amount };
-        });
 
         await db.transaction(async tx => {
             await tx.update(eventExpenses)
                 .set({ allocationMethod: "with_coefficients", participantCoefficients: coefficients })
                 .where(eq(eventExpenses.id, expenseId));
-
             await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
-            const nonZero = allocations.filter(a => a.amount > 0);
-            if (nonZero.length > 0) {
-                await tx.insert(eventExpenseAllocations).values(
-                    nonZero.map(a => ({ expenseId, registrationId: a.registrationId, amount: String(a.amount) }))
-                );
-            }
         });
 
         revalidatePath(`/dashboard/events/${exp.eventId}`);
@@ -526,11 +1031,23 @@ export async function regeneratePrescriptions(
     eventId: number,
 ): Promise<{ error: string } | { created: number; updated: number }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
         const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
         const settlement = await getEventSettlement(eventId);
+        const gateError = await prescriptionGateError(db, eventId, settlement, "regenerate_prescriptions", session.user.email);
+        if (gateError) return { error: gateError };
         const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId: eventId,
+            action: "regenerate_prescriptions",
+            changes: { created: { old: null, new: String(result.created) }, updated: { old: null, new: String(result.updated) } },
+            metadata: { eventId },
+            changedBy: session.user.email,
+        });
         revalidatePath(`/dashboard/events/${eventId}`);
         return result;
     } catch (e) {
@@ -557,9 +1074,14 @@ async function upsertPrescriptionAmounts(
 
     await db.transaction(async tx => {
         for (const reg of settlement.registrations) {
-            // Záloha je fixní — od ní odečteme, abychom dostali doplatek
-            const depositAmount = reg.depositPrescription?.amount ?? 0;
-            const settlementAmount = String(Math.max(0, reg.totalAmount - depositAmount));
+            const settlementAmount = String(Math.max(0, reg.totalAmount - reg.effectiveDepositForSettlement));
+
+            // Pojistka: už zaplacený/spárovaný doplatek se NIKDY nepřepisuje — člověk zaplatil
+            // dohodnutou částku, ta platí (důvěra uživatelů > korunová přesnost). Přepočet smí
+            // měnit jen pending předpisy. Viz no-regen-after-payments.
+            if (reg.settlementPrescription && (reg.settlementPrescription.status === "matched" || reg.settlementPrescription.status === "paid")) {
+                continue;
+            }
 
             if (reg.settlementPrescription) {
                 await tx.update(eventPaymentPrescriptions)
@@ -607,7 +1129,7 @@ export async function addAdminEventRegistration(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
-        if (await getBillingStatus(db, eventId) === "prescribed") return { error: "Nelze přidávat přihlášky — náklady jsou uzamčeny." };
+        { const block = await registrationEditBlock(db, eventId, session.user.email, { action: "create_registration" }); if (block) return { error: block }; }
 
         const publicToken = randomBytes(24).toString("hex");
 
@@ -643,6 +1165,15 @@ export async function addAdminEventRegistration(
             // Přihláška dostane settlement předpis hned při vzniku (amount=0, přepočítá se při lockBilling)
             await createSettlementPrescription(tx, eventId, reg.id, input.firstName, input.lastName, event.name);
 
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: reg.id,
+                action: "create",
+                changes: { created: { old: null, new: `${input.firstName} ${input.lastName} (${input.participants.length} os.)` } },
+                metadata: { eventId, registrationId: reg.id },
+                changedBy: session.user!.email!,
+            });
+
             return reg.id;
         });
 
@@ -658,12 +1189,44 @@ export async function updateAdminRegistration(
     input: Partial<Pick<AdminRegistrationInput, "email" | "phone" | "firstName" | "lastName"> & { note: string | null }>,
 ): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
-        const [reg] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+        const [reg] = await db
+            .select({
+                eventId: eventRegistrations.eventId,
+                email: eventRegistrations.email,
+                phone: eventRegistrations.phone,
+                firstName: eventRegistrations.firstName,
+                lastName: eventRegistrations.lastName,
+                note: eventRegistrations.note,
+            })
+            .from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!reg) return { error: "Přihláška nenalezena" };
-        if (await getBillingStatus(db, reg.eventId) === "prescribed") return { error: "Nelze měnit přihlášky — náklady jsou uzamčeny." };
+        { const block = await registrationEditBlock(db, reg.eventId, session.user.email, { action: "update_registration", registrationId }); if (block) return { error: block }; }
         await db.update(eventRegistrations).set(input).where(eq(eventRegistrations.id, registrationId));
-        if (reg) revalidatePath(`/dashboard/events/${reg.eventId}`);
+
+        // Audit jen reálně změněných polí (old → new).
+        const fields: (keyof typeof input)[] = ["email", "phone", "firstName", "lastName", "note"];
+        const changes: Record<string, { old: string | null; new: string | null }> = {};
+        for (const f of fields) {
+            if (f in input) {
+                const oldVal = (reg as Record<string, unknown>)[f] as string | null ?? null;
+                const newVal = (input[f] ?? null) as string | null;
+                if (oldVal !== newVal) changes[f] = { old: oldVal, new: newVal };
+            }
+        }
+        if (Object.keys(changes).length > 0) {
+            await db.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: registrationId,
+                action: "update",
+                changes,
+                metadata: { eventId: reg.eventId, registrationId },
+                changedBy: session.user.email,
+            });
+        }
+        revalidatePath(`/dashboard/events/${reg.eventId}`);
         return { success: true };
     } catch {
         return { error: "Nepodařilo se upravit přihlášku" };
@@ -675,17 +1238,29 @@ export async function updateParticipantFullName(
     fullName: string,
 ): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
         const [pRow] = await db
-            .select({ registrationId: eventRegistrationParticipants.registrationId })
+            .select({ registrationId: eventRegistrationParticipants.registrationId, oldName: eventRegistrationParticipants.fullName })
             .from(eventRegistrationParticipants)
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "rename_participant", registrationId: pRow.registrationId, participantId }); if (block) return { error: block }; }
         await db.update(eventRegistrationParticipants)
             .set({ fullName: fullName.trim() })
             .where(eq(eventRegistrationParticipants.id, participantId));
+        if (pRow.oldName !== fullName.trim()) {
+            await db.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: pRow.registrationId,
+                action: "rename_participant",
+                changes: { fullName: { old: pRow.oldName, new: fullName.trim() } },
+                metadata: { eventId: regRow?.eventId, registrationId: pRow.registrationId, participantId },
+                changedBy: session.user.email,
+            });
+        }
         if (regRow) revalidatePath(`/dashboard/events/${regRow.eventId}`);
         return { success: true };
     } catch {
@@ -698,18 +1273,32 @@ export async function linkParticipantToMember(
     memberId: number | null,
 ): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
         const [pRow] = await db
-            .select({ registrationId: eventRegistrationParticipants.registrationId })
+            .select({ registrationId: eventRegistrationParticipants.registrationId, oldMemberId: eventRegistrationParticipants.memberId })
             .from(eventRegistrationParticipants)
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (pRow) {
             const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-            if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze měnit účastníky — náklady jsou uzamčeny." };
+            if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "link_member", registrationId: pRow.registrationId, participantId, memberId }); if (block) return { error: block }; }
         }
         await db.update(eventRegistrationParticipants)
             .set({ memberId, personId: null })
             .where(eq(eventRegistrationParticipants.id, participantId));
+
+        // Propojení člena mění dotaci (počítá se jen členům) → auditujeme jako settlement-affecting změnu.
+        if (pRow && pRow.oldMemberId !== memberId) {
+            await db.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: pRow.registrationId,
+                action: "link_member",
+                changes: { memberId: { old: pRow.oldMemberId != null ? String(pRow.oldMemberId) : null, new: memberId != null ? String(memberId) : null } },
+                metadata: { registrationId: pRow.registrationId, participantId, memberId, previousMemberId: pRow.oldMemberId },
+                changedBy: session.user.email,
+            });
+        }
 
         const [p] = await db
             .select({ registrationId: eventRegistrationParticipants.registrationId })
@@ -817,11 +1406,23 @@ function buildSettlementEmailPayload(
         amount: p.amount,
         bankAccount: p.bankAccount,
         paymentDue: p.paymentDue,
-        unitPrice: reg.personsCount > 0 ? Math.round(reg.expensesTotal / reg.personsCount) : 0,
-        participants: reg.participants.map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null })),
+        // cost = finalAmount + subsidyAmount (gross cena před dotací, odvozená ze zaokrouhleného finalAmount) —
+        // ne raw totalCost, aby Cena/os. − Dotace v mailu vždy přesně dalo finalAmount (žádný zbytkový Kč navíc/míň).
+        participants: [
+            ...reg.participants.filter(pt => !pt.cancelledAt).map(pt => ({ fullName: pt.fullName, isMember: pt.memberId !== null, cost: pt.finalAmount + pt.subsidyAmount })),
+            // Odhlášení účastníci s nevrácenou (propadlou) zálohou — čistě informativní řádek,
+            // bez rozpisu/vysvětlení (na rozdíl od tabulky na záložce Platby). Na výpočet doplatku
+            // ani na celkový finanční výsledek akce to nemá žádný vliv — forfeitTotal se proto
+            // přidává i k zobrazené záloze níž (Cena/os. i Záloha z přihlášky se vykrátí stejně).
+            ...reg.participants.filter(pt => pt.cancelledAt && pt.depositForfeitPolicy && reg.depositPrescription).map(pt => {
+                const depositPerPerson = reg.depositPrescription!.amount / reg.personsCount;
+                const forfeitAmount = Math.max(0, depositPerPerson - (pt.depositRefundAmount ?? 0));
+                return forfeitAmount > 0 ? { fullName: pt.fullName, isMember: pt.memberId !== null, cost: forfeitAmount } : null;
+            }).filter((row): row is { fullName: string; isMember: boolean; cost: number } => row !== null),
+        ],
         memberCount: reg.memberCount,
         subsidy: reg.subsidy,
-        depositAmount: reg.depositPrescription?.amount ?? 0,
+        depositAmount: reg.effectiveDepositForSettlement + registrationForfeitTotal(reg),
         message: message || undefined,
         senderName,
         senderEmail,
@@ -852,6 +1453,7 @@ export async function sendEventSettlementEmails(
         let sent = 0;
         let skipped = 0;
         const failed: { name: string; email: string; error: string }[] = [];
+        const sentPrescriptionIds: number[] = [];
         const senderName = session.user.name ?? undefined;
         const senderEmail = session.user.email;
 
@@ -866,11 +1468,17 @@ export async function sendEventSettlementEmails(
             try {
                 const result = await resend.emails.send({ from: emailSettings.from, to, replyTo: emailSettings.replyTo, subject, html });
                 if (result.error) { failed.push({ name: fullName, email: to, error: result.error.message }); }
-                else { sent++; }
+                else { sent++; sentPrescriptionIds.push(p.id); }
             } catch (e) {
                 failed.push({ name: fullName, email: to, error: e instanceof Error ? e.message : "Neznámá chyba" });
             }
             await new Promise(r => setTimeout(r, 250));
+        }
+
+        if (sentPrescriptionIds.length > 0) {
+            await db.update(eventPaymentPrescriptions)
+                .set({ emailSentAt: new Date() })
+                .where(inArray(eventPaymentPrescriptions.id, sentPrescriptionIds));
         }
 
         await db.insert(eventSettlementEmailSends).values({
@@ -908,14 +1516,16 @@ export async function sendSingleRegistrationEmail(
             .from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!reg) return { error: "Přihláška nenalezena" };
         if (reg.cancelledAt) return { error: "Přihláška je zrušena" };
-        if (await getBillingStatus(db, reg.eventId) !== "prescribed") return { error: "Náklady nejsou uzamčeny — nejdříve vygenerujte předpisy." };
+        if ((await getEventLocks(db, reg.eventId))?.billingStatus !== "prescribed") return { error: "Náklady nejsou uzamčeny — nejdříve vygenerujte předpisy." };
 
         const [event] = await db.select({ name: events.name, treasurerApproved: events.treasurerApproved }).from(events).where(eq(events.id, reg.eventId));
         if (!event) return { error: "Akce nenalezena" };
         if (!event.treasurerApproved) return { error: "Předpis nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním." };
 
         const settlement = await getEventSettlement(reg.eventId);
-        const regRow = settlement.registrations.find(r => r.registrationId === registrationId);
+        await upsertPrescriptionAmounts(reg.eventId, settlement, event.name, db);
+        const freshSettlement = await getEventSettlement(reg.eventId);
+        const regRow = freshSettlement.registrations.find(r => r.registrationId === registrationId);
         if (!regRow) return { error: "Přihláška není ve vyúčtování" };
         if (!regRow.settlementPrescription) return { error: "Přihláška nemá doplatek předpis — nejdříve uzamkněte náklady." };
 
@@ -926,6 +1536,10 @@ export async function sendSingleRegistrationEmail(
 
         const result = await getResendClient().emails.send({ from: emailSettings.from, to, replyTo: emailSettings.replyTo, subject, html });
         if (result.error) return { error: result.error.message };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({ emailSentAt: new Date() })
+            .where(eq(eventPaymentPrescriptions.id, regRow.settlementPrescription.id));
 
         await db.insert(eventSettlementEmailSends).values({
             eventId: reg.eventId,
@@ -958,7 +1572,7 @@ export async function addParticipantToRegistration(
         const db = getDb();
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
         if (!regRow) return { error: "Přihláška nenalezena" };
-        if (await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze přidávat účastníky — náklady jsou uzamčeny." };
+        { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "add_participant", registrationId }); if (block) return { error: block }; }
 
         let eventId: number | null = null;
 
@@ -968,18 +1582,27 @@ export async function addParticipantToRegistration(
                 .from(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.registrationId, registrationId));
 
-            await tx.insert(eventRegistrationParticipants).values({
+            const [newParticipant] = await tx.insert(eventRegistrationParticipants).values({
                 registrationId,
                 eventId: regRow.eventId,
                 participantOrder: nextOrder,
                 fullName: participant.fullName.trim(),
                 isPrimary: false,
                 memberId: participant.memberId ?? null,
-            });
+            }).returning({ id: eventRegistrationParticipants.id });
 
             await tx.update(eventRegistrations)
                 .set({ personsCount: sql`${eventRegistrations.personsCount} + 1` })
                 .where(eq(eventRegistrations.id, registrationId));
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: registrationId,
+                action: "add_participant",
+                changes: { participant: { old: null, new: participant.fullName.trim() } },
+                metadata: { eventId: regRow.eventId, registrationId, participantId: newParticipant.id, memberId: participant.memberId ?? null },
+                changedBy: session.user!.email!,
+            });
 
             const [reg] = await tx.select({ eventId: eventRegistrations.eventId })
                 .from(eventRegistrations)
@@ -1008,13 +1631,13 @@ export async function removeParticipantFromRegistration(
             .where(eq(eventRegistrationParticipants.id, participantId));
         if (!pRow) return { error: "Účastník nenalezen" };
         const [regRow] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, pRow.registrationId));
-        if (regRow && await getBillingStatus(db, regRow.eventId) === "prescribed") return { error: "Nelze odebírat účastníky — náklady jsou uzamčeny." };
+        if (regRow) { const block = await registrationEditBlock(db, regRow.eventId, session.user.email, { action: "remove_participant", registrationId: pRow.registrationId, participantId }); if (block) return { error: block }; }
 
         let eventId: number | null = null;
 
         await db.transaction(async tx => {
             const [p] = await tx
-                .select({ registrationId: eventRegistrationParticipants.registrationId })
+                .select({ registrationId: eventRegistrationParticipants.registrationId, fullName: eventRegistrationParticipants.fullName, memberId: eventRegistrationParticipants.memberId })
                 .from(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.id, participantId));
 
@@ -1025,7 +1648,7 @@ export async function removeParticipantFromRegistration(
                 .from(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.registrationId, p.registrationId));
 
-            if (cnt <= 1) throw new Error("Přihláška musí mít alespoň jednoho účastníka. Pro zrušení přihlášky použijte tlačítko Zrušit přihlášku.");
+            if (cnt <= 1) throw new BlockedError("Přihláška musí mít alespoň jednoho účastníka. Pro zrušení přihlášky použijte tlačítko Zrušit přihlášku.", { attemptedAction: "remove_participant", eventId: regRow?.eventId, registrationId: p.registrationId, participantId, memberId: p.memberId });
 
             await tx.delete(eventRegistrationParticipants)
                 .where(eq(eventRegistrationParticipants.id, participantId));
@@ -1033,6 +1656,15 @@ export async function removeParticipantFromRegistration(
             await tx.update(eventRegistrations)
                 .set({ personsCount: sql`GREATEST(1, ${eventRegistrations.personsCount} - 1)` })
                 .where(eq(eventRegistrations.id, p.registrationId));
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: p.registrationId,
+                action: "remove_participant",
+                changes: { participant: { old: p.fullName, new: null } },
+                metadata: { eventId: regRow?.eventId, registrationId: p.registrationId, participantId, memberId: p.memberId },
+                changedBy: session.user!.email!,
+            });
 
             const [reg] = await tx.select({ eventId: eventRegistrations.eventId })
                 .from(eventRegistrations)
@@ -1043,7 +1675,269 @@ export async function removeParticipantFromRegistration(
         if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se odebrat účastníka" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se odebrat účastníka");
+    }
+}
+
+// ── Finální náklady akce (pro select v dialogu propadlé zálohy) ───────────────
+
+export async function getEventFinalExpenses(
+    eventId: number,
+): Promise<{ id: number; purposeText: string | null; amount: number }[]> {
+    const db = getDb();
+    const rows = await db
+        .select({ id: eventExpenses.id, purposeText: eventExpenses.purposeText, amount: eventExpenses.amount })
+        .from(eventExpenses)
+        .where(and(eq(eventExpenses.eventId, eventId), eq(eventExpenses.status, "final"), isNotNull(eventExpenses.amount)));
+    return rows.map(r => ({ id: r.id, purposeText: r.purposeText, amount: parseFloat(r.amount!) }));
+}
+
+// ── Odhlášení konkrétního účastníka (bez zrušení celé přihlášky) ──────────────
+
+export interface CancelParticipantData {
+    depositRefundAmount?: number;
+    depositForfeitPolicy?: DepositForfeitPolicy;
+    depositForfeitExpenseId?: number | null;
+}
+
+export async function cancelParticipant(
+    participantId: number,
+    data: CancelParticipantData,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const now = new Date();
+        let eventId: number | null = null;
+
+        // Zámek: odhlášení účastníka mění aktivní podíly → mění vyúčtování. Po uzamčení nákladů
+        // (lockForParticipants) je proto blokované úplně stejně jako přidání/odebrání — jinak by
+        // tahle cesta tiše přepočítala a přepsala už vystavené (i zaplacené) předpisy.
+        const [pre] = await db
+            .select({ eventId: eventRegistrations.eventId, registrationId: eventRegistrationParticipants.registrationId })
+            .from(eventRegistrationParticipants)
+            .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
+            .where(eq(eventRegistrationParticipants.id, participantId));
+        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "cancel_participant", registrationId: pre.registrationId, participantId }); if (block) return { error: block }; }
+
+        await db.transaction(async tx => {
+            const [participant] = await tx
+                .select({
+                    id: eventRegistrationParticipants.id,
+                    registrationId: eventRegistrationParticipants.registrationId,
+                    fullName: eventRegistrationParticipants.fullName,
+                    memberId: eventRegistrationParticipants.memberId,
+                    cancelledAt: eventRegistrationParticipants.cancelledAt,
+                })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            if (!participant) throw new Error("Účastník nenalezen");
+            if (participant.cancelledAt) throw new BlockedError("Účastník je již odhlášen", { attemptedAction: "cancel_participant", registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId });
+
+            const [reg] = await tx
+                .select({ id: eventRegistrations.id, eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt, personsCount: eventRegistrations.personsCount })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, participant.registrationId));
+
+            if (!reg) throw new Error("Přihláška nenalezena");
+            if (reg.cancelledAt) throw new BlockedError("Přihláška je již zrušena", { attemptedAction: "cancel_participant", eventId: reg.eventId, registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId });
+
+            eventId = reg.eventId;
+
+            // Označit účastníka jako odhlášeného
+            await tx.update(eventRegistrationParticipants)
+                .set({
+                    cancelledAt: now,
+                    depositRefundAmount: data.depositRefundAmount != null ? String(data.depositRefundAmount) : null,
+                    depositForfeitPolicy: data.depositForfeitPolicy ?? null,
+                    depositForfeitExpenseId: data.depositForfeitExpenseId ?? null,
+                })
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            // Zkontrolovat: pokud jsou nyní VŠICHNI účastníci odhlášeni, přihláška se stává zrušenou
+            const remaining = await tx
+                .select({ id: eventRegistrationParticipants.id })
+                .from(eventRegistrationParticipants)
+                .where(and(
+                    eq(eventRegistrationParticipants.registrationId, participant.registrationId),
+                    isNull(eventRegistrationParticipants.cancelledAt),
+                ));
+
+            if (remaining.length === 0) {
+                await tx.update(eventRegistrations)
+                    .set({ cancelledAt: now })
+                    .where(eq(eventRegistrations.id, participant.registrationId));
+
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ status: "cancelled", updatedAt: now })
+                    .where(and(
+                        eq(eventPaymentPrescriptions.registrationId, participant.registrationId),
+                        inArray(eventPaymentPrescriptions.status, ["pending"]),
+                    ));
+
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId: participant.registrationId,
+                    action: "cancel",
+                    changes: { cancelledAt: { old: null, new: now.toISOString() }, reason: { old: null, new: "Všichni účastníci odhlášeni" } },
+                    metadata: { eventId: reg.eventId, registrationId: participant.registrationId },
+                    changedBy: session.user!.email!,
+                });
+            }
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: participant.registrationId,
+                action: "cancel_participant",
+                changes: {
+                    participant: { old: null, new: participant.fullName },
+                    cancelledAt: { old: null, new: now.toISOString() },
+                    ...(data.depositRefundAmount != null ? { depositRefundAmount: { old: null, new: String(data.depositRefundAmount) } } : {}),
+                    ...(data.depositForfeitPolicy ? { depositForfeitPolicy: { old: null, new: data.depositForfeitPolicy } } : {}),
+                },
+                metadata: { eventId: reg.eventId, registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId },
+                changedBy: session.user!.email!,
+            });
+        });
+
+        if (eventId) {
+            // with_coefficients váhy se počítají vždy živě z aktivních účastníků (getEventSettlement),
+            // odhlášený účastník se tedy automaticky vyřadí — žádný přepočet alokací není potřeba.
+
+            // Pokud je billing uzamčen, přepočítáme i settlement předpisy — jinak payments tab ukazuje
+            // stará čísla z doby před odhlášením účastníka.
+            const [ev] = await db
+                .select({ billingStatus: events.billingStatus, name: events.name })
+                .from(events)
+                .where(eq(events.id, eventId));
+            if (ev?.billingStatus === "prescribed") {
+                const settlement = await getEventSettlement(eventId);
+                await upsertPrescriptionAmounts(eventId, settlement, ev.name, db);
+            }
+            revalidatePath(`/dashboard/events/${eventId}`);
+        }
+        return { success: true };
+    } catch (e) {
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se odhlásit účastníka");
+    }
+}
+
+export async function restoreParticipant(
+    participantId: number,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        let eventId: number | null = null;
+
+        // Zámek — stejně jako u cancelParticipant: obnovení účastníka mění vyúčtování, po uzamčení blokováno.
+        const [pre] = await db
+            .select({ eventId: eventRegistrations.eventId, registrationId: eventRegistrationParticipants.registrationId })
+            .from(eventRegistrationParticipants)
+            .innerJoin(eventRegistrations, eq(eventRegistrations.id, eventRegistrationParticipants.registrationId))
+            .where(eq(eventRegistrationParticipants.id, participantId));
+        if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "restore_participant", registrationId: pre.registrationId, participantId }); if (block) return { error: block }; }
+
+        await db.transaction(async tx => {
+            const [participant] = await tx
+                .select({
+                    id: eventRegistrationParticipants.id,
+                    registrationId: eventRegistrationParticipants.registrationId,
+                    fullName: eventRegistrationParticipants.fullName,
+                    memberId: eventRegistrationParticipants.memberId,
+                    cancelledAt: eventRegistrationParticipants.cancelledAt,
+                })
+                .from(eventRegistrationParticipants)
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            if (!participant) throw new Error("Účastník nenalezen");
+            if (!participant.cancelledAt) throw new BlockedError("Účastník není odhlášen", { attemptedAction: "restore_participant", registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId });
+
+            const [reg] = await tx
+                .select({ id: eventRegistrations.id, eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
+                .from(eventRegistrations)
+                .where(eq(eventRegistrations.id, participant.registrationId));
+
+            if (!reg) throw new Error("Přihláška nenalezena");
+
+            eventId = reg.eventId;
+
+            // Zjistit, zda jsou všichni účastníci odhlášeni (auto-cancel přihlášky)
+            const activeParticipants = await tx
+                .select({ id: eventRegistrationParticipants.id })
+                .from(eventRegistrationParticipants)
+                .where(and(
+                    eq(eventRegistrationParticipants.registrationId, participant.registrationId),
+                    isNull(eventRegistrationParticipants.cancelledAt),
+                ));
+
+            const wasAutoCancel = activeParticipants.length === 0 && !!reg.cancelledAt;
+
+            // Obnovit účastníka
+            await tx.update(eventRegistrationParticipants)
+                .set({
+                    cancelledAt: null,
+                    depositRefundAmount: null,
+                    depositForfeitPolicy: null,
+                    depositForfeitExpenseId: null,
+                })
+                .where(eq(eventRegistrationParticipants.id, participantId));
+
+            // Pokud byla přihláška auto-zrušena (všichni účastníci odhlášeni), obnovit i přihlášku
+            if (wasAutoCancel) {
+                await tx.update(eventRegistrations)
+                    .set({ cancelledAt: null })
+                    .where(eq(eventRegistrations.id, participant.registrationId));
+
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ status: "pending", updatedAt: new Date() })
+                    .where(and(
+                        eq(eventPaymentPrescriptions.registrationId, participant.registrationId),
+                        eq(eventPaymentPrescriptions.status, "cancelled"),
+                    ));
+
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId: participant.registrationId,
+                    action: "restore",
+                    changes: { cancelledAt: { old: reg.cancelledAt!.toISOString(), new: null } },
+                    metadata: { eventId: reg.eventId, registrationId: participant.registrationId },
+                    changedBy: session.user!.email!,
+                });
+            }
+
+            await tx.insert(auditLog).values({
+                entityType: "event_registration",
+                entityId: participant.registrationId,
+                action: "restore_participant",
+                changes: {
+                    participant: { old: participant.fullName, new: null },
+                    cancelledAt: { old: participant.cancelledAt.toISOString(), new: null },
+                },
+                metadata: { eventId: reg.eventId, registrationId: participant.registrationId, participantId: participant.id, memberId: participant.memberId },
+                changedBy: session.user!.email!,
+            });
+        });
+
+        if (eventId) {
+            const [ev] = await db
+                .select({ billingStatus: events.billingStatus, name: events.name })
+                .from(events)
+                .where(eq(events.id, eventId));
+            if (ev?.billingStatus === "prescribed") {
+                const settlement = await getEventSettlement(eventId);
+                await upsertPrescriptionAmounts(eventId, settlement, ev.name, db);
+            }
+            revalidatePath(`/dashboard/events/${eventId}`);
+        }
+        return { success: true };
+    } catch (e) {
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se obnovit účastníka");
     }
 }
 
@@ -1058,6 +1952,11 @@ export async function cancelAdminRegistration(
         const now = new Date();
         let eventId: number | null = null;
 
+        {
+            const [pre] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "cancel_registration", registrationId }); if (block) return { error: block }; }
+        }
+
         await db.transaction(async tx => {
             const [reg] = await tx
                 .select({ eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
@@ -1065,7 +1964,7 @@ export async function cancelAdminRegistration(
                 .where(eq(eventRegistrations.id, registrationId));
 
             if (!reg) throw new Error("Přihláška nenalezena");
-            if (reg.cancelledAt) throw new Error("Přihláška je již zrušena");
+            if (reg.cancelledAt) throw new BlockedError("Přihláška je již zrušena", { attemptedAction: "cancel_registration", eventId: reg.eventId, registrationId });
 
             const [paidPrescription] = await tx
                 .select({ id: eventPaymentPrescriptions.id })
@@ -1075,7 +1974,7 @@ export async function cancelAdminRegistration(
                     inArray(eventPaymentPrescriptions.status, ["matched", "paid"]),
                 ))
                 .limit(1);
-            if (paidPrescription) throw new Error("Nelze zrušit přihlášku — záloha byla přijata. Pro ruční storno kontaktuj pokladníka.");
+            if (paidPrescription) throw new BlockedError("Nelze zrušit přihlášku — záloha byla přijata. Pro ruční storno kontaktuj pokladníka.", { attemptedAction: "cancel_registration", eventId: reg.eventId, registrationId });
 
             eventId = reg.eventId;
 
@@ -1097,6 +1996,7 @@ export async function cancelAdminRegistration(
                 entityId: registrationId,
                 action: "cancel",
                 changes: { cancelledAt: { old: null, new: now.toISOString() } },
+                metadata: { eventId: reg.eventId, registrationId },
                 changedBy: session.user!.email!,
             });
         });
@@ -1104,7 +2004,7 @@ export async function cancelAdminRegistration(
         if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se zrušit přihlášku" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se zrušit přihlášku");
     }
 }
 
@@ -1118,6 +2018,11 @@ export async function restoreAdminRegistration(
         const db = getDb();
         let eventId: number | null = null;
 
+        {
+            const [pre] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email, { action: "restore_registration", registrationId }); if (block) return { error: block }; }
+        }
+
         await db.transaction(async tx => {
             const [reg] = await tx
                 .select({ eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
@@ -1125,7 +2030,7 @@ export async function restoreAdminRegistration(
                 .where(eq(eventRegistrations.id, registrationId));
 
             if (!reg) throw new Error("Přihláška nenalezena");
-            if (!reg.cancelledAt) throw new Error("Přihláška není zrušena");
+            if (!reg.cancelledAt) throw new BlockedError("Přihláška není zrušena", { attemptedAction: "restore_registration", eventId: reg.eventId, registrationId });
 
             eventId = reg.eventId;
 
@@ -1146,6 +2051,7 @@ export async function restoreAdminRegistration(
                 entityId: registrationId,
                 action: "restore",
                 changes: { cancelledAt: { old: reg.cancelledAt.toISOString(), new: null } },
+                metadata: { eventId: reg.eventId, registrationId },
                 changedBy: session.user!.email!,
             });
         });
@@ -1153,6 +2059,99 @@ export async function restoreAdminRegistration(
         if (eventId) revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch (e) {
-        return { error: e instanceof Error ? e.message : "Nepodařilo se obnovit přihlášku" };
+        return await blockedOrError(e, getDb(), (await auth())?.user?.email ?? "unknown", "Nepodařilo se obnovit přihlášku");
+    }
+}
+
+// ── Příslib zálohy ────────────────────────────────────────────────────────────
+
+export async function setDepositPromise(
+    prescriptionId: number,
+    promise: boolean,
+    note: string,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const [p] = await db
+            .select({
+                type: eventPaymentPrescriptions.type,
+                status: eventPaymentPrescriptions.status,
+                eventId: eventPaymentPrescriptions.eventId,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        if (!p) return { error: "Předpis nenalezen" };
+        if (p.type !== "deposit") return { error: "Příslib lze nastavit jen u zálohy" };
+        if (p.status === "cancelled") return { error: "Záloha je zrušena — příslib nedává smysl" };
+        if ((await getEventLocks(db, p.eventId))?.lockForParticipants)
+            return { error: "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby)." };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({
+                depositPromise: promise,
+                depositPromiseNote: promise ? (note || null) : null,
+                depositPromiseBy: promise ? session.user.email : null,
+                depositPromiseAt: promise ? new Date() : null,
+                // Příslib a "nebude platit" se vylučují — nastavení příslibu zruší případné "nebude platit".
+                ...(promise ? { depositWontPay: false, depositWontPayNote: null, depositWontPayBy: null, depositWontPayAt: null } : {}),
+                updatedAt: new Date(),
+            })
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        revalidatePath(`/dashboard/events/${p.eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se nastavit příslib zálohy" };
+    }
+}
+
+/** Explicitní rozhodnutí "záloha se nebude vybírat" — celá částka jde do doplatku. */
+export async function setDepositWontPay(
+    prescriptionId: number,
+    wontPay: boolean,
+    note: string,
+): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
+        const db = getDb();
+        const [p] = await db
+            .select({
+                type: eventPaymentPrescriptions.type,
+                status: eventPaymentPrescriptions.status,
+                eventId: eventPaymentPrescriptions.eventId,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        if (!p) return { error: "Předpis nenalezen" };
+        if (p.type !== "deposit") return { error: "\"Nebude platit\" lze nastavit jen u zálohy" };
+        if (p.status === "cancelled") return { error: "Záloha je zrušena — rozhodnutí nedává smysl" };
+        if ((await getEventLocks(db, p.eventId))?.lockForParticipants)
+            return { error: "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby)." };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({
+                depositWontPay: wontPay,
+                depositWontPayNote: wontPay ? (note || null) : null,
+                depositWontPayBy: wontPay ? session.user.email : null,
+                depositWontPayAt: wontPay ? new Date() : null,
+                // Vzájemné vyloučení s příslibem.
+                ...(wontPay ? { depositPromise: false, depositPromiseNote: null, depositPromiseBy: null, depositPromiseAt: null } : {}),
+                updatedAt: new Date(),
+            })
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        revalidatePath(`/dashboard/events/${p.eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se nastavit rozhodnutí o záloze" };
     }
 }

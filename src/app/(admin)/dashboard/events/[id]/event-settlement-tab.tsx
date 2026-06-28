@@ -9,7 +9,7 @@ import {
     updateExpenseAllocationMethod,
     setExpenseParticipantCoefficients,
 } from "@/lib/actions/event-settlement";
-import type { EventSettlement, SettlementRegistrationRow } from "@/lib/actions/event-settlement";
+import type { EventSettlement, SettlementRegistrationRow, FinalExpenseRow } from "@/lib/actions/event-settlement";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -23,13 +23,15 @@ type AllocPerson = { key: string; fullName: string };
 
 function getPersonsForAlloc(reg: SettlementRegistrationRow): AllocPerson[] {
     if (reg.participants.length > 0) {
-        return reg.participants.map((p, i) => ({
-            key: p.id > 0 ? `p${p.id}` : `r${reg.registrationId}-${i}`,
-            fullName: p.fullName,
-        }));
+        return reg.participants
+            .filter(p => !p.cancelledAt)
+            .map((p, i) => ({
+                key: p.id > 0 ? `p${p.id}` : `r${reg.registrationId}-${i}`,
+                fullName: p.fullName,
+            }));
     }
     // Fallback — registrace bez zaznamenaných účastníků
-    return Array.from({ length: reg.personsCount }, (_, i) => ({
+    return Array.from({ length: reg.activePersonsCount }, (_, i) => ({
         key: `r${reg.registrationId}-${i}`,
         fullName: i === 0 ? `${reg.firstName} ${reg.lastName}` : `Účastník ${i + 1}`,
     }));
@@ -49,12 +51,14 @@ function coefLabel(v: number): string {
     return `${v}×`;
 }
 
-function CoefChip({ personKey, fullName, value, onChange, disabled }: {
+function CoefChip({ personKey, fullName, value, onChange, disabled, isUnset }: {
     personKey: string;
     fullName: string;
     value: number;
     onChange: (key: string, val: number) => void;
     disabled?: boolean;
+    /** Klíč chybí v uložených koeficientech (účastník přidaný po nastavení) — tichá váha 0, dokud admin nedoplní. */
+    isUnset?: boolean;
 }) {
     const [open, setOpen] = useState(false);
     const [draft, setDraft] = useState(String(value));
@@ -84,18 +88,21 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
                     disabled={disabled}
                     className={[
                         "inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium border transition-all",
-                        isExcluded
-                            ? "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
-                            : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100",
+                        isUnset
+                            ? "bg-amber-50 text-amber-800 border-amber-300 hover:bg-amber-100"
+                            : isExcluded
+                                ? "bg-gray-50 text-gray-400 border-gray-200 hover:bg-gray-100"
+                                : "bg-emerald-50 text-emerald-800 border-emerald-200 hover:bg-emerald-100",
                         disabled ? "opacity-50 cursor-not-allowed" : "cursor-pointer",
                     ].join(" ")}
+                    title={isUnset ? "Koeficient nenastaven — doplňte podíl (blokuje generování předpisů)" : undefined}
                 >
-                    <span className={isExcluded ? "line-through" : ""}>{fullName}</span>
+                    <span className={isExcluded && !isUnset ? "line-through" : ""}>{fullName}</span>
                     <span className={[
                         "font-mono text-[10px]",
-                        isExcluded ? "text-gray-300" : value === 1 ? "text-emerald-400" : "text-emerald-600 font-semibold",
+                        isUnset ? "text-amber-600 font-semibold" : isExcluded ? "text-gray-300" : value === 1 ? "text-emerald-400" : "text-emerald-600 font-semibold",
                     ].join(" ")}>
-                        {coefLabel(value)}
+                        {isUnset ? "?" : coefLabel(value)}
                     </span>
                 </button>
             </PopoverTrigger>
@@ -170,13 +177,11 @@ function CoefChip({ personKey, fullName, value, onChange, disabled }: {
 function ExpenseAllocationRow({
     expense,
     registrations,
-    onAllocationsChanged,
     onReload,
     disabled,
 }: {
-    expense: EventSettlement["finalExpenses"][0];
+    expense: FinalExpenseRow;
     registrations: SettlementRegistrationRow[];
-    onAllocationsChanged?: (expenseId: number, allocs: { registrationId: number; amount: number }[], newMethod?: "with_coefficients" | "per_registration") => void;
     onReload?: () => void;
     disabled?: boolean;
 }) {
@@ -207,17 +212,6 @@ function ExpenseAllocationRow({
     const saveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => () => { if (saveTimer.current) clearTimeout(saveTimer.current); }, []);
-
-    // Přepočet alokací per přihláška z koeficientů
-    function calcAllocsFromCoefs(coefs: Record<string, number>): { registrationId: number; amount: number }[] {
-        const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
-        const totalWeight = allKeys.reduce((s, k) => s + (coefs[k] ?? 0), 0);
-        if (totalWeight === 0) return registrations.map(r => ({ registrationId: r.registrationId, amount: 0 }));
-        return registrations.map(reg => {
-            const regWeight = getPersonsForAlloc(reg).reduce((s, p) => s + (coefs[p.key] ?? 0), 0);
-            return { registrationId: reg.registrationId, amount: Math.ceil(expense.amount * regWeight / totalWeight) };
-        });
-    }
 
     function handleSetSplitAll() {
         if (disabled) return;
@@ -252,17 +246,18 @@ function ExpenseAllocationRow({
             }
             setCoefficients(coefs);
         }
-        // Okamžitá UI aktualizace včetně přepočtu spodní tabulky
+        // Okamžitá UI aktualizace (přepínač metody, rozbalení) — koeficientové chipy se vykreslí hned
         const prevMethod = method;
         setMethod("with_coefficients");
         setExpanded(true);
         setSaveError(null);
-        onAllocationsChanged?.(expense.id, calcAllocsFromCoefs(coefs), "with_coefficients");
-        // Uložení v pozadí
+        // Uložení v pozadí; po úspěchu tichý reload — částky se počítají na serveru (getEventSettlement),
+        // klient je už neaproximuje, ať se zobrazení nikdy nerozejde s tím, co půjde do předpisu.
         setMethodSaving(true);
         setExpenseParticipantCoefficients(expense.id, coefs)
             .then(res => {
                 if ("error" in res) { setSaveError(res.error); setMethod(prevMethod); setExpanded(false); }
+                else { onReload?.(); }
             })
             .finally(() => setMethodSaving(false));
     }
@@ -271,12 +266,11 @@ function ExpenseAllocationRow({
         if (disabled) return;
         const newCoefs = { ...coefficients, [key]: val };
         setCoefficients(newCoefs);
-        const newAllocs = calcAllocsFromCoefs(newCoefs);
-        onAllocationsChanged?.(expense.id, newAllocs, "with_coefficients");
         if (saveTimer.current) clearTimeout(saveTimer.current);
         saveTimer.current = setTimeout(async () => {
             const res = await setExpenseParticipantCoefficients(expense.id, newCoefs);
-            if ("error" in res) setSaveError(res.error); else setSaveError(null);
+            if ("error" in res) setSaveError(res.error);
+            else { setSaveError(null); onReload?.(); }
         }, 800);
     }
 
@@ -286,14 +280,14 @@ function ExpenseAllocationRow({
         Object.keys(coefficients).length > 0 &&
         Object.values(coefficients).some(v => Math.abs(v - 1) > 0.001 || v === 0);
 
-    // Celková váha a cena na podíl (pro zobrazení)
+    // Celková váha a cena na podíl (pro zobrazení) — z efektivní částky
     const allKeys = registrations.flatMap(r => getPersonsForAlloc(r).map(p => p.key));
     const totalWeight = allKeys.reduce((s, k) => s + (coefficients[k] ?? 0), 0);
-    const pricePerUnit = totalWeight > 0 ? Math.round(expense.amount / totalWeight) : 0;
+    const pricePerUnit = totalWeight > 0 ? Math.round(expense.effectiveAmount / totalWeight) : 0;
 
-    // Cena na osobu pro split_all (pro zobrazení v řádku 2)
-    const totalParticipants = registrations.reduce((s, r) => s + r.personsCount, 0);
-    const ppCostSplitAll = totalParticipants > 0 ? Math.ceil(expense.amount / totalParticipants) : 0;
+    // Cena na osobu pro split_all — aktivní účastníci, efektivní částka
+    const totalActiveParticipants = registrations.reduce((s, r) => s + r.activePersonsCount, 0);
+    const ppCostSplitAll = totalActiveParticipants > 0 ? Math.ceil(expense.effectiveAmount / totalActiveParticipants) : 0;
 
     return (
         <div className="border-b border-gray-100 last:border-0 py-3">
@@ -302,12 +296,22 @@ function ExpenseAllocationRow({
                 <div className="text-sm font-semibold text-gray-900 tabular-nums whitespace-nowrap text-right">
                     {fmtCzk(expense.amount)}
                 </div>
-                <p className="text-sm font-medium text-gray-800">{expense.purposeText ?? "—"}</p>
+                <div className="flex items-center gap-2 flex-wrap">
+                    <p className="text-sm font-medium text-gray-800">{expense.purposeText ?? "—"}</p>
+                    {expense.totalForfeit > 0 && (
+                        <span
+                            title={`Záloha propadlá na tento náklad: −${fmtCzk(expense.totalForfeit)}. Efektivní částka: ${fmtCzk(expense.effectiveAmount)}`}
+                            className="text-[10px] font-semibold px-1.5 py-0.5 rounded border border-orange-200 bg-orange-50 text-orange-700 whitespace-nowrap cursor-help"
+                        >
+                            −{fmtCzk(expense.totalForfeit)} storno záloha
+                        </span>
+                    )}
+                </div>
 
                 {/* Řádek 2: per osoba/podíl + metoda tlačítka */}
                 <div className="text-xs text-gray-400 tabular-nums whitespace-nowrap text-right">
-                    {method === "split_all" && totalParticipants > 0
-                        ? <>{fmtCzk(ppCostSplitAll)}/os. · {totalParticipants}&nbsp;os.</>
+                    {method === "split_all" && totalActiveParticipants > 0
+                        ? <>{fmtCzk(ppCostSplitAll)}/os. · {totalActiveParticipants}&nbsp;os.</>
                         : isCustom && totalWeight > 0
                             ? <>{fmtCzk(pricePerUnit)}/podíl · {totalWeight}&nbsp;p.</>
                             : "—"}
@@ -365,6 +369,7 @@ function ExpenseAllocationRow({
                                         value={coefficients[p.key] ?? 1}
                                         onChange={handleCoefChange}
                                         disabled={disabled}
+                                        isUnset={method === "with_coefficients" && !(p.key in coefficients)}
                                     />
                                 ))}
                             </div>
@@ -400,33 +405,6 @@ export function EventSettlementTab({ eventId, billingStatus }: { eventId: number
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
     useEffect(() => { load(); }, [eventId]);
-
-    function handleAllocationsChanged(
-        expenseId: number,
-        newAllocs: { registrationId: number; amount: number }[],
-        newMethod?: "with_coefficients" | "per_registration",
-    ) {
-        setSettlement(prev => {
-            if (!prev) return prev;
-            const allocMap = new Map(newAllocs.map(a => [a.registrationId, a.amount]));
-            const newRegs = prev.registrations.map(reg => {
-                const newExpenses = reg.expenses.map(e =>
-                    e.expenseId === expenseId
-                        ? { ...e, allocatedAmount: allocMap.get(reg.registrationId) ?? 0, ...(newMethod ? { allocationMethod: newMethod } : {}) }
-                        : e
-                );
-                const perRegPart = newExpenses
-                    .filter(e => e.allocationMethod === "per_registration" || e.allocationMethod === "with_coefficients")
-                    .reduce((s, e) => s + e.allocatedAmount, 0);
-                const expensesTotal = prev.unitPrice * reg.personsCount + perRegPart;
-                const subsidy = prev.totalMemberParticipants > 0
-                    ? Math.round(prev.subsidyTotal * reg.memberCount / prev.totalMemberParticipants)
-                    : 0;
-                return { ...reg, expenses: newExpenses, expensesTotal, subsidy, totalAmount: Math.max(0, expensesTotal - subsidy) };
-            });
-            return { ...prev, registrations: newRegs, grandTotal: newRegs.reduce((s, r) => s + r.totalAmount, 0) };
-        });
-    }
 
     if (loading) {
         return (
@@ -469,7 +447,6 @@ export function EventSettlementTab({ eventId, billingStatus }: { eventId: number
                             key={exp.id}
                             expense={exp}
                             registrations={settlement.registrations}
-                            onAllocationsChanged={handleAllocationsChanged}
                             onReload={silentReload}
                             disabled={isPrescribed}
                         />
