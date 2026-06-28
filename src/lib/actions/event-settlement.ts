@@ -1867,6 +1867,11 @@ export async function cancelAdminRegistration(
         const now = new Date();
         let eventId: number | null = null;
 
+        {
+            const [pre] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
+        }
+
         await db.transaction(async tx => {
             const [reg] = await tx
                 .select({ eventId: eventRegistrations.eventId, cancelledAt: eventRegistrations.cancelledAt })
@@ -1926,6 +1931,11 @@ export async function restoreAdminRegistration(
 
         const db = getDb();
         let eventId: number | null = null;
+
+        {
+            const [pre] = await db.select({ eventId: eventRegistrations.eventId }).from(eventRegistrations).where(eq(eventRegistrations.id, registrationId));
+            if (pre) { const block = await registrationEditBlock(db, pre.eventId, session.user.email); if (block) return { error: block }; }
+        }
 
         await db.transaction(async tx => {
             const [reg] = await tx
