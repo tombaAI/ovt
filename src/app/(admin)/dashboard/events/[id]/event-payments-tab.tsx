@@ -599,8 +599,11 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
 
     function handleUnlock() {
         setUnlockInfo(null);
+        if (settlement?.isCollecting && !window.confirm(
+            "Tato akce už vybírá peníze (odeslané předpisy nebo přijaté platby). Odemčením se vrátí do přípravy, ovlivní to vystavené předpisy a hospodář bude muset znovu schválit vyúčtování. Odemknout může jen hospodář. Pokračovat?"
+        )) return;
         startUnlock(async () => {
-            const res = await unlockBilling(eventId);
+            const res = await unlockBilling(eventId, { confirmed: true });
             if ("error" in res) { setLockError(res.error); return; }
             setBillingStatus("draft");
             onBillingStatusChange("draft");
