@@ -9,3 +9,6 @@ npm-debug.log*
 .DS_Store
 
 /workdatafinance_TJ/
+
+# Claude Code osobní/lokální nastavení
+.claude/settings.local.json
