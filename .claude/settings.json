@@ -1,11 +1,24 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit -m ':*)",
-      "Bash(node -e ':*)",
+      "WebFetch(domain:ovtbohemians.cz)",
+      "WebFetch(domain:www.bohemianstj.cz)",
       "WebFetch(domain:www.fio.cz)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
       "Bash(git commit -m ' *)",
+      "Bash(git push:*)",
+      "Bash(gh workflow *)",
+      "Bash(gh run *)",
+      "Bash(gh issue *)",
+      "Bash(gh pr *)",
+      "Bash(python3:*)",
+      "Bash(npm run:*)",
+      "Bash(npx tsc:*)",
+      "Bash(node -e ':*)",
+      "mcp__Neon__run_sql",
       "mcp__Neon__describe_table_schema",
+      "mcp__Neon__list_projects",
       "WebSearch",
       "Bash(npx tsc --noEmit 2>&1)",
       "Bash(npm run lint 2>&1)",
@@ -15,11 +28,14 @@
       "mcp__Neon__get_connection_string",
       "mcp__plugin_vercel-plugin_vercel__list_deployments",
       "mcp__plugin_vercel-plugin_vercel__get_project",
+      "mcp__plugin_vercel-plugin_vercel__get_runtime_logs",
       "mcp__plugin_vercel-plugin_vercel__list_projects",
       "Bash(git push *)",
       "Bash(git push)"
     ],
     "additionalDirectories": [
+      "/Users/ext93895/work/ovt/src/app/(admin)/dashboard/members",
+      "/Users/ext93895/work/ovt/src/app/api/events/[id]/expenses/[expenseId]",
       "/Users/ext93895/work/ovt-sync/.github/workflows",
       "/Users/ext93895/work/ovt/src/app/api"
     ]
