@@ -6,7 +6,18 @@
       "WebFetch(domain:www.fio.cz)",
       "Bash(git commit -m ' *)",
       "mcp__Neon__describe_table_schema",
-      "WebSearch"
+      "WebSearch",
+      "Bash(npx tsc --noEmit 2>&1)",
+      "Bash(npm run lint 2>&1)",
+      "Bash(npm run lint)",
+      "mcp__plugin_vercel-plugin_vercel__get_runtime_logs",
+      "mcp__Neon__list_projects",
+      "mcp__Neon__get_connection_string",
+      "mcp__plugin_vercel-plugin_vercel__list_deployments",
+      "mcp__plugin_vercel-plugin_vercel__get_project",
+      "mcp__plugin_vercel-plugin_vercel__list_projects",
+      "Bash(git push *)",
+      "Bash(git push)"
     ],
     "additionalDirectories": [
       "/Users/ext93895/work/ovt-sync/.github/workflows",
