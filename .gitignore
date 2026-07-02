@@ -12,3 +12,6 @@ npm-debug.log*
 
 # Claude Code osobní/lokální nastavení
 .claude/settings.local.json
+
+# TypeScript inkrementální build cache
+tsconfig.tsbuildinfo
