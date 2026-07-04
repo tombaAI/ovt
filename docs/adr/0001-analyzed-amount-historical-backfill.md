@@ -16,9 +16,11 @@ jako "shoda" a kontrola je nevyhodnocovala jako falešný alert.
 **Finální rozhodnutí**: místo odhadu proběhne jednorázová **skutečná** re-analýza —
 zjištění při návrhu, že existujících nákladů s přílohou je jen 37, změnilo kalkulaci:
 reálná Gemini analýza všech 37 je levná (řádově desetikoruny, pár minut běhu), takže
-není důvod spokojit se s nepřesným odhadem. Backfill tedy volá stejnou logiku jako
-nový endpoint `reanalyze` (viz design spec, sekce 4 a 7) — jednorázový skript spuštěný
-po nasazení, ne SQL `UPDATE`.
+není důvod spokojit se s nepřesným odhadem. Backfill je implementovaný jako resumovatelný
+admin endpoint `POST /api/admin/backfill-analyzed-amount` (viz design spec, sekce 7),
+který volá `analyzeExpenseFile()` nad staženou přílohou — ne SQL `UPDATE`. Nečitelné
+historické doklady (Gemini vrátí null) při backfillu spadnou zpět na uložení aktuální
+`amount` jako baseline, aby byl backfill konečný a nezůstaly věčně nezpracované řádky.
 
 Vedlejší produkt tohoto rozhodnutí: vznikla trvalá funkce **Přeanalyzovat** (re-analýza
 existující přílohy bez nutnosti soubor nahrávat znovu) — nejen jednorázový nástroj pro

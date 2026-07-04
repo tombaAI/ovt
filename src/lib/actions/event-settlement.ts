@@ -19,6 +19,7 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
+import { isTreasurer } from "@/lib/treasurer";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -599,11 +600,6 @@ async function isEventCollecting(db: ReturnType<typeof getDb>, eventId: number):
             ),
         ));
     return (row?.n ?? 0) > 0;
-}
-
-function isTreasurer(email: string | null | undefined): boolean {
-    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
-    return !!treasurerEmail && !!email && email.toLowerCase() === treasurerEmail;
 }
 
 /**

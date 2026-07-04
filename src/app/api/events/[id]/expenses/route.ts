@@ -140,6 +140,11 @@ export async function POST(
         const invoicePayeeName = String(formData.get("invoicePayeeName") ?? "").trim() || null;
         const file = formData.get("file") as File | null;
 
+        // Baseline z Gemini analýzy na klientu (pokud proběhla) — pro budoucí kontrolu shody.
+        const analyzedAmountRaw = String(formData.get("analyzedAmount") ?? "").replace(",", ".").trim();
+        const analyzedParsed = analyzedAmountRaw ? parseFloat(analyzedAmountRaw) : NaN;
+        const analyzedAmount = !isNaN(analyzedParsed) ? String(analyzedParsed) : null;
+
         let amount: number | null = null;
         if (status === "final") {
             amount = parseFloat(amountStr);
@@ -188,6 +193,7 @@ export async function POST(
             eventId,
             status,
             amount: amount !== null ? String(amount) : null,
+            analyzedAmount,
             purposeText: purposeText || null,
             purposeCategory: purposeCategoryVal,
             reimbursementPersonId,
@@ -231,6 +237,7 @@ export async function PATCH(
         const body = await request.json() as {
             expenseId?: unknown;
             amount?: unknown;
+            analyzedAmount?: unknown;
             purposeText?: unknown;
             purposeCategory?: unknown;
             reimbursementPersonId?: unknown;
@@ -255,7 +262,7 @@ export async function PATCH(
         // Quick toggle: only isPaid — not blocked by any lock
         if (body.isPaid !== undefined && body.amount === undefined && body.purposeCategory === undefined
             && body.purposeText === undefined && body.reimbursementPersonId === undefined
-            && body.invoicePayeeName === undefined) {
+            && body.invoicePayeeName === undefined && body.analyzedAmount === undefined) {
             const isPaid = body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
             await db.update(eventExpenses)
                 .set({ isPaid })
@@ -288,6 +295,17 @@ export async function PATCH(
             const parsed = parseFloat(String(body.amount ?? "").replace(",", "."));
             if (isNaN(parsed) || parsed <= 0) return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
             amount = parsed;
+        }
+
+        // Baseline z Gemini analýzy (při potvrzení draftu) — jen metadata, nepodléhá zámkům částky
+        let analyzedAmount: string | null | undefined;
+        if (body.analyzedAmount !== undefined) {
+            if (body.analyzedAmount === null) {
+                analyzedAmount = null;
+            } else {
+                const parsed = parseFloat(String(body.analyzedAmount).replace(",", "."));
+                analyzedAmount = !isNaN(parsed) ? String(parsed) : null;
+            }
         }
 
         if (body.purposeText !== undefined) {
@@ -325,6 +343,7 @@ export async function PATCH(
         await db.update(eventExpenses)
             .set({
                 ...(amount !== undefined && { amount: String(amount), status: "final" }),
+                ...(analyzedAmount !== undefined && { analyzedAmount }),
                 ...(purposeText !== undefined && { purposeText }),
                 ...(purposeCategory !== undefined && { purposeCategory }),
                 ...(isPaid !== undefined && { isPaid }),

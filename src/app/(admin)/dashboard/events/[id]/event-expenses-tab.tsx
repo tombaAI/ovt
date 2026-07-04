@@ -3,8 +3,9 @@
 import { useState, useEffect, useCallback, useRef } from "react";
 import ReactCrop, { type Crop, type PixelCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { Paperclip, Pencil, RotateCw, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert, Send } from "lucide-react";
+import { Paperclip, Pencil, RotateCw, Trash2, Upload, FileText, ImageIcon, Crop as CropIcon, Sparkles, CircleAlert, Send, Replace, RefreshCw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { getEventExpenses } from "@/lib/actions/event-expenses";
@@ -15,6 +16,7 @@ import { setTreasurerApproval, getVyuctovaniActivityLog, type VyuctovaniActivity
 import { lockForReimbursement, unlockForReimbursement } from "@/lib/actions/event-settlement";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
+import { analyzedMatchesAmount, hasAmountMismatch } from "@/lib/expense-mismatch";
 import { Mail, Check } from "lucide-react";
 
 
@@ -815,6 +817,7 @@ function AddExpenseForm({
             saveFd.append("file", file);
             if (analysisData.total_amount !== null && analysisData.total_amount !== undefined) {
                 saveFd.append("amount", String(analysisData.total_amount));
+                saveFd.append("analyzedAmount", String(analysisData.total_amount));
             }
             if (analysisData.account_code) {
                 saveFd.append("purposeCategory", analysisData.account_code);
@@ -871,6 +874,9 @@ function AddExpenseForm({
             const fd = new FormData();
             fd.append("status", "final");
             fd.append("amount", String(amountNum));
+            if (savedAnalysis?.total_amount !== null && savedAnalysis?.total_amount !== undefined) {
+                fd.append("analyzedAmount", String(savedAnalysis.total_amount));
+            }
             fd.append("purposeText", purposeText.trim());
             fd.append("purposeCategory", category);
             fd.append("isPaid", String(isPaid));
@@ -1196,7 +1202,27 @@ function AddInvoiceWithoutDocDialog({
     );
 }
 
-// ── Attach file dialog ────────────────────────────────────────────────────────
+// ── Porovnání zapsané vs. zjištěné částky ─────────────────────────────────────
+
+function AmountComparison({ written, detected }: { written: string | null; detected: number | null }) {
+    const match = analyzedMatchesAmount(written, detected);
+    return (
+        <div className={`rounded-lg border px-3 py-2 text-sm flex items-center justify-between gap-3 ${
+            match ? "border-green-200 bg-green-50" : "border-red-300 bg-red-50"
+        }`}>
+            <span className="text-gray-600">
+                Zapsáno: <span className="font-semibold text-gray-900 tabular-nums">{fmtAmount(written)}</span>
+            </span>
+            <span className={match ? "text-green-700" : "text-red-700 font-medium"}>
+                Zjištěno: <span className="font-semibold tabular-nums">
+                    {detected != null ? `${new Intl.NumberFormat("cs-CZ").format(detected)} Kč` : "nečitelné"}
+                </span>
+            </span>
+        </div>
+    );
+}
+
+// ── Attach / swap file dialog ─────────────────────────────────────────────────
 
 function AttachFileDialog({
     expense,
@@ -1204,27 +1230,69 @@ function AttachFileDialog({
     open,
     onOpenChange,
     onUpdated,
+    lockedForParticipants = false,
+    isTreasurer = false,
 }: {
     expense: EventExpenseRow;
     eventId: number;
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onUpdated: () => void;
+    lockedForParticipants?: boolean;
+    isTreasurer?: boolean;
 }) {
-    const [uploading, setUploading] = useState(false);
+    const [file, setFile] = useState<File | null>(null);
+    const [analyzing, setAnalyzing] = useState(false);
+    const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
+    const [amount, setAmount] = useState("");
+    const [confirmChecked, setConfirmChecked] = useState(false);
+    const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => {
-        if (!open) { setError(null); if (fileInputRef.current) fileInputRef.current.value = ""; }
-    }, [open]);
+    const hasFile = expense.fileUrl != null;
 
-    async function handleFile(file: File | undefined) {
+    useEffect(() => {
+        if (!open) return;
+        setFile(null); setAnalysis(null); setError(null); setConfirmChecked(false); setSaving(false);
+        setAmount(expense.amount ? expense.amount.replace(".", ",") : "");
+        if (fileInputRef.current) fileInputRef.current.value = "";
+    }, [open, expense]);
+
+    // Částka pro porovnání: zamčeno → vždy z DB; odemčeno → z editovatelného pole
+    const compareAmount = lockedForParticipants
+        ? expense.amount
+        : (amount.replace(",", ".").trim() || null);
+    const detected = analysis ? analysis.total_amount : null;
+    const match = analyzedMatchesAmount(compareAmount, detected);
+    const mismatch = analysis != null && !match;
+
+    async function handleFile(picked: File | undefined) {
+        if (!picked) return;
+        setFile(picked); setAnalyzing(true); setError(null); setAnalysis(null); setConfirmChecked(false);
+        try {
+            const small = await prepareFileForGemini(picked);
+            const fd = new FormData();
+            fd.append("file", small);
+            const res = await fetch("/api/expenses/analyze", { method: "POST", body: fd });
+            const data: ExpenseAnalysis & { error?: string } = await res.json();
+            if (!res.ok) throw new Error(data.error ?? "Chyba analýzy");
+            setAnalysis(data);
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Analýza selhala");
+        } finally {
+            setAnalyzing(false);
+        }
+    }
+
+    async function handleSave() {
         if (!file) return;
-        setUploading(true); setError(null);
+        setSaving(true); setError(null);
         try {
             const fd = new FormData();
             fd.append("file", file);
+            fd.append("amount", amount.replace(",", "."));
+            if (mismatch && isTreasurer && confirmChecked) fd.append("confirmMismatch", "true");
             const res = await fetch(
                 `/api/events/${eventId}/expenses/${expense.id}/attach-file`,
                 { method: "POST", body: fd },
@@ -1236,23 +1304,32 @@ function AttachFileDialog({
         } catch (err) {
             setError(err instanceof Error ? err.message : "Chyba nahrávání");
         } finally {
-            setUploading(false);
+            setSaving(false);
         }
     }
 
+    const busy = analyzing || saving;
+    // Kdy lze uložit
+    const lockedBlockedByTreasurer = lockedForParticipants && mismatch && !isTreasurer;
+    const needsConfirm = lockedForParticipants && mismatch && isTreasurer;
+    const canSave = file != null && !busy && !lockedBlockedByTreasurer && (!needsConfirm || confirmChecked);
+
     return (
-        <Dialog open={open} onOpenChange={open => { if (!uploading) onOpenChange(open); }}>
-            <DialogContent className="max-w-sm">
+        <Dialog open={open} onOpenChange={open => { if (!busy) onOpenChange(open); }}>
+            <DialogContent className="max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Přiložit fakturu</DialogTitle>
+                    <DialogTitle>{hasFile ? "Vyměnit doklad" : "Přiložit doklad"}</DialogTitle>
                 </DialogHeader>
                 <div className="space-y-3 pt-1">
                     {expense.purposeText && (
                         <p className="text-sm text-gray-600">{expense.purposeText}</p>
                     )}
-                    <label className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 p-6 text-center cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-colors ${uploading ? "opacity-50 pointer-events-none" : ""}`}>
+
+                    <label className={`flex flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-amber-200 bg-amber-50/50 p-5 text-center cursor-pointer hover:border-amber-300 hover:bg-amber-50 transition-colors ${busy ? "opacity-50 pointer-events-none" : ""}`}>
                         <Paperclip size={20} className="text-amber-500" />
-                        <span className="text-sm text-gray-700">{uploading ? "Nahrávám…" : "Vybrat soubor faktury"}</span>
+                        <span className="text-sm text-gray-700">
+                            {analyzing ? "Analyzuji…" : file ? file.name : "Vybrat soubor dokladu"}
+                        </span>
                         <span className="text-xs text-gray-400">PDF nebo fotka, max 10 MB</span>
                         <input
                             ref={fileInputRef}
@@ -1260,10 +1337,178 @@ function AttachFileDialog({
                             accept="image/*,application/pdf"
                             className="sr-only"
                             onChange={e => { void handleFile(e.target.files?.[0]); }}
-                            disabled={uploading}
+                            disabled={busy}
                         />
                     </label>
+
+                    {analysis && (
+                        <>
+                            <AnalysisCard analysis={analysis} />
+                            <AmountComparison written={compareAmount} detected={detected} />
+
+                            {lockedForParticipants ? (
+                                <div className="text-xs text-gray-500">
+                                    Předpisy jsou uzamčené — částka <span className="font-medium tabular-nums">{fmtAmount(expense.amount)}</span> se nemění.
+                                </div>
+                            ) : (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-gray-600">Zapsaná částka (Kč)</label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={amount}
+                                            onChange={e => setAmount(e.target.value)}
+                                            inputMode="decimal"
+                                            className="tabular-nums"
+                                            disabled={busy}
+                                        />
+                                        {detected != null && (
+                                            <Button type="button" variant="outline" size="sm"
+                                                onClick={() => setAmount(String(detected).replace(".", ","))}
+                                                disabled={busy}>
+                                                Použít zjištěnou
+                                            </Button>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
+
+                            {lockedBlockedByTreasurer && (
+                                <p className="text-xs text-red-600 flex items-start gap-1.5">
+                                    <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+                                    Dokud jsou předpisy uzamčené, výměnu s neshodující se částkou může provést jen hospodář.
+                                </p>
+                            )}
+                            {needsConfirm && (
+                                <label className="flex items-start gap-2 text-xs text-red-700 cursor-pointer">
+                                    <input type="checkbox" checked={confirmChecked}
+                                        onChange={e => setConfirmChecked(e.target.checked)}
+                                        className="mt-0.5" disabled={busy} />
+                                    <span>Rozumím, že se zjištěná částka neshoduje se zapsanou, přesto uložit.</span>
+                                </label>
+                            )}
+                        </>
+                    )}
+
                     {error && <p className="text-xs text-red-500">{error}</p>}
+
+                    <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={busy}>
+                            Zrušit
+                        </Button>
+                        <Button size="sm" onClick={handleSave} disabled={!canSave}>
+                            {saving ? "Ukládám…" : "Uložit"}
+                        </Button>
+                    </div>
+                </div>
+            </DialogContent>
+        </Dialog>
+    );
+}
+
+// ── Reanalyze dialog (přeanalyzovat existující přílohu) ───────────────────────
+
+function ReanalyzeDialog({
+    expense,
+    eventId,
+    open,
+    onOpenChange,
+    onUpdated,
+    isTreasurer = false,
+}: {
+    expense: EventExpenseRow;
+    eventId: number;
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onUpdated: () => void;
+    isTreasurer?: boolean;
+}) {
+    const [running, setRunning] = useState(false);
+    const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
+    const [code, setCode] = useState<"needs_treasurer" | "needs_confirmation" | null>(null);
+    const [done, setDone] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const call = useCallback(async (confirmMismatch: boolean) => {
+        setRunning(true); setError(null);
+        try {
+            const url = `/api/events/${eventId}/expenses/${expense.id}/reanalyze${confirmMismatch ? "?confirmMismatch=true" : ""}`;
+            const res = await fetch(url, { method: "POST" });
+            const data = await res.json() as { success?: true; error?: string; code?: "needs_treasurer" | "needs_confirmation"; analysis?: ExpenseAnalysis };
+            if (res.ok) {
+                setAnalysis(data.analysis ?? null); setCode(null); setDone(true);
+                onUpdated();
+                return;
+            }
+            if (res.status === 409 && data.code) {
+                setAnalysis(data.analysis ?? null); setCode(data.code);
+                return;
+            }
+            throw new Error(data.error ?? "Analýza selhala");
+        } catch (err) {
+            setError(err instanceof Error ? err.message : "Analýza selhala");
+        } finally {
+            setRunning(false);
+        }
+    }, [eventId, expense.id, onUpdated]);
+
+    // Auto-spuštění při otevření
+    useEffect(() => {
+        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); return; }
+        void call(false);
+    }, [open, call]);
+
+    const detected = analysis ? analysis.total_amount : null;
+
+    return (
+        <Dialog open={open} onOpenChange={o => { if (!running) onOpenChange(o); }}>
+            <DialogContent className="max-w-md">
+                <DialogHeader>
+                    <DialogTitle>Přeanalyzovat přílohu</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3 pt-1">
+                    {running && !analysis && (
+                        <p className="text-sm text-gray-500 flex items-center gap-2">
+                            <RefreshCw size={14} className="animate-spin" /> Analyzuji přílohu…
+                        </p>
+                    )}
+
+                    {analysis && (
+                        <>
+                            <AnalysisCard analysis={analysis} />
+                            <AmountComparison written={expense.amount} detected={detected} />
+                        </>
+                    )}
+
+                    {done && (
+                        <p className="text-sm text-green-700 flex items-center gap-1.5">
+                            <Check size={14} /> Analýza uložena.
+                        </p>
+                    )}
+
+                    {code === "needs_treasurer" && (
+                        <p className="text-xs text-red-600 flex items-start gap-1.5">
+                            <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+                            Zjištěná částka se neshoduje se zapsanou. Dokud jsou předpisy uzamčené, uložit to může jen hospodář.
+                        </p>
+                    )}
+                    {code === "needs_confirmation" && (
+                        <p className="text-xs text-red-700">
+                            Zjištěná částka se neshoduje se zapsanou — potvrďte uložení.
+                        </p>
+                    )}
+
+                    {error && <p className="text-xs text-red-500">{error}</p>}
+
+                    <div className="flex justify-end gap-2 pt-1">
+                        <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={running}>
+                            {done ? "Zavřít" : "Zrušit"}
+                        </Button>
+                        {code === "needs_confirmation" && isTreasurer && (
+                            <Button size="sm" onClick={() => call(true)} disabled={running}>
+                                {running ? "Ukládám…" : "Přesto uložit"}
+                            </Button>
+                        )}
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>
@@ -1361,6 +1606,8 @@ function DraftProcessDialog({
                 body: JSON.stringify({
                     expenseId: expense.id,
                     amount: amountNum,
+                    // Baseline pro kontrolu shody — jen když v dialogu proběhla čerstvá analýza
+                    ...(analysis?.total_amount != null && { analyzedAmount: analysis.total_amount }),
                     purposeText: purposeText.trim(),
                     purposeCategory,
                     isPaid,
@@ -1814,6 +2061,7 @@ function ExpenseItem({
     onUpdated,
     lockedForParticipants,
     lockedForReimbursement,
+    isTreasurer,
 }: {
     expense: EventExpenseRow;
     eventId: number;
@@ -1824,6 +2072,7 @@ function ExpenseItem({
     onUpdated: () => void;
     lockedForParticipants?: boolean;
     lockedForReimbursement?: boolean;
+    isTreasurer?: boolean;
 }) {
     const [deleting, setDeleting] = useState(false);
     const [editing, setEditing] = useState(false);
@@ -1833,11 +2082,13 @@ function ExpenseItem({
     const [sendingInstr, setSendingInstr] = useState(false);
     const [instrSentAt, setInstrSentAt] = useState(expense.invoicePaymentSentAt);
     const [attachingFile, setAttachingFile] = useState(false);
+    const [reanalyzing, setReanalyzing] = useState(false);
     const [instrError, setInstrError] = useState<string | null>(null);
 
     const isDraft = expense.status === "draft";
     const isUnconfirmed = expense.status === "unconfirmed";
     const needsAction = isDraft || isUnconfirmed;
+    const amountMismatch = hasAmountMismatch(expense.amount, expense.analyzedAmount);
     const isExternalPayee = expense.reimbursementPayeeKind === "external" && expense.reimbursementPersonId !== null;
     const blobProxyUrl = expense.fileUrl
         ? `/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`
@@ -1937,6 +2188,15 @@ function ExpenseItem({
                 {expense.purposeText && (
                     <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
                 )}
+                {amountMismatch && (
+                    <div className="mt-1 flex items-start gap-1.5 rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
+                        <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+                        <span>
+                            Zjištěná částka z dokladu (<span className="font-semibold tabular-nums">{fmtAmount(expense.analyzedAmount)}</span>)
+                            neodpovídá zapsané (<span className="font-semibold tabular-nums">{fmtAmount(expense.amount)}</span>).
+                        </span>
+                    </div>
+                )}
                 {!needsAction && expense.isPaid && (
                     <div className={`flex items-center gap-1 flex-wrap text-xs mt-0.5 ${expense.reimbursementPayeeName ? "text-gray-500" : "text-amber-600"}`}>
                         <span>
@@ -1962,15 +2222,6 @@ function ExpenseItem({
                         </span>
                         {expense.invoicePayeeName && (
                             <span className="text-xs text-gray-700">{expense.invoicePayeeName}</span>
-                        )}
-                        {!lockedForReimbursement && (
-                            <button
-                                onClick={() => setAttachingFile(true)}
-                                className="text-[11px] font-medium text-amber-700 hover:text-amber-900 border border-amber-300 rounded px-2 py-0.5 hover:bg-amber-50 transition-colors flex items-center gap-1"
-                            >
-                                <Paperclip size={10} />
-                                Přiložit fakturu
-                            </button>
                         )}
                     </div>
                 )}
@@ -2006,6 +2257,27 @@ function ExpenseItem({
                         className="text-xs text-blue-600 hover:underline mt-0.5 block truncate text-left">
                         {expense.fileName ?? "Příloha"}
                     </button>
+                )}
+                {!needsAction && !lockedForReimbursement && (
+                    <div className="flex flex-wrap items-center gap-2 mt-1">
+                        <button
+                            onClick={() => setAttachingFile(true)}
+                            className="text-[11px] font-medium text-gray-600 hover:text-gray-900 border border-gray-200 rounded px-2 py-0.5 hover:bg-gray-50 transition-colors flex items-center gap-1"
+                        >
+                            {expense.fileUrl ? <Replace size={10} /> : <Paperclip size={10} />}
+                            {expense.fileUrl ? "Vyměnit doklad" : "Přiložit doklad"}
+                        </button>
+                        {expense.fileUrl && (
+                            <button
+                                onClick={() => setReanalyzing(true)}
+                                title="Znovu přečíst částku z přílohy (Gemini)"
+                                className="text-[11px] font-medium text-violet-600 hover:text-violet-900 border border-violet-200 rounded px-2 py-0.5 hover:bg-violet-50 transition-colors flex items-center gap-1"
+                            >
+                                <Sparkles size={10} />
+                                Přeanalyzovat
+                            </button>
+                        )}
+                    </div>
                 )}
                 <p className="text-xs text-gray-400 mt-1">{fmtDate(expense.createdAt)}</p>
             </div>
@@ -2066,13 +2338,25 @@ function ExpenseItem({
                     onSaved={onUpdated}
                 />
             )}
-            {!expense.fileUrl && !expense.isPaid && (
+            {!needsAction && (
                 <AttachFileDialog
                     expense={expense}
                     eventId={eventId}
                     open={attachingFile}
                     onOpenChange={setAttachingFile}
                     onUpdated={onUpdated}
+                    lockedForParticipants={lockedForParticipants}
+                    isTreasurer={isTreasurer}
+                />
+            )}
+            {!needsAction && expense.fileUrl && (
+                <ReanalyzeDialog
+                    expense={expense}
+                    eventId={eventId}
+                    open={reanalyzing}
+                    onOpenChange={setReanalyzing}
+                    onUpdated={onUpdated}
+                    isTreasurer={isTreasurer}
                 />
             )}
             {blobProxyUrl && (
@@ -2643,6 +2927,7 @@ export function EventExpensesTab({
                                     onUpdated={load}
                                     lockedForParticipants={lockedForParticipants}
                                     lockedForReimbursement={lockedForReimbursement}
+                                    isTreasurer={isTreasurer}
                                 />
                             ))}
                         </div>

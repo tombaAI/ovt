@@ -179,15 +179,24 @@ u každého řádku dokladu.
 
 ## 7. Jednorázový backfill historických dokladů
 
-Po nasazení jednorázový skript (spustit ručně, ne jako trvalá součást aplikace):
-projde všechny `event_expenses` s `fileUrl IS NOT NULL` a `analyzedAmount IS NULL`
-(aktuálně 37 — 26 na zcela odemčených akcích, 11 na akcích s `lockForParticipants`,
-0 na akci s `lockForReimbursement`) a zavolá pro každý stejnou logiku jako endpoint
-`reanalyze` (krok 3 v sekci 4 — stáhnout blob, `analyzeExpenseFile()`, zapsat
-`analyzed_amount`). U 11 nákladů se zamčenými předpisy se skript spouští s právy
-hospodáře (nebo re-analýza rovnou zapisuje bez treasurer gate, protože jde o
-jednorázovou administrativní operaci, ne o uživatelskou akci přes UI — ověřit při
-implementaci, který přístup je jednodušší).
+Implementováno jako resumovatelný admin endpoint `POST /api/admin/backfill-analyzed-amount`
+(chráněný `CRON_SECRET` bearerem jako cron joby), ne standalone skript — 37 sekvenčních
+Gemini volání by přesáhlo timeout jedné serverless funkce, takže endpoint zpracuje dávku
+(`?limit=N`, default 8) a je idempotentní: bere jen `fileUrl IS NOT NULL AND analyzed_amount
+IS NULL` na akcích bez `lockForReimbursement`. Volá se opakovaně, dokud `remaining` != 0.
+
+Pro každý řádek: stáhnout blob (`fetchPrivateBlobAsFile`) → `analyzeExpenseFile()` → zapsat
+`analyzed_amount`. Backfill běží mimo UI (bez treasurer gate — administrativní operace).
+Zvláštní případ: když Gemini u historického dokladu částku nepřečte (`null`), uloží se jako
+baseline aktuální `amount` (jinak by řádek zůstal `NULL` a resumování by ho zkoušelo
+donekonečna). Reálně přečtené hodnoty se ukládají tak, jak jsou — skutečná neshoda se objeví.
+
+Spuštění:
+```
+curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
+  "https://.../api/admin/backfill-analyzed-amount?limit=8"
+# opakovat, dokud odpověď nevrátí remaining: 0
+```
 
 Nahrazuje původní plán ze staršího návrhu ADR-0001 (SQL `UPDATE ... SET analyzed_amount
 = amount`, bez skutečné analýzy) — při 37 dokladech je reálná re-analýza levná

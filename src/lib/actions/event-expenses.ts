@@ -12,6 +12,7 @@ export type EventExpenseRow = {
     eventId: number;
     status: "draft" | "unconfirmed" | "final";
     amount: string | null;
+    analyzedAmount: string | null;
     purposeText: string | null;
     purposeCategory: ExpenseCategory | null;
     reimbursementPersonId: number | null;
@@ -38,6 +39,7 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             eventId: eventExpenses.eventId,
             status: eventExpenses.status,
             amount: eventExpenses.amount,
+            analyzedAmount: eventExpenses.analyzedAmount,
             purposeText: eventExpenses.purposeText,
             purposeCategory: eventExpenses.purposeCategory,
             reimbursementPersonId: eventExpenses.reimbursementPersonId,
