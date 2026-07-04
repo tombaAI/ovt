@@ -47,12 +47,19 @@ hodnotu si uživatel nakonec zapíše/ponechá do `amount`. Když se `amount` po
 opraví (mimo re-analýzu), `analyzedAmount` se nemění — neshoda tak zůstává viditelná,
 dokud ji někdo aktivně nevyřeší (opravou částky, nebo novou výměnou přílohy).
 
-Mismatch = `amount` a `analyzedAmount` se po zaokrouhlení na haléře neshodují. Žádné
-samostatné tlačítko „ignorovat/potvrdit neshodu" neexistuje — jediné cesty k vyřešení
-jsou oprava částky (přes stávající editační flow a jeho gates) nebo nová výměna přílohy
-(přes flow popsaný níže).
+Mismatch = `amount` a `analyzedAmount` se po zaokrouhlení na haléře neshodují — **včetně**
+případu, kdy Gemini částku vůbec nedokázal přečíst (`total_amount: null`). Nejistota se
+považuje za neshodu, ne za "bez dat". Platí všude — v gate logice API (viz níže) i v
+zobrazení banneru. Žádné samostatné tlačítko „ignorovat/potvrdit neshodu" neexistuje —
+jediné cesty k vyřešení jsou oprava částky (přes stávající editační flow a jeho gates)
+nebo nová výměna přílohy (přes flow popsaný níže).
 
-Migrace: `supabase/migrations/YYYYMMDD_HHMMSS_add_expense_analyzed_amount.sql`.
+Migrace: `supabase/migrations/YYYYMMDD_HHMMSS_add_expense_analyzed_amount.sql`. Součástí
+migrace je i backfill: `UPDATE app.event_expenses SET analyzed_amount = amount WHERE
+file_url IS NOT NULL AND analyzed_amount IS NULL` — u existujících nákladů s přílohou se
+`analyzedAmount` nastaví na aktuální `amount` (vědomě nepřesné, ale funkční — viz
+[ADR-0001](../adr/0001-backfill-analyzed-amount-with-current-amount.md)). Náklady bez
+přílohy zůstávají `NULL`.
 
 ## 2. Sdílená logika (refaktoring)
 
@@ -93,9 +100,13 @@ Rozšířit `src/app/api/events/[id]/expenses/[expenseId]/attach-file/route.ts` 
        beze změny.
 5. Pokud `lockForParticipants` není aktivní: validovat a použít klientem poslané
    `amount` (mohla být v dialogu upravena) — bez treasurer gate, bez confirm kroku.
-6. Uložení: pokud `expense.fileUrl` existoval, smazat starý blob (`del`); nahrát nový
-   (`put`, stejná validace MIME/velikosti jako dnes); `UPDATE event_expenses SET
-   file_url, file_name, file_mime, analyzed_amount, amount (jen když unlocked) WHERE id = ...`.
+6. Uložení (v tomto pořadí, aby selhání uprostřed nikdy nenechalo náklad bez funkční
+   přílohy): nahrát nový soubor (`put`, stejná validace MIME/velikosti jako dnes) →
+   `UPDATE event_expenses SET file_url, file_name, file_mime, analyzed_amount, amount
+   (jen když unlocked) WHERE id = ...` → teprve pak smazat starý blob (`del`), pokud
+   `expense.fileUrl` existoval. Chyba při mazání starého blobu se jen zaloguje
+   (`console.error`), uživateli se nevrací jako chyba — orphaned blob je jen plýtvání
+   úložištěm, ne datová ztráta.
 7. Response: `{ success: true, analysis }` nebo `{ error, code? }`.
 
 **POST `/api/events/[id]/expenses`** (vytvoření nákladu) a **PATCH** (potvrzení/úprava):
