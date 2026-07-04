@@ -54,12 +54,11 @@ zobrazení banneru. Žádné samostatné tlačítko „ignorovat/potvrdit neshod
 jediné cesty k vyřešení jsou oprava částky (přes stávající editační flow a jeho gates)
 nebo nová výměna přílohy (přes flow popsaný níže).
 
-Migrace: `supabase/migrations/YYYYMMDD_HHMMSS_add_expense_analyzed_amount.sql`. Součástí
-migrace je i backfill: `UPDATE app.event_expenses SET analyzed_amount = amount WHERE
-file_url IS NOT NULL AND analyzed_amount IS NULL` — u existujících nákladů s přílohou se
-`analyzedAmount` nastaví na aktuální `amount` (vědomě nepřesné, ale funkční — viz
-[ADR-0001](../adr/0001-backfill-analyzed-amount-with-current-amount.md)). Náklady bez
-přílohy zůstávají `NULL`.
+Migrace: `supabase/migrations/YYYYMMDD_HHMMSS_add_expense_analyzed_amount.sql` — jen
+`ALTER TABLE`, žádný SQL backfill. Existující náklady s přílohou (aktuálně 37 — viz
+[ADR-0001](../adr/0001-analyzed-amount-historical-backfill.md)) dostanou
+`analyzedAmount` skutečnou re-analýzou jednorázovým skriptem po nasazení, ne odhadem
+(sekce 7).
 
 ## 2. Sdílená logika (refaktoring)
 
@@ -114,7 +113,34 @@ doplnit nepovinné pole `analyzedAmount` (z aktuální Gemini analýzy na klient
 proběhla) — uloží se 1:1 do nového sloupce při vytvoření/potvrzení nákladu, aby i nově
 založené náklady měly od začátku baseline pro budoucí kontrolu shody.
 
-## 4. UI — dialog přiložení/výměny
+## 4. API — přeanalyzovat existující přílohu (bez výměny souboru)
+
+Nový endpoint `POST /api/events/[id]/expenses/[expenseId]/reanalyze`. Na rozdíl od
+`attach-file` nepřijímá žádný soubor — znovu stáhne a analyzuje **aktuálně přiloženou**
+přílohu (`expense.fileUrl`), zapíše jen `analyzed_amount`. `amount` a soubor samotný se
+nikdy nemění — je to čistě ověřovací akce.
+
+**Logika:**
+
+1. Bez `fileUrl` → 400 (není co analyzovat).
+2. `lockForReimbursement` aktivní → 409, stejná hláška jako u `attach-file` — **bez
+   výjimky pro hospodáře**. Jakmile je akce plně uzavřená k proplacení, do nákladů se
+   už nezapisuje vůbec nic, ani anotace.
+3. Stáhnout blob server-side (`fetch(expense.fileUrl, { headers: { Authorization:
+   \`Bearer ${process.env.BLOB_READ_WRITE_TOKEN}\` } })` — stejný vzor jako
+   `/api/blob-file`, ale bez roundtripu přes klienta) → `analyzeExpenseFile()`.
+4. Pokud `lockForParticipants`: stejná treasurer/confirm brána jako u `attach-file`
+   (kroky 4 v sekci 3) — re-analýza může nově odhalit neshodu na zamčeném nákladu, a to
+   podléhá stejnému schválení hospodářem.
+5. Pokud odemčeno: žádný guard, uložit `analyzed_amount` rovnou.
+6. Response: `{ success: true, analysis }` nebo `{ error, code? }` (stejné kódy jako
+   `attach-file`: `needs_treasurer`, `needs_confirmation`).
+
+**UI**: malá ikonka "Přeanalyzovat" vedle náhledu existující přílohy (`event-expenses-tab.tsx`),
+vedle tlačítka "Vyměnit fakturu". Bez file pickeru — jen potvrzovací dialog s
+`AnalysisCard` a případně stejným treasurer/confirm krokem jako u výměny.
+
+## 5. UI — dialog přiložení/výměny
 
 Zobecnit `AttachFileDialog` (`event-expenses-tab.tsx`) z "jen když `!fileUrl && !isPaid`"
 na dostupný pro libovolný náklad, gate `!lockedForReimbursement`. Nové tlačítko
@@ -139,7 +165,7 @@ u každého řádku dokladu.
      "Uložit" (odpovídá `confirmMismatch: true` v requestu; server-side re-check).
 4. "Zrušit" kdykoliv → nic se neukládá, vybraný soubor se zahodí.
 
-## 5. Zobrazení neshody v přehledu
+## 6. Zobrazení neshody v přehledu
 
 - **`ExpenseItem`** (řádek nákladu): pokud `analyzedAmount != null` a neshoduje se s
   `amount`, zobrazit výrazný červený banner "Zjištěná částka z dokladu (Y Kč)
@@ -150,6 +176,22 @@ u každého řádku dokladu.
 - Vyžaduje protažení `analyzedAmount` přes `EventExpenseRow`
   (`src/lib/actions/event-expenses.ts`) a lokální `ExpenseRow` typ v
   `event-expense-actions.tsx`.
+
+## 7. Jednorázový backfill historických dokladů
+
+Po nasazení jednorázový skript (spustit ručně, ne jako trvalá součást aplikace):
+projde všechny `event_expenses` s `fileUrl IS NOT NULL` a `analyzedAmount IS NULL`
+(aktuálně 37 — 26 na zcela odemčených akcích, 11 na akcích s `lockForParticipants`,
+0 na akci s `lockForReimbursement`) a zavolá pro každý stejnou logiku jako endpoint
+`reanalyze` (krok 3 v sekci 4 — stáhnout blob, `analyzeExpenseFile()`, zapsat
+`analyzed_amount`). U 11 nákladů se zamčenými předpisy se skript spouští s právy
+hospodáře (nebo re-analýza rovnou zapisuje bez treasurer gate, protože jde o
+jednorázovou administrativní operaci, ne o uživatelskou akci přes UI — ověřit při
+implementaci, který přístup je jednodušší).
+
+Nahrazuje původní plán ze staršího návrhu ADR-0001 (SQL `UPDATE ... SET analyzed_amount
+= amount`, bez skutečné analýzy) — při 37 dokladech je reálná re-analýza levná
+(desetikoruny, řádově minuty) a nenese riziko trvale nepřesných dat.
 
 ## Mimo rozsah (vědomě neřešeno)
 
@@ -175,3 +217,10 @@ průchod na stagingu:
    "Odeslat vyúčtování" se objeví.
 4. Případ Berounka 33 na produkci i stagingu: výměna špatné přílohy TMA faktury bez
    zásahu do částky.
+5. `reanalyze` na odemčené akci: přepíše `analyzed_amount`, `amount` i soubor beze změny.
+6. `reanalyze` na akci s `lockForParticipants` a neshodou: stejná treasurer/confirm brána
+   jako u výměny přílohy.
+7. `reanalyze` na akci s `lockForReimbursement`: 409 i pro hospodáře.
+8. Jednorázový backfill skript na kopii produkčních dat (nebo stagingu): všech 37
+   nákladů s přílohou dostane reálný `analyzed_amount`, žádný se nepřeskočí kvůli
+   `lockForReimbursement` (dnes 0 takových).
