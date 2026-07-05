@@ -2736,7 +2736,10 @@ export function EventExpensesTab({
     const [activityLog, setActivityLog] = useState<VyuctovaniActivity[]>([]);
 
     const load = useCallback(async () => {
-        setLoading(true);
+        // Bez setLoading(true) zde: při refetchi po uložení (onUpdated) by "loading" na chvíli
+        // odmontovalo celý seznam ExpenseItem — a s ním i právě otevřený dialog (Přeanalyzovat/
+        // Vyměnit), který by tak zmizel bez zobrazení výsledku. Spinner "Načítám doklady…" tedy
+        // patří jen prvnímu načtení (loading začíná na true a už se zpátky nenastavuje).
         try {
             const rows = await getEventExpenses(eventId);
             setExpenses(rows);
