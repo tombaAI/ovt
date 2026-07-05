@@ -2188,13 +2188,18 @@ function ExpenseItem({
                 {expense.purposeText && (
                     <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
                 )}
-                {amountMismatch && (
+                {amountMismatch ? (
                     <div className="mt-1 flex items-start gap-1.5 rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
                         <TriangleAlert size={13} className="shrink-0 mt-0.5" />
                         <span>
                             Zjištěná částka z dokladu (<span className="font-semibold tabular-nums">{fmtAmount(expense.analyzedAmount)}</span>)
                             neodpovídá zapsané (<span className="font-semibold tabular-nums">{fmtAmount(expense.amount)}</span>).
                         </span>
+                    </div>
+                ) : expense.analyzedAmount != null && (
+                    <div className="mt-1 flex items-center gap-1 text-[11px] text-green-600" title="Zjištěná částka z dokladu odpovídá zapsané">
+                        <Check size={11} />
+                        <span>Shoda s dokladem</span>
                     </div>
                 )}
                 {!needsAction && expense.isPaid && (
