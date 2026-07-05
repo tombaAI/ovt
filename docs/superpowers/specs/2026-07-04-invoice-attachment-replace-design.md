@@ -170,6 +170,9 @@ u každého řádku dokladu.
 - **`ExpenseItem`** (řádek nákladu): pokud `analyzedAmount != null` a neshoduje se s
   `amount`, zobrazit výrazný červený banner "Zjištěná částka z dokladu (Y Kč)
   neodpovídá zapsané (X Kč)" — nezávisle na `status`/`isPaid`.
+- **Pozitivní indikátor** (doplněno dodatečně): pokud `analyzedAmount != null` a **shoduje**
+  se s `amount`, zobrazit místo banneru malý zelený "✓ Shoda s dokladem" — jinak řádek bez
+  neshody vypadal stejně jako náklad, který nikdy analýzu neměl (žádné trvalé potvrzení).
 - **`computeBlockingIssues`** (`event-expense-actions.tsx`): přidat kontrolu napříč
   `expenses` — počet nákladů s neshodou → nový blokující důvod pro "Odeslat
   vyúčtování", ve stejném stylu jako dnešní "nepotvrzeno" / "chybí účet".
@@ -191,12 +194,31 @@ Zvláštní případ: když Gemini u historického dokladu částku nepřečte (
 baseline aktuální `amount` (jinak by řádek zůstal `NULL` a resumování by ho zkoušelo
 donekonečna). Reálně přečtené hodnoty se ukládají tak, jak jsou — skutečná neshoda se objeví.
 
-Spuštění:
+**Spuštění (staging)** — `CRON_SECRET` z Vercel Dashboard → projekt `ovt` → Settings →
+Environment Variables → Preview:
 ```
-curl -X POST -H "Authorization: Bearer $CRON_SECRET" \
-  "https://.../api/admin/backfill-analyzed-amount?limit=8"
-# opakovat, dokud odpověď nevrátí remaining: 0
+curl -X POST -H "Authorization: Bearer <CRON_SECRET>" \
+  "https://ovt-git-staging-tombaais-projects.vercel.app/api/admin/backfill-analyzed-amount?limit=8"
 ```
+**Produkce** (až po mergi do `main`) — `CRON_SECRET` z Production env:
+```
+curl -X POST -H "Authorization: Bearer <CRON_SECRET>" \
+  "https://is.ovtbohemians.cz/api/admin/backfill-analyzed-amount?limit=8"
+```
+Opakovat stejný příkaz, dokud odpověď (`{ ok, processed, updated, unreadable, failed,
+failures, remaining }`) nevrátí `remaining: 0`. Limit 8/dávku ⇒ u 37 dokladů cca 5 volání.
+
+**Badge "Shoda s dokladem" po backfillu — pozor na `unreadable`**: badge (sekce 6/UI) se
+zobrazí u každého řádku s `analyzedAmount != null`, který sedí s `amount`. Po backfillu se
+objeví téměř všude, ale ne se stejnou váhou:
+- Gemini doklad přečetl a částka sedí → `analyzedAmount` = reálně zjištěná hodnota, badge
+  je opravdové potvrzení.
+- Gemini doklad přečetl a částka nesedí → místo badge se zobrazí červený banner neshody
+  (to je ta reálná hodnota backfillu — může odhalit staré chyby).
+- Gemini doklad vůbec nepřečetl (nečitelný scan) → baseline se uloží jako aktuální `amount`
+  sám do sebe (viz výše), badge se zobrazí, ale znamená jen "nemáme důvod myslet si, že je
+  to špatně", ne že to AI nezávisle ověřilo. Počet takových případů je v odpovědi endpointu
+  jako `unreadable`.
 
 Nahrazuje původní plán ze staršího návrhu ADR-0001 (SQL `UPDATE ... SET analyzed_amount
 = amount`, bez skutečné analýzy) — při 37 dokladech je reálná re-analýza levná
