@@ -3,10 +3,11 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, events } from "@/db/schema";
+import { eventExpenses, events, auditLog } from "@/db/schema";
 import { analyzeExpenseFile, ExpenseAnalysisConfigError } from "@/lib/expense-analysis";
 import { isTreasurer } from "@/lib/treasurer";
-import { evaluateLockedMismatchGate } from "@/lib/expense-mismatch";
+import { evaluateLockedMismatchGate, analyzedMatchesAmount } from "@/lib/expense-mismatch";
+import { logBlockedAttempt } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -53,11 +54,13 @@ export async function POST(
             .where(eq(events.id, eventId));
         if (!eventRow) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
         if (eventRow.lockForReimbursement) {
-            return NextResponse.json({ error: "Nelze přikládat soubory — výdajový zámek je aktivní" }, { status: 409 });
+            const reason = "Nelze přikládat soubory — výdajový zámek je aktivní";
+            await logBlockedAttempt(db, { attemptedAction: "attach_expense_file", reason, changedBy: session.user.email, eventId, expenseId });
+            return NextResponse.json({ error: reason }, { status: 409 });
         }
 
         const [expense] = await db
-            .select({ id: eventExpenses.id, eventId: eventExpenses.eventId, amount: eventExpenses.amount, fileUrl: eventExpenses.fileUrl })
+            .select({ id: eventExpenses.id, eventId: eventExpenses.eventId, amount: eventExpenses.amount, analyzedAmount: eventExpenses.analyzedAmount, fileUrl: eventExpenses.fileUrl, fileName: eventExpenses.fileName, purposeText: eventExpenses.purposeText })
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
 
@@ -101,6 +104,7 @@ export async function POST(
                 confirmMismatch,
             });
             if (!gate.ok) {
+                await logBlockedAttempt(db, { attemptedAction: "attach_expense_file", reason: gate.error, changedBy: session.user.email, eventId, expenseId });
                 return NextResponse.json({ error: gate.error, code: gate.code, analysis }, { status: 409 });
             }
         } else {
@@ -121,16 +125,37 @@ export async function POST(
         const safeName = `events/${eventId}/expenses/${expenseId}_${Date.now()}.${ext}`;
         const blob = await put(safeName, file, { access: "private", contentType: file.type });
 
+        const newAnalyzedAmount = analyzedAmount != null ? String(analyzedAmount) : null;
         await db
             .update(eventExpenses)
             .set({
                 fileUrl: blob.url,
                 fileName: file.name,
                 fileMime: file.type,
-                analyzedAmount: analyzedAmount != null ? String(analyzedAmount) : null,
+                analyzedAmount: newAnalyzedAmount,
                 ...(locked ? {} : { amount: amountToSave }),
             })
             .where(eq(eventExpenses.id, expenseId));
+
+        // Audit — diff přílohy/částky + metadata (výměna? přebil hospodář neshodu?).
+        const changes: Record<string, { old: string | null; new: string | null }> = {
+            fileUrl: { old: expense.fileUrl ?? null, new: blob.url },
+            fileName: { old: expense.fileName ?? null, new: file.name },
+            analyzedAmount: { old: expense.analyzedAmount ?? null, new: newAnalyzedAmount },
+        };
+        if (!locked && amountToSave !== expense.amount) {
+            changes.amount = { old: expense.amount ?? null, new: amountToSave };
+        }
+        // mismatchOverridden: v zamčeném stavu gate prošel, ale částka se přesto neshoduje → hospodář ji přebil.
+        const mismatchOverridden = locked && !analyzedMatchesAmount(amountToSave, analyzedAmount);
+        await db.insert(auditLog).values({
+            entityType: "event_expense",
+            entityId: expenseId,
+            action: "attach_expense_file",
+            changes,
+            metadata: { eventId, expenseId, purposeText: expense.purposeText, replaced: !!expense.fileUrl, mismatchOverridden },
+            changedBy: session.user.email,
+        });
 
         if (expense.fileUrl) {
             try {

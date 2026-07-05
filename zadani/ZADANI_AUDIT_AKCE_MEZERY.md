@@ -1,5 +1,10 @@
 # Zadání: Doplnit chybějící audit u akcí a vyúčtování
 
+> **Návrh prošel grilling session — finální podoba viz [ADR-0002](../docs/adr/0002-event-audit-log-scope-and-reconstructability.md).**
+> Sekce níže jsou aktualizované podle výsledku (byly upraveny oproti prvnímu návrhu — hlavně `entityType`
+> u položek vázaných na jednu přihlášku/náklad, nový scope `event_expense`, doplněný `reanalyze_expense`,
+> a `blocked` log i pro dosud netknuté zámky). Otevřené otázky z prvního návrhu jsou vyřešené, viz konec dokumentu.
+
 ## Byznys případ
 
 Hospodář (a admin obecně) potřebuje u každé akce vidět kompletní historii toho, kdo a kdy s ní něco udělal — nejen editace polí, ale i souhlas/odvolání vyúčtování, odeslání mailů účastníkům, zamykání dokladů, změny nákladů. Dnes existuje jednotný pohled `getEventFullAuditLog()`, ale řada mutací do něj vůbec nepropisuje — buď píší do vlastní vedlejší tabulky, kterou tento pohled nečte, nebo nepíšou nikam.
@@ -14,7 +19,7 @@ Zjištěno při ruční kontrole: potvrzení/odvolání vyúčtování hospodá�
 
 - Tabulka `app.audit_log` (`src/db/schema.ts`) — `entityType`, `entityId`, `action`, `changes` (JSONB diff), `metadata`, `changedBy`, `changedAt`.
 - [`getEventAuditLog`](src/lib/actions/events.ts#L633) — jednoduchý pohled, jen pole akce (`entityType = "event"`).
-- [`getEventFullAuditLog`](src/lib/actions/event-registrations.ts#L1359) — "forenzní" pohled jen pro hospodáře (`TREASURER_EMAIL`), sjednocuje `entityType IN ("event", "event_registration")`. **Toto je jediné místo, kde by měla být vidět kompletní historie akce — a právě sem se nedostává několik kategorií mutací (viz níže).**
+- [`getEventFullAuditLog`](src/lib/actions/event-registrations.ts#L1359) — "forenzní" pohled jen pro hospodáře (`TREASURER_EMAIL`), dnes sjednocuje `entityType IN ("event", "event_registration")`. **Toto je jediné místo, kde by měla být vidět kompletní historie akce — a právě sem se nedostává několik kategorií mutací (viz níže).** Po tomhle zadání přibude třetí scope, `event_expense` (viz bod 4).
 
 ### Mutace, které JIŽ nějaký log mají, ale mimo `audit_log`
 
@@ -59,43 +64,62 @@ Smazání nákladu nebo změna částky dnes nezanechá žádnou stopu — kdo, 
 
 ## Co se má změnit
 
+Princip napříč vším níže — **rekonstruovatelnost**: z `audit_log` má jít složit zpět kompletní flow akce. Skalární pole (částka, stav, boolean) stačí jako diff `changes: {pole: {old, new}}`. Mapová/vícehodnotová pole a destruktivní vedlejší efekty (mazání řádků) navíc dostávají plný snapshot v `metadata` — diff samotný je křehký (jeden vynechaný záznam znehodnotí rekonstrukci od toho bodu dál). Detailní zdůvodnění viz [ADR-0002](../docs/adr/0002-event-audit-log-scope-and-reconstructability.md).
+
 ### 1. Sjednotit zápis existujících logů do `audit_log`
 
-U tří míst, které už logují (jen jinam), přidat vedle zápisu do vlastní tabulky i řádek do `audit_log` s `entityType: "event"`, `entityId: eventId`:
+U tří míst, které už logují (jen jinam), přidat vedle zápisu do vlastní tabulky i řádek do `audit_log`:
 
-- `setTreasurerApproval` → `action: "treasurer_approve"` / `"treasurer_revoke"`
-- `sendEventSettlementEmails` → `action: "send_settlement_emails"`, `metadata: { sent, skipped, failed }`
-- `sendSingleRegistrationEmail` → `action: "send_settlement_email_single"`, `metadata: { registrationId }`
-- `logVyuctovaniSend` → `action: "send_vyuctovani_tj"`, `metadata: { recipients }`
+- `setTreasurerApproval` → `entityType: "event"`, `action: "treasurer_approve"` / `"treasurer_revoke"`
+- `sendEventSettlementEmails` → `entityType: "event"`, `action: "send_settlement_emails"`, `metadata: { sent, skipped, failed }`
+- `sendSingleRegistrationEmail` → **`entityType: "event_registration"`, `entityId: registrationId`** (ne `"event"` — je to e-mail jedné konkrétní přihlášce), `action: "send_settlement_email_single"`
+- `logVyuctovaniSend` → `entityType: "event"`, `action: "send_vyuctovani_tj"`, `metadata: { recipients }` — **potvrzeno: tohle NENÍ legacy/na vyřazení**, je to aktivně používané tlačítko "Odeslat vyúčtování" (finální předání účetnictví TJ), viz otevřená otázka 2 níže
 
-Vlastní tabulky (`event_treasurer_approval_log`, `event_settlement_email_sends`, `event_vyuctovani_sends`) zůstávají beze změny — mají specifický tvar dat (příjemci, počty) potřebný pro jiná zobrazení. Jde jen o přidání paralelního záznamu do jednotného auditu.
+Vlastní tabulky (`event_treasurer_approval_log`, `event_settlement_email_sends`, `event_vyuctovani_sends`) zůstávají beze změny — mají specifický tvar dat (příjemci, počty) potřebný pro jiná zobrazení. Jde jen o přidání paralelního záznamu do jednotného auditu; ten u nich neduplikuje detail, jen dává časovou osu.
 
 ### 2. Doplnit audit u settlement akcí, které nemají žádný log
 
-Do každé z těchto funkcí přidat `db.insert(auditLog)` se `changes` (kde dává smysl starý/nový stav) a `entityType: "event"`:
+Do každé z těchto funkcí přidat `db.insert(auditLog)` při úspěchu. **U 6 z 8** (všechny kromě `lockForReimbursement`/`unlockForReimbursement` — ty dnes žádnou `lockForParticipants` bránu nemají, jen kontrolu "akce existuje") přidat i `logBlockedAttempt` (viz bod 5) při odmítnutí zámkem — dosud žádná z nich blocked log neměla:
 
-- `lockForReimbursement` / `unlockForReimbursement` → `action: "lock_reimbursement"` / `"unlock_reimbursement"`
-- `updateEventSubsidy` → `action: "update_subsidy"`, `changes: { subsidyPerMember: { old, new } }`
-- `updateExpenseAllocationMethod` → `action: "update_expense_allocation_method"`, `metadata: { expenseId }`, `changes: { allocationMethod: { old, new } }`
-- `setExpenseRegistrationAllocations` → `action: "set_expense_registration_allocations"`, `metadata: { expenseId }`
-- `setExpenseParticipantCoefficients` → `action: "set_expense_coefficients"`, `metadata: { expenseId }`
-- `setDepositPromise` / `setDepositWontPay` → `action: "set_deposit_promise"` / `"set_deposit_wont_pay"`, `metadata: { prescriptionId }`, `changes: { value: { old, new }, note: { old, new } }`
+- `lockForReimbursement` / `unlockForReimbursement` → `entityType: "event"`, `action: "lock_reimbursement"` / `"unlock_reimbursement"` (bez `blocked` varianty — není co blokovat)
+- `updateEventSubsidy` → `entityType: "event"`, `action: "update_subsidy"`, `changes: { subsidyPerMember: { old, new } }`
+- `updateExpenseAllocationMethod` → **`entityType: "event_expense"`, `entityId: expenseId`** (subjekt je náklad, ne akce), `action: "update_expense_allocation_method"`, `changes: { allocationMethod: { old, new } }`, **plus `metadata.deletedAllocations`** = snapshot smazaných řádků `eventExpenseAllocations`, pokud přepnutí na `split_all` nějaké smazalo
+- `setExpenseRegistrationAllocations` → **`entityType: "event_expense"`**, `action: "set_expense_registration_allocations"`, `changes` = diff alokované částky per `registrationId`, **plus `metadata.allocationsAfter`** = plný snapshot všech alokací nákladu po uložení
+- `setExpenseParticipantCoefficients` → **`entityType: "event_expense"`**, `action: "set_expense_coefficients"`, `changes` = diff jen změněných klíčů (`{ [personKey]: {old, new} }`), **plus `metadata.coefficientsAfter`** = plná mapa koeficientů po uložení
+- `setDepositPromise` / `setDepositWontPay` → **`entityType: "event_registration"`, `entityId: registrationId`** (ne `"event"` — váže se na jednu přihlášku), `action: "set_deposit_promise"` / `"set_deposit_wont_pay"`, `metadata: { prescriptionId }`, `changes: { value: { old, new }, note: { old, new } }`
 
 ### 3. Doplnit audit v API routách pro náklady akce
 
-V `src/app/api/events/[id]/expenses/route.ts` (POST/PATCH/DELETE) a v `attach-file/route.ts`, `send-invoice-payment/route.ts` přidat `db.insert(auditLog)` po každé úspěšné mutaci:
+V `src/app/api/events/[id]/expenses/route.ts` (POST/PATCH/DELETE), `attach-file/route.ts`, `send-invoice-payment/route.ts` **a `reanalyze/route.ts`** (viz níže) přidat `db.insert(auditLog)` po úspěšné mutaci. Všechny s `entityType: "event_expense"`, `entityId: expenseId`. **U 5 z 6** (všechny kromě `send-invoice-payment` — ten dnes nemá žádnou `lockForParticipants`/`lockForReimbursement` bránu, jen vstupní validace typu "faktura už zaplacená"/"chybí soubor") přidat i `logBlockedAttempt` při 409:
 
-- POST → `action: "create_expense"`, `metadata: { expenseId }`
-- PATCH → `action: "update_expense"`, `metadata: { expenseId }`, `changes` s reálně změněnými poli (částka, kategorie, účel, plátce, `isPaid`...)
-- DELETE → `action: "delete_expense"`, `metadata: { expenseId }`, `changes` s hodnotami smazaného řádku (protože po smazání už nejdou dohledat)
-- attach-file → `action: "attach_expense_file"`, `metadata: { expenseId, fileName }`
-- send-invoice-payment → `action: "send_invoice_payment"`, `metadata: { expenseId }`
+- POST → `action: "create_expense"`, `metadata` = plný snapshot počátečního stavu založeného řádku (ne jen `expenseId`) — slouží jako kotva pro rekonstrukci, viz UPDATE/DELETE níže
+- PATCH → `action: "update_expense"`, `changes` s reálně změněnými poli (částka, kategorie, účel, plátce, `isPaid`, `invoicePayeeName`, příjemce proplacení...)
+- DELETE → `action: "delete_expense"`, `changes` s klíčovými poli smazaného řádku (čitelnost v UI), `metadata` s **celým** smazaným řádkem (forenzní snapshot, po smazání už nejde dohledat)
+- attach-file → `action: "attach_expense_file"`, `changes: { amount, analyzedAmount, fileUrl, fileName }` (`amount` jen když se v odemčeném stavu měnilo), `metadata: { replaced: boolean, mismatchOverridden: boolean }` (`replaced` = příloha už existovala; `mismatchOverridden` = hospodář přebil neshodu na zamčeném nákladu)
+- **reanalyze** (`POST /api/events/[id]/expenses/[expenseId]/reanalyze/route.ts`) → **doplněno dodatečně, nebylo v prvním návrhu zadání** (routa vznikla až po jeho sepsání) — `action: "reanalyze_expense"`, `changes: { analyzedAmount: { old, new } }`
+- send-invoice-payment → `action: "send_invoice_payment"`, `changes: { invoicePaymentSentAt: { old: null, new: <timestamp> } }`
 
-Tyto routy zatím `auditLog` neimportují — bude potřeba přidat import a `getDb()`/session stejně jako u ostatních server actions (`auth()` pro `changedBy`).
+Tyto routy zatím `auditLog` neimportují — bude potřeba přidat import (mají už `auth()`/`getDb()`, není potřeba dodávat).
 
-### 4. Rozšířit `getEventFullAuditLog`
+**Mimo scope:** `POST /api/admin/backfill-analyzed-amount` — jednorázový, `CRON_SECRET`-autorizovaný systémový skript (vlastní [ADR-0001](../docs/adr/0001-analyzed-amount-historical-backfill.md)), ne uživatelská akce; nemá `session`/e-mail k zapsání jako `changedBy`.
 
-Žádná změna v query není potřeba, pokud všechny výše uvedené akce začnou zapisovat do `audit_log` s `entityType: "event"` — automaticky se objeví. Jen ověřit, že UI (`event-detail-client.tsx` / audit tab) umí zobrazit nové hodnoty `action` čitelně (mapování na české popisky, podobně jako u `update_field`/`accept_from_gcal`).
+### 4. Rozšířit `getEventFullAuditLog` a UI
+
+Na rozdíl od prvního návrhu **je potřeba změna v query**, protože přibývá třetí scope:
+
+- `EventFullAuditEntry.scope`: `"event" | "registration" | "expense"` (nový typ)
+- `getEventFullAuditLog` — třetí `OR` větev (`entityType = "event_expense"`), join na `eventExpenses` pro `purposeText`; když náklad už neexistuje (smazaný), fallback na `metadata.purposeText` snapshot (proto ho mají všechny `event_expense` záznamy, ne jen DELETE)
+- `EventAuditTab` (`event-detail-client.tsx`) — zobrazit název nákladu vedle badge, stejně jako `registrationName`; doplnit `AUDIT_ACTION_META` o nové `action` hodnoty (české popisky) a `AUDIT_ATTEMPT_LABELS` o nové `attemptedAction` hodnoty pro `blocked` záznamy
+
+### 5. Sdílená audit utilita pro `blocked` záznamy
+
+`logBlockedAttempt`/`BlockedError`/`BlockedAttempt` (dnes privátní jen v `event-settlement.ts`) přesunout do sdíleného `src/lib/audit.ts` — poprvé je potřeba volat i z API rout (`attach-file`, `reanalyze`), ne jen ze server actions. `BlockedAttempt` rozšířit o `expenseId`; `entityType` výběr v `logBlockedAttempt` rozšířit o třetí větev:
+
+```
+entityType: opts.registrationId != null ? "event_registration"
+          : opts.expenseId != null ? "event_expense"
+          : "event"
+```
 
 ---
 
@@ -108,8 +132,16 @@ Tyto routy zatím `auditLog` neimportují — bude potřeba přidat import a `ge
 
 ---
 
-## Otevřené otázky
+## Otevřené otázky — vyřešeno (grilling session)
 
-1. U `DELETE /expenses` a dalších destruktivních akcí — má `changes` obsahovat celý smazaný řádek, nebo jen klíčová pole (částka, účel)? Navrhujeme klíčová pole kvůli čitelnosti v UI, plný snapshot do `metadata` pro forenzní účely.
-2. Má se do jednotného auditu propsat i legacy `/api/events/[id]/send-vyuctovani` (PDF pro TJ), nebo je to už na vyřazení a nemá smysl do něj investovat? (Ovlivní prioritu bodu 1 pro `logVyuctovaniSend`.)
-3. Rozsah tohoto zadání je omezen na akce/vyúčtování (`events`, `event_registrations`, `event_expenses`, `event_payment_prescriptions`). Podobná kontrola pro brigády/lodě/členy není součástí — provést až jako samostatné zadání, pokud bude zájem.
+1. **`DELETE /expenses` — celý řádek, nebo jen klíčová pole?** Obojí: klíčová pole do `changes` (čitelnost v UI), celý smazaný řádek do `metadata` (forenzní snapshot). Potvrzeno.
+2. **Legacy `/api/events/[id]/send-vyuctovani` — propsat do auditu, nebo na vyřazení?** Není legacy ani na vyřazení — je to jediné a aktivně používané tlačítko "Odeslat vyúčtování" (finální předání účetnictví TJ Bohemians, gate na `billingStatus = "prescribed"` a `treasurerApproved`). Zahrnuto do bodu 1 beze změny priority.
+3. Rozsah tohoto zadání je omezen na akce/vyúčtování (`events`, `event_registrations`, `event_expenses`, `event_payment_prescriptions`). Podobná kontrola pro brigády/lodě/členy není součástí — provést až jako samostatné zadání, pokud bude zájem. (Beze změny.)
+
+Nově otevřené/rozšířené v grilling session (viz [ADR-0002](../docs/adr/0002-event-audit-log-scope-and-reconstructability.md) pro plné zdůvodnění):
+
+- Zavedení třetího scope `event_expense` pro vše vázané na konkrétní náklad (místo anonymního `"event"`).
+- Princip rekonstruovatelnosti — snapshoty v `metadata` navíc k diffu u mapových polí a destruktivních vedlejších efektů.
+- `blocked` log rozšířen na 11 mutací s reálnou zámkovou bránou (6 z bodu 2 + 5 z bodu 3; `lockForReimbursement`/`unlockForReimbursement`/`send-invoice-payment` žádnou nemají, viz body 2 a 3) — dřív jen v `event-settlement.ts` na jiných místech, ne jen na úspěšné zápisy.
+- Doplněna routa `reanalyze_expense`, která v době sepsání prvního návrhu ještě neexistovala.
+- Explicitně vyloučen `POST /api/admin/backfill-analyzed-amount` (systémový skript, ne uživatelská akce).

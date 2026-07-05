@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, events, mailEvents } from "@/db/schema";
+import { eventExpenses, events, mailEvents, auditLog } from "@/db/schema";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildInvoicePaymentInstructionEmail } from "@/lib/email-templates/invoice-payment-instruction";
 
@@ -145,6 +145,14 @@ export async function POST(
                     testTo: settings.testTo ?? null,
                     sendError: sendError ? String(sendError) : null,
                 },
+            }),
+            db.insert(auditLog).values({
+                entityType: "event_expense",
+                entityId: expenseId,
+                action: "send_invoice_payment",
+                changes: { invoicePaymentSentAt: { old: null, new: sentAt.toISOString() } },
+                metadata: { eventId, expenseId, purposeText: expense.purposeText, recipient: to },
+                changedBy: session.user.email,
             }),
         ]);
 

@@ -2,11 +2,12 @@ import { NextRequest, NextResponse } from "next/server";
 import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, events } from "@/db/schema";
+import { eventExpenses, events, auditLog } from "@/db/schema";
 import { analyzeExpenseFile, ExpenseAnalysisConfigError } from "@/lib/expense-analysis";
 import { fetchPrivateBlobAsFile } from "@/lib/blob-fetch";
 import { isTreasurer } from "@/lib/treasurer";
 import { evaluateLockedMismatchGate } from "@/lib/expense-mismatch";
+import { logBlockedAttempt } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -47,7 +48,9 @@ export async function POST(
             .where(eq(events.id, eventId));
         if (!eventRow) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
         if (eventRow.lockForReimbursement) {
-            return NextResponse.json({ error: "Nelze analyzovat — výdajový zámek je aktivní" }, { status: 409 });
+            const reason = "Nelze analyzovat — výdajový zámek je aktivní";
+            await logBlockedAttempt(db, { attemptedAction: "reanalyze_expense", reason, changedBy: session.user.email, eventId, expenseId });
+            return NextResponse.json({ error: reason }, { status: 409 });
         }
 
         const [expense] = await db
@@ -55,6 +58,8 @@ export async function POST(
                 id: eventExpenses.id,
                 eventId: eventExpenses.eventId,
                 amount: eventExpenses.amount,
+                analyzedAmount: eventExpenses.analyzedAmount,
+                purposeText: eventExpenses.purposeText,
                 fileUrl: eventExpenses.fileUrl,
                 fileName: eventExpenses.fileName,
                 fileMime: eventExpenses.fileMime,
@@ -86,14 +91,27 @@ export async function POST(
                 confirmMismatch,
             });
             if (!gate.ok) {
+                await logBlockedAttempt(db, { attemptedAction: "reanalyze_expense", reason: gate.error, changedBy: session.user.email, eventId, expenseId });
                 return NextResponse.json({ error: gate.error, code: gate.code, analysis }, { status: 409 });
             }
         }
 
+        const newAnalyzedAmount = analyzedAmount != null ? String(analyzedAmount) : null;
         await db
             .update(eventExpenses)
-            .set({ analyzedAmount: analyzedAmount != null ? String(analyzedAmount) : null })
+            .set({ analyzedAmount: newAnalyzedAmount })
             .where(eq(eventExpenses.id, expenseId));
+
+        if ((expense.analyzedAmount ?? null) !== newAnalyzedAmount) {
+            await db.insert(auditLog).values({
+                entityType: "event_expense",
+                entityId: expenseId,
+                action: "reanalyze_expense",
+                changes: { analyzedAmount: { old: expense.analyzedAmount ?? null, new: newAnalyzedAmount } },
+                metadata: { eventId, expenseId, purposeText: expense.purposeText },
+                changedBy: session.user.email,
+            });
+        }
 
         return NextResponse.json({ success: true, analysis });
     } catch (err) {

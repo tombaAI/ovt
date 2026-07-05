@@ -1061,12 +1061,39 @@ const AUDIT_ACTION_META: Record<string, { label: string; cls: string }> = {
     lock_billing: { label: "Uzamčení vyúčtování", cls: "bg-slate-100 text-slate-600 border-slate-200" },
     unlock_billing: { label: "Odemčení vyúčtování", cls: "bg-red-50 text-red-600 border-red-200" },
     regenerate_prescriptions: { label: "Přegenerování předpisů", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    // Souhlas hospodáře + odeslání mailů (bod 1)
+    treasurer_approve: { label: "Souhlas hospodáře", cls: "bg-emerald-50 text-emerald-600 border-emerald-200" },
+    treasurer_revoke: { label: "Odvolání souhlasu", cls: "bg-red-50 text-red-600 border-red-200" },
+    send_settlement_emails: { label: "Odeslání předpisů (hromadně)", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    send_settlement_email_single: { label: "Odeslání předpisu", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    send_vyuctovani_tj: { label: "Odeslání vyúčtování TJ", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    // Zámky dokladů + dotace + záloha (bod 2)
+    lock_reimbursement: { label: "Uzamčení dokladů", cls: "bg-slate-100 text-slate-600 border-slate-200" },
+    unlock_reimbursement: { label: "Odemčení dokladů", cls: "bg-red-50 text-red-600 border-red-200" },
+    update_subsidy: { label: "Změna dotace", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    update_expense_allocation_method: { label: "Změna rozdělení nákladu", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    set_expense_registration_allocations: { label: "Alokace nákladu", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    set_expense_coefficients: { label: "Koeficienty účastníků", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    set_deposit_promise: { label: "Příslib zálohy", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    set_deposit_wont_pay: { label: "Nebude platit zálohu", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    // Náklady akce (bod 3)
+    create_expense: { label: "Vznik nákladu", cls: "bg-blue-50 text-blue-600 border-blue-200" },
+    update_expense: { label: "Úprava nákladu", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    delete_expense: { label: "Smazání nákladu", cls: "bg-red-50 text-red-600 border-red-200" },
+    attach_expense_file: { label: "Příloha dokladu", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    reanalyze_expense: { label: "Přeanalyzování dokladu", cls: "bg-amber-50 text-amber-600 border-amber-200" },
+    send_invoice_payment: { label: "Pokyn k úhradě faktury", cls: "bg-blue-50 text-blue-600 border-blue-200" },
 };
 
 const AUDIT_EXTRA_LABELS: Record<string, string> = {
     billingStatus: "Stav vyúčtování", treasurerApproved: "Souhlas hospodáře", collecting: "Vybírá platby",
     created: "Vytvořeno", updated: "Aktualizováno", participant: "Účastník", memberId: "Člen (ID)", fullName: "Jméno",
     reason: "Důvod",
+    subsidyPerMember: "Dotace", allocationMethod: "Způsob rozdělení", amount: "Částka", analyzedAmount: "Zjištěná částka",
+    purposeText: "Účel", purposeCategory: "Kategorie", isPaid: "Zaplaceno", invoicePayeeName: "Příjemce faktury",
+    fileUrl: "Soubor", fileName: "Název souboru", invoicePaymentSentAt: "Pokyn odeslán",
+    lockForReimbursement: "Zámek dokladů", value: "Hodnota", note: "Poznámka",
+    reimbursementPersonId: "Příjemce (ID)", reimbursementMemberId: "Příjemce člen (ID)",
 };
 
 // Co se uživatel pokusil udělat (u zablokovaných pokusů, action="blocked", metadata.attemptedAction).
@@ -1078,6 +1105,11 @@ const AUDIT_ATTEMPT_LABELS: Record<string, string> = {
     cancel_registration: "zrušit přihlášku", restore_registration: "obnovit přihlášku",
     unlock_billing: "odemknout vyúčtování", lock_billing: "uzamknout vyúčtování",
     regenerate_prescriptions: "přegenerovat předpisy", self_cancel_registration: "zrušit přihlášku online",
+    update_subsidy: "změnit dotaci", update_expense_allocation_method: "změnit rozdělení nákladu",
+    set_expense_registration_allocations: "alokovat náklad", set_expense_coefficients: "nastavit koeficienty",
+    set_deposit_promise: "nastavit příslib zálohy", set_deposit_wont_pay: "nastavit \"nebude platit\"",
+    create_expense: "vytvořit náklad", update_expense: "upravit náklad", delete_expense: "smazat náklad",
+    attach_expense_file: "přiložit doklad", reanalyze_expense: "přeanalyzovat doklad",
 };
 
 function EventAuditTab({ eventId }: { eventId: number }) {
@@ -1113,6 +1145,8 @@ function EventAuditTab({ eventId }: { eventId: number }) {
                                     <span className={`px-1.5 py-px rounded text-[10px] font-medium border ${meta.cls}`}>{meta.label}</span>
                                     {entry.scope === "registration"
                                         ? <span className="text-gray-700 font-medium">{entry.registrationName}</span>
+                                        : entry.scope === "expense"
+                                        ? <span className="text-gray-700 font-medium">{entry.expenseName ?? "náklad"}</span>
                                         : <span className="text-gray-400 italic">celá akce</span>}
                                     <span className="text-gray-400">· {entry.changedBy}</span>
                                 </div>

@@ -20,6 +20,7 @@ import { randomBytes } from "crypto";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
 import { isTreasurer } from "@/lib/treasurer";
+import { logBlockedAttempt, BlockedError, blockedOrError } from "@/lib/audit";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -602,52 +603,8 @@ async function isEventCollecting(db: ReturnType<typeof getDb>, eventId: number):
     return (row?.n ?? 0) > 0;
 }
 
-/**
- * Zaloguje NEÚSPĚŠNÝ pokus o akci (uživatel dostal stopku). Audit tak zachytí i to, co uživatelé
- * chtěli udělat, ale systém jim to nedovolil — abychom na to mohli reagovat. action = "blocked",
- * metadata.attemptedAction = co se pokoušeli udělat, changes.reason = proč to neprošlo.
- */
-async function logBlockedAttempt(
-    db: ReturnType<typeof getDb>,
-    opts: { attemptedAction: string; reason: string; changedBy: string; eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null },
-): Promise<void> {
-    try {
-        await db.insert(auditLog).values({
-            entityType: opts.registrationId != null ? "event_registration" : "event",
-            entityId: opts.registrationId ?? opts.eventId ?? 0,
-            action: "blocked",
-            changes: { reason: { old: null, new: opts.reason } },
-            metadata: { blocked: true, attemptedAction: opts.attemptedAction, eventId: opts.eventId, registrationId: opts.registrationId, participantId: opts.participantId, memberId: opts.memberId },
-            changedBy: opts.changedBy,
-        });
-    } catch (e) {
-        // Audit blokace nesmí shodit samotnou (už tak odmítnutou) akci.
-        console.error("[logBlockedAttempt]", e);
-    }
-}
-
-/**
- * Stopka uvnitř transakce. Vyhozením se transakce vrátí (rollback), proto se neloguje hned —
- * zaloguje se až v catch přes blockedOrError (mimo rollback, samostatným zápisem).
- */
-type BlockedAttempt = { attemptedAction: string; eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null };
-class BlockedError extends Error {
-    attempt: BlockedAttempt;
-    constructor(message: string, attempt: BlockedAttempt) {
-        super(message);
-        this.name = "BlockedError";
-        this.attempt = attempt;
-    }
-}
-
-/** V catch: BlockedError = vědomá stopka → zaloguj a vrať její hlášku; jinak běžná chyba s fallbackem. */
-async function blockedOrError(e: unknown, db: ReturnType<typeof getDb>, changedBy: string, fallback: string): Promise<{ error: string }> {
-    if (e instanceof BlockedError) {
-        await logBlockedAttempt(db, { ...e.attempt, reason: e.message, changedBy });
-        return { error: e.message };
-    }
-    return { error: e instanceof Error ? e.message : fallback };
-}
+// logBlockedAttempt / BlockedError / BlockedAttempt / blockedOrError přesunuty do src/lib/audit.ts
+// (poprvé je potřebují i API routy pro náklady, ne jen server actions). Importováno nahoře.
 
 /** Gate před generováním předpisů (nevyřešená záloha / nenastavený koeficient) — vrací chybu + zaloguje blokaci. */
 async function prescriptionGateError(
@@ -832,12 +789,22 @@ export async function unlockBilling(
 /** Uzamkne doklady pro proplacení — zamkne metadata nákladů (kategorie, popis, příjemce, soubor). */
 export async function lockForReimbursement(eventId: number): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
-        const [ev] = await db.select({ id: events.id }).from(events).where(eq(events.id, eventId));
+        const [ev] = await db.select({ id: events.id, lockForReimbursement: events.lockForReimbursement }).from(events).where(eq(events.id, eventId));
         if (!ev) return { error: "Akce nenalezena" };
         await db.update(events)
             .set({ lockForReimbursement: true, updatedAt: new Date() })
             .where(eq(events.id, eventId));
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId: eventId,
+            action: "lock_reimbursement",
+            changes: { lockForReimbursement: { old: String(ev.lockForReimbursement), new: "true" } },
+            metadata: { eventId },
+            changedBy: session.user.email,
+        });
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch {
@@ -848,10 +815,21 @@ export async function lockForReimbursement(eventId: number): Promise<{ success: 
 /** Odemkne doklady pro proplacení. */
 export async function unlockForReimbursement(eventId: number): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
+        const [ev] = await db.select({ lockForReimbursement: events.lockForReimbursement }).from(events).where(eq(events.id, eventId));
         await db.update(events)
             .set({ lockForReimbursement: false, updatedAt: new Date() })
             .where(eq(events.id, eventId));
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId: eventId,
+            action: "unlock_reimbursement",
+            changes: { lockForReimbursement: { old: String(ev?.lockForReimbursement ?? true), new: "false" } },
+            metadata: { eventId },
+            changedBy: session.user.email,
+        });
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch {
@@ -863,12 +841,27 @@ export async function unlockForReimbursement(eventId: number): Promise<{ success
 
 export async function updateEventSubsidy(eventId: number, subsidyPerMember: number | null): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
-        if ((await getEventLocks(db, eventId))?.lockForParticipants)
-            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+        if ((await getEventLocks(db, eventId))?.lockForParticipants) {
+            const reason = "Vyúčtování je uzamčeno — nejdřív odemkněte";
+            await logBlockedAttempt(db, { attemptedAction: "update_subsidy", reason, changedBy: session.user.email, eventId });
+            return { error: reason };
+        }
+        const [prev] = await db.select({ subsidyPerMember: events.subsidyPerMember }).from(events).where(eq(events.id, eventId));
+        const newVal = subsidyPerMember !== null ? String(subsidyPerMember) : null;
         await db.update(events)
-            .set({ subsidyPerMember: subsidyPerMember !== null ? String(subsidyPerMember) : null, updatedAt: new Date() })
+            .set({ subsidyPerMember: newVal, updatedAt: new Date() })
             .where(eq(events.id, eventId));
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId: eventId,
+            action: "update_subsidy",
+            changes: { subsidyPerMember: { old: prev?.subsidyPerMember ?? null, new: newVal } },
+            metadata: { eventId },
+            changedBy: session.user.email,
+        });
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
     } catch {
@@ -883,20 +876,40 @@ export async function updateExpenseAllocationMethod(
     method: "split_all" | "per_registration",
 ): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
-        const [exp] = await db.select({ eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
+        const [exp] = await db.select({ eventId: eventExpenses.eventId, allocationMethod: eventExpenses.allocationMethod, purposeText: eventExpenses.purposeText }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp) return { error: "Náklad nenalezen" };
-        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
-            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants) {
+            const reason = "Vyúčtování je uzamčeno — nejdřív odemkněte";
+            await logBlockedAttempt(db, { attemptedAction: "update_expense_allocation_method", reason, changedBy: session.user.email, eventId: exp.eventId, expenseId });
+            return { error: reason };
+        }
 
         // participantCoefficients záměrně nezahazujeme — zachováme je pro obnovu při přepnutí zpět
         await db.update(eventExpenses)
             .set({ allocationMethod: method })
             .where(eq(eventExpenses.id, expenseId));
 
+        // Přepnutí na split_all maže ruční alokace — před smazáním je zachytíme do snapshotu (rekonstrukce).
+        let deletedAllocations: { registrationId: number; amount: string }[] = [];
         if (method === "split_all") {
+            deletedAllocations = await db
+                .select({ registrationId: eventExpenseAllocations.registrationId, amount: eventExpenseAllocations.amount })
+                .from(eventExpenseAllocations)
+                .where(eq(eventExpenseAllocations.expenseId, expenseId));
             await db.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
         }
+
+        await db.insert(auditLog).values({
+            entityType: "event_expense",
+            entityId: expenseId,
+            action: "update_expense_allocation_method",
+            changes: { allocationMethod: { old: exp.allocationMethod, new: method } },
+            metadata: { eventId: exp.eventId, expenseId, purposeText: exp.purposeText, ...(deletedAllocations.length > 0 ? { deletedAllocations } : {}) },
+            changedBy: session.user.email,
+        });
 
         revalidatePath(`/dashboard/events/${exp.eventId}`);
         return { success: true };
@@ -912,12 +925,17 @@ export async function setExpenseRegistrationAllocations(
     allocations: { registrationId: number; amount: number }[],
 ): Promise<{ success: true } | { error: string }> {
     try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
 
-        const [exp] = await db.select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
+        const [exp] = await db.select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId, purposeText: eventExpenses.purposeText }).from(eventExpenses).where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
-        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
-            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants) {
+            const reason = "Vyúčtování je uzamčeno — nejdřív odemkněte";
+            await logBlockedAttempt(db, { attemptedAction: "set_expense_registration_allocations", reason, changedBy: session.user.email, eventId: exp.eventId, expenseId });
+            return { error: reason };
+        }
 
         // Ověření, že součet sedí k částce nákladu
 
@@ -928,6 +946,14 @@ export async function setExpenseRegistrationAllocations(
             return { error: `Součet alokací (${allocSum} Kč) je menší než náklad (${expenseAmount} Kč)` };
         }
 
+        // Starý stav pro diff (per registrationId).
+        const before = await db
+            .select({ registrationId: eventExpenseAllocations.registrationId, amount: eventExpenseAllocations.amount })
+            .from(eventExpenseAllocations)
+            .where(eq(eventExpenseAllocations.expenseId, expenseId));
+        const oldByReg = new Map(before.map(a => [a.registrationId, a.amount]));
+        const newByReg = new Map(allocations.map(a => [a.registrationId, String(a.amount)]));
+
         await db.transaction(async tx => {
             await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
             if (allocations.length > 0) {
@@ -935,6 +961,22 @@ export async function setExpenseRegistrationAllocations(
                     allocations.map(a => ({ expenseId, registrationId: a.registrationId, amount: String(a.amount) }))
                 );
             }
+        });
+
+        // Diff jen změněných přihlášek + plný snapshot po uložení (rekonstrukce).
+        const changes: Record<string, { old: string | null; new: string | null }> = {};
+        for (const regId of new Set([...oldByReg.keys(), ...newByReg.keys()])) {
+            const oldA = oldByReg.get(regId) ?? null;
+            const newA = newByReg.get(regId) ?? null;
+            if (oldA !== newA) changes[`reg${regId}`] = { old: oldA, new: newA };
+        }
+        await db.insert(auditLog).values({
+            entityType: "event_expense",
+            entityId: expenseId,
+            action: "set_expense_registration_allocations",
+            changes,
+            metadata: { eventId: exp.eventId, expenseId, purposeText: exp.purposeText, allocationsAfter: allocations.map(a => ({ registrationId: a.registrationId, amount: String(a.amount) })) },
+            changedBy: session.user.email,
         });
 
         revalidatePath(`/dashboard/events/${exp.eventId}`);
@@ -962,19 +1004,42 @@ export async function setExpenseParticipantCoefficients(
     try {
         const db = getDb();
 
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+
         const [exp] = await db
-            .select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId })
+            .select({ amount: eventExpenses.amount, eventId: eventExpenses.eventId, purposeText: eventExpenses.purposeText, participantCoefficients: eventExpenses.participantCoefficients })
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
         if (!exp?.amount) return { error: "Náklad nenalezen nebo nemá částku" };
-        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants)
-            return { error: "Vyúčtování je uzamčeno — nejdřív odemkněte" };
+        if ((await getEventLocks(db, exp.eventId))?.lockForParticipants) {
+            const reason = "Vyúčtování je uzamčeno — nejdřív odemkněte";
+            await logBlockedAttempt(db, { attemptedAction: "set_expense_coefficients", reason, changedBy: session.user.email, eventId: exp.eventId, expenseId });
+            return { error: reason };
+        }
 
         await db.transaction(async tx => {
             await tx.update(eventExpenses)
                 .set({ allocationMethod: "with_coefficients", participantCoefficients: coefficients })
                 .where(eq(eventExpenses.id, expenseId));
             await tx.delete(eventExpenseAllocations).where(eq(eventExpenseAllocations.expenseId, expenseId));
+        });
+
+        // Diff jen změněných klíčů + plná mapa koeficientů po uložení (rekonstrukce).
+        const oldCoeffs = (exp.participantCoefficients as Record<string, number> | null) ?? {};
+        const changes: Record<string, { old: string | null; new: string | null }> = {};
+        for (const key of new Set([...Object.keys(oldCoeffs), ...Object.keys(coefficients)])) {
+            const oldV = key in oldCoeffs ? String(oldCoeffs[key]) : null;
+            const newV = key in coefficients ? String(coefficients[key]) : null;
+            if (oldV !== newV) changes[key] = { old: oldV, new: newV };
+        }
+        await db.insert(auditLog).values({
+            entityType: "event_expense",
+            entityId: expenseId,
+            action: "set_expense_coefficients",
+            changes,
+            metadata: { eventId: exp.eventId, expenseId, purposeText: exp.purposeText, coefficientsAfter: coefficients },
+            changedBy: session.user.email,
         });
 
         revalidatePath(`/dashboard/events/${exp.eventId}`);
@@ -1488,6 +1553,16 @@ export async function sendEventSettlementEmails(
             testTo: emailSettings.testTo ?? null,
         });
 
+        // Paralelní zápis do jednotného auditu (vedle specifické eventSettlementEmailSends tabulky).
+        await db.insert(auditLog).values({
+            entityType: "event",
+            entityId: eventId,
+            action: "send_settlement_emails",
+            changes: {},
+            metadata: { eventId, sent, skipped, failed: failed.length },
+            changedBy: senderEmail,
+        });
+
         return { sent, skipped, failed };
     } catch (e) {
         return { error: e instanceof Error ? e.message : "Chyba při odesílání e-mailů" };
@@ -1546,6 +1621,16 @@ export async function sendSingleRegistrationEmail(
             message: opts?.message || null,
             registrationId,
             testTo: emailSettings.testTo ?? null,
+        });
+
+        // Paralelní zápis do jednotného auditu — e-mail jedné konkrétní přihlášce → scope event_registration.
+        await db.insert(auditLog).values({
+            entityType: "event_registration",
+            entityId: registrationId,
+            action: "send_settlement_email_single",
+            changes: {},
+            metadata: { eventId: reg.eventId, registrationId, prescriptionId: regRow.settlementPrescription.id },
+            changedBy: senderEmail,
         });
 
         revalidatePath(`/dashboard/events/${reg.eventId}`);
@@ -2076,6 +2161,9 @@ export async function setDepositPromise(
                 type: eventPaymentPrescriptions.type,
                 status: eventPaymentPrescriptions.status,
                 eventId: eventPaymentPrescriptions.eventId,
+                registrationId: eventPaymentPrescriptions.registrationId,
+                depositPromise: eventPaymentPrescriptions.depositPromise,
+                depositPromiseNote: eventPaymentPrescriptions.depositPromiseNote,
             })
             .from(eventPaymentPrescriptions)
             .where(eq(eventPaymentPrescriptions.id, prescriptionId));
@@ -2083,13 +2171,17 @@ export async function setDepositPromise(
         if (!p) return { error: "Předpis nenalezen" };
         if (p.type !== "deposit") return { error: "Příslib lze nastavit jen u zálohy" };
         if (p.status === "cancelled") return { error: "Záloha je zrušena — příslib nedává smysl" };
-        if ((await getEventLocks(db, p.eventId))?.lockForParticipants)
-            return { error: "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby)." };
+        if ((await getEventLocks(db, p.eventId))?.lockForParticipants) {
+            const reason = "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby).";
+            await logBlockedAttempt(db, { attemptedAction: "set_deposit_promise", reason, changedBy: session.user.email, eventId: p.eventId, registrationId: p.registrationId });
+            return { error: reason };
+        }
 
+        const newNote = promise ? (note || null) : null;
         await db.update(eventPaymentPrescriptions)
             .set({
                 depositPromise: promise,
-                depositPromiseNote: promise ? (note || null) : null,
+                depositPromiseNote: newNote,
                 depositPromiseBy: promise ? session.user.email : null,
                 depositPromiseAt: promise ? new Date() : null,
                 // Příslib a "nebude platit" se vylučují — nastavení příslibu zruší případné "nebude platit".
@@ -2097,6 +2189,18 @@ export async function setDepositPromise(
                 updatedAt: new Date(),
             })
             .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        await db.insert(auditLog).values({
+            entityType: "event_registration",
+            entityId: p.registrationId,
+            action: "set_deposit_promise",
+            changes: {
+                value: { old: String(p.depositPromise), new: String(promise) },
+                note: { old: p.depositPromiseNote ?? null, new: newNote },
+            },
+            metadata: { eventId: p.eventId, registrationId: p.registrationId, prescriptionId },
+            changedBy: session.user.email,
+        });
 
         revalidatePath(`/dashboard/events/${p.eventId}`);
         return { success: true };
@@ -2122,6 +2226,9 @@ export async function setDepositWontPay(
                 type: eventPaymentPrescriptions.type,
                 status: eventPaymentPrescriptions.status,
                 eventId: eventPaymentPrescriptions.eventId,
+                registrationId: eventPaymentPrescriptions.registrationId,
+                depositWontPay: eventPaymentPrescriptions.depositWontPay,
+                depositWontPayNote: eventPaymentPrescriptions.depositWontPayNote,
             })
             .from(eventPaymentPrescriptions)
             .where(eq(eventPaymentPrescriptions.id, prescriptionId));
@@ -2129,13 +2236,17 @@ export async function setDepositWontPay(
         if (!p) return { error: "Předpis nenalezen" };
         if (p.type !== "deposit") return { error: "\"Nebude platit\" lze nastavit jen u zálohy" };
         if (p.status === "cancelled") return { error: "Záloha je zrušena — rozhodnutí nedává smysl" };
-        if ((await getEventLocks(db, p.eventId))?.lockForParticipants)
-            return { error: "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby)." };
+        if ((await getEventLocks(db, p.eventId))?.lockForParticipants) {
+            const reason = "Předpisy jsou uzamčené — nejdřív odemkněte vyúčtování (záložka Platby).";
+            await logBlockedAttempt(db, { attemptedAction: "set_deposit_wont_pay", reason, changedBy: session.user.email, eventId: p.eventId, registrationId: p.registrationId });
+            return { error: reason };
+        }
 
+        const newNote = wontPay ? (note || null) : null;
         await db.update(eventPaymentPrescriptions)
             .set({
                 depositWontPay: wontPay,
-                depositWontPayNote: wontPay ? (note || null) : null,
+                depositWontPayNote: newNote,
                 depositWontPayBy: wontPay ? session.user.email : null,
                 depositWontPayAt: wontPay ? new Date() : null,
                 // Vzájemné vyloučení s příslibem.
@@ -2143,6 +2254,18 @@ export async function setDepositWontPay(
                 updatedAt: new Date(),
             })
             .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        await db.insert(auditLog).values({
+            entityType: "event_registration",
+            entityId: p.registrationId,
+            action: "set_deposit_wont_pay",
+            changes: {
+                value: { old: String(p.depositWontPay), new: String(wontPay) },
+                note: { old: p.depositWontPayNote ?? null, new: newNote },
+            },
+            metadata: { eventId: p.eventId, registrationId: p.registrationId, prescriptionId },
+            changedBy: session.user.email,
+        });
 
         revalidatePath(`/dashboard/events/${p.eventId}`);
         return { success: true };
