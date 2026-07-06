@@ -233,6 +233,7 @@ export async function POST(
         bankCode: people.bankCode,
         fileUrl: eventExpenses.fileUrl,
         fileName: eventExpenses.fileName,
+        isPaid: eventExpenses.isPaid,
       })
       .from(eventExpenses)
       .leftJoin(people, eq(eventExpenses.reimbursementPersonId, people.id))
@@ -254,9 +255,12 @@ export async function POST(
 
     const expenses = allExpenses;
 
-    // Hard block: missing required fields on final expenses
+    // Hard block: missing required fields on final expenses.
+    // Doklady s isPaid=false (faktury k úhradě účetnictvím) nepotřebují příjemce — stejná
+    // výjimka jako v computeBlockingIssues (event-expense-actions.tsx); tahle validace
+    // dřív isPaid vůbec neznala, takže faktury tu vždy spadly na "chybí příjemce".
     const missingRequiredFields = expenses.filter(
-      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || !e.reimbursementPersonId,
+      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || (e.isPaid !== false && !e.reimbursementPersonId),
     );
     if (missingRequiredFields.length > 0) {
       return NextResponse.json({

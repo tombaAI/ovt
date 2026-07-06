@@ -50,9 +50,18 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: Nainstalovat PostgreSQL client
+        run: sudo apt-get install -y --no-install-recommends postgresql-client
       - run: npm ci
-      - name: Nahrát schéma do testovací DB
-        run: npm run db:push -- --force
+      # Schéma se staví přehráním VŠECH migrací od bootstrapu — stejný mechanismus
+      # jako produkce (db-migrate.yml) a zároveň průběžná kontrola, že migrace
+      # jdou aplikovat od nuly. (drizzle-kit push v CI tiše nic neaplikoval.)
+      - name: Nahrát schéma do testovací DB (přehrát migrace)
+        run: |
+          for file in $(ls supabase/migrations/*.sql | sort); do
+            echo "▶ Aplikuji: $file"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$file"
+          done
       - name: Seed testovacích dat
         run: node e2e/seed.mjs
         env:

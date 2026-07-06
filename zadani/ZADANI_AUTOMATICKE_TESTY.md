@@ -70,7 +70,7 @@ Aplikace má jen Google OAuth — v testech se **nepřihlašuje přes Google**. 
 
 ### Testovací databáze
 
-E2E nikdy neběží proti staging/produkční DB. CI si zvedne **Postgres service container**, schéma nahraje `drizzle-kit push` a data vloží idempotentní seed (`e2e/seed.mjs`): admin user, členové, `membership_years`, `contribution_periods` + předpisy, akce. Lokálně totéž proti libovolnému disposable Postgresu (Docker/Neon branch) — postup v `e2e/README.md`.
+E2E nikdy neběží proti staging/produkční DB. CI si zvedne **Postgres service container**, schéma postaví **přehráním všech migrací** ze `supabase/migrations/` (stejný mechanismus jako produkce — zároveň průběžně ověřuje, že migrace jdou aplikovat od nuly) a data vloží idempotentní seed (`e2e/seed.mjs`): admin user, členové, `contribution_periods` + předpisy. Lokálně totéž proti libovolnému disposable Postgresu (Docker/Neon branch) — postup v `e2e/README.md`.
 
 ### Rozsah v1 (smoke)
 
@@ -91,7 +91,7 @@ Rozšiřovat o interakční testy (zápis) postupně — vždy když se v ručn�
 | `npm run test:e2e` | Playwright (vyžaduje `DATABASE_URL` na testovací DB + `AUTH_SECRET`) |
 
 - **Pre-commit** (husky): `lint && tsc --noEmit && test:unit` — každý commit má zelené typy i výpočty.
-- **CI** (`.github/workflows/tests.yml`): na push do `staging` a PR do `main` běží job `unit` (lint + tsc + Vitest) a job `e2e` (Postgres service → push schématu → seed → `next build` + `next start` → Playwright). PR do `main` se nemerguje s červenými testy.
+- **CI** (`.github/workflows/tests.yml`): na push do `staging` a PR do `main` běží job `unit` (lint + tsc + Vitest) a job `e2e` (Postgres service → přehrání migrací → seed → `next build` + `next start` → Playwright). PR do `main` se nemerguje s červenými testy.
 - E2E v CI používá dummy env (`AUTH_GOOGLE_ID` apod.) — Google OAuth ani Resend se nevolají (`RESEND_API_KEY` nenastaven = mail disabled mód), `FIO_API_TOKEN` nenastaven = žádná banka.
 
 ## Definice hotovo pro budoucí úpravy

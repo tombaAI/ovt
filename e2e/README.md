@@ -9,7 +9,8 @@ Kontext a strategie: `zadani/ZADANI_AUTOMATICKE_TESTY.md`.
 ## CI
 
 Běží automaticky v `.github/workflows/tests.yml` (push do `staging`, PR do `main`):
-Postgres service container → `db:push` → seed → `next build`/`start` → Playwright.
+Postgres service container → přehrání všech migrací ze `supabase/migrations/` →
+seed → `next build`/`start` → Playwright.
 
 ## Lokální spuštění
 
@@ -22,7 +23,9 @@ export DATABASE_URL=postgres://postgres:test@localhost:54329/postgres
 export AUTH_SECRET=e2e-test-secret
 export ADMIN_EMAILS=e2e-admin@test.local
 export AUTH_GOOGLE_ID=dummy AUTH_GOOGLE_SECRET=dummy
-npm run db:push
+for f in supabase/migrations/*.sql; do
+  docker exec -i ovt-e2e psql -U postgres -v ON_ERROR_STOP=1 -q < "$f"
+done
 E2E_ALLOW_SEED=1 node e2e/seed.mjs
 npx playwright install chromium   # jen poprvé
 npm run test:e2e
