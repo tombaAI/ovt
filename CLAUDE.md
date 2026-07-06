@@ -56,11 +56,23 @@ Při změně schématu:
 npm run dev          # local dev server
 npm run build        # production build
 npm run lint         # ESLint
+npm run test:unit    # Vitest — unit testy čistých výpočtů (src/**/*.test.ts)
+npm run test:watch   # Vitest ve watch módu
+npm run test:e2e     # Playwright smoke testy (vyžaduje testovací DB — viz e2e/README.md)
 npm run db:push      # push Drizzle schema changes to Neon (dev/staging)
 npm run db:studio    # Drizzle Studio — local DB browser
 ```
 
-Pre-commit hook runs `npm run lint && npx tsc --noEmit` — always verify clean before committing. There are no automated tests; only linting and type-checking are enforced.
+Pre-commit hook runs `npm run lint && npx tsc --noEmit && npm run test:unit` — always verify clean before committing.
+
+## Testy
+
+Strategie a závazná pravidla: `zadani/ZADANI_AUTOMATICKE_TESTY.md`. Shrnutí:
+
+- **Výpočty patří do čistých modulů** v `src/lib/` (bez DB/Next.js) s unit testy vedle souboru (`foo.ts` → `foo.test.ts`); server actions je jen volají po načtení dat z DB. Vzor: `src/lib/settlement-calc.ts` (algoritmus vyúčtování akce) volaný z `getEventSettlement`.
+- **Bugfix výpočtu = nejdřív regresní test**, který chybu reprodukuje, pak fix.
+- **E2E smoke** (`e2e/`) — stránky se vykreslí, auth funguje, data tečou. Nikdy nespouštět proti staging/produkční DB. Nová stránka/klíčový tok = přidat smoke test.
+- CI: `.github/workflows/tests.yml` (push do `staging`, PR do `main`) — job `unit` (lint + tsc + Vitest) a job `e2e` (Postgres service + Playwright).
 
 ## Stack
 
@@ -270,6 +282,7 @@ See `.env.example` for the full list with Czech comments.
 
 | Workflow | Trigger | Co dělá |
 |---|---|---|
+| `tests.yml` | Push do `staging`, PR do `main` | Unit (lint + tsc + Vitest) a E2E (Playwright + Postgres service) |
 | `db-backup.yml` | Každý den 02:00 UTC + manuálně | `pg_dump` → GitHub Artifact, retence 90 dní |
 | `db-migrate.yml` | Push do `main` (jen pokud přibyly `.sql` soubory) | Spustí nové migrace z `supabase/migrations/` přes `psql` |
 | `import-members-tj.yml` | `repository_dispatch` | Webhook pro import členů TJ |

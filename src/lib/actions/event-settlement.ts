@@ -21,6 +21,24 @@ import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
 import { isTreasurer } from "@/lib/treasurer";
 import { logBlockedAttempt, BlockedError, blockedOrError } from "@/lib/audit";
+import {
+    activePersonKeysForRegistration,
+    calcEffectiveAmount,
+    calcForfeitForExpense,
+    calcParticipantForfeit,
+    computeCoefficientWeights,
+    computeParticipantFinalAmount,
+    computePerRegistrationWeights,
+    computeSettlementAmount,
+    computeSplitAllWeights,
+    computeSubsidyPerMember,
+    computeUnitPrice,
+    effectiveDepositAmount,
+    sumRegistrationTotal,
+    sumWeights,
+    type PersonKey,
+    type RegistrationDeposit,
+} from "@/lib/settlement-calc";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -76,16 +94,6 @@ function isDepositUnresolved(dep: PrescriptionInfo | null): boolean {
     return !dep.depositPromise && !dep.depositWontPay;
 }
 
-/** Efektivní záloha pro výpočet doplatku — odečítáme jen co skutečně přišlo nebo je přislíbeno. */
-function effectiveDepositAmount(dep: PrescriptionInfo | null): number {
-    if (!dep) return 0;
-    if (dep.status === "matched" || dep.status === "paid")
-        return dep.matchedAmount ?? dep.amount;
-    if (dep.depositPromise)
-        return dep.amount;
-    return 0;
-}
-
 /**
  * Část zálohy téže přihlášky, která už propadla (forfeit_to_expense) a snížila effectiveAmount
  * nějakého nákladu v kroku 2 — tu samou korunu nelze započítat podruhé jako "zaplaceno" proti
@@ -100,7 +108,7 @@ function calcOwnForfeitedAmount(
     const depositPerPerson = depositAmount / (personsCount ?? 1);
     return regParticipants
         .filter(p => p.cancelledAt !== null && p.depositForfeitPolicy === "forfeit_to_expense")
-        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+        .reduce((sum, p) => sum + calcParticipantForfeit(depositPerPerson, p.depositRefundAmount ?? 0), 0);
 }
 
 /**
@@ -114,7 +122,7 @@ function registrationForfeitTotal(reg: { depositPrescription: PrescriptionInfo |
     const depositPerPerson = reg.depositPrescription.amount / reg.personsCount;
     return reg.participants
         .filter(p => p.cancelledAt && p.depositForfeitPolicy)
-        .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+        .reduce((sum, p) => sum + calcParticipantForfeit(depositPerPerson, p.depositRefundAmount ?? 0), 0);
 }
 
 export type SettlementRegistrationRow = {
@@ -184,33 +192,11 @@ export type EventSettlement = {
     isCollecting: boolean;
 };
 
-// ── Klíče osob — sdílená identifikace účastníka pro koeficienty/váhy ──────────
-// "p{participantId}" pro jmenované účastníky, "r{regId}-{idx}" pro bezejmenné
-// (fallback dle personsCount, když přihláška nemá záznamy v event_registration_participants).
-// Stejná logika musí platit v getEventSettlement i při ukládání koeficientů (setExpenseParticipantCoefficients),
-// jinak se klíče v participantCoefficients neshodují s tím, co se čte při výpočtu.
-function activePersonKeysForRegistration(
-    regId: number,
-    personsCount: number | null,
-    regParticipants: { id: number; cancelledAt: Date | null }[],
-): string[] {
-    if (regParticipants.length > 0) {
-        return regParticipants
-            .map((p, i) => ({ key: p.id > 0 ? `p${p.id}` : `r${regId}-${i}`, active: !p.cancelledAt }))
-            .filter(pk => pk.active)
-            .map(pk => pk.key);
-    }
-    return Array.from({ length: personsCount ?? 1 }, (_, i) => `r${regId}-${i}`);
-}
-
-/** Zaokrouhlení nahoru na celé Kč s tolerancí na chyby plovoucí desetinné čárky (krok 7 — jediné místo zaokrouhlení). */
-function ceilMoney(value: number): number {
-    return Math.ceil(value - 1e-9);
-}
-
 // ── Výpočet vyúčtování ────────────────────────────────────────────────────────
 //
-// Postup přesně dle zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md — počítá se s plnou
+// Postup přesně dle zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md — samotné výpočetní
+// kroky žijí jako čisté (unit testované) funkce v src/lib/settlement-calc.ts,
+// tady se jen načítají data z DB a adaptují na jejich vstupy. Počítá se s plnou
 // přesností (žádné mezivýsledkové Math.ceil/Math.round) a zaokrouhluje se
 // JEDNOU, na úplném konci, pro finální částku JEDNOHO ÚČASTNÍKA (krok 7).
 // Přihláška je jen platební obálka — její doplatek je součet už zaokrouhlených
@@ -320,7 +306,6 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         : [];
 
     // ── Krok 1: klíče aktivních účastníků (per přihláška a globálně) ──────────
-    type PersonKey = { key: string; registrationId: number; memberId: number | null };
     const personKeysByReg = new Map<number, PersonKey[]>();
     for (const reg of regs) {
         const regParts = participants.filter(p => p.registrationId === reg.id);
@@ -342,30 +327,27 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
     // ── Krok 2: propadlé zálohy per náklad ─────────────────────────────────────
     // depositPerParticipant = depositPrescription.amount / personsCount (fixní sazba)
-    function calcForfeitForExpense(expenseId: number): number {
-        return participants
-            .filter(p =>
-                p.cancelledAt !== null &&
-                p.depositForfeitPolicy === "forfeit_to_expense" &&
-                p.depositForfeitExpenseId === expenseId
-            )
-            .reduce((sum, p) => {
-                const reg = regs.find(r => r.id === p.registrationId);
-                const depositRaw = prescriptions.find(pr => pr.registrationId === p.registrationId && pr.type === "deposit");
-                if (!reg || !depositRaw) return sum;
-                const depositPerPerson = parseFloat(depositRaw.amount) / (reg.personsCount ?? 1);
-                const refund = parseFloat(p.depositRefundAmount ?? "0") || 0;
-                return sum + Math.max(0, depositPerPerson - refund);
-            }, 0);
+    const cancelledForfeitingParticipants = participants
+        .filter(p => p.cancelledAt !== null)
+        .map(p => ({
+            registrationId: p.registrationId,
+            depositForfeitPolicy: p.depositForfeitPolicy as DepositForfeitPolicy | null,
+            depositForfeitExpenseId: p.depositForfeitExpenseId,
+            depositRefundAmount: parseFloat(p.depositRefundAmount ?? "0") || 0,
+        }));
+    const depositByRegistration = new Map<number, RegistrationDeposit>();
+    for (const reg of regs) {
+        const dep = prescriptions.find(pr => pr.registrationId === reg.id && pr.type === "deposit");
+        if (dep) depositByRegistration.set(reg.id, { amount: parseFloat(dep.amount), personsCount: reg.personsCount ?? 1 });
     }
 
     const finalExpenseRows: FinalExpenseRow[] = finalExpenses.map(e => {
-        const totalForfeit = calcForfeitForExpense(e.id);
+        const totalForfeit = calcForfeitForExpense(e.id, cancelledForfeitingParticipants, depositByRegistration);
         return {
             id: e.id,
             purposeText: e.purposeText,
             amount: e.amount,
-            effectiveAmount: Math.max(0, e.amount - totalForfeit),
+            effectiveAmount: calcEffectiveAmount(e.amount, totalForfeit),
             totalForfeit,
             allocationMethod: e.allocationMethod,
             participantCoefficients: e.participantCoefficients,
@@ -377,36 +359,22 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
     const unitPriceByExpense = new Map<number, number>();
 
     for (const expense of finalExpenseRows) {
-        const weights = new Map<string, number>();
+        let weights: Map<string, number>;
 
         if (expense.allocationMethod === "split_all") {
-            for (const k of allPersonKeys) weights.set(k.key, 1);
+            weights = computeSplitAllWeights(allPersonKeys);
         } else if (expense.allocationMethod === "with_coefficients") {
-            // Koeficienty jsou jediný zdroj pravdy — žádná derivovaná tabulka. Chybějící klíč
-            // (účastník přidaný po uložení koeficientů) = váha 0, dokud admin nedoplní.
-            // Bez koeficientů vůbec (teoretický stav, with_coefficients se vždy ukládá s nimi) → rovnoměrně.
-            const coeffs = expense.participantCoefficients;
-            for (const k of allPersonKeys) weights.set(k.key, coeffs ? (coeffs[k.key] ?? 0) : 1);
+            weights = computeCoefficientWeights(allPersonKeys, expense.participantCoefficients);
         } else {
-            // per_registration (manuální Kč částka per přihláška, bez koeficientů): váha = částka
-            // z eventExpenseAllocations, rozpočtená rovným dílem na aktivní účastníky té přihlášky.
-            // Bez jakýchkoli zadaných alokací → fallback: rovnoměrně na všechny (jako split_all).
-            const allocsForExpense = manualAllocations.filter(a => a.expenseId === expense.id);
-            if (allocsForExpense.length === 0) {
-                for (const k of allPersonKeys) weights.set(k.key, 1);
-            } else {
-                for (const [regId, keys] of personKeysByReg) {
-                    const alloc = allocsForExpense.find(a => a.registrationId === regId);
-                    const regWeight = alloc ? parseFloat(alloc.amount) : 0;
-                    const per = keys.length > 0 ? regWeight / keys.length : 0;
-                    for (const k of keys) weights.set(k.key, per);
-                }
+            const allocationsByRegistration = new Map<number, number>();
+            for (const a of manualAllocations) {
+                if (a.expenseId === expense.id) allocationsByRegistration.set(a.registrationId, parseFloat(a.amount));
             }
+            weights = computePerRegistrationWeights(personKeysByReg, allocationsByRegistration);
         }
 
         weightsByExpense.set(expense.id, weights);
-        const totalWeight = allPersonKeys.reduce((s, k) => s + (weights.get(k.key) ?? 0), 0);
-        unitPriceByExpense.set(expense.id, totalWeight > 0 ? expense.effectiveAmount / totalWeight : 0);
+        unitPriceByExpense.set(expense.id, computeUnitPrice(expense.effectiveAmount, sumWeights(allPersonKeys, weights)));
     }
 
     // unitPrice — souhrnné informativní pole, jen pro "split_all" náklady. Plná přesnost (krok 3).
@@ -416,9 +384,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
     const unitPrice = totalParticipants > 0 ? splitAllSum / totalParticipants : 0;
 
     // ── Krok 4–7: náklad na účastníka přes všechny náklady, dotace, JEDINÉ zaokrouhlení NAHORU ──
-    // Dotace na člena se zaokrouhluje DOLŮ na celé Kč už tady (výjimka z "zaokrouhli jen jednou") —
-    // součet skutečně přiznané dotace tak nikdy nepřekročí schválenou částku event.subsidyPerMember.
-    const subsidyPerMember = totalMemberParticipants > 0 ? Math.floor(subsidyTotal / totalMemberParticipants) : 0;
+    const subsidyPerMember = computeSubsidyPerMember(subsidyTotal, totalMemberParticipants);
 
     type ParticipantCalc = {
         key: string;
@@ -440,7 +406,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             totalCost += cost;
         }
         const subsidyAmount = k.memberId !== null ? subsidyPerMember : 0;
-        const finalAmount = ceilMoney(Math.max(0, totalCost - subsidyAmount));
+        const finalAmount = computeParticipantFinalAmount(totalCost, subsidyAmount);
         return { key: k.key, registrationId: k.registrationId, memberId: k.memberId, totalCost, subsidyAmount, finalAmount, perExpense };
     });
 
@@ -494,7 +460,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
 
         const expensesTotal = calcs.reduce((s, c) => s + c.totalCost, 0);
         const subsidy = calcs.reduce((s, c) => s + c.subsidyAmount, 0);
-        const totalAmount = calcs.reduce((s, c) => s + c.finalAmount, 0);
+        const totalAmount = sumRegistrationTotal(calcs.map(c => c.finalAmount));
 
         const regPrescriptions = prescriptions.filter(p => p.registrationId === reg.id);
         const depositRaw = regPrescriptions.find(p => p.type === "deposit") ?? null;
@@ -539,7 +505,7 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             expensesTotal,
             subsidy,
             totalAmount,
-            settlementAmount: Math.max(0, totalAmount - effectiveDepositForSettlement),
+            settlementAmount: computeSettlementAmount(totalAmount, effectiveDepositForSettlement),
             effectiveDepositForSettlement,
             depositPrescription,
             settlementPrescription: toPrescriptionInfo(settlementRaw),
