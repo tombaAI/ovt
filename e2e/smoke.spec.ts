@@ -30,17 +30,19 @@ test.describe("přihlášený admin", () => {
             await expect(page).toHaveURL(new RegExp(path.replace(/\//g, "\\/")));
             // Navigace admin layoutu = middleware pustil, layout se vyrenderoval
             await expect(page.getByRole("link", { name: "Členové" }).first()).toBeVisible();
-            await expect(page.getByText(probe).first()).toBeVisible();
+            // filter({ visible: true }) — stránky renderují responzivní varianty (mobil skrytý)
+            await expect(page.getByText(probe).filter({ visible: true }).first()).toBeVisible();
             // Server/client error boundary se nesmí objevit
             await expect(page.getByText(/Application error|Něco se pokazilo/)).toHaveCount(0);
         });
     }
 
-    test("detail člena (sheet) zobrazí seedovaná data", async ({ page }) => {
+    test("detail člena zobrazí seedovaná data", async ({ page }) => {
         await page.goto("/dashboard/members");
-        await page.getByText("Jan Testovací").first().click();
-        const sheet = page.getByRole("dialog");
-        await expect(sheet).toBeVisible();
-        await expect(sheet.getByText("Jan Testovací").first()).toBeVisible();
+        await page.getByText("Jan Testovací").filter({ visible: true }).first().click();
+        // Klik na řádek otevírá inline detail přes history.pushState na /dashboard/members/{id}
+        await expect(page).toHaveURL(/\/dashboard\/members\/\d+/);
+        await expect(page.getByText("Jan Testovací").filter({ visible: true }).first()).toBeVisible();
+        await expect(page.getByText("jan.testovaci@test.local").filter({ visible: true }).first()).toBeVisible();
     });
 });

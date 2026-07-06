@@ -40,6 +40,8 @@ jobs:
     env:
       DATABASE_URL: postgres://postgres:test@localhost:5432/postgres
       AUTH_SECRET: e2e-ci-secret
+      # next start mimo Vercel: bez trust host Auth.js odmítá požadavky (UntrustedHost)
+      AUTH_TRUST_HOST: "true"
       ADMIN_EMAILS: e2e-admin@test.local
       AUTH_GOOGLE_ID: dummy
       AUTH_GOOGLE_SECRET: dummy
@@ -74,5 +76,7 @@ jobs:
         if: failure()
         with:
           name: playwright-report
-          path: playwright-report/
+          path: |
+            playwright-report/
+            test-results/
           retention-days: 7
