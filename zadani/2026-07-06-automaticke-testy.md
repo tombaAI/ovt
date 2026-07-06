@@ -1,4 +1,10 @@
+---
+status: staging-uat
+---
+
 # Zadání: Automatické testy (unit + UI/E2E)
+
+> **Stav: Na stagingu (UAT).** Implementováno (commit `d222eba`), čeká na ověření a schválení uživatelem před mergem do produkce. Viz [INDEX.md](INDEX.md).
 
 Cíl: po **každé úpravě kódu** automaticky ověřit, že aplikace funguje — algoritmicky (výpočty, data) i z pohledu UI (stránky se vykreslí, klíčové toky fungují). Dosud existovala jen statická kontrola (ESLint + `tsc --noEmit` v pre-commit) a ruční ověřování na stagingu; regrese typu issue #28 (dvojí započtení propadlé zálohy) se odhalily až v datech.
 
@@ -32,7 +38,7 @@ Princip pyramidy: co nejvíc logiky pokrýt rychlými unit testy čistých funkc
 
 ### Pravidlo: výpočty patří do čistých modulů
 
-Testovatelné jsou jen funkce **bez závislosti na DB/Next.js**. Server actions v `src/lib/actions/` data načtou, adaptují a **volají čisté funkce** z `src/lib/` — výpočet se nikdy neprovádí inline v akci. Tento pattern už kodifikoval `src/lib/settlement-calc.ts` (extrakce algoritmu z `ZADANI_VYPOCET_NAKLADU_AKCE.md`); tímto zadáním se stává závazným pro novou výpočetní logiku.
+Testovatelné jsou jen funkce **bez závislosti na DB/Next.js**. Server actions v `src/lib/actions/` data načtou, adaptují a **volají čisté funkce** z `src/lib/` — výpočet se nikdy neprovádí inline v akci. Tento pattern už kodifikoval `src/lib/settlement-calc.ts` (extrakce algoritmu z [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md)); tímto zadáním se stává závazným pro novou výpočetní logiku.
 
 ### Rozsah v1
 

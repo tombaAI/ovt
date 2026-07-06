@@ -115,7 +115,7 @@ function calcOwnForfeitedAmount(
  * Součet nevrácených (propadlých) částí zálohy přes odhlášené účastníky s rozhodnutou
  * politikou — na rozdíl od calcOwnForfeitedAmount (jen forfeit_to_expense, používá se
  * pro odpočet v Kroku 8) tady jde o JAKOUKOLI rozhodnutou politiku, čistě pro zobrazení
- * (e-mail s vyúčtováním, tabulka na záložce Platby) — viz ZADANI_VYPOCET_NAKLADU_AKCE.md.
+ * (e-mail s vyúčtováním, tabulka na záložce Platby) — viz 2026-06-24-vypocet-nakladu-akce.md.
  */
 function registrationForfeitTotal(reg: { depositPrescription: PrescriptionInfo | null; personsCount: number; participants: SettlementParticipant[] }): number {
     if (!reg.depositPrescription) return 0;
@@ -143,7 +143,7 @@ export type SettlementRegistrationRow = {
     /**
      * Efektivní záloha použitá pro výpočet doplatku = effectiveDepositAmount minus ta část,
      * která už propadla (forfeit_to_expense) a snížila náklad v kroku 2 — jinak by se stejná
-     * koruna započítala dvakrát (issue 2026-06-24, viz ZADANI_VYPOCET_NAKLADU_AKCE.md).
+     * koruna započítala dvakrát (issue 2026-06-24, viz 2026-06-24-vypocet-nakladu-akce.md).
      */
     effectiveDepositForSettlement: number;
     /** Záloha — předpis platby vytvořený při podání přihlášky. Množství je fixní, billing ho nemění. */
@@ -194,7 +194,7 @@ export type EventSettlement = {
 
 // ── Výpočet vyúčtování ────────────────────────────────────────────────────────
 //
-// Postup přesně dle zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md — samotné výpočetní
+// Postup přesně dle zadani/2026-06-24-vypocet-nakladu-akce.md — samotné výpočetní
 // kroky žijí jako čisté (unit testované) funkce v src/lib/settlement-calc.ts,
 // tady se jen načítají data z DB a adaptují na jejich vstupy. Počítá se s plnou
 // přesností (žádné mezivýsledkové Math.ceil/Math.round) a zaokrouhluje se
@@ -960,7 +960,7 @@ export async function setExpenseRegistrationAllocations(
  * stejná identifikace jako activePersonKeysForRegistration v getEventSettlement.
  *
  * Žádná derivovaná Kč alokace se neukládá — getEventSettlement čte participantCoefficients
- * přímo a počítá s plnou přesností (krok 1+3 v ZADANI_VYPOCET_NAKLADU_AKCE.md). Staré
+ * přímo a počítá s plnou přesností (krok 1+3 v 2026-06-24-vypocet-nakladu-akce.md). Staré
  * alokace (např. z dřívějšího per_registration) se smažou, aby nezůstaly jako mrtvá data.
  */
 export async function setExpenseParticipantCoefficients(

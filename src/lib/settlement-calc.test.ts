@@ -19,7 +19,7 @@ import {
     type PersonKey,
 } from "./settlement-calc";
 
-// Scénáře odpovídají krokům 1–8 v zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md.
+// Scénáře odpovídají krokům 1–8 v zadani/2026-06-24-vypocet-nakladu-akce.md.
 
 const pk = (key: string, registrationId = 1, memberId: number | null = null): PersonKey =>
     ({ key, registrationId, memberId });

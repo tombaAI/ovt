@@ -1,6 +1,6 @@
 # E2E smoke testy (Playwright)
 
-Kontext a strategie: `zadani/ZADANI_AUTOMATICKE_TESTY.md`.
+Kontext a strategie: `zadani/2026-07-06-automaticke-testy.md`.
 
 **Nikdy nespouštět proti staging/produkční DB** — seed zapisuje testovací data
 (členové 990001/990002, admin `e2e-admin@test.local`, období 2026). Seed má pojistku

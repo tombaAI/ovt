@@ -323,7 +323,7 @@ function ParticipantRow({ p, reg, depositSharePerPerson }: { p: SettlementPartic
         const forfeitLabel = p.depositForfeitPolicy ? FORFEIT_POLICY_LABELS[p.depositForfeitPolicy] ?? p.depositForfeitPolicy : null;
         // Nevrácená část zálohy (skutečně zaplacená, jen se nevrátila) — čistě informativní
         // zobrazení, na výpočet doplatku/celkového výsledku akce to nemá žádný vliv (ten už
-        // počítá s propadlou zálohou jinde, viz Krok 2 v ZADANI_VYPOCET_NAKLADU_AKCE.md).
+        // počítá s propadlou zálohou jinde, viz Krok 2 v 2026-06-24-vypocet-nakladu-akce.md).
         const depositPerPerson = reg.depositPrescription ? reg.depositPrescription.amount / reg.personsCount : null;
         const forfeitAmount = depositPerPerson != null ? Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)) : null;
 

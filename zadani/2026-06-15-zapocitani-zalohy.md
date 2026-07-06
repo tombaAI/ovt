@@ -1,6 +1,12 @@
+---
+status: produkce
+---
+
 # Zadání: Započtení zálohy a příslib zálohy
 
-Samostatný úkol vyčleněný ze sekcí 1 (Bude záloha?), 6 (Příslib zálohy) a 7 (Párování plateb) dokumentu `ZADANI_ZIVOTNI_CYKLUS_AKCE.md`.
+> **Stav: V produkci.** Příslib zálohy i "nebude platit" (`depositPromise`/`depositWontPay`) jsou nasazené — viz [INDEX.md](INDEX.md).
+
+Samostatný úkol vyčleněný ze sekcí 1 (Bude záloha?), 6 (Příslib zálohy) a 7 (Párování plateb) dokumentu [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md).
 
 ---
 

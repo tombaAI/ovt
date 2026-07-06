@@ -2,7 +2,7 @@
  * Čisté výpočetní funkce pro vyúčtování nákladů akce — bez DB/Next.js závislostí,
  * takže jsou přímo unit testovatelné (viz settlement-calc.test.ts).
  *
- * Implementují kroky 1–8 z zadani/ZADANI_VYPOCET_NAKLADU_AKCE.md. `getEventSettlement`
+ * Implementují kroky 1–8 z zadani/2026-06-24-vypocet-nakladu-akce.md. `getEventSettlement`
  * (src/lib/actions/event-settlement.ts) je po načtení dat z DB jen volá — to je to jediné
  * místo, kde se výpočet provádí, ať zobrazení nákladů a generování předpisu nikdy nedají
  * jiné číslo (viz issue #28 — propadlá záloha se kdysi počítala dvakrát, pokaždé jinak).

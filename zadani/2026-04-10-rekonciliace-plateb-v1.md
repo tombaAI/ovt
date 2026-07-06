@@ -1,8 +1,14 @@
+---
+status: produkce
+---
+
 # Zadání realizace: Rekonciliace přijatých plateb V1
+
+> **Stav: V produkci.** Ledger V1 (`payment_ledger`, `payment_allocations`, auto-match, split plateb) je nasazený a v běžném provozu od dubna 2026 — viz [INDEX.md](INDEX.md).
 
 Datum: 2026-04-10
 Verze: 1.1
-Stav: upřesněno po architekturní oponentuře 2026-04-13
+Stav zadání: upřesněno po architekturní oponentuře 2026-04-13
 
 ---
 

@@ -1,8 +1,14 @@
+---
+status: produkce
+---
+
 # Zadání: Výpočet nákladů akce a doplatku za účastníka
+
+> **Stav: V produkci.** Kanonický algoritmus (`getEventSettlement`, `src/lib/settlement-calc.ts`) je nasazený, kryt unit testy dle [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) — viz [INDEX.md](INDEX.md).
 
 Kanonický popis algoritmu pro vyúčtování akce — zobrazení v záložce **Náklady** i generování **předpisu doplatku** musí dát stejné číslo, protože obojí vychází z jednoho průchodu tímto algoritmem (`getEventSettlement`).
 
-Navazuje na `ZADANI_PROPADLA_ZALOHA.md` (definice propadlé zálohy) — tento dokument definuje navíc přesný pořadí kroků a **kdy se (ne)zaokrouhluje**, což byla příčina issue #28 (Čeněk Havelka / bus).
+Navazuje na [2026-06-15-propadla-zaloha.md](2026-06-15-propadla-zaloha.md) (definice propadlé zálohy) — tento dokument definuje navíc přesný pořadí kroků a **kdy se (ne)zaokrouhluje**, což byla příčina issue #28 (Čeněk Havelka / bus).
 
 ---
 

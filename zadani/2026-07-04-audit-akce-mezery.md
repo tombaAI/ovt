@@ -1,5 +1,11 @@
+---
+status: staging-uat
+---
+
 # Zadání: Doplnit chybějící audit u akcí a vyúčtování
 
+> **Stav: Na stagingu (UAT).** Zgrilováno a implementováno (commit `f28f062`), čeká na ověření a schválení uživatelem před mergem do produkce. Viz [INDEX.md](INDEX.md).
+>
 > **Návrh prošel grilling session — finální podoba viz [ADR-0002](../docs/adr/0002-event-audit-log-scope-and-reconstructability.md).**
 > Sekce níže jsou aktualizované podle výsledku (byly upraveny oproti prvnímu návrhu — hlavně `entityType`
 > u položek vázaných na jednu přihlášku/náklad, nový scope `event_expense`, doplněný `reanalyze_expense`,

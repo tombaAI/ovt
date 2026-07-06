@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **OVT sprava** — internal management web app for OVT Bohemians (Czech water sports club). Admin-only interface, PC-first with mobile support. Deployed on Vercel with Neon (PostgreSQL).
 
-See `zadani/popis_zadani_1.txt` for the full product spec (in Czech).
+See `zadani/popis_zadani_1.txt` for the full product spec (in Czech). See `zadani/INDEX.md` for the status/roadmap of individual feature specs (návrh/zgrilováno/staging-UAT/schváleno/produkce).
 
 ## Workflow
 
@@ -67,7 +67,7 @@ Pre-commit hook runs `npm run lint && npx tsc --noEmit && npm run test:unit` —
 
 ## Testy
 
-Strategie a závazná pravidla: `zadani/ZADANI_AUTOMATICKE_TESTY.md`. Shrnutí:
+Strategie a závazná pravidla: `zadani/2026-07-06-automaticke-testy.md`. Shrnutí:
 
 - **Výpočty patří do čistých modulů** v `src/lib/` (bez DB/Next.js) s unit testy vedle souboru (`foo.ts` → `foo.test.ts`); server actions je jen volají po načtení dat z DB. Vzor: `src/lib/settlement-calc.ts` (algoritmus vyúčtování akce) volaný z `getEventSettlement`.
 - **Bugfix výpočtu = nejdřív regresní test**, který chybu reprodukuje, pak fix.

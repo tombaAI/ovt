@@ -1,8 +1,14 @@
+---
+status: produkce
+---
+
 # Zadání: Zamknout náklady a odeslat předpisy účastníkům
 
-Samostatný úkol vyčleněný ze sekce 6 (Vyúčtování — proces odeslání na účastníky) dokumentu `ZADANI_ZIVOTNI_CYKLUS_AKCE.md`.
+> **Stav: V produkci.** Dva symetrické zámky (`lockForParticipants`/`lockForReimbursement`) jsou nasazené — viz [INDEX.md](INDEX.md).
 
-**Závislost:** Správné chování zálohy ve výpočtu zajišťuje zadání `ZADANI_ZAPOCITANI_ZALOHY.md` — doporučujeme ho dokončit první, aby e-mail obsahoval správnou výši doplatku.
+Samostatný úkol vyčleněný ze sekce 6 (Vyúčtování — proces odeslání na účastníky) dokumentu [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md).
+
+**Závislost:** Správné chování zálohy ve výpočtu zajišťuje zadání [2026-06-15-zapocitani-zalohy.md](2026-06-15-zapocitani-zalohy.md) — doporučujeme ho dokončit první, aby e-mail obsahoval správnou výši doplatku.
 
 ---
 

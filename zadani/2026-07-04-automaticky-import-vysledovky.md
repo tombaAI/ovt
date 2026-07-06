@@ -1,4 +1,10 @@
+---
+status: navrh
+---
+
 # Zadání: Automatický import výsledovky z e-mailu
+
+> **Stav: Návrh.** Zadání zapsáno, negrilováno, implementace zatím nezahájena. Viz [INDEX.md](INDEX.md).
 
 Návrh k realizaci — automatizace pravidelného importu PDF výsledovky (`importTjFinancePdf`), která dnes chodí mailem a nahrává se ručně přes dialog na stránce Finance.
 

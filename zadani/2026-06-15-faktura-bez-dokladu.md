@@ -1,6 +1,12 @@
+---
+status: produkce
+---
+
 # Zadání: Faktura bez dokladu
 
-Samostatný úkol vyčleněný ze sekce 4 (Náklady) a sekce 6 (Vyúčtování) dokumentu `ZADANI_ZIVOTNI_CYKLUS_AKCE.md`.
+> **Stav: V produkci** (základní rozsah — zadání nákladu bez souboru, dodatečné přiložení). Rozšíření (výměna přílohy u libovolného nákladu, kontrola shody částky s dokladem, hospodářské potvrzení neshody) řeší navazující design dokument [`docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md`](../docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md) — na stagingu, čeká na UAT/merge. Viz [INDEX.md](INDEX.md).
+
+Samostatný úkol vyčleněný ze sekce 4 (Náklady) a sekce 6 (Vyúčtování) dokumentu [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md).
 
 ---
 

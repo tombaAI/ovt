@@ -1,6 +1,6 @@
 import { defineConfig, devices } from "@playwright/test";
 
-// E2E smoke testy — viz zadani/ZADANI_AUTOMATICKE_TESTY.md a e2e/README.md.
+// E2E smoke testy — viz zadani/2026-07-06-automaticke-testy.md a e2e/README.md.
 // Vyžadují DATABASE_URL na TESTOVACÍ databázi (nikdy staging/produkce) a AUTH_SECRET
 // shodný s testovaným serverem — auth.setup.ts z něj podepisuje session cookie.
 

@@ -1,4 +1,10 @@
+---
+status: produkce (částečně)
+---
+
 # Životní cyklus akce
+
+> **Stav: Zastřešující zadání, částečně v produkci.** Základ (náklady, vyúčtování, propadlá záloha, zámky, párování plateb) je hotový a rozpracovaný do samostatných zadání — [2026-06-15-propadla-zaloha.md](2026-06-15-propadla-zaloha.md), [2026-06-15-zamknout-predpisy.md](2026-06-15-zamknout-predpisy.md), [2026-06-15-zapocitani-zalohy.md](2026-06-15-zapocitani-zalohy.md), [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md), [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) — všechny v produkci. Zbytek bodů v sekci "Nová funkce" (konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce) je stále jen návrh, implementace nezačala. Viz [INDEX.md](INDEX.md).
 
 ## Dashboard akce
 kolik lidí je přihlášených

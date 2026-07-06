@@ -1,6 +1,10 @@
+---
+status: produkce (částečně)
+---
+
 # UX Redesign — Zadání
 
-Stav: **Rozpracováno** — připravujeme zadání, nepřistupujeme ještě k implementaci.
+> **Stav: Částečně v produkci.** Detail stránky místo Sheetů jsou hotové a nasazené pro Členy, Předpisy a Platby (`members/[id]`, `contributions/[id]`, `payments/[id]`, back-stack, bottom nav). Lodě, Brigády a Akce zůstávají na starém Sheet-based UI — tahle část zadání je stále ve fázi návrhu, implementace nezačala. Viz [INDEX.md](INDEX.md).
 
 ---
 

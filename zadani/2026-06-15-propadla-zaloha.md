@@ -1,6 +1,12 @@
+---
+status: produkce
+---
+
 # Zadání: Propadlá záloha — napočítání na fixní náklad
 
-Samostatný úkol vyčleněný ze sekce 6 (Vyúčtování, storno podmínky) dokumentu `ZADANI_ZIVOTNI_CYKLUS_AKCE.md`.
+> **Stav: V produkci.** Propadlá záloha per účastník je nasazená — viz [INDEX.md](INDEX.md).
+
+Samostatný úkol vyčleněný ze sekce 6 (Vyúčtování, storno podmínky) dokumentu [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md).
 
 ---
 

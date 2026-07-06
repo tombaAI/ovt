@@ -1,6 +1,12 @@
+---
+status: technický podklad (částečně naplněný)
+---
+
 # Technické poznámky: životní cyklus akce
 
-Technické podklady k byznys zadání v `ZADANI_ZIVOTNI_CYKLUS_AKCE.md`.
+> **Stav:** Prioritizovaný seznam z tohoto dokumentu je částečně naplněný — příslib zálohy a odečet zálohy jsou hotové (v produkci); EUR náklady, ubytovací/pojistný přehled, přepínače `has_registrations`/`has_deposit`, pozvánka mailem a status Uzavřeno zůstávají nezahájené, shodně s [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md). Viz [INDEX.md](INDEX.md).
+
+Technické podklady k byznys zadání v [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md).
 
 ---
 
