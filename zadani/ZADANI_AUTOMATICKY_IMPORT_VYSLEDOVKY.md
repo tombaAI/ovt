@@ -116,7 +116,13 @@ V cílové Gmail schránce vytvořit filtr:
 
 ### 5. Přesměrování z `bohemianstj.cz` schránky
 
-Na zdrojové schránce (`tomas.bauer@bohemianstj.cz`) nastavit pravidlo/filtr, které příchozí mail odpovídající stejnému kritériu (odesílatel účetního systému, předmět „Sestavy TJ Bohemians") přeposílá na Gmail účet, kde běží Apps Script. Konkrétní postup závisí na tom, jestli je tato schránka Google Workspace nebo jiná platforma (Exchange/Outlook apod.) — řeší se v administraci mailové schránky, mimo tento repozitář.
+Schránka `tomas.bauer@bohemianstj.cz` **není** Google Workspace. Nastavuje se v ní běžné přesměrovací pravidlo/filtr (odesílatel účetního systému, předmět „Sestavy TJ Bohemians"), které příchozí mail přeposílá na soukromý Gmail účet `ovtbohemians@gmail.com` — tam poběží Apps Script i Gmail filtr z bodu 4. Konkrétní kroky nastavení závisí na použité platformě dané schránky a řeší se v její administraci, mimo tento repozitář.
+
+### 6. Vizuální odlišení automatického importu v historii
+
+**Soubor:** `src/app/(admin)/dashboard/finance/import-history.tsx`
+
+Řádek historie s `importedBy === "gmail-automation"` dostane badge/ikonu odlišující ho od ručních importů (kde `importedBy` je e-mail administrátora) — např. malá ikona automatizace (mail/robot) + label „automaticky" místo zobrazení stringu `gmail-automation` jako by šlo o e-mail. Ostatní sloupce (added/matched/conflicts/suspicious, datum) zůstávají stejné jako u ručního importu.
 
 ---
 
@@ -167,9 +173,10 @@ Na zdrojové schránce (`tomas.bauer@bohemianstj.cz`) nastavit pravidlo/filtr, k
 | `src/lib/actions/finance-tj.ts` | Vyčlenit `processTjFinancePdfBuffer()` z `importTjFinancePdf()`; `importTjFinancePdf()` zůstává tenký wrapper nad ní |
 | `src/app/api/webhooks/finance-import/route.ts` | **Nový soubor.** POST handler podle vzoru `import_members_tj_bohemians/route.ts` |
 | Vercel env (produkce, případně staging) | Nová proměnná `IMPORT_SECRET_FINANCE` |
-| Google Apps Script (mimo repo) | Nový skript v cílovém Gmail účtu — trigger, Script Properties, funkce `checkForVysledovka()` |
-| Gmail nastavení (mimo repo) | Filtr → label `OVT/Vysledovka` |
-| Mailbox `bohemianstj.cz` (mimo repo) | Přesměrovací pravidlo na cílový Gmail |
+| Google Apps Script (mimo repo) | Nový skript v účtu `ovtbohemians@gmail.com` — trigger, Script Properties, funkce `checkForVysledovka()` |
+| Gmail nastavení (mimo repo) | Filtr → label `OVT/Vysledovka` v `ovtbohemians@gmail.com` |
+| Mailbox `bohemianstj.cz` (mimo repo) | Přesměrovací pravidlo na `ovtbohemians@gmail.com` |
+| `src/app/(admin)/dashboard/finance/import-history.tsx` | Badge/ikona pro řádky s `importedBy === "gmail-automation"` |
 
 ### Žádná DB migrace
 
@@ -191,13 +198,16 @@ Sloupec `imported_by` je `text`, bez FK — žádná změna schématu není pot�
 2. Apps Script dočasně zamířený na staging URL — ruční spuštění `checkForVysledovka()` (bez čekání na trigger) na jednom testovacím labelovaném mailu, ověřit celý řetězec Gmail → webhook → DB → label `-hotovo`.
 3. Test chybové větve: poslat neplatný/nesprávný PDF nebo dočasně rozbít secret → ověřit, že přijde přesně jeden alert e-mail a přidá se label `-chyba`.
 4. Přepnout Script Property `WEBHOOK_URL` na produkci, zapnout časový trigger na produkčním schématu (10 min).
-5. Ověřit na reálném příchozím mailu z účetního systému — zkontrolovat historii importů na `is.ovtbohemians.cz/dashboard/finance` a správnost `added/matched/conflicts/suspicious` počtů.
+5. Ověřit na reálném příchozím mailu z účetního systému — zkontrolovat historii importů na `is.ovtbohemians.cz/dashboard/finance` a správnost `added/matched/conflicts/suspicious` počtů i vizuálního odlišení automatického importu.
 
 ---
 
-## Otevřené otázky
+## Rozhodnuto
 
-1. Je zdrojová schránka `bohemianstj.cz` Google Workspace, nebo jiná platforma (Exchange/Outlook)? Ovlivňuje to konkrétní postup nastavení přesměrování (krok mimo tento repozitář).
-2. Cílová Gmail schránka pro automatizaci — potvrdit, že je to `bautom@gmail.com` (uživatel session).
-3. Má se v historii importů (`import-history.tsx`) vizuálně odlišit automatický import od ručního (např. ikona/badge u `importedBy = "gmail-automation"`), nebo stačí zobrazit surový string jako dnes?
-4. Etapa 2 (mimo rozsah tohoto zadání, jen pro budoucí referenci): automatické párování transakcí z výsledovky na `member_contributions` přes variabilní symbol, analogicky k `autoMatchLedgerEntry()` u bankovních plateb.
+- Zdrojová schránka `tomas.bauer@bohemianstj.cz` **není** Google Workspace — přesměrování je obyčejné mailbox pravidlo, konkrétní kroky se řeší v její administraci.
+- Cílová Gmail schránka pro automatizaci: **`ovtbohemians@gmail.com`**.
+- Automatický import se v historii **vizuálně odlišuje** od ručního (bod 6 výše).
+
+## Mimo rozsah (Etapa 2, jen pro budoucí referenci)
+
+Automatické párování transakcí z výsledovky na `member_contributions` přes variabilní symbol, analogicky k `autoMatchLedgerEntry()` u bankovních plateb. Neřeší se v tomto zadání.
