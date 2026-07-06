@@ -5,11 +5,13 @@
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 1. Přejmenování bank_transactions → fio_bank_transactions
+--    (IF EXISTS: migrace 20260413_100000 byla zpětně aktualizována na v1.1 a při
+--    přehrání od nuly už tabulku vytváří rovnou pod novým jménem)
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE app.bank_transactions RENAME TO fio_bank_transactions;
+ALTER TABLE IF EXISTS app.bank_transactions RENAME TO fio_bank_transactions;
 
-ALTER INDEX app.bank_transactions_date_idx RENAME TO fio_bank_transactions_date_idx;
-ALTER INDEX app.bank_transactions_vs_idx   RENAME TO fio_bank_transactions_vs_idx;
+ALTER INDEX IF EXISTS app.bank_transactions_date_idx RENAME TO fio_bank_transactions_date_idx;
+ALTER INDEX IF EXISTS app.bank_transactions_vs_idx   RENAME TO fio_bank_transactions_vs_idx;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 2. Typy amount: INTEGER → NUMERIC(10,2)
@@ -28,8 +30,17 @@ ALTER TABLE app.payment_allocations
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 3. Přejmenování payment_ledger.bank_tx_id → fio_bank_tx_id
+--    (podmíněně — 20260413_100000 v1.1 už sloupec vytváří pod novým jménem)
 -- ─────────────────────────────────────────────────────────────────────────────
-ALTER TABLE app.payment_ledger RENAME COLUMN bank_tx_id TO fio_bank_tx_id;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM information_schema.columns
+        WHERE table_schema = 'app' AND table_name = 'payment_ledger' AND column_name = 'bank_tx_id'
+    ) THEN
+        ALTER TABLE app.payment_ledger RENAME COLUMN bank_tx_id TO fio_bank_tx_id;
+    END IF;
+END $$;
 
 -- ─────────────────────────────────────────────────────────────────────────────
 -- 4. Aktualizace CHECK constraint source_type: 'fio' → 'fio_bank'
