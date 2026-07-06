@@ -45,6 +45,7 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 | [`docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md`](../docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md) | [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md) | `staging-uat` — výměna přílohy, kontrola shody částky, hospodářské potvrzení neshody (commity `44d8503`…`3c60af0`) |
 | [`docs/adr/0001-analyzed-amount-historical-backfill.md`](../docs/adr/0001-analyzed-amount-historical-backfill.md) | invoice-attachment-replace-design | `superseded` — nahrazeno reálným re-analýza backfillem místo odhadu |
 | [`docs/adr/0002-event-audit-log-scope-and-reconstructability.md`](../docs/adr/0002-event-audit-log-scope-and-reconstructability.md) | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | implementováno (`f28f062`), `staging-uat` |
+| [`docs/TESTING.md`](../docs/TESTING.md) | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | průvodce realizací — jak testy spouštět, validovat a rozšiřovat (vč. receptu na E2E průchod akcí) |
 
 ## Roadmap — co je rozdělané
 

@@ -67,7 +67,7 @@ Pre-commit hook runs `npm run lint && npx tsc --noEmit && npm run test:unit` —
 
 ## Testy
 
-Strategie a závazná pravidla: `zadani/2026-07-06-automaticke-testy.md`. Shrnutí:
+Strategie a závazná pravidla: `zadani/2026-07-06-automaticke-testy.md`. Praktický průvodce (spouštění, validace testů, recepty na rozšíření vč. E2E průchodu akcí): `docs/TESTING.md`. Shrnutí:
 
 - **Výpočty patří do čistých modulů** v `src/lib/` (bez DB/Next.js) s unit testy vedle souboru (`foo.ts` → `foo.test.ts`); server actions je jen volají po načtení dat z DB. Vzor: `src/lib/settlement-calc.ts` (algoritmus vyúčtování akce) volaný z `getEventSettlement`.
 - **Bugfix výpočtu = nejdřív regresní test**, který chybu reprodukuje, pak fix.
