@@ -50,9 +50,15 @@ dokud ji někdo aktivně nevyřeší (opravou částky, nebo novou výměnou př
 Mismatch = `amount` a `analyzedAmount` se po zaokrouhlení na haléře neshodují — **včetně**
 případu, kdy Gemini částku vůbec nedokázal přečíst (`total_amount: null`). Nejistota se
 považuje za neshodu, ne za "bez dat". Platí všude — v gate logice API (viz níže) i v
-zobrazení banneru. Žádné samostatné tlačítko „ignorovat/potvrdit neshodu" neexistuje —
-jediné cesty k vyřešení jsou oprava částky (přes stávající editační flow a jeho gates)
-nebo nová výměna přílohy (přes flow popsaný níže).
+zobrazení banneru.
+
+**Dodatečně (2026-07-06)**: ukázalo se v praxi, že "žádné tlačítko ignorovat" (jak psáno
+původně níže) tvrdě blokuje "Odeslat vyúčtování" i u legitimních, natrvalo neshodujících
+se případů (faktura v EUR, zaplaceno v CZK — Gemini vždy přečte EUR částku, žádná oprava
+ani výměna to nikdy nesrovná). Přidáno hospodářské **potvrzení neshody** (sekce 8) — víc
+než "ignorovat cokoliv": váže se přesně na dvojici `(amount, analyzedAmount)` v okamžiku
+potvrzení, takže jakákoli pozdější změna (nová příloha, oprava částky) potvrzení
+automaticky zneplatní a je potřeba ho zopakovat.
 
 Migrace: `supabase/migrations/YYYYMMDD_HHMMSS_add_expense_analyzed_amount.sql` — jen
 `ALTER TABLE`, žádný SQL backfill. Existující náklady s přílohou (aktuálně 37 — viz
@@ -224,11 +230,45 @@ Nahrazuje původní plán ze staršího návrhu ADR-0001 (SQL `UPDATE ... SET an
 = amount`, bez skutečné analýzy) — při 37 dokladech je reálná re-analýza levná
 (desetikoruny, řádově minuty) a nenese riziko trvale nepřesných dat.
 
+## 8. Hospodářské potvrzení neshody (doplněno 2026-07-06)
+
+Řeší legitimní, natrvalo neshodující se případy (faktura v EUR, zaplaceno v CZK) —
+bez tohoto by neshoda navždy blokovala "Odeslat vyúčtování", protože ji nejde vyřešit
+ani opravou částky (přepsal by se správný CZK údaj chybnou EUR hodnotou), ani výměnou/
+re-analýzou (Gemini z téhož typu dokladu vždy přečte tu stejnou cizoměnovou částku).
+
+**Datový model** — 4 nové sloupce na `event_expenses` (migrace
+`20260705_090000_add_expense_mismatch_acknowledgement.sql`):
+`mismatch_acknowledged_amount`, `mismatch_acknowledged_analyzed_amount` (snapshot dvojice
+`amount`/`analyzedAmount` v okamžiku potvrzení), `mismatch_acknowledged_by`,
+`mismatch_acknowledged_at`.
+
+**Sémantika**: potvrzení platí, jen dokud se AKTUÁLNÍ dvojice `(amount, analyzedAmount)`
+přesně shoduje se snapshotem (`isMismatchAcknowledged` v `lib/expense-mismatch.ts`).
+Jakákoli změna — nová příloha, oprava částky, nová re-analýza s jinou zjištěnou hodnotou
+— snapshot přestane sedět a neshoda se automaticky vrátí jako neshodou k řešení. Není to
+tedy obecné "ignorovat", ale potvrzení jedné konkrétní situace; nový stav vyžaduje nové
+potvrzení.
+
+**API**: `POST /api/events/[id]/expenses/[expenseId]/acknowledge-mismatch` — jen hospodář
+(403 jinak), vyžaduje existující neshodu (400 jinak), `lockForReimbursement` blokuje bez
+výjimky (stejně jako attach-file/reanalyze). Zapisuje snapshot + audit log
+(`acknowledge_expense_mismatch`).
+
+**`computeBlockingIssues`**: přepnuto z `hasAmountMismatch` na `hasUnresolvedMismatch`
+(`lib/expense-mismatch.ts`) — potvrzená neshoda už neblokuje "Odeslat vyúčtování".
+
+**UI** (`ExpenseItem`): tři stavy místo dvou —
+- neshoda neřešená → červený banner + (jen hospodáři) tlačítko "Označit jako v pořádku
+  (jiná měna)"
+- neshoda potvrzená → šedý řádek "Neshoda potvrzena jako v pořádku (zjištěno Y Kč, jiná
+  měna)" s tooltipem kdo/kdy, needá blokuje
+- shoda → zelený badge "Shoda s dokladem" (sekce 6, beze změny)
+
 ## Mimo rozsah (vědomě neřešeno)
 
-- Žádné tlačítko "ignorovat neshodu" — legitimní rozdíly (např. faktura v EUR,
-  zaplaceno v CZK) zůstávají viditelné jako varování, dokud je někdo neuzavře opravou
-  částky nebo výměnou přílohy. Je to záměr, ne mezera.
+- Obecné tlačítko "ignorovat neshodu bez důvodu" — potvrzení (sekce 8) se váže na
+  konkrétní dvojici hodnot, ne na "napořád nekontrolovat tenhle doklad".
 - Kategorie/popis/příjemce nejsou součástí tohoto flow — ty se dál upravují přes
   stávající editační dialog (`ExpenseEditDialog`), beze změny.
 - Návrh se netýká `AddExpenseForm`/`DraftProcessDialog` flow kromě doplnění

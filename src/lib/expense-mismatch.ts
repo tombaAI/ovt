@@ -26,6 +26,48 @@ export function hasAmountMismatch(
     return !analyzedMatchesAmount(amount, analyzedAmount);
 }
 
+function amountsEqual(
+    a: string | number | null | undefined,
+    b: string | number | null | undefined,
+): boolean {
+    if (a == null && b == null) return true;
+    if (a == null || b == null) return false;
+    const x = typeof a === "string" ? parseFloat(a) : a;
+    const y = typeof b === "string" ? parseFloat(b) : b;
+    if (Number.isNaN(x) || Number.isNaN(y)) return false;
+    return Math.round(x * 100) === Math.round(y * 100);
+}
+
+export type MismatchAckSnapshot = {
+    mismatchAcknowledgedAmount: string | number | null | undefined;
+    mismatchAcknowledgedAnalyzedAmount: string | number | null | undefined;
+};
+
+/**
+ * Byla AKTUÁLNÍ dvojice (amount, analyzedAmount) hospodářem potvrzena jako v pořádku (typicky
+ * jiná měna dokladu)? Váže se přesně na tuto dvojici — jakákoli změna (nový doklad, oprava
+ * částky) potvrzení zneplatní, protože už neodpovídá uloženému snapshotu.
+ */
+export function isMismatchAcknowledged(
+    amount: string | number | null | undefined,
+    analyzedAmount: string | number | null | undefined,
+    ack: MismatchAckSnapshot,
+): boolean {
+    if (ack.mismatchAcknowledgedAnalyzedAmount == null) return false;
+    return amountsEqual(amount, ack.mismatchAcknowledgedAmount)
+        && amountsEqual(analyzedAmount, ack.mismatchAcknowledgedAnalyzedAmount);
+}
+
+/** Neshoda, která ještě nebyla hospodářem potvrzena jako v pořádku — tohle blokuje odeslání vyúčtování. */
+export function hasUnresolvedMismatch(
+    amount: string | number | null | undefined,
+    analyzedAmount: string | number | null | undefined,
+    ack: MismatchAckSnapshot,
+): boolean {
+    if (!hasAmountMismatch(amount, analyzedAmount)) return false;
+    return !isMismatchAcknowledged(amount, analyzedAmount, ack);
+}
+
 export type MismatchGate =
     | { ok: true }
     | { ok: false; code: "needs_treasurer" | "needs_confirmation"; error: string };

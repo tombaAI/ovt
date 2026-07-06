@@ -17,8 +17,12 @@ _Avoid_: Příloha (používat jen jako synonymum v UI textech, ne jako termín)
 _Avoid_: Detekovaná částka, OCR částka
 
 **Neshoda**:
-Stav, kdy se `amount` (zapsaná částka) a `analyzedAmount` (zjištěná částka) po zaokrouhlení na haléře liší — včetně případu, kdy Gemini částku vůbec nepřečetl (`analyzedAmount = null` se považuje za neshodu, ne za "bez dat"). Neshoda nemá tlačítko "ignorovat" — řeší se buď opravou `amount`, nebo novou výměnou dokladu.
+Stav, kdy se `amount` (zapsaná částka) a `analyzedAmount` (zjištěná částka) po zaokrouhlení na haléře liší — včetně případu, kdy Gemini částku vůbec nepřečetl (`analyzedAmount = null` se považuje za neshodu, ne za "bez dat"). Řeší se opravou `amount`, novou výměnou dokladu, nebo (jen hospodář) potvrzením jako v pořádku — viz Potvrzení neshody.
 _Avoid_: Mismatch (jen jako anglický název pole/kódu v API, ne v textu pro uživatele)
+
+**Potvrzení neshody** (`mismatchAcknowledgedAmount`/`mismatchAcknowledgedAnalyzedAmount`):
+Hospodářské potvrzení, že AKTUÁLNÍ neshoda je v pořádku (typicky jiná měna dokladu — nikdy nepůjde srovnat na číselnou shodu). Snapshot dvojice `(amount, analyzedAmount)` v okamžiku potvrzení — jakákoli pozdější změna kterékoli hodnoty potvrzení automaticky zneplatní (nejde tedy o "ignorovat tenhle doklad napořád", ale o potvrzení jedné konkrétní situace). Potvrzená neshoda neblokuje odeslání vyúčtování.
+_Avoid_: Ignorovat neshodu, schválit neshodu (potvrzení není totéž co schválení nákladu)
 
 **Zamčeno pro účastníky** (`lockForParticipants`):
 Akce má vygenerované předpisy (`billingStatus: "prescribed"`) — částky nákladů jsou needitovatelné, protože vstupují do výpočtu předpisů. V tomto stavu smí neshodu u výměny dokladu potvrdit jen hospodář.

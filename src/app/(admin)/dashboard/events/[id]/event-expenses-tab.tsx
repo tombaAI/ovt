@@ -16,7 +16,7 @@ import { setTreasurerApproval, getVyuctovaniActivityLog, type VyuctovaniActivity
 import { lockForReimbursement, unlockForReimbursement } from "@/lib/actions/event-settlement";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
-import { analyzedMatchesAmount, hasAmountMismatch } from "@/lib/expense-mismatch";
+import { analyzedMatchesAmount, hasAmountMismatch, isMismatchAcknowledged } from "@/lib/expense-mismatch";
 import { Mail, Check } from "lucide-react";
 
 
@@ -2084,11 +2084,32 @@ function ExpenseItem({
     const [attachingFile, setAttachingFile] = useState(false);
     const [reanalyzing, setReanalyzing] = useState(false);
     const [instrError, setInstrError] = useState<string | null>(null);
+    const [acknowledging, setAcknowledging] = useState(false);
+    const [ackError, setAckError] = useState<string | null>(null);
 
     const isDraft = expense.status === "draft";
     const isUnconfirmed = expense.status === "unconfirmed";
     const needsAction = isDraft || isUnconfirmed;
-    const amountMismatch = hasAmountMismatch(expense.amount, expense.analyzedAmount);
+    const rawMismatch = hasAmountMismatch(expense.amount, expense.analyzedAmount);
+    const mismatchAcknowledged = rawMismatch && isMismatchAcknowledged(expense.amount, expense.analyzedAmount, {
+        mismatchAcknowledgedAmount: expense.mismatchAcknowledgedAmount,
+        mismatchAcknowledgedAnalyzedAmount: expense.mismatchAcknowledgedAnalyzedAmount,
+    });
+    const amountMismatch = rawMismatch && !mismatchAcknowledged;
+
+    async function handleAcknowledgeMismatch() {
+        setAcknowledging(true); setAckError(null);
+        try {
+            const res = await fetch(`/api/events/${eventId}/expenses/${expense.id}/acknowledge-mismatch`, { method: "POST" });
+            const data = await res.json() as { success?: true; error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Potvrzení selhalo");
+            onUpdated();
+        } catch (err) {
+            setAckError(err instanceof Error ? err.message : "Potvrzení selhalo");
+        } finally {
+            setAcknowledging(false);
+        }
+    }
     const isExternalPayee = expense.reimbursementPayeeKind === "external" && expense.reimbursementPersonId !== null;
     const blobProxyUrl = expense.fileUrl
         ? `/api/blob-file?url=${encodeURIComponent(expense.fileUrl)}`
@@ -2189,11 +2210,33 @@ function ExpenseItem({
                     <p className="text-sm text-gray-700 mt-0.5">{expense.purposeText}</p>
                 )}
                 {amountMismatch ? (
-                    <div className="mt-1 flex items-start gap-1.5 rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
-                        <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+                    <div className="mt-1 flex flex-col gap-1.5 rounded-lg border border-red-300 bg-red-50 px-2.5 py-1.5 text-xs text-red-700">
+                        <div className="flex items-start gap-1.5">
+                            <TriangleAlert size={13} className="shrink-0 mt-0.5" />
+                            <span>
+                                Zjištěná částka z dokladu (<span className="font-semibold tabular-nums">{fmtAmount(expense.analyzedAmount)}</span>)
+                                neodpovídá zapsané (<span className="font-semibold tabular-nums">{fmtAmount(expense.amount)}</span>).
+                            </span>
+                        </div>
+                        {isTreasurer && (
+                            <div className="flex items-center gap-2 pl-[19px]">
+                                <button
+                                    onClick={handleAcknowledgeMismatch}
+                                    disabled={acknowledging}
+                                    className="text-[11px] font-medium text-red-700 hover:text-red-900 border border-red-300 rounded px-2 py-0.5 hover:bg-red-100 disabled:opacity-40 transition-colors"
+                                >
+                                    {acknowledging ? "Potvrzuji…" : "Označit jako v pořádku (jiná měna)"}
+                                </button>
+                                {ackError && <span className="text-[11px]">{ackError}</span>}
+                            </div>
+                        )}
+                    </div>
+                ) : mismatchAcknowledged ? (
+                    <div className="mt-1 flex items-center gap-1.5 text-[11px] text-gray-500"
+                        title={expense.mismatchAcknowledgedBy ? `Potvrdil ${expense.mismatchAcknowledgedBy}${expense.mismatchAcknowledgedAt ? ` · ${fmtDate(expense.mismatchAcknowledgedAt)}` : ""}` : undefined}>
+                        <Check size={11} className="text-gray-400" />
                         <span>
-                            Zjištěná částka z dokladu (<span className="font-semibold tabular-nums">{fmtAmount(expense.analyzedAmount)}</span>)
-                            neodpovídá zapsané (<span className="font-semibold tabular-nums">{fmtAmount(expense.amount)}</span>).
+                            Neshoda potvrzena jako v pořádku (zjištěno {fmtAmount(expense.analyzedAmount)}, jiná měna)
                         </span>
                     </div>
                 ) : expense.analyzedAmount != null && (

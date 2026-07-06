@@ -16,7 +16,7 @@ import {
   expenseCategoryEnum,
   type ExpenseCategory,
 } from "@/lib/expense-categories";
-import { hasAmountMismatch } from "@/lib/expense-mismatch";
+import { hasUnresolvedMismatch } from "@/lib/expense-mismatch";
 import type { PersonOption } from "@/lib/actions/people";
 import type { CestneProhlaseniData } from "@/lib/pdf/cestne-prohlaseni-template";
 import type { CestovniPrikazData } from "@/lib/pdf/cestovni-prikaz-template";
@@ -664,6 +664,8 @@ type ExpenseRow = {
   status: "draft" | "unconfirmed" | "final";
   amount: string | null;
   analyzedAmount?: string | null;
+  mismatchAcknowledgedAmount?: string | null;
+  mismatchAcknowledgedAnalyzedAmount?: string | null;
   purposeText: string | null;
   reimbursementPersonId: number | null;
   reimbursementPayeeBankAccountNumber: string | null;
@@ -695,8 +697,12 @@ function computeBlockingIssues(expenses: ExpenseRow[]): string[] {
   if (missingBank > 0) {
     issues.push(`${missingBank} příjemce${missingBank === 1 ? "" : "ů"} nemá bankovní účet`);
   }
-  // Neshoda zjištěné (z dokladu) vs. zapsané částky — z tohoto řádku se generuje pokyn k úhradě
-  const mismatched = expenses.filter((e) => hasAmountMismatch(e.amount, e.analyzedAmount)).length;
+  // Neshoda zjištěné (z dokladu) vs. zapsané částky — z tohoto řádku se generuje pokyn k úhradě.
+  // Hospodářem potvrzená neshoda (jiná měna apod.) neblokuje.
+  const mismatched = expenses.filter((e) => hasUnresolvedMismatch(e.amount, e.analyzedAmount, {
+    mismatchAcknowledgedAmount: e.mismatchAcknowledgedAmount,
+    mismatchAcknowledgedAnalyzedAmount: e.mismatchAcknowledgedAnalyzedAmount,
+  })).length;
   if (mismatched > 0) {
     issues.push(`${mismatched} doklad${mismatched === 1 ? "" : "ů"} má neshodu částky s přílohou`);
   }
