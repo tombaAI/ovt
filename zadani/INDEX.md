@@ -35,7 +35,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | Doplnění chybějících audit-log zápisů | `staging-uat` — commit `f28f062`, viz ADR-0002 |
 | [2026-07-04-automaticky-import-vysledovky.md](2026-07-04-automaticky-import-vysledovky.md) | Automatický import PDF výsledovky z Gmailu | `navrh` |
 | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | Vitest unit + Playwright E2E smoke testy | `staging-uat` — commit `d222eba` |
-| [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `navrh` |
+| [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `navrh` — rozhodnuto: varianta B (water-filling) + pinning verze algoritmu na akci |
 
 ## Navazující design dokumenty (`docs/`)
 
