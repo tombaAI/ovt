@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { eventExpenses, events, members, people, auditLog } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import { logBlockedAttempt } from "@/lib/audit";
+import { isAllowedExpenseFile } from "@/lib/expense-file-validation";
 import { eq } from "drizzle-orm";
 
 type ExpenseLocks = { lockedForParticipants: boolean; lockedForReimbursement: boolean };
@@ -18,10 +19,6 @@ async function getExpenseLocks(db: ReturnType<typeof getDb>, eventId: number): P
     return { lockedForParticipants: row.lockForParticipants, lockedForReimbursement: row.lockForReimbursement };
 }
 
-const ALLOWED_MIME = new Set([
-    "image/jpeg", "image/png", "image/webp", "image/heic",
-    "application/pdf",
-]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 async function resolveReimbursementTarget(
@@ -171,8 +168,8 @@ export async function POST(
         let fileMime: string | null = null;
 
         if (file && file.size > 0) {
-            if (!ALLOWED_MIME.has(file.type)) {
-                return NextResponse.json({ error: "Nepodporovaný typ souboru (povoleno: PDF, JPEG, PNG, WebP, HEIC)" }, { status: 400 });
+            if (!isAllowedExpenseFile(file.type, file.name)) {
+                return NextResponse.json({ error: "Nepodporovaný typ souboru (povoleno: PDF, JPEG, PNG, WebP, HEIC, XLS, XLSX)" }, { status: 400 });
             }
             if (file.size > MAX_FILE_BYTES) {
                 return NextResponse.json({ error: "Soubor je příliš velký (max 10 MB)" }, { status: 400 });
