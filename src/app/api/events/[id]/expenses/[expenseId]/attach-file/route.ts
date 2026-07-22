@@ -8,13 +8,10 @@ import { analyzeExpenseFile, ExpenseAnalysisConfigError } from "@/lib/expense-an
 import { isTreasurer } from "@/lib/treasurer";
 import { evaluateLockedMismatchGate, analyzedMatchesAmount } from "@/lib/expense-mismatch";
 import { logBlockedAttempt } from "@/lib/audit";
+import { isAllowedExpenseFile } from "@/lib/expense-file-validation";
 
 export const dynamic = "force-dynamic";
 
-const ALLOWED_MIME = new Set([
-    "image/jpeg", "image/png", "image/webp", "image/heic",
-    "application/pdf",
-]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 
 /**
@@ -76,9 +73,9 @@ export async function POST(
         if (!file || file.size === 0) {
             return NextResponse.json({ error: "Nebyl vybrán žádný soubor" }, { status: 400 });
         }
-        if (!ALLOWED_MIME.has(file.type)) {
+        if (!isAllowedExpenseFile(file.type, file.name)) {
             return NextResponse.json(
-                { error: "Nepodporovaný typ souboru (povoleno: PDF, JPEG, PNG, WebP, HEIC)" },
+                { error: "Nepodporovaný typ souboru (povoleno: PDF, JPEG, PNG, WebP, HEIC, XLS, XLSX)" },
                 { status: 400 },
             );
         }
