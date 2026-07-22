@@ -1052,13 +1052,13 @@ function AddExpenseForm({
                 </div>
                 <div>
                     <p className="text-sm font-medium text-gray-700">Nahrát doklad</p>
-                    <p className="text-xs text-gray-400 mt-0.5">PDF nebo fotka — Gemini automaticky vyčte částku a kategorii</p>
+                    <p className="text-xs text-gray-400 mt-0.5">PDF, Excel nebo fotka — Gemini automaticky vyčte částku a kategorii</p>
                 </div>
                 <div className="flex items-center justify-center gap-2 flex-wrap">
                     <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md bg-[#327600] text-white text-sm font-medium hover:bg-[#2a6400] transition-colors">
                         <Upload size={14} />
                         <span>Vybrat soubor</span>
-                        <input ref={fileInputRef} type="file" accept="image/*,application/pdf"
+                        <input ref={fileInputRef} type="file" accept="image/*,application/pdf,.xls,.xlsx"
                             className="sr-only" onChange={e => handleFileSelect(e.target.files?.[0])} />
                     </label>
                     <label className="flex items-center gap-1.5 cursor-pointer h-9 px-4 rounded-md border border-gray-300 text-gray-700 text-sm hover:bg-gray-50 transition-colors sm:hidden">
@@ -1330,11 +1330,11 @@ function AttachFileDialog({
                         <span className="text-sm text-gray-700">
                             {analyzing ? "Analyzuji…" : file ? file.name : "Vybrat soubor dokladu"}
                         </span>
-                        <span className="text-xs text-gray-400">PDF nebo fotka, max 10 MB</span>
+                        <span className="text-xs text-gray-400">PDF, Excel nebo fotka, max 10 MB</span>
                         <input
                             ref={fileInputRef}
                             type="file"
-                            accept="image/*,application/pdf"
+                            accept="image/*,application/pdf,.xls,.xlsx"
                             className="sr-only"
                             onChange={e => { void handleFile(e.target.files?.[0]); }}
                             disabled={busy}
