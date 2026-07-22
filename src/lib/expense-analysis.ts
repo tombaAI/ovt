@@ -3,6 +3,8 @@ import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import { z } from "zod";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import type { ExpenseCategory } from "@/lib/expense-categories";
+import { isSpreadsheetFile } from "@/lib/expense-file-validation";
+import { extractTextFromSpreadsheet } from "@/lib/xlsx-extract";
 
 // Jádro Gemini analýzy dokladu (účtenka/faktura akce). Sdílené mezi:
 //  - POST /api/expenses/analyze (náhled na klientu při zakládání/výměně)
@@ -92,18 +94,22 @@ export async function analyzeExpenseFile(
     const google = createGoogleGenerativeAI({ apiKey });
     const modelId = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
 
+    const content = isSpreadsheetFile(file.type, file.name)
+        ? [{
+            type: "text" as const,
+            text: `${prompt}\n\nObsah tabulky (CSV export listů sešitu):\n${extractTextFromSpreadsheet(buffer)}`,
+        }]
+        : [
+            file.type === "application/pdf"
+                ? { type: "file"  as const, data: buffer, mediaType: "application/pdf" as const }
+                : { type: "image" as const, image: buffer, mediaType: file.type },
+            { type: "text" as const, text: prompt },
+        ];
+
     const { object, usage } = await generateObject({
         model: google(modelId),
         schema: resultSchema,
-        messages: [{
-            role: "user",
-            content: [
-                file.type === "application/pdf"
-                    ? { type: "file"  as const, data: buffer, mediaType: "application/pdf" as const }
-                    : { type: "image" as const, image: buffer, mediaType: file.type },
-                { type: "text" as const, text: prompt },
-            ],
-        }],
+        messages: [{ role: "user", content }],
     });
 
     console.info(
