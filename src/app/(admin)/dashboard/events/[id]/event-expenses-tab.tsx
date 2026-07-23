@@ -1222,6 +1222,23 @@ function AmountComparison({ written, detected }: { written: string | null; detec
     );
 }
 
+function PayeeComparison({ written, detected }: { written: string; detected: string | null }) {
+    if (!detected) return null;
+    const match = written.trim().toLowerCase() === detected.trim().toLowerCase();
+    return (
+        <div className={`rounded-lg border px-3 py-2 text-sm flex items-center justify-between gap-3 ${
+            match ? "border-green-200 bg-green-50" : "border-amber-300 bg-amber-50"
+        }`}>
+            <span className="text-gray-600 truncate">
+                Zapsáno: <span className="font-medium text-gray-900">{written || "—"}</span>
+            </span>
+            <span className={match ? "text-green-700" : "text-amber-700"}>
+                Na faktuře: <span className="font-medium">{detected}</span>
+            </span>
+        </div>
+    );
+}
+
 // ── Attach / swap file dialog ─────────────────────────────────────────────────
 
 function AttachFileDialog({
