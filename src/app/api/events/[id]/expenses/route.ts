@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { eventExpenses, events, members, people, auditLog } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
 import { logBlockedAttempt } from "@/lib/audit";
-import { isAllowedExpenseFile } from "@/lib/expense-file-validation";
+import { isAllowedExpenseFile, resolveExpenseFileMime } from "@/lib/expense-file-validation";
 import { eq } from "drizzle-orm";
 
 type ExpenseLocks = { lockedForParticipants: boolean; lockedForReimbursement: boolean };
@@ -174,15 +174,16 @@ export async function POST(
             if (file.size > MAX_FILE_BYTES) {
                 return NextResponse.json({ error: "Soubor je příliš velký (max 10 MB)" }, { status: 400 });
             }
+            const safeMime = resolveExpenseFileMime(file.type, file.name);
             const ext = file.name.split(".").pop() ?? "bin";
             const safeName = `events/${eventId}/expenses/${Date.now()}.${ext}`;
             const blob = await put(safeName, file, {
                 access: "private",
-                contentType: file.type,
+                contentType: safeMime,
             });
             fileUrl = blob.url;
             fileName = file.name;
-            fileMime = file.type;
+            fileMime = safeMime;
         }
 
         const purposeCategoryVal = (expenseCategoryEnum as readonly string[]).includes(purposeCategory)

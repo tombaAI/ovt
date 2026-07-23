@@ -8,7 +8,7 @@ import { analyzeExpenseFile, ExpenseAnalysisConfigError } from "@/lib/expense-an
 import { isTreasurer } from "@/lib/treasurer";
 import { evaluateLockedMismatchGate, analyzedMatchesAmount } from "@/lib/expense-mismatch";
 import { logBlockedAttempt } from "@/lib/audit";
-import { isAllowedExpenseFile } from "@/lib/expense-file-validation";
+import { isAllowedExpenseFile, resolveExpenseFileMime } from "@/lib/expense-file-validation";
 
 export const dynamic = "force-dynamic";
 
@@ -118,9 +118,10 @@ export async function POST(
         }
 
         // Uložení v bezpečném pořadí: nahrát nový → zapsat DB → teprve pak smazat starý blob.
+        const safeMime = resolveExpenseFileMime(file.type, file.name);
         const ext = file.name.split(".").pop() ?? "bin";
         const safeName = `events/${eventId}/expenses/${expenseId}_${Date.now()}.${ext}`;
-        const blob = await put(safeName, file, { access: "private", contentType: file.type });
+        const blob = await put(safeName, file, { access: "private", contentType: safeMime });
 
         const newAnalyzedAmount = analyzedAmount != null ? String(analyzedAmount) : null;
         await db
@@ -128,7 +129,7 @@ export async function POST(
             .set({
                 fileUrl: blob.url,
                 fileName: file.name,
-                fileMime: file.type,
+                fileMime: safeMime,
                 analyzedAmount: newAnalyzedAmount,
                 ...(locked ? {} : { amount: amountToSave }),
             })
