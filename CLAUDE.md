@@ -37,6 +37,28 @@ See `zadani/popis_zadani_1.txt` for the full product spec (in Czech). See `zadan
 6. merge → Vercel nasadí produkci + GHA spustí DB migrace
 ```
 
+### Superpowers vývoj (feature branch)
+
+Pro práci vedenou přes Superpowers flow (`brainstorming` → `writing-plans` →
+`subagent-driven-development`, víceúkolové plány) platí jiný standard než pravidlo 1 výše:
+
+- **Standard je samostatná větev ze `staging`** (ne přímý commit na `staging`) — pojmenovaná
+  podle spec/plan souboru, např. `feat/2026-07-22-xlsx-invoice-support`.
+- **Vždy potvrdit s uživatelem před založením** — jak se větev bude jmenovat a že se na ní
+  začíná pracovat, nezakládat automaticky bez potvrzení.
+- **Worktree (samostatný pracovní adresář) je na dotaz, ne automaticky** — hodí se, když má
+  uživatel v hlavním adresáři rozdělanou práci nebo chce hlavní checkout nechat nedotčený;
+  jindy stačí přepnout větev v současném adresáři.
+- Task-by-task commit + push (pravidlo 3) platí i tady — jen cílí na feature větev, ne na
+  `staging`.
+- Po finální whole-branch review: **PR `feature větev → staging`** (ne přímo push na
+  `staging`) — teprve tady proběhne review celého diffu najednou.
+- Po schválení a mergi do `staging` následuje běžný cyklus výše (ověření na staging preview,
+  pak PR `staging → main`).
+- Reálné ověření v prohlížeči (Gemini analýza, upload do blob storage apod.) dělat na staging
+  preview, ne lokálně — lokálně chybí `GEMINI_API_KEY` i `BLOB_READ_WRITE_TOKEN` a nemá smysl
+  je tam dávat.
+
 ### DB migrace
 
 Soubory v `supabase/migrations/` jsou **viditelné v PR diff** — uživatel v PR schválí přesný SQL před mergem.
