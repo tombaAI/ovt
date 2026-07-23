@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- Spec: `zadani/2026-07-23-vylepseni-popisu-prijemce.md` — dodržet přesně scope (jen `AttachFileDialog` + `ReanalyzeDialog`, žádná změna `AddExpenseForm` ani Gemini promptu/schématu).
+- Spec: `docs/superpowers/specs/2026-07-23-vylepseni-popisu-prijemce.md` — dodržet přesně scope (jen `AttachFileDialog` + `ReanalyzeDialog`, žádná změna `AddExpenseForm` ani Gemini promptu/schématu).
 - **Bez automatických testů** pro tuhle oblast — repo konvence (viz `docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md`, sekce Testing): ověření je lint + `npx tsc --noEmit` + ruční průchod na stagingu. Pre-commit hook (`npm run lint && npx tsc --noEmit && npm run test:unit`) běží automaticky při každém commitu — žádný krok navíc není potřeba přidávat ručně, ale je potřeba mít commit čistý.
 - `purposeText` musí zůstat vždy neprázdný (PATCH endpoint vrátí 400 `"Chybí účel"`, pokud přijde prázdný string) — klient validuje před odesláním, stejně jako `ExpenseEditDialog` dnes.
 - `invoicePayeeName` se týká jen nákladů, kde `expense.isPaid === false` (faktura k proplacení) — u účtenek (`isPaid === true`) se pole vůbec nezobrazuje, stejně jako dnes v `ExpenseEditDialog`.
