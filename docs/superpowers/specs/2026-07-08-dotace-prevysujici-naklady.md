@@ -99,7 +99,7 @@ Ukázat skutečný `totalCost` a rozlišit „dotace využitá / nevyužitá". N
 | `src/lib/settlement-calc.ts` | nová čistá funkce (např. `computeSubsidyAmounts(subsidyTotal, membersWithCosts) → Map<key, number>`), nahradí prosté `computeSubsidyPerMember` + plošné přiznání |
 | `src/lib/actions/event-settlement.ts` (`getEventSettlement`, ~ř. 387–410) | volat výpočet dle `settlement_algo_version` akce; `subsidyAmount` per účastník místo konstanty |
 | `src/db/schema.ts` + migrace `supabase/migrations/` | sloupec `events.settlement_algo_version` (default `2`) + backfill `1` pro akce s kdy vygenerovanými předpisy |
-| `zadani/2026-06-24-vypocet-nakladu-akce.md` | aktualizovat krok 6 (a poznámku ke kroku 7) po schválení |
+| `2026-06-24-vypocet-nakladu-akce.md` | aktualizovat krok 6 (a poznámku ke kroku 7) po schválení |
 | UI Náklady/Platby + e-mail s předpisem | beze změny vzorců (`finalAmount + subsidyAmount` dál platí); zvážit řádek „dotace nevyužitá — zůstává klubu" v souhrnu akce |
 | unit testy (`settlement-calc.test.ts`) | testy nové funkce — viz níže |
 

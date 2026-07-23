@@ -1,6 +1,8 @@
 # Index zadání
 
-Přehled stavu všech zadávacích dokumentů ve `zadani/` a navazujících design dokumentů v `docs/`. Udržuj aktuální při každé změně stavu — je to jediné místo, kde je vidět, co je hotovo, co běží a co čeká.
+Přehled stavu všech zadávacích a design dokumentů, soustředěných v `docs/superpowers/specs/`. Udržuj aktuální při každé změně stavu — je to jediné místo, kde je vidět, co je hotovo, co běží a co čeká.
+
+Historické setup/infra dokumenty a datové podklady (bez lifecycle stavu) zůstávají ve `zadani/` — viz poslední sekce tohoto indexu.
 
 ## Konvence pojmenování
 
@@ -45,10 +47,10 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 
 | Dokument | Navazuje na | Stav |
 |---|---|---|
-| [`docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md`](../docs/superpowers/specs/2026-07-04-invoice-attachment-replace-design.md) | [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md) | `staging-uat` — výměna přílohy, kontrola shody částky, hospodářské potvrzení neshody (commity `44d8503`…`3c60af0`) |
-| [`docs/adr/0001-analyzed-amount-historical-backfill.md`](../docs/adr/0001-analyzed-amount-historical-backfill.md) | invoice-attachment-replace-design | `superseded` — nahrazeno reálným re-analýza backfillem místo odhadu |
-| [`docs/adr/0002-event-audit-log-scope-and-reconstructability.md`](../docs/adr/0002-event-audit-log-scope-and-reconstructability.md) | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | implementováno (`f28f062`), `staging-uat` |
-| [`docs/TESTING.md`](../docs/TESTING.md) | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | průvodce realizací — jak testy spouštět, validovat a rozšiřovat (vč. receptu na E2E průchod akcí) |
+| [`2026-07-04-invoice-attachment-replace-design.md`](2026-07-04-invoice-attachment-replace-design.md) | [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md) | `staging-uat` — výměna přílohy, kontrola shody částky, hospodářské potvrzení neshody (commity `44d8503`…`3c60af0`) |
+| [`docs/adr/0001-analyzed-amount-historical-backfill.md`](../../adr/0001-analyzed-amount-historical-backfill.md) | invoice-attachment-replace-design | `superseded` — nahrazeno reálným re-analýza backfillem místo odhadu |
+| [`docs/adr/0002-event-audit-log-scope-and-reconstructability.md`](../../adr/0002-event-audit-log-scope-and-reconstructability.md) | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | implementováno (`f28f062`), `staging-uat` |
+| [`docs/TESTING.md`](../../TESTING.md) | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | průvodce realizací — jak testy spouštět, validovat a rozšiřovat (vč. receptu na E2E průchod akcí) |
 
 ## Roadmap — co je rozdělané
 
@@ -66,11 +68,13 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 6. Integrační test Gemini analýzy dokladů — vzorové JPG/PDF/XLS (`2026-07-23-integracni-test-gemini-analyzy.md`) — zároveň první zkušební běh nového postupu vývoje přes feature větev (viz `CLAUDE.md`)
 7. Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (`2026-07-23-vylepseni-popisu-prijemce.md`)
 
-## Ostatní dokumenty ve složce
+## Ostatní dokumenty — zůstávají ve `zadani/`
 
-Nemají vlastní lifecycle stav (nejsou to funkční zadání ke sledování):
+Nemají vlastní lifecycle stav (nejsou to funkční zadání ke sledování) — na rozdíl od
+aktivních zadání a design dokumentů výše, tyhle **nebyly** přesunuty do
+`docs/superpowers/specs/` a dál žijí v `zadani/` v kořeni repa:
 
-- `popis_zadani_1.txt` — hlavní produktová specifikace, dávno realizována.
-- `UCK01_zadani.txt`, `vyuctovani_akce_zadani.txt`, `todo_next_steps.txt` — starší ad-hoc poznámky a TODO, ne formální zadání.
-- `prvni_deploy_web_databaze_bez_emailu.md`, `revize_prvni_etapy_rozpoctu_a_rls.md`, `setup_od_nuly_vercel_supabase_resend.md`, `technicka_oponentura_vercel_supabase_resend.md`, `zadavaci_dokumentace_ovt_web.md` — historické setup/infra dokumenty z počáteční fáze projektu, dávno hotovo.
-- `*.xlsx`, `*.csv`, `loginy_a_pristupy.txt`, `ovtbohemians_dns.txt` — datové podklady, ne zadání.
+- `zadani/popis_zadani_1.txt` — hlavní produktová specifikace, dávno realizována.
+- `zadani/UCK01_zadani.txt`, `zadani/vyuctovani_akce_zadani.txt`, `zadani/todo_next_steps.txt` — starší ad-hoc poznámky a TODO, ne formální zadání.
+- `zadani/prvni_deploy_web_databaze_bez_emailu.md`, `zadani/revize_prvni_etapy_rozpoctu_a_rls.md`, `zadani/setup_od_nuly_vercel_supabase_resend.md`, `zadani/technicka_oponentura_vercel_supabase_resend.md`, `zadani/zadavaci_dokumentace_ovt_web.md` — historické setup/infra dokumenty z počáteční fáze projektu, dávno hotovo.
+- `zadani/*.xlsx`, `zadani/*.csv`, `zadani/loginy_a_pristupy.txt`, `zadani/ovtbohemians_dns.txt` — datové podklady, ne zadání.

@@ -1,6 +1,6 @@
 # Průvodce automatickými testy
 
-> Průvodní dokument k realizaci zadání [zadani/2026-07-06-automaticke-testy.md](../zadani/2026-07-06-automaticke-testy.md).
+> Průvodní dokument k realizaci zadání [docs/superpowers/specs/2026-07-06-automaticke-testy.md](superpowers/specs/2026-07-06-automaticke-testy.md).
 > Zadání říká *co a proč*; tento dokument říká *co přesně vzniklo, jak to používat,
 > jak si ověřit, že testy fungují, a jak na ně navázat*. Udržovat aktuální při každém
 > rozšíření testů.
@@ -166,7 +166,7 @@ Test, který nikdy nezčervená, je bezcenný. Rychlé způsoby, jak si důvěru
    v seedu přejmenuj člena — smoke musí spadnout. E2E ověřuje i migrace: smaž lokálně
    guard z `20260413_110000` a `node e2e/local-db.mjs` musí selhat.
 3. **Křížová kontrola s realitou:** vzorový průchod v testech odpovídá ručnímu výpočtu
-   dle `zadani/2026-06-24-vypocet-nakladu-akce.md`. Při pochybnosti spočítej scénář
+   dle `docs/superpowers/specs/2026-06-24-vypocet-nakladu-akce.md`. Při pochybnosti spočítej scénář
    ručně na papíře a porovnej s testem — test je jen zápis ručního výpočtu.
 4. **Volitelně coverage:** `npm i -D @vitest/coverage-v8` a `npx vitest run --coverage`
    — sleduj pokrytí `src/lib/settlement-calc.ts` a `expense-mismatch.ts` (mělo by být
