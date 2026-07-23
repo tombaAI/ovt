@@ -37,6 +37,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | Vitest unit + Playwright E2E smoke testy | `staging-uat` — commit `d222eba` |
 | [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `navrh` — rozhodnuto: varianta B (water-filling) + pinning verze algoritmu na akci |
 | [2026-07-23-integracni-test-gemini-analyzy.md](2026-07-23-integracni-test-gemini-analyzy.md) | Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS) | `navrh` |
+| [2026-07-23-vylepseni-popisu-prijemce.md](2026-07-23-vylepseni-popisu-prijemce.md) | Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (výměna/re-analýza) | `navrh` |
 
 ## Navazující design dokumenty (`docs/`)
 
@@ -63,6 +64,7 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 4. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
 5. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
 6. Integrační test Gemini analýzy dokladů — vzorové JPG/PDF/XLS (`2026-07-23-integracni-test-gemini-analyzy.md`) — zároveň první zkušební běh nového postupu vývoje přes feature větev (viz `CLAUDE.md`)
+7. Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (`2026-07-23-vylepseni-popisu-prijemce.md`)
 
 ## Ostatní dokumenty ve složce
 
