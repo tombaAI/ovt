@@ -92,7 +92,7 @@ export async function analyzeExpenseFile(
     const prompt = process.env.GEMINI_EXTRACTION_PROMPT ?? DEFAULT_PROMPT;
 
     const google = createGoogleGenerativeAI({ apiKey });
-    const modelId = process.env.GEMINI_MODEL ?? "gemini-2.0-flash";
+    const modelId = process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
 
     const content = isSpreadsheetFile(file.type, file.name)
         ? [{
