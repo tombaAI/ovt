@@ -536,9 +536,10 @@ export async function POST(
     }).join("\n\n");
 
     const resend = getResendClient();
+    const to = settings.testTo ? [settings.testTo] : recipients;
     const { data, error } = await resend.emails.send({
       from: settings.from,
-      to: recipients,
+      to,
       subject: `OVT vyúčtování akce: ${event.name}`,
       html,
       text: `Vyúčtování akce: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
