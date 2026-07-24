@@ -1,14 +1,14 @@
 ---
-status: navrh
+status: zgrilovano
 ---
 
 # Zadání: Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS)
 
-> **Stav: Návrh.** Zapsáno z rozhovoru o mezerách v testovací pyramidě po zavedení XLS/XLSX
-> podpory (viz [`docs/superpowers/specs/2026-07-22-xlsx-invoice-support-design.md`](../docs/superpowers/specs/2026-07-22-xlsx-invoice-support-design.md)).
-> Neprošlo grilováním, rozsah se ještě může měnit. Tohle zadání je zároveň první zkušební
-> běh nového postupu vývoje přes samostatnou feature větev — viz `CLAUDE.md`, sekce
-> „Superpowers vývoj (feature branch)".
+> **Stav: Zgrilováno.** Zapsáno z rozhovoru o mezerách v testovací pyramidě po zavedení
+> XLS/XLSX podpory (viz [`docs/superpowers/specs/2026-07-22-xlsx-invoice-support-design.md`](../docs/superpowers/specs/2026-07-22-xlsx-invoice-support-design.md)).
+> Grilling dokončen 2026-07-23 včetně dohledání a stažení 5 reálných vzorových dokladů.
+> Tohle zadání je zároveň první zkušební běh nového postupu vývoje přes samostatnou
+> feature větev — viz `CLAUDE.md`, sekce „Superpowers vývoj (feature branch)".
 
 ## Cíl
 
@@ -30,7 +30,7 @@ XLSX větve (CSV extrakce → textový prompt), ne jen validaci/parsing bez vol�
 - Reálné volání AI stojí (byť nízkou) cenu a je to jiná kategorie testu než dosavadní rychlý
   Vitest/Playwright smoke — nemá jít do stejného pre-commit/každý-push cyklu.
 
-## Rozsah (návrh)
+## Rozsah
 
 1. Malá sada vzorových dokladů — JPG, PDF, XLS/XLSX — **ne triviální/uměle jednoduché**,
    ale reálně reprezentativní (faktura s více položkami, různé kategorie apod.). Soubory
@@ -67,11 +67,19 @@ XLSX větve (CSV extrakce → textový prompt), ne jen validaci/parsing bez vol�
    chybí secret", i za cenu rizika že výpadek/expirace klíče zablokuje merge, dokud to
    někdo neopraví.
 4. **Assert styl:** u každého vzorku **povinný** sidecar `<soubor>.expected.json` s
-   `{ total_amount, account_code }` (žádný "jen tolerance-based" fallback). Přesná shoda
-   `account_code`; `total_amount` výchozí tolerance **0 Kč** (přesná shoda) — Gemini má
-   z tištěného dokladu vyčíst přesnou částku, neshoda i o pár korun je reálná regrese.
-   Volitelné pole `amountTolerance` v konkrétním `expected.json`, pokud je u vzorku znám
-   důvod k odchylce.
+   `{ total_amount, account_code, approvedAmount, amountTolerance? }` (žádný "jen
+   tolerance-based" fallback). `account_code`: přesná shoda. `total_amount`: výchozí
+   tolerance **0 Kč** (přesná shoda) — Gemini má z tištěného dokladu vyčíst přesnou
+   částku tak, jak je na něm napsaná (ne po měnovém přepočtu), neshoda i o pár korun je
+   reálná regrese. Volitelné pole `amountTolerance` v konkrétním `expected.json`, pokud
+   je u vzorku znám důvod k odchylce.
+   `approvedAmount` = schválená/zapsaná částka nákladu (`event_expenses.amount`) — test
+   navíc volá čistou funkci `hasAmountMismatch(approvedAmount, result.total_amount)` z
+   `expense-mismatch.ts` a ověří, že vyjde `true`/`false` přesně podle toho, jestli se
+   `approvedAmount` liší od `expected.total_amount` v sidecaru. Díky tomu test neověřuje
+   jen syrový výstup Gemini analýzy, ale i navazující identifikaci rozporu — reálný
+   scénář zahraniční akce, kde doklad je v cizí měně a schválená částka je po přepočtu
+   (viz vzorek "Kemp" níže), musí projít jako **očekávaný, ne jako chyba testu**.
 5. **Dynamické vyhledávání vzorků:** test **negenerativně** prochází (glob) všechny páry
    `soubor` + `soubor.expected.json` v `e2e/fixtures/gemini-samples/` — žádný hardcoded
    seznam v testovacím kódu. Přidání nového vzorku (edge-case) = jen 2 nové soubory do
@@ -88,25 +96,38 @@ XLSX větve (CSV extrakce → textový prompt), ne jen validaci/parsing bez vol�
    ```
    Kontrolu citlivých dat na vzorcích (jméno/adresa člena na dokladu) provádí uživatel
    před commitem — mimo rozsah automatizace.
+8. **Konkrétní vzorové doklady (dohledáno přes Neon MCP, staging DB, 2026-07-23):** 5
+   reálných `event_expenses` záznamů, `status: final` (lidská revize = důvěryhodná ground
+   truth), pokrývající 2 účetní kategorie a všechny 3 typy souborů:
 
-## Zbývá dořešit
+   | Soubor | Akce / doklad | `account_code` | Poznámka |
+   |---|---|---|---|
+   | `zahranicni-zajezd-isel-bus.xls` | *Zahraniční zájezd - Isel* — "Bus" | 518/009 | |
+   | `zahranicni-zajezd-isel-kemp.jpg` | *Zahraniční zájezd - Isel* — "Kemp" | 518/009 | **záměrný mismatch** — viz níže |
+   | `berounka-platba-za-kemp.jpg` | *Berounka* — "Platba za kemp" | 518/009 | |
+   | `berounka-preprava-batohu.jpg` | *Berounka* — "Přeprava batohů Praha-Skryje, Roztoky a zpět, os. autem s vlekem" | 518/009 | |
+   | `roztoky-u-krivoklatu-pronajem-usd.pdf` | *Roztoky u Křivoklátu* — "Pronájem USD" | 518/001 | 5. vzorek doplněný při grillingu za chybějící PDF |
 
-- **Konkrétní vzorové doklady** — uživatel vybral 4 reálné položky ze stagingu jako
-  kandidáty (více než minimální JPG/PDF/XLS trojice, cíleně pokrývající různé kategorie):
-  1. akce *Zahraniční voda* — doklad "Bus"
-  2. akce *Zahraniční voda* — doklad "Kemp"
-  3. akce *Berounka* — doklad "Platba za kemp"
-  4. akce *Berounka* — doklad "Přeprava batohů Praha-Skryje, Roztoky a zpět, os. autem
-     s vlekem"
+   Akce u prvních dvou dokladů byla v původním zadání uvedená jako *Zahraniční voda* —
+   ten záznam v `event_expenses` ale žádné náklady nemá; doklady "Bus"/"Kemp" reálně
+   patří k akci *Zahraniční zájezd - Isel* (opraveno v tabulce výše).
 
-  Očekávané hodnoty (`total_amount`, `account_code`) do `expected.json` = již schválená
-  částka/kód z reálného `event_expenses` záznamu (lidská revize v produkčním provozu =
-  důvěryhodná ground truth). Potřeba dohledat `file_url` + tyto hodnoty přes Neon MCP
-  (staging DB) — **blokováno**: Neon MCP nebyl v konverzaci, kde proběhla autorizace
-  (`/mcp`), vidět jako dostupný nástroj navzdory stavu "Connected" v `/mcp` panelu;
-  zkouší se restart konverzace, aby se nově autorizovaný server propsal do nástrojů.
-  Soubory se pak stáhnou přímo z Vercel Blob (`file_url` je veřejně čitelná URL, netřeba
-  `BLOB_READ_WRITE_TOKEN`).
+   **Doklad "Kemp" je záměrně vybraný jako testovací případ na neshodu částky:** jde o
+   zahraniční akci, doklad je v cizí měně, Gemini z něj vždy vyčte částku tak, jak je
+   napsaná na dokladu (950,40), zatímco `event_expenses.amount` (23670,66) je až lidský
+   přepočet do CZK. Tenhle rozdíl je hospodářem odsouhlasený
+   (`mismatch_acknowledged_by/at`), ne bug. `expected.json` proto obsahuje
+   `total_amount: 950.40` (co má Gemini reálně vrátit) + `approvedAmount: 23670.66`, a
+   test musí ověřit, že `hasAmountMismatch()` na týhle dvojici vrátí `true` — cíleně
+   testuje reálný flow identifikace rozporu, ne jen "šťastnou cestu" shody.
+
+   Soubory stažené a uložené do `e2e/fixtures/gemini-samples/` jako binární fixtures
+   (committnuté do repa) — `file_url` ve Vercel Blob je **privátní**
+   (`*.private.blob.vercel-storage.com`, přímý přístup 403 bez tokenu), stažení proběhlo
+   přes existující autentizovaný proxy route `/api/blob-file?url=...`
+   (`src/app/api/blob-file/route.ts`) na staging URL, přihlášený v prohlížeči. Tohle je
+   jednorázová operace při tvorbě fixtures, ne součást CI běhu testu — CI čte soubory
+   přímo z repa, žádný přístup k blob storage za běhu nepotřebuje.
 
 ## Mimo rozsah
 
