@@ -768,12 +768,22 @@ export async function setTreasurerApproval(
 
     try {
         const db = getDb();
+        const [prev] = await db.select({ treasurerApproved: events.treasurerApproved }).from(events).where(eq(events.id, eventId));
         await db.transaction(async tx => {
             await tx.update(events).set({ treasurerApproved: approved }).where(eq(events.id, eventId));
             await tx.insert(eventTreasurerApprovalLog).values({
                 eventId,
                 action: approved ? "approved" : "revoked",
                 changedBy: session.user!.name?.trim() || session.user!.email!,
+            });
+            // Paralelní zápis do jednotného auditu (vedle specifické eventTreasurerApprovalLog tabulky).
+            await tx.insert(auditLog).values({
+                entityType: "event",
+                entityId: eventId,
+                action: approved ? "treasurer_approve" : "treasurer_revoke",
+                changes: { treasurerApproved: { old: String(prev?.treasurerApproved ?? false), new: String(approved) } },
+                metadata: { eventId },
+                changedBy: session.user!.email!,
             });
         });
         revalidatePath(`/dashboard/events/${eventId}`);
@@ -827,6 +837,15 @@ export async function logVyuctovaniSend(
 ): Promise<void> {
     const db = getDb();
     await db.insert(eventVyuctovaniSends).values({ eventId, sentBy, recipients, testTo });
+    // Paralelní zápis do jednotného auditu — "Odeslat vyúčtování" (finální předání účetnictví TJ).
+    await db.insert(auditLog).values({
+        entityType: "event",
+        entityId: eventId,
+        action: "send_vyuctovani_tj",
+        changes: {},
+        metadata: { eventId, recipients, testTo },
+        changedBy: sentBy,
+    });
 }
 
 // Ponecháno pro zpětnou kompatibilitu se settlement tabem

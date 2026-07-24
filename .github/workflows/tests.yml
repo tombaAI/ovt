@@ -1,0 +1,82 @@
+# Automatické testy — viz zadani/ZADANI_AUTOMATICKE_TESTY.md.
+# unit: lint + typy + Vitest (čisté výpočty). e2e: Playwright smoke proti
+# produkčnímu buildu s disposable Postgres service containerem.
+name: Tests
+
+on:
+  push:
+    branches: [staging]
+  pull_request:
+    branches: [staging, main]
+
+jobs:
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc --noEmit
+      - run: npm run test:unit
+
+  e2e:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:test@localhost:5432/postgres
+      AUTH_SECRET: e2e-ci-secret
+      # next start mimo Vercel: bez trust host Auth.js odmítá požadavky (UntrustedHost)
+      AUTH_TRUST_HOST: "true"
+      ADMIN_EMAILS: e2e-admin@test.local
+      AUTH_GOOGLE_ID: dummy
+      AUTH_GOOGLE_SECRET: dummy
+      # RESEND_API_KEY / FIO_API_TOKEN záměrně nenastaveny — mail disabled, žádná banka
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Nainstalovat PostgreSQL client
+        run: sudo apt-get install -y --no-install-recommends postgresql-client
+      - run: npm ci
+      # Schéma se staví přehráním VŠECH migrací od bootstrapu — stejný mechanismus
+      # jako produkce (db-migrate.yml) a zároveň průběžná kontrola, že migrace
+      # jdou aplikovat od nuly. (drizzle-kit push v CI tiše nic neaplikoval.)
+      - name: Nahrát schéma do testovací DB (přehrát migrace)
+        run: |
+          for file in $(ls supabase/migrations/*.sql | sort); do
+            echo "▶ Aplikuji: $file"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$file"
+          done
+      - name: Seed testovacích dat
+        run: node e2e/seed.mjs
+        env:
+          E2E_ALLOW_SEED: "1"
+      - run: npm run build
+      - name: Nainstalovat Playwright Chromium
+        run: npx playwright install --with-deps chromium
+      - run: npm run test:e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 7

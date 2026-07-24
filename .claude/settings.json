@@ -1,16 +1,36 @@
 {
   "permissions": {
     "allow": [
-      "Bash(git commit -m ':*)",
-      "Bash(node -e ':*)",
+      "WebFetch(domain:ovtbohemians.cz)",
+      "WebFetch(domain:www.bohemianstj.cz)",
       "WebFetch(domain:www.fio.cz)",
+      "Bash(git add:*)",
+      "Bash(git commit -m ':*)",
       "Bash(git commit -m ' *)",
-      "mcp__Neon__describe_table_schema",
-      "WebSearch"
+      "Bash(git commit -m *)",
+      "Bash(git push:*)",
+      "Bash(git push *)",
+      "Bash(git push)",
+      "Bash(gh workflow *)",
+      "Bash(gh run *)",
+      "Bash(gh issue *)",
+      "Bash(gh pr *)",
+      "Bash(npm run:*)",
+      "Bash(npm run lint 2>&1)",
+      "Bash(npm run lint)",
+      "Bash(npx tsc:*)",
+      "Bash(npx tsc --noEmit 2>&1)",
+      "Bash(mkdir -p *)",
+      "mcp__neon__run_sql",
+      "mcp__neon__describe_table_schema",
+      "mcp__neon__list_projects",
+      "mcp__neon__describe_project",
+      "WebSearch",
+      "mcp__plugin_vercel-plugin_vercel__get_runtime_logs",
+      "mcp__plugin_vercel-plugin_vercel__list_deployments",
+      "mcp__plugin_vercel-plugin_vercel__get_project",
+      "mcp__plugin_vercel-plugin_vercel__list_projects"
     ],
-    "additionalDirectories": [
-      "/Users/ext93895/work/ovt-sync/.github/workflows",
-      "/Users/ext93895/work/ovt/src/app/api"
-    ]
+    "additionalDirectories": []
   }
 }

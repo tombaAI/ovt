@@ -559,6 +559,14 @@ export const eventExpenses = appSchema.table(
         eventId: integer("event_id").notNull().references(() => events.id, { onDelete: "cascade" }),
         status: text("status", { enum: eventExpenseStatusEnum }).notNull().default("final"),
         amount: numeric("amount", { precision: 10, scale: 2 }),        // null u draftů
+        analyzedAmount: numeric("analyzed_amount", { precision: 10, scale: 2 }),  // total_amount z poslední Gemini analýzy aktuální přílohy; null = neanalyzováno / nečitelné
+        // Hospodářem potvrzená neshoda (typicky jiná měna dokladu) — snapshot dvojice (amount, analyzedAmount)
+        // v okamžiku potvrzení. Platí, jen dokud se aktuální dvojice shoduje s tímto snapshotem;
+        // jakákoli změna (nový doklad, oprava částky) potvrzení automaticky zneplatní.
+        mismatchAcknowledgedAmount: numeric("mismatch_acknowledged_amount", { precision: 10, scale: 2 }),
+        mismatchAcknowledgedAnalyzedAmount: numeric("mismatch_acknowledged_analyzed_amount", { precision: 10, scale: 2 }),
+        mismatchAcknowledgedBy: text("mismatch_acknowledged_by"),
+        mismatchAcknowledgedAt: timestamp("mismatch_acknowledged_at", { withTimezone: true }),
         allocationMethod: text("allocation_method", { enum: eventExpenseAllocationMethodEnum }).notNull().default("split_all"),
         participantCoefficients: jsonb("participant_coefficients").$type<Record<string, number>>(),
         purposeText: text("purpose_text"),

@@ -2,8 +2,10 @@ import { put, del } from "@vercel/blob";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
-import { eventExpenses, events, members, people } from "@/db/schema";
+import { eventExpenses, events, members, people, auditLog } from "@/db/schema";
 import { expenseCategoryEnum } from "@/lib/expense-categories";
+import { logBlockedAttempt } from "@/lib/audit";
+import { isAllowedExpenseFile, resolveExpenseFileMime } from "@/lib/expense-file-validation";
 import { eq } from "drizzle-orm";
 
 type ExpenseLocks = { lockedForParticipants: boolean; lockedForReimbursement: boolean };
@@ -17,10 +19,6 @@ async function getExpenseLocks(db: ReturnType<typeof getDb>, eventId: number): P
     return { lockedForParticipants: row.lockForParticipants, lockedForReimbursement: row.lockForReimbursement };
 }
 
-const ALLOWED_MIME = new Set([
-    "image/jpeg", "image/png", "image/webp", "image/heic",
-    "application/pdf",
-]);
 const MAX_FILE_BYTES = 10 * 1024 * 1024; // 10 MB
 
 async function resolveReimbursementTarget(
@@ -122,7 +120,9 @@ export async function POST(
         const locks = await getExpenseLocks(db, eventId);
         if (!locks) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
         if (locks.lockedForParticipants || locks.lockedForReimbursement) {
-            return NextResponse.json({ error: "Nelze přidávat náklady — akce je uzamčena" }, { status: 409 });
+            const reason = "Nelze přidávat náklady — akce je uzamčena";
+            await logBlockedAttempt(db, { attemptedAction: "create_expense", reason, changedBy: session.user.email, eventId });
+            return NextResponse.json({ error: reason }, { status: 409 });
         }
 
         const formData = await request.formData();
@@ -139,6 +139,11 @@ export async function POST(
         const isPaid = isPaidRaw === null ? true : isPaidRaw !== "false" && isPaidRaw !== "0";
         const invoicePayeeName = String(formData.get("invoicePayeeName") ?? "").trim() || null;
         const file = formData.get("file") as File | null;
+
+        // Baseline z Gemini analýzy na klientu (pokud proběhla) — pro budoucí kontrolu shody.
+        const analyzedAmountRaw = String(formData.get("analyzedAmount") ?? "").replace(",", ".").trim();
+        const analyzedParsed = analyzedAmountRaw ? parseFloat(analyzedAmountRaw) : NaN;
+        const analyzedAmount = !isNaN(analyzedParsed) ? String(analyzedParsed) : null;
 
         let amount: number | null = null;
         if (status === "final") {
@@ -163,31 +168,33 @@ export async function POST(
         let fileMime: string | null = null;
 
         if (file && file.size > 0) {
-            if (!ALLOWED_MIME.has(file.type)) {
-                return NextResponse.json({ error: "Nepodporovaný typ souboru (povoleno: PDF, JPEG, PNG, WebP, HEIC)" }, { status: 400 });
+            if (!isAllowedExpenseFile(file.type, file.name)) {
+                return NextResponse.json({ error: "Nepodporovaný typ souboru (povoleno: PDF, JPEG, PNG, WebP, HEIC, XLS, XLSX)" }, { status: 400 });
             }
             if (file.size > MAX_FILE_BYTES) {
                 return NextResponse.json({ error: "Soubor je příliš velký (max 10 MB)" }, { status: 400 });
             }
+            const safeMime = resolveExpenseFileMime(file.type, file.name);
             const ext = file.name.split(".").pop() ?? "bin";
             const safeName = `events/${eventId}/expenses/${Date.now()}.${ext}`;
             const blob = await put(safeName, file, {
                 access: "private",
-                contentType: file.type,
+                contentType: safeMime,
             });
             fileUrl = blob.url;
             fileName = file.name;
-            fileMime = file.type;
+            fileMime = safeMime;
         }
 
         const purposeCategoryVal = (expenseCategoryEnum as readonly string[]).includes(purposeCategory)
             ? purposeCategory as typeof expenseCategoryEnum[number]
             : null;
 
-        await db.insert(eventExpenses).values({
+        const [created] = await db.insert(eventExpenses).values({
             eventId,
             status,
             amount: amount !== null ? String(amount) : null,
+            analyzedAmount,
             purposeText: purposeText || null,
             purposeCategory: purposeCategoryVal,
             reimbursementPersonId,
@@ -198,6 +205,16 @@ export async function POST(
             fileName,
             fileMime,
             uploadedBy: session.user.email,
+        }).returning();
+
+        // Audit — plný snapshot počátečního stavu (kotva pro rekonstrukci; UPDATE/DELETE navazují diffem).
+        await db.insert(auditLog).values({
+            entityType: "event_expense",
+            entityId: created.id,
+            action: "create_expense",
+            changes: {},
+            metadata: { eventId, expenseId: created.id, purposeText: created.purposeText, snapshot: created },
+            changedBy: session.user.email,
         });
 
         return NextResponse.json({ success: true });
@@ -231,6 +248,7 @@ export async function PATCH(
         const body = await request.json() as {
             expenseId?: unknown;
             amount?: unknown;
+            analyzedAmount?: unknown;
             purposeText?: unknown;
             purposeCategory?: unknown;
             reimbursementPersonId?: unknown;
@@ -244,7 +262,7 @@ export async function PATCH(
             return NextResponse.json({ error: "Chybí expenseId" }, { status: 400 });
         }
 
-        const [row] = await db.select({ id: eventExpenses.id, eventId: eventExpenses.eventId })
+        const [row] = await db.select()
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
 
@@ -255,24 +273,38 @@ export async function PATCH(
         // Quick toggle: only isPaid — not blocked by any lock
         if (body.isPaid !== undefined && body.amount === undefined && body.purposeCategory === undefined
             && body.purposeText === undefined && body.reimbursementPersonId === undefined
-            && body.invoicePayeeName === undefined) {
+            && body.invoicePayeeName === undefined && body.analyzedAmount === undefined) {
             const isPaid = body.isPaid !== false && body.isPaid !== 0 && body.isPaid !== "false";
             await db.update(eventExpenses)
                 .set({ isPaid })
                 .where(eq(eventExpenses.id, expenseId));
+            if (row.isPaid !== isPaid) {
+                await db.insert(auditLog).values({
+                    entityType: "event_expense",
+                    entityId: expenseId,
+                    action: "update_expense",
+                    changes: { isPaid: { old: String(row.isPaid), new: String(isPaid) } },
+                    metadata: { eventId, expenseId, purposeText: row.purposeText },
+                    changedBy: session.user.email,
+                });
+            }
             return NextResponse.json({ success: true });
         }
 
         // Amount — blocked by either lock
         if (body.amount !== undefined && (locks.lockedForParticipants || locks.lockedForReimbursement)) {
-            return NextResponse.json({ error: "Nelze měnit částku — akce je uzamčena" }, { status: 409 });
+            const reason = "Nelze měnit částku — akce je uzamčena";
+            await logBlockedAttempt(db, { attemptedAction: "update_expense", reason, changedBy: session.user.email, eventId, expenseId });
+            return NextResponse.json({ error: reason }, { status: 409 });
         }
 
         // Metadata (kategorie, popis, příjemce, invoicePayeeName) — blocked by lock_for_reimbursement
         const hasMetadataChange = body.purposeCategory !== undefined || body.purposeText !== undefined
             || body.reimbursementPersonId !== undefined || body.invoicePayeeName !== undefined;
         if (hasMetadataChange && locks.lockedForReimbursement) {
-            return NextResponse.json({ error: "Nelze měnit doklad — výdajový zámek je aktivní" }, { status: 409 });
+            const reason = "Nelze měnit doklad — výdajový zámek je aktivní";
+            await logBlockedAttempt(db, { attemptedAction: "update_expense", reason, changedBy: session.user.email, eventId, expenseId });
+            return NextResponse.json({ error: reason }, { status: 409 });
         }
 
         // Build update from provided fields
@@ -288,6 +320,17 @@ export async function PATCH(
             const parsed = parseFloat(String(body.amount ?? "").replace(",", "."));
             if (isNaN(parsed) || parsed <= 0) return NextResponse.json({ error: "Neplatná částka" }, { status: 400 });
             amount = parsed;
+        }
+
+        // Baseline z Gemini analýzy (při potvrzení draftu) — jen metadata, nepodléhá zámkům částky
+        let analyzedAmount: string | null | undefined;
+        if (body.analyzedAmount !== undefined) {
+            if (body.analyzedAmount === null) {
+                analyzedAmount = null;
+            } else {
+                const parsed = parseFloat(String(body.analyzedAmount).replace(",", "."));
+                analyzedAmount = !isNaN(parsed) ? String(parsed) : null;
+            }
         }
 
         if (body.purposeText !== undefined) {
@@ -325,6 +368,7 @@ export async function PATCH(
         await db.update(eventExpenses)
             .set({
                 ...(amount !== undefined && { amount: String(amount), status: "final" }),
+                ...(analyzedAmount !== undefined && { analyzedAmount }),
                 ...(purposeText !== undefined && { purposeText }),
                 ...(purposeCategory !== undefined && { purposeCategory }),
                 ...(isPaid !== undefined && { isPaid }),
@@ -333,6 +377,33 @@ export async function PATCH(
                 ...(reimbursementMemberId !== undefined && { reimbursementMemberId }),
             })
             .where(eq(eventExpenses.id, expenseId));
+
+        // Audit — diff jen reálně změněných polí (staré hodnoty z načteného řádku).
+        const norm = (v: unknown): string | null => (v === null || v === undefined ? null : String(v));
+        const changes: Record<string, { old: string | null; new: string | null }> = {};
+        const diff = (field: string, oldV: unknown, newV: unknown) => {
+            const o = norm(oldV), n = norm(newV);
+            if (o !== n) changes[field] = { old: o, new: n };
+        };
+        if (amount !== undefined) diff("amount", row.amount, String(amount));
+        if (analyzedAmount !== undefined) diff("analyzedAmount", row.analyzedAmount, analyzedAmount);
+        if (purposeText !== undefined) diff("purposeText", row.purposeText, purposeText);
+        if (purposeCategory !== undefined) diff("purposeCategory", row.purposeCategory, purposeCategory);
+        if (isPaid !== undefined) diff("isPaid", row.isPaid, isPaid);
+        if (invoicePayeeName !== undefined) diff("invoicePayeeName", row.invoicePayeeName, invoicePayeeName);
+        if (reimbursementPersonId !== undefined) diff("reimbursementPersonId", row.reimbursementPersonId, reimbursementPersonId);
+        if (reimbursementMemberId !== undefined) diff("reimbursementMemberId", row.reimbursementMemberId, reimbursementMemberId);
+
+        if (Object.keys(changes).length > 0) {
+            await db.insert(auditLog).values({
+                entityType: "event_expense",
+                entityId: expenseId,
+                action: "update_expense",
+                changes,
+                metadata: { eventId, expenseId, purposeText: purposeText ?? row.purposeText },
+                changedBy: session.user.email,
+            });
+        }
 
         return NextResponse.json({ success: true });
     } catch (err) {
@@ -364,7 +435,9 @@ export async function DELETE(
         const locks = await getExpenseLocks(db, eventId);
         if (!locks) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
         if (locks.lockedForParticipants || locks.lockedForReimbursement) {
-            return NextResponse.json({ error: "Nelze mazat náklady — akce je uzamčena" }, { status: 409 });
+            const reason = "Nelze mazat náklady — akce je uzamčena";
+            await logBlockedAttempt(db, { attemptedAction: "delete_expense", reason, changedBy: session.user.email, eventId, expenseId: Number(expenseId) || undefined });
+            return NextResponse.json({ error: reason }, { status: 409 });
         }
 
         const [expRow] = await db.select().from(eventExpenses)
@@ -379,6 +452,20 @@ export async function DELETE(
         }
 
         await db.delete(eventExpenses).where(eq(eventExpenses.id, expenseId));
+
+        // Audit — klíčová pole do changes (čitelnost), celý smazaný řádek do metadata (forenzní snapshot).
+        await db.insert(auditLog).values({
+            entityType: "event_expense",
+            entityId: expRow.id,
+            action: "delete_expense",
+            changes: {
+                amount: { old: expRow.amount ?? null, new: null },
+                purposeText: { old: expRow.purposeText ?? null, new: null },
+                purposeCategory: { old: expRow.purposeCategory ?? null, new: null },
+            },
+            metadata: { eventId, expenseId: expRow.id, purposeText: expRow.purposeText, snapshot: expRow },
+            changedBy: session.user.email,
+        });
 
         return NextResponse.json({ success: true });
     } catch (err) {

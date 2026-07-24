@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **OVT sprava** — internal management web app for OVT Bohemians (Czech water sports club). Admin-only interface, PC-first with mobile support. Deployed on Vercel with Neon (PostgreSQL).
 
-See `zadani/popis_zadani_1.txt` for the full product spec (in Czech).
+See `zadani/popis_zadani_1.txt` for the full product spec (in Czech). See `docs/superpowers/specs/INDEX.md` for the status/roadmap of individual feature specs (návrh/zgrilováno/staging-UAT/schváleno/produkce).
 
 ## Workflow
 
@@ -37,6 +37,28 @@ See `zadani/popis_zadani_1.txt` for the full product spec (in Czech).
 6. merge → Vercel nasadí produkci + GHA spustí DB migrace
 ```
 
+### Superpowers vývoj (feature branch)
+
+Pro práci vedenou přes Superpowers flow (`brainstorming` → `writing-plans` →
+`subagent-driven-development`, víceúkolové plány) platí jiný standard než pravidlo 1 výše:
+
+- **Standard je samostatná větev ze `staging`** (ne přímý commit na `staging`) — pojmenovaná
+  podle spec/plan souboru, např. `feat/2026-07-22-xlsx-invoice-support`.
+- **Vždy potvrdit s uživatelem před založením** — jak se větev bude jmenovat a že se na ní
+  začíná pracovat, nezakládat automaticky bez potvrzení.
+- **Worktree (samostatný pracovní adresář) je na dotaz, ne automaticky** — hodí se, když má
+  uživatel v hlavním adresáři rozdělanou práci nebo chce hlavní checkout nechat nedotčený;
+  jindy stačí přepnout větev v současném adresáři.
+- Task-by-task commit + push (pravidlo 3) platí i tady — jen cílí na feature větev, ne na
+  `staging`.
+- Po finální whole-branch review: **PR `feature větev → staging`** (ne přímo push na
+  `staging`) — teprve tady proběhne review celého diffu najednou.
+- Po schválení a mergi do `staging` následuje běžný cyklus výše (ověření na staging preview,
+  pak PR `staging → main`).
+- Reálné ověření v prohlížeči (Gemini analýza, upload do blob storage apod.) dělat na staging
+  preview, ne lokálně — lokálně chybí `GEMINI_API_KEY` i `BLOB_READ_WRITE_TOKEN` a nemá smysl
+  je tam dávat.
+
 ### DB migrace
 
 Soubory v `supabase/migrations/` jsou **viditelné v PR diff** — uživatel v PR schválí přesný SQL před mergem.
@@ -56,11 +78,24 @@ Při změně schématu:
 npm run dev          # local dev server
 npm run build        # production build
 npm run lint         # ESLint
+npm run test:unit    # Vitest — unit testy čistých výpočtů (src/**/*.test.ts)
+npm run test:watch   # Vitest ve watch módu
+npm run test:e2e     # Playwright smoke testy (vyžaduje testovací DB — viz e2e/README.md)
+npm run test:gemini  # integrační test Gemini analýzy dokladů (vyžaduje GEMINI_API_KEY, jinak vždy FAIL)
 npm run db:push      # push Drizzle schema changes to Neon (dev/staging)
 npm run db:studio    # Drizzle Studio — local DB browser
 ```
 
-Pre-commit hook runs `npm run lint && npx tsc --noEmit` — always verify clean before committing. There are no automated tests; only linting and type-checking are enforced.
+Pre-commit hook runs `npm run lint && npx tsc --noEmit && npm run test:unit` — always verify clean before committing.
+
+## Testy
+
+Strategie a závazná pravidla: `docs/superpowers/specs/2026-07-06-automaticke-testy.md`. Praktický průvodce (spouštění, validace testů, recepty na rozšíření vč. E2E průchodu akcí): `docs/TESTING.md`. Shrnutí:
+
+- **Výpočty patří do čistých modulů** v `src/lib/` (bez DB/Next.js) s unit testy vedle souboru (`foo.ts` → `foo.test.ts`); server actions je jen volají po načtení dat z DB. Vzor: `src/lib/settlement-calc.ts` (algoritmus vyúčtování akce) volaný z `getEventSettlement`.
+- **Bugfix výpočtu = nejdřív regresní test**, který chybu reprodukuje, pak fix.
+- **E2E smoke** (`e2e/`) — stránky se vykreslí, auth funguje, data tečou. Nikdy nespouštět proti staging/produkční DB. Nová stránka/klíčový tok = přidat smoke test.
+- CI: `.github/workflows/tests.yml` (push do `staging`, PR do `main`) — job `unit` (lint + tsc + Vitest) a job `e2e` (Postgres service + Playwright).
 
 ## Stack
 
@@ -270,6 +305,8 @@ See `.env.example` for the full list with Czech comments.
 
 | Workflow | Trigger | Co dělá |
 |---|---|---|
+| `tests.yml` | Push do `staging`, PR do `staging`/`main` | Unit (lint + tsc + Vitest) a E2E (Playwright + Postgres service) |
+| `gemini-integration-test.yml` | PR do `staging`/`main` + manuálně | Integrační test Gemini analýzy nad vzorovými doklady (`test:gemini`), vyžaduje `GEMINI_API_KEY` secret |
 | `db-backup.yml` | Každý den 02:00 UTC + manuálně | `pg_dump` → GitHub Artifact, retence 90 dní |
 | `db-migrate.yml` | Push do `main` (jen pokud přibyly `.sql` soubory) | Spustí nové migrace z `supabase/migrations/` přes `psql` |
 | `import-members-tj.yml` | `repository_dispatch` | Webhook pro import členů TJ |

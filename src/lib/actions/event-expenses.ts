@@ -12,6 +12,11 @@ export type EventExpenseRow = {
     eventId: number;
     status: "draft" | "unconfirmed" | "final";
     amount: string | null;
+    analyzedAmount: string | null;
+    mismatchAcknowledgedAmount: string | null;
+    mismatchAcknowledgedAnalyzedAmount: string | null;
+    mismatchAcknowledgedBy: string | null;
+    mismatchAcknowledgedAt: Date | null;
     purposeText: string | null;
     purposeCategory: ExpenseCategory | null;
     reimbursementPersonId: number | null;
@@ -38,6 +43,11 @@ export async function getEventExpenses(eventId: number): Promise<EventExpenseRow
             eventId: eventExpenses.eventId,
             status: eventExpenses.status,
             amount: eventExpenses.amount,
+            analyzedAmount: eventExpenses.analyzedAmount,
+            mismatchAcknowledgedAmount: eventExpenses.mismatchAcknowledgedAmount,
+            mismatchAcknowledgedAnalyzedAmount: eventExpenses.mismatchAcknowledgedAnalyzedAmount,
+            mismatchAcknowledgedBy: eventExpenses.mismatchAcknowledgedBy,
+            mismatchAcknowledgedAt: eventExpenses.mismatchAcknowledgedAt,
             purposeText: eventExpenses.purposeText,
             purposeCategory: eventExpenses.purposeCategory,
             reimbursementPersonId: eventExpenses.reimbursementPersonId,

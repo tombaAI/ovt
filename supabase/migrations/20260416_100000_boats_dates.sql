@@ -5,7 +5,7 @@
 BEGIN;
 
 ALTER TABLE app.boats
-    ADD COLUMN last_checked_at date;
+    ADD COLUMN IF NOT EXISTS last_checked_at date;
 
 UPDATE app.boats
 SET stored_from     = '2020-01-01',

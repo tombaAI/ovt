@@ -9,6 +9,7 @@ import {
     eventRegistrations,
     eventRegistrationParticipants,
     eventPaymentPrescriptions,
+    eventExpenses,
     auditLog,
     members,
     type EventPaymentPrescriptionStatus,
@@ -1332,16 +1333,20 @@ export async function getRegistrationAuditLog(registrationId: number): Promise<R
 // ── Audit celé akce (jen pro hospodáře) ───────────────────────────────────────
 
 export type AuditMetadata = {
-    eventId?: number; registrationId?: number; participantId?: number; memberId?: number | null; previousMemberId?: number | null;
+    eventId?: number; registrationId?: number; expenseId?: number; participantId?: number; memberId?: number | null; previousMemberId?: number | null;
+    /** Snapshot názvu nákladu — fallback pro zobrazení, když už náklad neexistuje (smazán). */
+    purposeText?: string | null;
     /** Neúspěšný pokus — uživatel dostal stopku (např. úprava uzamčené akce). attemptedAction = co chtěl udělat. */
     blocked?: boolean; attemptedAction?: string;
 };
 
 export type EventFullAuditEntry = {
     id: number;
-    scope: "event" | "registration";
+    scope: "event" | "registration" | "expense";
     registrationId: number | null;
     registrationName: string | null;
+    /** Název nákladu (u scope "expense") — z live joinu, nebo z metadata.purposeText když je smazaný. */
+    expenseName: string | null;
     action: string;
     changes: Record<string, { old: string | null; new: string | null }>;
     /** Strukturovaná ID dotčených objektů — pro úplný replay i budoucí pohledy (audit per člen apod.). */
@@ -1365,11 +1370,16 @@ export async function getEventFullAuditLog(eventId: number): Promise<EventFullAu
     }
 
     const db = getDb();
-    const regs = await db
-        .select({ id: eventRegistrations.id, firstName: eventRegistrations.firstName, lastName: eventRegistrations.lastName })
-        .from(eventRegistrations)
-        .where(eq(eventRegistrations.eventId, eventId));
+    const [regs, expenses] = await Promise.all([
+        db.select({ id: eventRegistrations.id, firstName: eventRegistrations.firstName, lastName: eventRegistrations.lastName })
+            .from(eventRegistrations)
+            .where(eq(eventRegistrations.eventId, eventId)),
+        db.select({ id: eventExpenses.id, purposeText: eventExpenses.purposeText })
+            .from(eventExpenses)
+            .where(eq(eventExpenses.eventId, eventId)),
+    ]);
     const nameById = new Map(regs.map(r => [r.id, `${r.firstName} ${r.lastName}`]));
+    const expenseNameById = new Map(expenses.map(e => [e.id, e.purposeText]));
     const regIds = regs.map(r => r.id);
 
     const rows = await db
@@ -1378,19 +1388,33 @@ export async function getEventFullAuditLog(eventId: number): Promise<EventFullAu
         .where(or(
             and(eq(auditLog.entityType, "event"), eq(auditLog.entityId, eventId)),
             and(eq(auditLog.entityType, "event_registration"), inArray(auditLog.entityId, regIds.length > 0 ? regIds : [-1])),
+            // Náklad může být mezitím smazaný → filtrujeme podle metadata.eventId, ne jen podle živých ID.
+            and(eq(auditLog.entityType, "event_expense"), sql`${auditLog.metadata}->>'eventId' = ${String(eventId)}`),
         ))
         .orderBy(desc(auditLog.changedAt))
         .limit(300);
 
-    return rows.map(r => ({
-        id: r.id,
-        scope: r.entityType === "event" ? "event" : "registration",
-        registrationId: r.entityType === "event_registration" ? r.entityId : null,
-        registrationName: r.entityType === "event_registration" ? (nameById.get(r.entityId) ?? `#${r.entityId}`) : null,
-        action: r.action,
-        changes: (r.changes ?? {}) as Record<string, { old: string | null; new: string | null }>,
-        metadata: (r.metadata ?? {}) as AuditMetadata,
-        changedBy: r.changedBy,
-        changedAt: r.changedAt as Date,
-    }));
+    return rows.map(r => {
+        const metadata = (r.metadata ?? {}) as AuditMetadata;
+        const scope: "event" | "registration" | "expense" =
+            r.entityType === "event_registration" ? "registration"
+                : r.entityType === "event_expense" ? "expense"
+                : "event";
+        // Název nákladu: živý join, nebo fallback na snapshot v metadata (když je náklad smazaný).
+        const expenseName = scope === "expense"
+            ? (expenseNameById.get(r.entityId) ?? metadata.purposeText ?? `#${r.entityId}`)
+            : null;
+        return {
+            id: r.id,
+            scope,
+            registrationId: scope === "registration" ? r.entityId : null,
+            registrationName: scope === "registration" ? (nameById.get(r.entityId) ?? `#${r.entityId}`) : null,
+            expenseName,
+            action: r.action,
+            changes: (r.changes ?? {}) as Record<string, { old: string | null; new: string | null }>,
+            metadata,
+            changedBy: r.changedBy,
+            changedAt: r.changedAt as Date,
+        };
+    });
 }
