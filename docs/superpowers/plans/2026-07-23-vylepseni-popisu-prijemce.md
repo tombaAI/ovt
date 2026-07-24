@@ -114,11 +114,18 @@ function AttachFileDialog({
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const initializedRef = useRef(false);
 
     const hasFile = expense.fileUrl != null;
 
+    // initializedRef zajistí, že se stav nastaví jen JEDNOU za otevření dialogu, ne při
+    // každé změně `expense` reference (onUpdated() po úspěšném uložení vyvolá refetch
+    // v parentovi → nová `expense` reference → bez téhle pojistky by se stav uprostřed
+    // otevřeného dialogu tiše vynuloval, včetně chybové hlášky a fileSaved flagu).
     useEffect(() => {
-        if (!open) return;
+        if (!open) { initializedRef.current = false; return; }
+        if (initializedRef.current) return;
+        initializedRef.current = true;
         setFile(null); setAnalysis(null); setError(null); setConfirmChecked(false); setSaving(false);
         setAmount(expense.amount ? expense.amount.replace(".", ",") : "");
         setPurposeText(expense.purposeText ?? "");
@@ -330,7 +337,7 @@ function AttachFileDialog({
 }
 ```
 
-Klíčové změny oproti originálu: nový state `purposeText`/`invoicePayeeName`/`fileSaved`; `handleSave` teď po úspěšném `attach-file` POSTu navazuje PATCH jen při reálné změně; `fileSaved` flag umožní retry PATCHe bez opětovného nahrávání souboru, pokud PATCH selže; nová editovatelná pole popis/příjemce (s `PayeeComparison` a tlačítkem "Použít" u příjemce) se zobrazí ve stejném bloku jako `AnalysisCard`.
+Klíčové změny oproti originálu: nový state `purposeText`/`invoicePayeeName`/`fileSaved`; `handleSave` teď po úspěšném `attach-file` POSTu navazuje PATCH jen při reálné změně; `fileSaved` flag umožní retry PATCHe bez opětovného nahrávání souboru, pokud PATCH selže; nová editovatelná pole popis/příjemce (s `PayeeComparison` a tlačítkem "Použít" u příjemce) se zobrazí ve stejném bloku jako `AnalysisCard`; `initializedRef` zabrání tomu, aby `onUpdated()`-vyvolaný refetch (nová `expense` reference) uprostřed otevřeného dialogu vynuloval `error`/`fileSaved`/rozepsané úpravy — bez něj by retry-bez-nového-nahrání nefungoval.
 
 - [ ] **Step 2: Ověřit typy a lint**
 
@@ -385,6 +392,7 @@ function ReanalyzeDialog({
     const [savingMetadata, setSavingMetadata] = useState(false);
     const [metadataSaved, setMetadataSaved] = useState(false);
     const [metadataError, setMetadataError] = useState<string | null>(null);
+    const initializedRef = useRef(false);
 
     const call = useCallback(async (confirmMismatch: boolean) => {
         setRunning(true); setError(null);
@@ -409,9 +417,14 @@ function ReanalyzeDialog({
         }
     }, [eventId, expense.id, onUpdated]);
 
-    // Auto-spuštění při otevření
+    // Auto-spuštění při otevření — initializedRef zajistí, že se stav nastaví jen JEDNOU
+    // za otevření dialogu, ne při každé změně `expense` reference (onUpdated() po úspěšné
+    // reanalýze/uložení popisu vyvolá refetch v parentovi → nová `expense` reference →
+    // bez téhle pojistky by se stav uprostřed otevřeného dialogu tiše vynuloval).
     useEffect(() => {
-        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); return; }
+        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); initializedRef.current = false; return; }
+        if (initializedRef.current) return;
+        initializedRef.current = true;
         setPurposeText(expense.purposeText ?? "");
         setInvoicePayeeName(expense.invoicePayeeName ?? "");
         setMetadataSaved(false); setMetadataError(null);
@@ -545,7 +558,7 @@ function ReanalyzeDialog({
 }
 ```
 
-Klíčové změny oproti originálu: nový state pro popis/příjemce, inicializovaný při otevření dialogu ze stávajících hodnot nákladu; editovatelná pole se zobrazí hned s `AnalysisCard`/`AmountComparison` (ne až po `done`); samostatná akce `handleSaveMetadata` (PATCH) nezávislá na hlavní re-analyze logice; tlačítko "Uložit popis/příjemce" se zobrazí jen když se hodnota reálně liší a ještě nebyla uložena.
+Klíčové změny oproti originálu: nový state pro popis/příjemce, inicializovaný při otevření dialogu ze stávajících hodnot nákladu; editovatelná pole se zobrazí hned s `AnalysisCard`/`AmountComparison` (ne až po `done`); samostatná akce `handleSaveMetadata` (PATCH) nezávislá na hlavní re-analyze logice; tlačítko "Uložit popis/příjemce" se zobrazí jen když se hodnota reálně liší a ještě nebyla uložena; `initializedRef` (stejný vzorec jako v `AttachFileDialog`, Task 2) zabrání tomu, aby `onUpdated()` po úspěšné auto-reanalýze vynuloval stav uprostřed otevřeného dialogu.
 
 - [ ] **Step 2: Ověřit typy a lint**
 
