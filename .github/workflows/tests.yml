@@ -7,7 +7,7 @@ on:
   push:
     branches: [staging]
   pull_request:
-    branches: [main]
+    branches: [staging, main]
 
 jobs:
   unit:

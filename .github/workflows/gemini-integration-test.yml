@@ -1,0 +1,29 @@
+# Integrační test Gemini analýzy dokladů — reálné volání AI nad vzorovými soubory
+# z e2e/fixtures/gemini-samples/. Oddělený od tests.yml: síťové volání, cena,
+# potenciální AI nekonzistence — nesdílí status check s lint/unit/e2e.
+# Chybějící/nefunkční GEMINI_API_KEY = fail, žádné tiché přeskočení (viz
+# docs/superpowers/specs/2026-07-23-integracni-test-gemini-analyzy.md).
+name: Gemini integration test
+
+on:
+  pull_request:
+    branches: [staging, main]
+  workflow_dispatch:
+
+concurrency:
+  group: gemini-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  gemini:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:gemini
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

@@ -57,6 +57,12 @@ e2e/
   local-db.mjs                 # in-memory Postgres (PGlite přes TCP) — bez Dockeru
   smoke.spec.ts                # 9 smoke testů
 .github/workflows/tests.yml    # CI: job unit + job e2e
+vitest.gemini.config.ts        # konfigurace Gemini integračního testu (samostatný include)
+e2e/
+  gemini/
+    expense-analysis.integration.test.ts   # volá analyzeExpenseFile() nad reálnými vzorky
+  fixtures/gemini-samples/     # vzorové doklady (JPG/PDF/XLS) + <soubor>.expected.json
+.github/workflows/gemini-integration-test.yml   # CI: PR do staging/main + workflow_dispatch
 .husky/pre-commit              # lint && tsc --noEmit && test:unit
 ```
 
@@ -70,6 +76,7 @@ e2e/
 | `npm run test:watch` | Vitest ve watch módu při vývoji | nic |
 | `npm run test:e2e` | Playwright smoke | testovací DB + env, viz níže |
 | `npx playwright test --ui` | E2E s interaktivním UI (debugování) | totéž |
+| `npm run test:gemini` | Integrační test Gemini analýzy nad reálnými doklady | `GEMINI_API_KEY` (bez něj vždy FAIL, ne skip) |
 
 **Lokální E2E bez Dockeru** (na stroji je blokovaný port 5432 a Docker chybí — proto
 `local-db.mjs`):
@@ -245,6 +252,36 @@ Praktické poznámky:
 - **Komponentové testy** (Testing Library + jsdom) — až pokud se objeví třída regresí
   v klientských komponentách, které smoke nechytí.
 - **Vizualní regrese** (Playwright screenshots) — až se ustálí design.
+
+### 6.6 Gemini integrační test — přidání nového vzorku
+
+Zadání: `docs/superpowers/specs/2026-07-23-integracni-test-gemini-analyzy.md`.
+
+Přidání nového vzorového dokladu (edge-case, nová kategorie apod.) = 2 nové soubory
+do `e2e/fixtures/gemini-samples/`, **bez úpravy testovacího kódu** (dynamický glob):
+
+1. Soubor dokladu (JPG/PNG/PDF/XLS/XLSX) — reálný, ne uměle jednoduchý.
+2. `<soubor>.expected.json`:
+   ```json
+   { "total_amount": 1234.50, "account_code": "518/009", "approvedAmount": 1234.50 }
+   ```
+   `approvedAmount` != `total_amount` jen když je vzorek záměrně vybraný na testování
+   rozporu (např. zahraniční doklad v cizí měně) — jinak stejná hodnota jako
+   `total_amount`. Volitelné `amountTolerance`, pokud je u vzorku znám důvod k odchylce
+   od přesné shody — **pozor:** mismatch cross-check (`hasAmountMismatch()`) se u vzorků
+   s nenulovou `amountTolerance` automaticky neprovádí (viz
+   `expense-analysis.integration.test.ts`), protože přesná shoda na haléře a tolerance
+   na Kč se jinak neslučují. Volitelné pole `payee_name` (`string | null`) — konkrétní
+   jméno jen u jednoznačné faktury s jasným dodavatelem v hlavičce, `null` u dokladu
+   sebe-označeného jako účtenka/čestné prohlášení, pole úplně vynechat, pokud je název
+   dodavatele nejednoznačný (víc věrohodných variant v hlavičce/patičce).
+
+Kontrola citlivých dat (jméno/adresa člena na dokladu) před commitem je na tom, kdo
+vzorek přidává — mimo rozsah automatizace.
+
+Lokální běh bez `GEMINI_API_KEY` vždy selže (`ExpenseAnalysisConfigError`) — to je
+očekávané, ne bug; reálné ověření běží v CI (`gemini-integration-test.yml`) s
+nastaveným secretem.
 
 ---
 
