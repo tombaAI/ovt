@@ -1222,6 +1222,23 @@ function AmountComparison({ written, detected }: { written: string | null; detec
     );
 }
 
+function PayeeComparison({ written, detected }: { written: string; detected: string | null }) {
+    if (!detected) return null;
+    const match = written.trim().toLowerCase() === detected.trim().toLowerCase();
+    return (
+        <div className={`rounded-lg border px-3 py-2 text-sm flex items-center justify-between gap-3 ${
+            match ? "border-green-200 bg-green-50" : "border-amber-300 bg-amber-50"
+        }`}>
+            <span className="text-gray-600 truncate">
+                Zapsáno: <span className="font-medium text-gray-900">{written || "—"}</span>
+            </span>
+            <span className={match ? "text-green-700" : "text-amber-700"}>
+                Na faktuře: <span className="font-medium">{detected}</span>
+            </span>
+        </div>
+    );
+}
+
 // ── Attach / swap file dialog ─────────────────────────────────────────────────
 
 function AttachFileDialog({
@@ -1245,17 +1262,30 @@ function AttachFileDialog({
     const [analyzing, setAnalyzing] = useState(false);
     const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
     const [amount, setAmount] = useState("");
+    const [purposeText, setPurposeText] = useState("");
+    const [invoicePayeeName, setInvoicePayeeName] = useState("");
     const [confirmChecked, setConfirmChecked] = useState(false);
+    const [fileSaved, setFileSaved] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const initializedRef = useRef(false);
 
     const hasFile = expense.fileUrl != null;
 
+    // initializedRef zajistí, že se stav nastaví jen JEDNOU za otevření dialogu, ne při
+    // každé změně `expense` reference (onUpdated() po úspěšném uložení vyvolá refetch
+    // v parentovi → nová `expense` reference → bez téhle pojistky by se stav uprostřed
+    // otevřeného dialogu tiše vynuloval, včetně chybové hlášky a fileSaved flagu).
     useEffect(() => {
-        if (!open) return;
+        if (!open) { initializedRef.current = false; return; }
+        if (initializedRef.current) return;
+        initializedRef.current = true;
         setFile(null); setAnalysis(null); setError(null); setConfirmChecked(false); setSaving(false);
         setAmount(expense.amount ? expense.amount.replace(".", ",") : "");
+        setPurposeText(expense.purposeText ?? "");
+        setInvoicePayeeName(expense.invoicePayeeName ?? "");
+        setFileSaved(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
     }, [open, expense]);
 
@@ -1270,6 +1300,7 @@ function AttachFileDialog({
     async function handleFile(picked: File | undefined) {
         if (!picked) return;
         setFile(picked); setAnalyzing(true); setError(null); setAnalysis(null); setConfirmChecked(false);
+        setFileSaved(false);
         try {
             const small = await prepareFileForGemini(picked);
             const fd = new FormData();
@@ -1287,22 +1318,51 @@ function AttachFileDialog({
 
     async function handleSave() {
         if (!file) return;
+        if (!purposeText.trim()) { setError("Doplň účel dokladu"); return; }
         setSaving(true); setError(null);
         try {
-            const fd = new FormData();
-            fd.append("file", file);
-            fd.append("amount", amount.replace(",", "."));
-            if (mismatch && isTreasurer && confirmChecked) fd.append("confirmMismatch", "true");
-            const res = await fetch(
-                `/api/events/${eventId}/expenses/${expense.id}/attach-file`,
-                { method: "POST", body: fd },
-            );
-            const data = await res.json() as { error?: string };
-            if (!res.ok) throw new Error(data.error ?? "Chyba nahrávání");
+            if (!fileSaved) {
+                const fd = new FormData();
+                fd.append("file", file);
+                fd.append("amount", amount.replace(",", "."));
+                if (mismatch && isTreasurer && confirmChecked) fd.append("confirmMismatch", "true");
+                const res = await fetch(
+                    `/api/events/${eventId}/expenses/${expense.id}/attach-file`,
+                    { method: "POST", body: fd },
+                );
+                const data = await res.json() as { error?: string };
+                if (!res.ok) throw new Error(data.error ?? "Chyba nahrávání");
+                setFileSaved(true);
+            }
+
+            const trimmedPurpose = purposeText.trim();
+            const trimmedPayee = invoicePayeeName.trim();
+            const purposeChanged = trimmedPurpose !== (expense.purposeText ?? "");
+            const payeeChanged = !expense.isPaid && trimmedPayee !== (expense.invoicePayeeName ?? "");
+            if (purposeChanged || payeeChanged) {
+                const patchBody: Record<string, unknown> = { expenseId: expense.id };
+                if (purposeChanged) patchBody.purposeText = trimmedPurpose;
+                if (payeeChanged) patchBody.invoicePayeeName = trimmedPayee || null;
+                const patchRes = await fetch(`/api/events/${eventId}/expenses`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patchBody),
+                });
+                if (!patchRes.ok) {
+                    const patchData = await patchRes.json() as { error?: string };
+                    throw new Error(patchData.error ?? "Doklad byl uložen, ale popis/příjemce se nepodařilo uložit — zkus to znovu.");
+                }
+            }
+
             onOpenChange(false);
             onUpdated();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Chyba nahrávání");
+            setError(err instanceof Error ? err.message : "Chyba ukládání");
+            // Vždy refetchnout — `fileSaved` je tu closure hodnota z okamžiku volání handleSave,
+            // takže po úspěšném uploadu v tomtéž běhu (setFileSaved(true) se projeví až příští
+            // render) by čtení `fileSaved` zde bylo still-stale. Refetch při úplném selhání
+            // (nic se neuložilo) je jen neškodný no-op — initializedRef chrání rozepsaný stav dialogu.
+            onUpdated();
         } finally {
             setSaving(false);
         }
@@ -1386,6 +1446,36 @@ function AttachFileDialog({
                                     <span>Rozumím, že se zjištěná částka neshoduje se zapsanou, přesto uložit.</span>
                                 </label>
                             )}
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-gray-600">Popis / účel</label>
+                                <Input
+                                    value={purposeText}
+                                    onChange={e => setPurposeText(e.target.value)}
+                                    disabled={busy}
+                                />
+                            </div>
+
+                            {!expense.isPaid && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-gray-600">Příjemce faktury</label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={invoicePayeeName}
+                                            onChange={e => setInvoicePayeeName(e.target.value)}
+                                            disabled={busy}
+                                        />
+                                        {analysis.payee_name && (
+                                            <Button type="button" variant="outline" size="sm"
+                                                onClick={() => setInvoicePayeeName(analysis.payee_name ?? "")}
+                                                disabled={busy}>
+                                                Použít
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <PayeeComparison written={invoicePayeeName} detected={analysis.payee_name} />
+                                </div>
+                            )}
                         </>
                     )}
 
@@ -1427,6 +1517,12 @@ function ReanalyzeDialog({
     const [code, setCode] = useState<"needs_treasurer" | "needs_confirmation" | null>(null);
     const [done, setDone] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [purposeText, setPurposeText] = useState("");
+    const [invoicePayeeName, setInvoicePayeeName] = useState("");
+    const [savingMetadata, setSavingMetadata] = useState(false);
+    const [metadataSaved, setMetadataSaved] = useState(false);
+    const [metadataError, setMetadataError] = useState<string | null>(null);
+    const initializedRef = useRef(false);
 
     const call = useCallback(async (confirmMismatch: boolean) => {
         setRunning(true); setError(null);
@@ -1451,13 +1547,47 @@ function ReanalyzeDialog({
         }
     }, [eventId, expense.id, onUpdated]);
 
-    // Auto-spuštění při otevření
+    // Auto-spuštění při otevření — initializedRef zajistí, že se stav nastaví jen JEDNOU
+    // za otevření dialogu, ne při každé změně `expense` reference (onUpdated() po úspěšné
+    // reanalýze/uložení popisu vyvolá refetch v parentovi → nová `expense` reference →
+    // bez téhle pojistky by se stav uprostřed otevřeného dialogu tiše vynuloval).
     useEffect(() => {
-        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); return; }
+        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); initializedRef.current = false; return; }
+        if (initializedRef.current) return;
+        initializedRef.current = true;
+        setPurposeText(expense.purposeText ?? "");
+        setInvoicePayeeName(expense.invoicePayeeName ?? "");
+        setMetadataSaved(false); setMetadataError(null);
         void call(false);
-    }, [open, call]);
+    }, [open, call, expense]);
 
     const detected = analysis ? analysis.total_amount : null;
+
+    const metadataChanged = purposeText.trim() !== (expense.purposeText ?? "")
+        || (!expense.isPaid && invoicePayeeName.trim() !== (expense.invoicePayeeName ?? ""));
+
+    async function handleSaveMetadata() {
+        const trimmedPurpose = purposeText.trim();
+        if (!trimmedPurpose) { setMetadataError("Doplň účel dokladu"); return; }
+        setSavingMetadata(true); setMetadataError(null);
+        try {
+            const patchBody: Record<string, unknown> = { expenseId: expense.id, purposeText: trimmedPurpose };
+            if (!expense.isPaid) patchBody.invoicePayeeName = invoicePayeeName.trim() || null;
+            const res = await fetch(`/api/events/${eventId}/expenses`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patchBody),
+            });
+            const data = await res.json() as { error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Uložení selhalo");
+            setMetadataSaved(true);
+            onUpdated();
+        } catch (err) {
+            setMetadataError(err instanceof Error ? err.message : "Uložení selhalo");
+        } finally {
+            setSavingMetadata(false);
+        }
+    }
 
     return (
         <Dialog open={open} onOpenChange={o => { if (!running) onOpenChange(o); }}>
@@ -1476,6 +1606,43 @@ function ReanalyzeDialog({
                         <>
                             <AnalysisCard analysis={analysis} />
                             <AmountComparison written={expense.amount} detected={detected} />
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-gray-600">Popis / účel</label>
+                                <Input
+                                    value={purposeText}
+                                    onChange={e => { setPurposeText(e.target.value); setMetadataSaved(false); }}
+                                    disabled={savingMetadata}
+                                />
+                            </div>
+
+                            {!expense.isPaid && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-gray-600">Příjemce faktury</label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={invoicePayeeName}
+                                            onChange={e => { setInvoicePayeeName(e.target.value); setMetadataSaved(false); }}
+                                            disabled={savingMetadata}
+                                        />
+                                        {analysis.payee_name && (
+                                            <Button type="button" variant="outline" size="sm"
+                                                onClick={() => { setInvoicePayeeName(analysis.payee_name ?? ""); setMetadataSaved(false); }}
+                                                disabled={savingMetadata}>
+                                                Použít
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <PayeeComparison written={invoicePayeeName} detected={analysis.payee_name} />
+                                </div>
+                            )}
+
+                            {metadataSaved && (
+                                <p className="text-xs text-green-700 flex items-center gap-1.5">
+                                    <Check size={13} /> Popis/příjemce uloženy.
+                                </p>
+                            )}
+                            {metadataError && <p className="text-xs text-red-500">{metadataError}</p>}
                         </>
                     )}
 
@@ -1503,6 +1670,11 @@ function ReanalyzeDialog({
                         <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={running}>
                             {done ? "Zavřít" : "Zrušit"}
                         </Button>
+                        {analysis && metadataChanged && !metadataSaved && (
+                            <Button variant="outline" size="sm" onClick={handleSaveMetadata} disabled={savingMetadata || running}>
+                                {savingMetadata ? "Ukládám…" : "Uložit popis/příjemce"}
+                            </Button>
+                        )}
                         {code === "needs_confirmation" && isTreasurer && (
                             <Button size="sm" onClick={() => call(true)} disabled={running}>
                                 {running ? "Ukládám…" : "Přesto uložit"}
