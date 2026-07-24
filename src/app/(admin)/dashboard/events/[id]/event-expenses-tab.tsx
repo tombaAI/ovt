@@ -1269,11 +1269,18 @@ function AttachFileDialog({
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const initializedRef = useRef(false);
 
     const hasFile = expense.fileUrl != null;
 
+    // initializedRef zajistí, že se stav nastaví jen JEDNOU za otevření dialogu, ne při
+    // každé změně `expense` reference (onUpdated() po úspěšném uložení vyvolá refetch
+    // v parentovi → nová `expense` reference → bez téhle pojistky by se stav uprostřed
+    // otevřeného dialogu tiše vynuloval, včetně chybové hlášky a fileSaved flagu).
     useEffect(() => {
-        if (!open) return;
+        if (!open) { initializedRef.current = false; return; }
+        if (initializedRef.current) return;
+        initializedRef.current = true;
         setFile(null); setAnalysis(null); setError(null); setConfirmChecked(false); setSaving(false);
         setAmount(expense.amount ? expense.amount.replace(".", ",") : "");
         setPurposeText(expense.purposeText ?? "");
@@ -1282,7 +1289,7 @@ function AttachFileDialog({
         if (fileInputRef.current) fileInputRef.current.value = "";
     }, [open, expense]);
 
-    // Частka pro porovnání: zamčeno → vždy z DB; odemčeno → z editovatelného pole
+    // Částka pro porovnání: zamčeno → vždy z DB; odemčeno → z editovatelného pole
     const compareAmount = lockedForParticipants
         ? expense.amount
         : (amount.replace(",", ".").trim() || null);
