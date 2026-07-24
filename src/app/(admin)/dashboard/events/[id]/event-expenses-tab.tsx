@@ -1358,7 +1358,11 @@ function AttachFileDialog({
             onUpdated();
         } catch (err) {
             setError(err instanceof Error ? err.message : "Chyba ukládání");
-            if (fileSaved) onUpdated(); // soubor a částka se uložily i přes chybu v druhém kroku
+            // Vždy refetchnout — `fileSaved` je tu closure hodnota z okamžiku volání handleSave,
+            // takže po úspěšném uploadu v tomtéž běhu (setFileSaved(true) se projeví až příští
+            // render) by čtení `fileSaved` zde bylo still-stale. Refetch při úplném selhání
+            // (nic se neuložilo) je jen neškodný no-op — initializedRef chrání rozepsaný stav dialogu.
+            onUpdated();
         } finally {
             setSaving(false);
         }
