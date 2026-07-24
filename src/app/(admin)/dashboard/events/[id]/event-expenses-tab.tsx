@@ -1262,7 +1262,10 @@ function AttachFileDialog({
     const [analyzing, setAnalyzing] = useState(false);
     const [analysis, setAnalysis] = useState<ExpenseAnalysis | null>(null);
     const [amount, setAmount] = useState("");
+    const [purposeText, setPurposeText] = useState("");
+    const [invoicePayeeName, setInvoicePayeeName] = useState("");
     const [confirmChecked, setConfirmChecked] = useState(false);
+    const [fileSaved, setFileSaved] = useState(false);
     const [saving, setSaving] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -1273,10 +1276,13 @@ function AttachFileDialog({
         if (!open) return;
         setFile(null); setAnalysis(null); setError(null); setConfirmChecked(false); setSaving(false);
         setAmount(expense.amount ? expense.amount.replace(".", ",") : "");
+        setPurposeText(expense.purposeText ?? "");
+        setInvoicePayeeName(expense.invoicePayeeName ?? "");
+        setFileSaved(false);
         if (fileInputRef.current) fileInputRef.current.value = "";
     }, [open, expense]);
 
-    // Částka pro porovnání: zamčeno → vždy z DB; odemčeno → z editovatelného pole
+    // Частka pro porovnání: zamčeno → vždy z DB; odemčeno → z editovatelného pole
     const compareAmount = lockedForParticipants
         ? expense.amount
         : (amount.replace(",", ".").trim() || null);
@@ -1287,6 +1293,7 @@ function AttachFileDialog({
     async function handleFile(picked: File | undefined) {
         if (!picked) return;
         setFile(picked); setAnalyzing(true); setError(null); setAnalysis(null); setConfirmChecked(false);
+        setFileSaved(false);
         try {
             const small = await prepareFileForGemini(picked);
             const fd = new FormData();
@@ -1304,22 +1311,47 @@ function AttachFileDialog({
 
     async function handleSave() {
         if (!file) return;
+        if (!purposeText.trim()) { setError("Doplň účel dokladu"); return; }
         setSaving(true); setError(null);
         try {
-            const fd = new FormData();
-            fd.append("file", file);
-            fd.append("amount", amount.replace(",", "."));
-            if (mismatch && isTreasurer && confirmChecked) fd.append("confirmMismatch", "true");
-            const res = await fetch(
-                `/api/events/${eventId}/expenses/${expense.id}/attach-file`,
-                { method: "POST", body: fd },
-            );
-            const data = await res.json() as { error?: string };
-            if (!res.ok) throw new Error(data.error ?? "Chyba nahrávání");
+            if (!fileSaved) {
+                const fd = new FormData();
+                fd.append("file", file);
+                fd.append("amount", amount.replace(",", "."));
+                if (mismatch && isTreasurer && confirmChecked) fd.append("confirmMismatch", "true");
+                const res = await fetch(
+                    `/api/events/${eventId}/expenses/${expense.id}/attach-file`,
+                    { method: "POST", body: fd },
+                );
+                const data = await res.json() as { error?: string };
+                if (!res.ok) throw new Error(data.error ?? "Chyba nahrávání");
+                setFileSaved(true);
+            }
+
+            const trimmedPurpose = purposeText.trim();
+            const trimmedPayee = invoicePayeeName.trim();
+            const purposeChanged = trimmedPurpose !== (expense.purposeText ?? "");
+            const payeeChanged = !expense.isPaid && trimmedPayee !== (expense.invoicePayeeName ?? "");
+            if (purposeChanged || payeeChanged) {
+                const patchBody: Record<string, unknown> = { expenseId: expense.id };
+                if (purposeChanged) patchBody.purposeText = trimmedPurpose;
+                if (payeeChanged) patchBody.invoicePayeeName = trimmedPayee || null;
+                const patchRes = await fetch(`/api/events/${eventId}/expenses`, {
+                    method: "PATCH",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify(patchBody),
+                });
+                if (!patchRes.ok) {
+                    const patchData = await patchRes.json() as { error?: string };
+                    throw new Error(patchData.error ?? "Doklad byl uložen, ale popis/příjemce se nepodařilo uložit — zkus to znovu.");
+                }
+            }
+
             onOpenChange(false);
             onUpdated();
         } catch (err) {
-            setError(err instanceof Error ? err.message : "Chyba nahrávání");
+            setError(err instanceof Error ? err.message : "Chyba ukládání");
+            if (fileSaved) onUpdated(); // soubor a částka se uložily i přes chybu v druhém kroku
         } finally {
             setSaving(false);
         }
@@ -1402,6 +1434,36 @@ function AttachFileDialog({
                                         className="mt-0.5" disabled={busy} />
                                     <span>Rozumím, že se zjištěná částka neshoduje se zapsanou, přesto uložit.</span>
                                 </label>
+                            )}
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-gray-600">Popis / účel</label>
+                                <Input
+                                    value={purposeText}
+                                    onChange={e => setPurposeText(e.target.value)}
+                                    disabled={busy}
+                                />
+                            </div>
+
+                            {!expense.isPaid && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-gray-600">Příjemce faktury</label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={invoicePayeeName}
+                                            onChange={e => setInvoicePayeeName(e.target.value)}
+                                            disabled={busy}
+                                        />
+                                        {analysis.payee_name && (
+                                            <Button type="button" variant="outline" size="sm"
+                                                onClick={() => setInvoicePayeeName(analysis.payee_name ?? "")}
+                                                disabled={busy}>
+                                                Použít
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <PayeeComparison written={invoicePayeeName} detected={analysis.payee_name} />
+                                </div>
                             )}
                         </>
                     )}
