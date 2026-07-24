@@ -9,6 +9,9 @@ const baseURL = process.env.E2E_BASE_URL ?? `http://localhost:${PORT}`;
 
 export default defineConfig({
     testDir: "./e2e",
+    // Vitest integrační test (ne Playwright) — Playwright výchozí testMatch matchuje
+    // i *.test.ts, bez týhle výjimky by se ho pokusil spustit a spadl by.
+    testIgnore: "**/gemini/**",
     fullyParallel: true,
     forbidOnly: Boolean(process.env.CI),
     retries: process.env.CI ? 1 : 0,

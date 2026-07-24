@@ -11,6 +11,7 @@
     "test:unit": "vitest run",
     "test:watch": "vitest",
     "test:e2e": "playwright test",
+    "test:gemini": "vitest run --config vitest.gemini.config.ts",
     "test:pdf-smoke": "npm run build && node scripts/pdf-smoke-test.mjs",
     "testgen": "npm run test:pdf-smoke",
     "db:push": "drizzle-kit push",
