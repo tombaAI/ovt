@@ -2453,22 +2453,21 @@ function ExpenseItem({
                         {expense.invoicePayeeName && (
                             <span className="text-xs text-gray-700">{expense.invoicePayeeName}</span>
                         )}
-                        {instrSentAt ? (
+                        {instrSentAt && (
                             <span className="text-[10px] text-green-700 flex items-center gap-1">
                                 <Check size={10} />
                                 Pokyn odeslán {fmtDate(instrSentAt)}
                             </span>
-                        ) : (
-                            <button
-                                onClick={handleSendInvoicePayment}
-                                disabled={sendingInstr}
-                                title="Odeslat pokyn k úhradě hospodáři TJ"
-                                className="text-[11px] font-medium text-orange-700 hover:text-orange-900 border border-orange-200 rounded px-2 py-0.5 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
-                            >
-                                <Send size={10} />
-                                {sendingInstr ? "Odesílám…" : "Odeslat pokyn"}
-                            </button>
                         )}
+                        <button
+                            onClick={handleSendInvoicePayment}
+                            disabled={sendingInstr}
+                            title={instrSentAt ? "Odeslat pokyn k úhradě znovu hospodáři TJ" : "Odeslat pokyn k úhradě hospodáři TJ"}
+                            className="text-[11px] font-medium text-orange-700 hover:text-orange-900 border border-orange-200 rounded px-2 py-0.5 hover:bg-orange-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1"
+                        >
+                            <Send size={10} />
+                            {sendingInstr ? "Odesílám…" : instrSentAt ? "Odeslat znovu" : "Odeslat pokyn"}
+                        </button>
                         {instrError && <span className="text-[11px] text-red-600">{instrError}</span>}
                     </div>
                 )}

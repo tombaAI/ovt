@@ -68,6 +68,7 @@ export async function POST(
                 invoicePayeeName: eventExpenses.invoicePayeeName,
                 fileUrl: eventExpenses.fileUrl,
                 fileName: eventExpenses.fileName,
+                invoicePaymentSentAt: eventExpenses.invoicePaymentSentAt,
             })
             .from(eventExpenses)
             .where(eq(eventExpenses.id, expenseId));
@@ -150,7 +151,7 @@ export async function POST(
                 entityType: "event_expense",
                 entityId: expenseId,
                 action: "send_invoice_payment",
-                changes: { invoicePaymentSentAt: { old: null, new: sentAt.toISOString() } },
+                changes: { invoicePaymentSentAt: { old: expense.invoicePaymentSentAt?.toISOString() ?? null, new: sentAt.toISOString() } },
                 metadata: { eventId, expenseId, purposeText: expense.purposeText, recipient: to },
                 changedBy: session.user.email,
             }),
