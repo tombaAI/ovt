@@ -15,6 +15,7 @@
 - Chybějící/nefunkční `GEMINI_API_KEY` = test **musí spadnout** (ne tiše přeskočit) — `analyzeExpenseFile()` už dnes vyhazuje `ExpenseAnalysisConfigError`, když klíč chybí, takže žádná speciální guard logika v testu není potřeba.
 - `total_amount` výchozí tolerance **0 Kč** (přesná shoda), volitelné `amountTolerance` v konkrétním `expected.json`. `account_code` vždy přesná shoda.
 - Sidecar `expected.json` obsahuje i `approvedAmount` — test musí přes `hasAmountMismatch()` (z `src/lib/expense-mismatch.ts`, beze změny) ověřit, že se identifikace rozporu shoduje s tím, co plyne z `approvedAmount` vs. `total_amount` v sidecaru.
+- Sidecar smí obsahovat **volitelné** pole `payee_name` (`string | null`) — exact-match assert, jen pokud je v `expected.json` přítomné (`"payee_name" in expected`), jinak se nekontroluje. Doplněno 2026-07-24: po nasazení `feat/2026-07-23-vylepseni-popisu-prijemce` na staging přestal být `analysis.payee_name` jen tiché interní pole a je aktivně zobrazený v UI (`PayeeComparison`), viz spec.
 - Žádný hardcoded seznam vzorků v testovacím kódu — vždy dynamický glob adresáře.
 - `GEMINI_API_KEY` jako GitHub Actions **repo secret** — nepřidávat do `.env.local`.
 - Nový workflow `gemini-integration-test.yml` je **oddělený** od `tests.yml` (jiný status check, jiná kategorie testu).
@@ -112,6 +113,10 @@ type ExpectedSample = {
     account_code: ExpenseCategory;
     approvedAmount: number;
     amountTolerance?: number;
+    // Volitelné — jen když je v sidecaru přítomné (`"payee_name" in expected.json`).
+    // Vynechané u vzorků, kde je hlavička/patička dokladu nejednoznačná (víc věrohodných
+    // variant názvu dodavatele) — viz vzorek "Kemp" v e2e/fixtures/gemini-samples/.
+    payee_name?: string | null;
 };
 
 type Sample = {
@@ -166,6 +171,13 @@ describe("Gemini analýza reálných vzorových dokladů", () => {
         // výsledkem Gemini analýzy (viz vzorek "Kemp" — vědomý mismatch kvůli cizí měně).
         const expectMismatch = hasAmountMismatch(expected.approvedAmount, expected.total_amount);
         expect(hasAmountMismatch(expected.approvedAmount, result.total_amount)).toBe(expectMismatch);
+
+        // payee_name je volitelný — jen když je v sidecaru výslovně přítomný (i jako
+        // null, viz vzorky "účtenka"/"čestné prohlášení" — Gemini tam podle promptu
+        // musí vrátit null, ne si vymyslet jméno z merchant pole).
+        if (expected.payee_name !== undefined) {
+            expect(result.payee_name).toBe(expected.payee_name);
+        }
     });
 });
 ```
@@ -445,10 +457,19 @@ git push
 - Bod 1 (test runner, umístění mimo `src/`, žádný Next server): Task 1 ✅
 - Bod 2 (trigger PR na staging+main, samostatný workflow): Task 3 ✅
 - Bod 3 (chybějící klíč = fail): Task 1 Step 5 ověřuje ✅ (žádný extra kód potřeba)
-- Bod 4 (assert styl vč. `approvedAmount` + `hasAmountMismatch`): Task 1 Step 4 ✅
+- Bod 4 (assert styl vč. `approvedAmount` + `hasAmountMismatch`, volitelný `payee_name`): Task 1 Step 4 ✅
 - Bod 5 (dynamický glob, žádný hardcoded seznam): Task 1 Step 4 (`loadSamples()`) ✅
 - Bod 6 (`tests.yml` PR do staging): Task 2 ✅
 - Bod 7 (struktura složek): Task 1 vytváří přesně tuhle strukturu ✅
-- Bod 8 (5 konkrétních vzorků): fixtures už existují v repu (commit `b2efcff`), plán je nevytváří znovu — poznámka v Global Constraints ✅
+- Bod 8 (5 konkrétních vzorků + `payee_name` u 4 z nich): fixtures už existují v repu (commit `b2efcff`, `payee_name` doplněn 2026-07-24 po vizuální kontrole obsahu dokladů), plán je nevytváří znovu — poznámka v Global Constraints ✅
 
 **Riziko navíc odhalené při psaní plánu** (nebylo v zadání): Playwright výchozí `testMatch` by bez `testIgnore` zkusil spustit nový Vitest soubor a rozbil `npm run test:e2e` — ošetřeno v Task 1 Step 3+6.
+
+**Dodatek 2026-07-24** (po nasazení `feat/2026-07-23-vylepseni-popisu-prijemce` na
+staging): `payee_name` doplněn do 4 z 5 `expected.json` na základě přímé vizuální
+kontroly obsahu dokladu (ne odhadu z názvu souboru) — `null` u samo-označených
+"účtenka"/"čestné prohlášení" dokladů, konkrétní jméno jen u `zahranicni-zajezd-isel-bus.xls`
+(jednoznačný jednořádkový dodavatel v hlavičce faktury). Vzorek "Kemp" (Isel) zůstává
+bez `payee_name` — je to sice taky faktura (RECHNUNG), ale hlavička/patička nabízí dvě
+věrohodné varianty názvu dodavatele, exact-match by tam byl křehký na hádání, ne na
+reálné regresi.

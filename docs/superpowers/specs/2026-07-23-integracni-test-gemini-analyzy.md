@@ -80,6 +80,18 @@ XLSX větve (CSV extrakce → textový prompt), ne jen validaci/parsing bez vol�
    jen syrový výstup Gemini analýzy, ale i navazující identifikaci rozporu — reálný
    scénář zahraniční akce, kde doklad je v cizí měně a schválená částka je po přepočtu
    (viz vzorek "Kemp" níže), musí projít jako **očekávaný, ne jako chyba testu**.
+
+   **Doplněno 2026-07-24** po nasazení `feat/2026-07-23-vylepseni-popisu-prijemce` na
+   staging (PR #32): `analysis.payee_name` přestal být jen tiše použité interní pole
+   (`AddExpenseForm`) a je teď aktivně zobrazený/použitelný v UI (`PayeeComparison` v
+   `AttachFileDialog`/`ReanalyzeDialog`), takže jeho správnost teď víc záleží. Sidecar
+   proto smí obsahovat i **volitelné** pole `payee_name` (`string | null`) s exact-match
+   assertem — jen u vzorků, kde je jednoznačně čitelný ze samotného dokladu (jasná
+   faktura s jedním nezaměnitelným řádkem dodavatele, nebo doklad jasně
+   sebe-označený jako "účtenka"/"čestné prohlášení", kde má `payee_name` podle promptu
+   (`expense-analysis.ts`) vyjít `null`). U dokladů, kde je v hlavičce/patičce víc
+   věrohodných variant názvu (viz vzorek "Kemp" — Isel níže), pole radši vynechat, než
+   hádat přesný řetězec a riskovat falešný pád testu.
 5. **Dynamické vyhledávání vzorků:** test **negenerativně** prochází (glob) všechny páry
    `soubor` + `soubor.expected.json` v `e2e/fixtures/gemini-samples/` — žádný hardcoded
    seznam v testovacím kódu. Přidání nového vzorku (edge-case) = jen 2 nové soubory do
@@ -100,13 +112,13 @@ XLSX větve (CSV extrakce → textový prompt), ne jen validaci/parsing bez vol�
    reálných `event_expenses` záznamů, `status: final` (lidská revize = důvěryhodná ground
    truth), pokrývající 2 účetní kategorie a všechny 3 typy souborů:
 
-   | Soubor | Akce / doklad | `account_code` | Poznámka |
-   |---|---|---|---|
-   | `zahranicni-zajezd-isel-bus.xls` | *Zahraniční zájezd - Isel* — "Bus" | 518/009 | |
-   | `zahranicni-zajezd-isel-kemp.jpg` | *Zahraniční zájezd - Isel* — "Kemp" | 518/009 | **záměrný mismatch** — viz níže |
-   | `berounka-platba-za-kemp.jpg` | *Berounka* — "Platba za kemp" | 518/009 | |
-   | `berounka-preprava-batohu.jpg` | *Berounka* — "Přeprava batohů Praha-Skryje, Roztoky a zpět, os. autem s vlekem" | 518/009 | |
-   | `roztoky-u-krivoklatu-pronajem-usd.pdf` | *Roztoky u Křivoklátu* — "Pronájem USD" | 518/001 | 5. vzorek doplněný při grillingu za chybějící PDF |
+   | Soubor | Akce / doklad | `account_code` | `payee_name` | Poznámka |
+   |---|---|---|---|---|
+   | `zahranicni-zajezd-isel-bus.xls` | *Zahraniční zájezd - Isel* — "Bus" | 518/009 | "JAN KUKLA - autobusová doprava" | faktura, jasný dodavatel v hlavičce |
+   | `zahranicni-zajezd-isel-kemp.jpg` | *Zahraniční zájezd - Isel* — "Kemp" | 518/009 | *(nevyplněno)* | **záměrný mismatch** — viz níže; faktura (RECHNUNG), ale 2 věrohodné varianty názvu (hlavička vs. patička), pole vynecháno |
+   | `berounka-platba-za-kemp.jpg` | *Berounka* — "Platba za kemp" | 518/009 | `null` | sebe-označená jako "účtenka" |
+   | `berounka-preprava-batohu.jpg` | *Berounka* — "Přeprava batohů Praha-Skryje, Roztoky a zpět, os. autem s vlekem" | 518/009 | `null` | "Čestné prohlášení nákladu akce" — podtyp "receipt" dle promptu |
+   | `roztoky-u-krivoklatu-pronajem-usd.pdf` | *Roztoky u Křivoklátu* — "Pronájem USD" | 518/001 | `null` | 5. vzorek doplněný při grillingu za chybějící PDF; "PŘÍJMOVÝ POKLADNÍ DOKLAD" = receipt |
 
    Akce u prvních dvou dokladů byla v původním zadání uvedená jako *Zahraniční voda* —
    ten záznam v `event_expenses` ale žádné náklady nemá; doklady "Bus"/"Kemp" reálně
