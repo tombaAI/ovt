@@ -81,6 +81,7 @@ npm run lint         # ESLint
 npm run test:unit    # Vitest — unit testy čistých výpočtů (src/**/*.test.ts)
 npm run test:watch   # Vitest ve watch módu
 npm run test:e2e     # Playwright smoke testy (vyžaduje testovací DB — viz e2e/README.md)
+npm run test:gemini  # integrační test Gemini analýzy dokladů (vyžaduje GEMINI_API_KEY, jinak vždy FAIL)
 npm run db:push      # push Drizzle schema changes to Neon (dev/staging)
 npm run db:studio    # Drizzle Studio — local DB browser
 ```
@@ -304,7 +305,8 @@ See `.env.example` for the full list with Czech comments.
 
 | Workflow | Trigger | Co dělá |
 |---|---|---|
-| `tests.yml` | Push do `staging`, PR do `main` | Unit (lint + tsc + Vitest) a E2E (Playwright + Postgres service) |
+| `tests.yml` | Push do `staging`, PR do `staging`/`main` | Unit (lint + tsc + Vitest) a E2E (Playwright + Postgres service) |
+| `gemini-integration-test.yml` | PR do `staging`/`main` + manuálně | Integrační test Gemini analýzy nad vzorovými doklady (`test:gemini`), vyžaduje `GEMINI_API_KEY` secret |
 | `db-backup.yml` | Každý den 02:00 UTC + manuálně | `pg_dump` → GitHub Artifact, retence 90 dní |
 | `db-migrate.yml` | Push do `main` (jen pokud přibyly `.sql` soubory) | Spustí nové migrace z `supabase/migrations/` přes `psql` |
 | `import-members-tj.yml` | `repository_dispatch` | Webhook pro import členů TJ |
