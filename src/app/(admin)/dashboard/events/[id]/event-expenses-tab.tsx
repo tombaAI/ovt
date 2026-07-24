@@ -1513,6 +1513,12 @@ function ReanalyzeDialog({
     const [code, setCode] = useState<"needs_treasurer" | "needs_confirmation" | null>(null);
     const [done, setDone] = useState(false);
     const [error, setError] = useState<string | null>(null);
+    const [purposeText, setPurposeText] = useState("");
+    const [invoicePayeeName, setInvoicePayeeName] = useState("");
+    const [savingMetadata, setSavingMetadata] = useState(false);
+    const [metadataSaved, setMetadataSaved] = useState(false);
+    const [metadataError, setMetadataError] = useState<string | null>(null);
+    const initializedRef = useRef(false);
 
     const call = useCallback(async (confirmMismatch: boolean) => {
         setRunning(true); setError(null);
@@ -1537,13 +1543,47 @@ function ReanalyzeDialog({
         }
     }, [eventId, expense.id, onUpdated]);
 
-    // Auto-spuštění při otevření
+    // Auto-spuštění při otevření — initializedRef zajistí, že se stav nastaví jen JEDNOU
+    // za otevření dialogu, ne při každé změně `expense` reference (onUpdated() po úspěšné
+    // reanalýze/uložení popisu vyvolá refetch v parentovi → nová `expense` reference →
+    // bez téhle pojistky by se stav uprostřed otevřeného dialogu tiše vynuloval).
     useEffect(() => {
-        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); return; }
+        if (!open) { setAnalysis(null); setCode(null); setDone(false); setError(null); initializedRef.current = false; return; }
+        if (initializedRef.current) return;
+        initializedRef.current = true;
+        setPurposeText(expense.purposeText ?? "");
+        setInvoicePayeeName(expense.invoicePayeeName ?? "");
+        setMetadataSaved(false); setMetadataError(null);
         void call(false);
-    }, [open, call]);
+    }, [open, call, expense]);
 
     const detected = analysis ? analysis.total_amount : null;
+
+    const metadataChanged = purposeText.trim() !== (expense.purposeText ?? "")
+        || (!expense.isPaid && invoicePayeeName.trim() !== (expense.invoicePayeeName ?? ""));
+
+    async function handleSaveMetadata() {
+        const trimmedPurpose = purposeText.trim();
+        if (!trimmedPurpose) { setMetadataError("Doplň účel dokladu"); return; }
+        setSavingMetadata(true); setMetadataError(null);
+        try {
+            const patchBody: Record<string, unknown> = { expenseId: expense.id, purposeText: trimmedPurpose };
+            if (!expense.isPaid) patchBody.invoicePayeeName = invoicePayeeName.trim() || null;
+            const res = await fetch(`/api/events/${eventId}/expenses`, {
+                method: "PATCH",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(patchBody),
+            });
+            const data = await res.json() as { error?: string };
+            if (!res.ok) throw new Error(data.error ?? "Uložení selhalo");
+            setMetadataSaved(true);
+            onUpdated();
+        } catch (err) {
+            setMetadataError(err instanceof Error ? err.message : "Uložení selhalo");
+        } finally {
+            setSavingMetadata(false);
+        }
+    }
 
     return (
         <Dialog open={open} onOpenChange={o => { if (!running) onOpenChange(o); }}>
@@ -1562,6 +1602,43 @@ function ReanalyzeDialog({
                         <>
                             <AnalysisCard analysis={analysis} />
                             <AmountComparison written={expense.amount} detected={detected} />
+
+                            <div className="space-y-1.5">
+                                <label className="text-xs font-medium text-gray-600">Popis / účel</label>
+                                <Input
+                                    value={purposeText}
+                                    onChange={e => { setPurposeText(e.target.value); setMetadataSaved(false); }}
+                                    disabled={savingMetadata}
+                                />
+                            </div>
+
+                            {!expense.isPaid && (
+                                <div className="space-y-1.5">
+                                    <label className="text-xs font-medium text-gray-600">Příjemce faktury</label>
+                                    <div className="flex items-center gap-2">
+                                        <Input
+                                            value={invoicePayeeName}
+                                            onChange={e => { setInvoicePayeeName(e.target.value); setMetadataSaved(false); }}
+                                            disabled={savingMetadata}
+                                        />
+                                        {analysis.payee_name && (
+                                            <Button type="button" variant="outline" size="sm"
+                                                onClick={() => { setInvoicePayeeName(analysis.payee_name ?? ""); setMetadataSaved(false); }}
+                                                disabled={savingMetadata}>
+                                                Použít
+                                            </Button>
+                                        )}
+                                    </div>
+                                    <PayeeComparison written={invoicePayeeName} detected={analysis.payee_name} />
+                                </div>
+                            )}
+
+                            {metadataSaved && (
+                                <p className="text-xs text-green-700 flex items-center gap-1.5">
+                                    <Check size={13} /> Popis/příjemce uloženy.
+                                </p>
+                            )}
+                            {metadataError && <p className="text-xs text-red-500">{metadataError}</p>}
                         </>
                     )}
 
@@ -1589,6 +1666,11 @@ function ReanalyzeDialog({
                         <Button variant="outline" size="sm" onClick={() => onOpenChange(false)} disabled={running}>
                             {done ? "Zavřít" : "Zrušit"}
                         </Button>
+                        {analysis && metadataChanged && !metadataSaved && (
+                            <Button variant="outline" size="sm" onClick={handleSaveMetadata} disabled={savingMetadata || running}>
+                                {savingMetadata ? "Ukládám…" : "Uložit popis/příjemce"}
+                            </Button>
+                        )}
                         {code === "needs_confirmation" && isTreasurer && (
                             <Button size="sm" onClick={() => call(true)} disabled={running}>
                                 {running ? "Ukládám…" : "Přesto uložit"}
