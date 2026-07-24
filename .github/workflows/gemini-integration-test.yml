@@ -10,6 +10,10 @@ on:
     branches: [staging, main]
   workflow_dispatch:
 
+concurrency:
+  group: gemini-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   gemini:
     runs-on: ubuntu-latest

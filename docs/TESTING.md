@@ -268,7 +268,13 @@ do `e2e/fixtures/gemini-samples/`, **bez úpravy testovacího kódu** (dynamick�
    `approvedAmount` != `total_amount` jen když je vzorek záměrně vybraný na testování
    rozporu (např. zahraniční doklad v cizí měně) — jinak stejná hodnota jako
    `total_amount`. Volitelné `amountTolerance`, pokud je u vzorku znám důvod k odchylce
-   od přesné shody.
+   od přesné shody — **pozor:** mismatch cross-check (`hasAmountMismatch()`) se u vzorků
+   s nenulovou `amountTolerance` automaticky neprovádí (viz
+   `expense-analysis.integration.test.ts`), protože přesná shoda na haléře a tolerance
+   na Kč se jinak neslučují. Volitelné pole `payee_name` (`string | null`) — konkrétní
+   jméno jen u jednoznačné faktury s jasným dodavatelem v hlavičce, `null` u dokladu
+   sebe-označeného jako účtenka/čestné prohlášení, pole úplně vynechat, pokud je název
+   dodavatele nejednoznačný (víc věrohodných variant v hlavičce/patičce).
 
 Kontrola citlivých dat (jméno/adresa člena na dokladu) před commitem je na tom, kdo
 vzorek přidává — mimo rozsah automatizace.

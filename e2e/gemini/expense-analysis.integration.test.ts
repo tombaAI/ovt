@@ -43,7 +43,9 @@ type Sample = {
 
 function loadSamples(): Sample[] {
     const entries = readdirSync(FIXTURES_DIR);
-    const sampleFileNames = entries.filter((name) => !name.endsWith(".expected.json"));
+    const sampleFileNames = entries.filter(
+        (name) => !name.startsWith(".") && !name.endsWith(".expected.json"),
+    );
 
     return sampleFileNames.map((fileName) => {
         const filePath = join(FIXTURES_DIR, fileName);
@@ -81,11 +83,17 @@ describe("Gemini analýza reálných vzorových dokladů", () => {
         const tolerance = expected.amountTolerance ?? 0;
         expect(Math.abs(result.total_amount - expected.total_amount)).toBeLessThanOrEqual(tolerance);
 
-        // Cross-check identifikace rozporu: co plyne z approvedAmount vs. total_amount
-        // v sidecaru, musí odpovídat tomu, co hasAmountMismatch() vrátí nad reálným
-        // výsledkem Gemini analýzy (viz vzorek "Kemp" — vědomý mismatch kvůli cizí měně).
-        const expectMismatch = hasAmountMismatch(expected.approvedAmount, expected.total_amount);
-        expect(hasAmountMismatch(expected.approvedAmount, result.total_amount)).toBe(expectMismatch);
+        // Cross-check identifikace rozporu jen pro vzorky s přesnou shodou (tolerance 0).
+        // hasAmountMismatch() srovnává na haléře přesně — u vzorku s nenulovou
+        // amountTolerance by "result.total_amount v toleranci, ale ne přesně rovno
+        // expected.total_amount" mohlo hasAmountMismatch() vrátit jiný verdikt, než plyne
+        // ze sidecaru, i když nejde o skutečný měnový rozpor, jen o legitimní odchylku,
+        // kterou amountTolerance povoluje. Mismatch-assert proto zůstává jen na přesně
+        // shodných vzorcích (viz vzorek "Kemp" — tolerance 0).
+        if (tolerance === 0) {
+            const expectMismatch = hasAmountMismatch(expected.approvedAmount, expected.total_amount);
+            expect(hasAmountMismatch(expected.approvedAmount, result.total_amount)).toBe(expectMismatch);
+        }
 
         // payee_name je volitelný — jen když je v sidecaru výslovně přítomný (i jako
         // null, viz vzorky "účtenka"/"čestné prohlášení" — Gemini tam podle promptu
