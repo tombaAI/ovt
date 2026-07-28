@@ -244,8 +244,17 @@ export async function POST(
       return NextResponse.json({ error: "Akce nemá žádné náklady k vyúčtování." }, { status: 400 });
     }
 
+    // Faktury k úhradě (isPaid=false) se proplácí samostatným pokynem přímo hospodáři
+    // (send-invoice-payment) — do vyúčtování akce nepatří vůbec.
+    const expenses = allExpenses.filter((e) => e.isPaid !== false);
+    if (expenses.length === 0) {
+      return NextResponse.json({
+        error: "Akce má jen faktury k úhradě, které se řeší samostatným pokynem — není co zahrnout do vyúčtování.",
+      }, { status: 400 });
+    }
+
     // Hard block: unconfirmed or draft expenses
-    const unconfirmedExpenses = allExpenses.filter((e) => e.status !== "final");
+    const unconfirmedExpenses = expenses.filter((e) => e.status !== "final");
     if (unconfirmedExpenses.length > 0) {
       return NextResponse.json({
         error: `Nelze odeslat — ${unconfirmedExpenses.length} doklad${unconfirmedExpenses.length === 1 ? "" : "ů"} není potvrzeno.`,
@@ -253,14 +262,9 @@ export async function POST(
       }, { status: 400 });
     }
 
-    const expenses = allExpenses;
-
     // Hard block: missing required fields on final expenses.
-    // Doklady s isPaid=false (faktury k úhradě účetnictvím) nepotřebují příjemce — stejná
-    // výjimka jako v computeBlockingIssues (event-expense-actions.tsx); tahle validace
-    // dřív isPaid vůbec neznala, takže faktury tu vždy spadly na "chybí příjemce".
     const missingRequiredFields = expenses.filter(
-      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || (e.isPaid !== false && !e.reimbursementPersonId),
+      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || !e.reimbursementPersonId,
     );
     if (missingRequiredFields.length > 0) {
       return NextResponse.json({
