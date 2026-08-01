@@ -261,6 +261,12 @@ Vercel cron jobs (defined in `vercel.json`), run daily at 06:00 UTC, require `CR
 - `GET /api/cron/sync-members` — CSK member data sync
 - `GET /api/cron/sync-bank` — Fio Bank transaction sync
 
+Other Bearer-token-gated endpoints (same `isWebhookAuthorized()` helper, `src/app/api/webhooks/_auth.ts`):
+- `POST /api/admin/backfill-analyzed-amount` — one-off backfill of Gemini-analyzed expense amounts, requires `CRON_SECRET`
+- `POST /api/webhooks/import_members_tj_bohemians` — CSK member import, requires `IMPORT_SECRET_TJ`, triggered by GHA workflow `import-members-tj.yml` via `repository_dispatch`
+
+**`isWebhookAuthorized()` fails open**: if the env var isn't set, the request is authorized regardless of the `Authorization` header sent (or not sent). An unset secret means the endpoint is unauthenticated, not blocked — always verify `CRON_SECRET` and `IMPORT_SECRET_TJ` are actually set in Vercel Production (not just referenced in code), especially after adding a new endpoint that uses this helper.
+
 Health check endpoints (no auth required):
 - `GET /api/health` — runtime config status + admin email list
 - `GET /api/health/db` — database connectivity
@@ -286,7 +292,8 @@ MAIL_TEST_TO          # override recipient for test sends
 
 Other integrations:
 ```
-CRON_SECRET           # Bearer token for cron job endpoints
+CRON_SECRET           # Bearer token — gates cron endpoints (sync-bank/sync-members) + admin backfill endpoint. Fail-open if unset, see Cron jobs & API routes above.
+IMPORT_SECRET_TJ      # Bearer token for the TJ member import webhook (repository_dispatch from import-members-tj.yml). Fail-open if unset.
 FIO_API_TOKEN         # Fio Bank API token
 APP_BASE_URL          # override base URL (default: http://localhost:3000)
 ```
