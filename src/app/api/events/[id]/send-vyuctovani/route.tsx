@@ -234,7 +234,6 @@ export async function POST(
         fileUrl: eventExpenses.fileUrl,
         fileName: eventExpenses.fileName,
         isPaid: eventExpenses.isPaid,
-        invoicePayeeName: eventExpenses.invoicePayeeName,
       })
       .from(eventExpenses)
       .leftJoin(people, eq(eventExpenses.reimbursementPersonId, people.id))
@@ -245,8 +244,17 @@ export async function POST(
       return NextResponse.json({ error: "Akce nemá žádné náklady k vyúčtování." }, { status: 400 });
     }
 
-    // Hard block: unconfirmed or draft expenses (i. faktury — PDF vyúčtování shrnuje kompletní náklady)
-    const unconfirmedExpenses = allExpenses.filter((e) => e.status !== "final");
+    // Faktury k úhradě (isPaid=false) se proplácí samostatným pokynem přímo hospodáři
+    // (send-invoice-payment) — do vyúčtování akce nepatří vůbec.
+    const expenses = allExpenses.filter((e) => e.isPaid !== false);
+    if (expenses.length === 0) {
+      return NextResponse.json({
+        error: "Akce má jen faktury k úhradě, které se řeší samostatným pokynem — není co zahrnout do vyúčtování.",
+      }, { status: 400 });
+    }
+
+    // Hard block: unconfirmed or draft expenses
+    const unconfirmedExpenses = expenses.filter((e) => e.status !== "final");
     if (unconfirmedExpenses.length > 0) {
       return NextResponse.json({
         error: `Nelze odeslat — ${unconfirmedExpenses.length} doklad${unconfirmedExpenses.length === 1 ? "" : "ů"} není potvrzeno.`,
@@ -254,13 +262,9 @@ export async function POST(
       }, { status: 400 });
     }
 
-    const expenses = allExpenses;
-
     // Hard block: missing required fields on final expenses.
-    // Faktury k úhradě (isPaid=false) se neproplácí bankovním převodem podle tohoto mailu —
-    // nepotřebují příjemce/účet, řeší se samostatným pokynem (send-invoice-payment).
     const missingRequiredFields = expenses.filter(
-      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || (e.isPaid !== false && !e.reimbursementPersonId),
+      (e) => !e.amount || Number(e.amount) <= 0 || !e.purposeText || !e.reimbursementPersonId,
     );
     if (missingRequiredFields.length > 0) {
       return NextResponse.json({
@@ -308,12 +312,6 @@ export async function POST(
 
     const settlementBuffer = Buffer.from(await renderToBuffer(<VyuctovaniDocument data={settlementData} />));
 
-    // Faktury k úhradě (isPaid=false) se neproplácí bankovním převodem podle tohoto mailu —
-    // do skupin příjemců (bankovní převody) nepatří, jen do samostatného info přehledu níže.
-    const reimbursableExpenses = expenses.filter((e) => e.isPaid !== false);
-    const invoiceExpenses = expenses.filter((e) => e.isPaid === false);
-    const invoiceTotal = invoiceExpenses.reduce((s, e) => s + Number(e.amount), 0);
-
     // Group expenses by beneficiary
     type PayeeGroup = {
       personId: number | null;
@@ -325,7 +323,7 @@ export async function POST(
       total: number;
     };
     const groupMap = new Map<string, PayeeGroup>();
-    for (const expense of reimbursableExpenses) {
+    for (const expense of expenses) {
       const key = String(expense.reimbursementPersonId ?? "__none__");
       if (!groupMap.has(key)) {
         groupMap.set(key, {
@@ -446,64 +444,6 @@ export async function POST(
         </tr>`;
     }).join(`<tr><td colspan="3" style="padding:8px 0;background:#ffffff;"></td></tr>`);
 
-    // HTML: informativní přehled faktur — hradí se fakturou přímo z účetnictví, ne převodem podle tohoto mailu
-    const invoiceRowsHtml = invoiceExpenses.map((e) => `
-      <tr>
-        <td style="padding:5px 10px;border-bottom:1px solid #fef3c7;font-size:13px;color:#374151;">${escapeHtml(e.purposeText ?? "")}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #fef3c7;font-size:13px;color:#374151;">${escapeHtml(e.invoicePayeeName ?? "—")}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #fef3c7;font-size:12px;font-family:monospace;color:#6b7280;">${escapeHtml(e.purposeCategory ?? "")}</td>
-        <td style="padding:5px 10px;border-bottom:1px solid #fef3c7;font-size:13px;text-align:right;white-space:nowrap;color:#374151;">${formatAmount(Number(e.amount))}&nbsp;Kč</td>
-      </tr>`).join("");
-
-    const invoiceSectionHtml = invoiceExpenses.length === 0 ? "" : `
-      <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
-        Faktury k úhradě &mdash; mimo tento mail
-      </p>
-      <p style="margin:0 0 10px;font-size:13px;color:#92400e;background:#fffbeb;border:1px solid #fde68a;border-radius:6px;padding:8px 12px;line-height:1.5;">
-        Součástí nákladů akce jsou i faktury hrazené přímo z účetnictví oddílu. Jen pro
-        přehled &mdash; <strong>neproplácí se převodem podle tohoto mailu</strong>, platba
-        se řeší samostatným pokynem k úhradě faktury.
-      </p>
-      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #fde68a;border-radius:8px;overflow:hidden;margin:0 0 24px;">
-        <thead>
-          <tr style="background:#fffbeb;">
-            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;">Účel nákladu</th>
-            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;">Dodavatel</th>
-            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;">Kód</th>
-            <th style="padding:7px 10px;text-align:right;font-size:11px;color:#92400e;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
-          </tr>
-        </thead>
-        <tbody>${invoiceRowsHtml}</tbody>
-        <tfoot>
-          <tr style="background:#fef3c7;border-top:2px solid #fde68a;">
-            <td colspan="3" style="padding:8px 10px;font-weight:700;font-size:12px;color:#92400e;">Celkem faktury (mimo tento mail)</td>
-            <td style="padding:8px 10px;font-weight:700;font-size:13px;text-align:right;white-space:nowrap;color:#92400e;">${formatAmount(invoiceTotal)}&nbsp;Kč</td>
-          </tr>
-        </tfoot>
-      </table>`;
-
-    const reimbursementSectionHtml = payeeGroups.length === 0 ? "" : `
-      <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
-        Proplacení nákladů &mdash; podúčet oddílu 207
-      </p>
-
-      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 24px;">
-        <thead>
-          <tr style="background:#f3f4f6;">
-            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účel nákladu</th>
-            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Kód</th>
-            <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
-          </tr>
-        </thead>
-        <tbody>${payeeGroupsHtml}</tbody>
-        <tfoot>
-          <tr style="background:#dcfce7;border-top:2px solid #86efac;">
-            <td colspan="2" style="padding:10px 10px;font-weight:700;font-size:13px;color:#111827;">Celkem k proplacení</td>
-            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:#15803d;">${formatAmount(total)}&nbsp;Kč</td>
-          </tr>
-        </tfoot>
-      </table>`;
-
     const senderDisplay = session.user.name?.trim()
       ? `${session.user.name.trim()} (${session.user.email})`
       : session.user.email;
@@ -531,9 +471,26 @@ export async function POST(
         včetně všech dokladů. CSV příloha obsahuje přehled pro bankovní převody.
       </p>
 
-      ${reimbursementSectionHtml}
+      <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
+        Proplacení nákladů &mdash; podúčet oddílu 207
+      </p>
 
-      ${invoiceSectionHtml}
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 24px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účel nákladu</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Kód</th>
+            <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
+          </tr>
+        </thead>
+        <tbody>${payeeGroupsHtml}</tbody>
+        <tfoot>
+          <tr style="background:#dcfce7;border-top:2px solid #86efac;">
+            <td colspan="2" style="padding:10px 10px;font-weight:700;font-size:13px;color:#111827;">Celkem k proplacení</td>
+            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:#15803d;">${formatAmount(total)}&nbsp;Kč</td>
+          </tr>
+        </tfoot>
+      </table>
 
       <!-- Podpisy: připravil + schválil -->
       <table width="100%" cellpadding="0" cellspacing="0"
@@ -582,12 +539,6 @@ export async function POST(
       return `${g.payeeName} | ${account} | celkem ${formatAmount(g.total)} Kč\n${itemLines}\nZpráva: ${g.paymentMessage}`;
     }).join("\n\n");
 
-    const invoiceTextSection = invoiceExpenses.length === 0 ? "" : `\n\nFaktury k úhradě (mimo tento mail, hradí se přímo z účetnictví, neproplácí se převodem podle tohoto mailu):\n${
-      invoiceExpenses.map((e) =>
-        `  - ${e.purposeText} (${e.purposeCategory}) — ${e.invoicePayeeName ?? "—"}: ${formatAmount(Number(e.amount))} Kč`,
-      ).join("\n")
-    }\nCelkem faktury: ${formatAmount(invoiceTotal)} Kč`;
-
     const resend = getResendClient();
     const to = settings.testTo ? [settings.testTo] : recipients;
     const { data, error } = await resend.emails.send({
@@ -595,7 +546,7 @@ export async function POST(
       to,
       subject: `OVT vyúčtování akce: ${event.name}`,
       html,
-      text: `Vyúčtování akce: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč${invoiceTextSection}`,
+      text: `Vyúčtování akce: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
       replyTo: settings.replyTo,
       attachments,
     });
