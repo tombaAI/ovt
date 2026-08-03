@@ -40,6 +40,8 @@ Zdroje: [oficiální stránka ČPV na kanoe.cz](https://www.kanoe.cz/vodni-turis
 | Dospělí a junioři — dospělí | K1 muži (K1m), K1 ženy (K1ž), C1, C2 dospělí (C2d) | dovrší 21+ → ročníky 2005 a starší |
 | Bez určení věku | GTX (nafukovací kánoe/kajak), K2 (dvoumístný kajak) | bez věkového omezení; K2 se nepočítá do celkového hodnocení seriálu |
 
+Oficiální vzor přihlášky 2026 (XLSX) obsahuje číselník kategorií s těmito kódy a názvy: **K1M** (Kajak muži), **K1Ž** (Kajak ženy), **K1H** (Kajak hoši), **K1D** (Kajak dívky), **C1** (Singlkanoe), **C2** (Deblkanoe), **C2M** (Deblkanoe mládež), **GTX** (Deblkanoe nafukovací), **K2** (Deblkajak) — náš číselník převezme tyto kódy. Pozor na drobný nesoulad: text pravidel používá pro dospělou deblkanoi zkratku „C2d“, formulář kód „C2“. GTX je dle formuláře výslovně dvoumístná nafukovací kánoe (posádka 2 osob).
+
 Doplňující pravidla podstatná pro datový model:
 
 - Start mládeže mezi dospělými/juniory je nepřípustný; **výjimka jen C2d** — smíšená posádka je zařazena podle staršího člena (bod 1.5).
@@ -71,7 +73,7 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 - Veřejná stránka (bez přihlášení) s formulářem odpovídajícím papírové přihlášce: hlavička (oddíl, číslo oddílu / „N“, kontaktní osoba, telefon, e-mail, adresa) + libovolný počet řádků závodníků (jméno, příjmení, kategorie z číselníku, reg. č. ČSK VT / rok narození).
 - Deblové kategorie (C2m, C2d, K2, GTX): UI musí umět svázat dva řádky do jedné lodi (posádky). Validace: posádka má právě 2 členy, kategorie obou řádků se shoduje, C2d smí kombinovat věkové skupiny.
 - Měkké validace podle pravidel: ročník vs. kategorie (mládež/junioři/dospělí), duplicitní závodník v téže kategorii, chybějící reg. číslo i rok narození. Tvrdě blokovat jen skutečné nesmysly — přihlašuje se i pro cizí lidi a organizátor musí umět cokoli opravit.
-- Souhlas s pravidly ČPV, bezpečnostními podmínkami a zpracováním osobních údajů (checkbox + plné znění prohlášení z papírové přihlášky) — zaznamenat kdy/kdo/odkud.
+- Stvrzení prohlášení (pravidla ČPV, bezpečnostní podmínky, vzetí na vědomí informace o zpracování osobních údajů — přesné znění převzít z oficiálního vzoru 2026): checkbox + zaznamenat kdy/kdo/odkud.
 - Po odeslání: potvrzovací e-mail na kontaktní adresu s rekapitulací, platebními údaji a odkazem pro úpravy. Zvážit ověření e-mailu ještě před potvrzením přihlášky (překlep v e-mailu = ztracený přístup i nedoručitelné platební údaje).
 
 ### 2. Předpis platby
@@ -173,7 +175,7 @@ Jen rámcově — bude samostatné zadání:
 ## Nefunkční požadavky a architektonické poznámky
 
 - **První veřejná část systému.** Dosud je celá aplikace za admin loginem (Google OAuth + whitelist). Přihlašovací formulář a edit-linky jsou veřejné → nový bezpečnostní perimetr: tokeny s dostatečnou entropií, rate limiting, žádný únik osobních dat mezi přihláškami, oddělení od admin API. Zásadní bod pro grilování.
-- **GDPR:** sbíráme osobní údaje cizích lidí (jména, ročníky, reg. čísla, kontakty). Souhlas je součástí prohlášení na přihlášce (převzít text z oficiálního vzoru); dořešit retenci po závodě (výsledky vyžadují jména + reg. čísla trvale, kontakty ne) a informační povinnost na formuláři.
+- **GDPR:** sbíráme osobní údaje cizích lidí (jména, ročníky, reg. čísla, kontakty). Oficiální vzor 2026 už nepracuje se souhlasem, ale s **informací o zpracování na základě oprávněného zájmu pořadatele**: kontaktní údaje kontaktní osoby se uchovávají do konce soutěžního roku a poté se likvidují; jméno, příjmení a rok narození závodníka slouží k identifikaci a rozřazení a zveřejňují se ve výsledkových listinách. Online systém tento režim převezme (informační povinnost na formuláři, retence/anonymizace kontaktů po konci soutěžního roku); u online plateb navíc dořešit retenci platebních údajů (protiúčty) vůči účetním povinnostem.
 - **Audit všeho** — stejný standard jako zbytek systému (`audit_log`), včetně akcí provedených účastníkem přes token (aktér = přihláška/token, ne admin e-mail).
 - **E-maily přes Resend** — potvrzení, rekapitulace změn, platební údaje, edit-linky; pozor na kvóty a doručitelnost (SPF/DKIM už vyřešeno pro is.ovtbohemians.cz).
 - **Vztah k existujícímu modulu akcí:** předpisy „H“ řady jsou obdobou `event_payment_prescriptions`; přihláškový model (registrace s více osobami, edit-link) je obdobou `event_registrations`. Při grilování rozhodnout: rozšíření stávajících tabulek vs. samostatné tabulky pro závod (kandidát: samostatné — veřejný závod má jinou strukturu řádků/posádek a jiný lifecycle, sdílet jen ledger + párování).
@@ -181,7 +183,7 @@ Jen rámcově — bude samostatné zadání:
 
 ## Otevřené otázky
 
-1. **Podpis / kvalifikované stvrzení prohlášení.** Papírový podpis stvrzuje bezpečnostní prohlášení + souhlas s GDPR (u nezletilých podpis osoby povinné dohledem). Jak nahradit online? Kandidáti: (a) checkbox + auditovaný záznam (kdo, kdy, IP) — právně nejslabší, ale bezbariérové; (b) potvrzení odkazem z e-mailu (double opt-in); (c) podpisová listina vytištěná ze systému a podepsaná fyzicky při prezenci v sobotu (kombinuje online data s papírovým podpisem — dnes fakticky nejblíž současné praxi); (d) kombinace a + c. **Necháno otevřené na pokyn uživatele.**
+1. **Podpis / kvalifikované stvrzení prohlášení.** Papírový podpis stvrzuje bezpečnostní prohlášení + vzetí na vědomí informace o zpracování osobních údajů (u nezletilých podpis osoby povinné dohledem). Jak nahradit online? Kandidáti: (a) checkbox + auditovaný záznam (kdo, kdy, IP) — právně nejslabší, ale bezbariérové; (b) potvrzení odkazem z e-mailu (double opt-in); (c) podpisová listina vytištěná ze systému a podepsaná fyzicky při prezenci v sobotu (kombinuje online data s papírovým podpisem — dnes fakticky nejblíž současné praxi); (d) kombinace a + c. **Necháno otevřené na pokyn uživatele.**
 2. **Přesný název, termín a startovné závodu** — doplnit (odvozený víkend 3.–4. 10. 2026; startovné X Kč/osoba).
 3. **Mapování „H“ řady na variabilní symbol** — VS musí být numerický; jak přesně kóduje řadu (např. VS = `8` + pořadové číslo?), jednotný vs. per-předpis VS.
 4. **Osud neproplacených přeplatků** — vratka na žádost; co s přeplatky, o které si nikdo neřekne (propadají? aktivně vracíme vše po závodě?).
@@ -192,9 +194,11 @@ Jen rámcově — bude samostatné zadání:
 
 ## Vazby a podklady
 
-- `zadani/Prihl_CPV_2016_Blanice.pdf` — vzor papírové přihlášky (podklad od uživatele).
+- `zadani/Pravidla_CPV_2026_full.pdf` — oficiální pravidla ČPV 2026, lokální kopie ([originál na kanoe.cz](https://www.kanoe.cz/img/turistika/2026/Pravidla_CPV_2026_full.pdf), ověřeno checksum).
+- `zadani/Prihl_CPV_vzor.xlsx` — oficiální vzor přihlášky 2026 s číselníkem kategorií a GDPR doložkou ([originál](https://www.kanoe.cz/img/turistika/2026/Prihl_CPV_vzor.xlsx)).
+- `zadani/Prihl_CPV_2016_Blanice.pdf` — historický vzor papírové přihlášky 2016 (podklad od uživatele; struktura shodná se vzorem 2026, liší se GDPR text — 2016 „souhlas“, 2026 „informace o zpracování“).
 - `zadani/csk_data-utf-2026-04-08-22-59-48.csv` — export členů našeho oddílu z ČSK databáze (struktura dat pro větev 1).
-- [Pravidla ČPV 2026 (PDF, kanoe.cz)](https://www.kanoe.cz/img/turistika/2026/Pravidla_CPV_2026_full.pdf), [vzor přihlášky 2026 (XLSX)](https://www.kanoe.cz/img/turistika/2026/Prihl_CPV_vzor.xlsx), [stránka ČPV](https://www.kanoe.cz/vodni-turistika/pyranha-cup-cpv), [výsledky zavody-cpv.cz](http://www.zavody-cpv.cz).
+- [Stránka ČPV na kanoe.cz](https://www.kanoe.cz/vodni-turistika/pyranha-cup-cpv), [výsledky zavody-cpv.cz](http://www.zavody-cpv.cz).
 - [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md) — přihlášky na oddílové akce (edit-link princip, předpisy, zálohy) — ideový předchůdce.
 - [2026-04-10-rekonciliace-plateb-v1.md](2026-04-10-rekonciliace-plateb-v1.md) — payment ledger, auto-match, split alokace — platební základ, na kterém stavíme.
 - [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) — mechanismus změny částky předpisu (otevřená otázka 6).
