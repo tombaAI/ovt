@@ -19,7 +19,9 @@ OVT Bohemians na podzim 2026 pořádá závod seriálu **Český pohár vodáků
 
 Systém musí být robustní, intuitivní pro účastníky, s jasným přehledem pro organizátora, odolný proti náhodným „ukliknutím“ (účastníků i organizátora) a plně auditovaný.
 
-**Termíny (odvozeno, potvrdit):** deadline změn přihlášek = neděle **27. 9. 2026** („7 dní před akcí“) → akce se koná o víkendu **3.–4. 10. 2026**. Přesný název a termín závodu doplnit (pravděpodobně tradiční podzimní pražský závod ČPV — potvrdit u uživatele).
+**Termíny (odvozeno, potvrdit):** deadline změn přihlášek = neděle **27. 9. 2026** („7 dní před akcí“) → akce se koná o víkendu **3.–4. 10. 2026**. Jde o náš tradiční závod **„Hamerák“**; přesný oficiální název v kalendáři ČPV a termín doplnit.
+
+**Referenční rámec:** řídíme se pravidly, vzorem přihlášky a stavem ČPV/ČSK **platnými pro rok 2026**.
 
 ## Kontext: co je ČPV (rešerše)
 
@@ -191,6 +193,8 @@ Jen rámcově — bude samostatné zadání:
 6. **Rozdílový předpis vs. přepis částky** u nezaplaceného předpisu (scénář 14/16) — jednodušší UX vs. čistší účetní stopa; souvisí s již zgrilovaným mechanismem návrh/potvrzení změny částky předpisu ([2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md)).
 7. **Ověření e-mailu před vznikem přihlášky** (double opt-in) — ano/ne; chrání proti překlepům a spamu, přidává tření.
 8. **Vícejazyčnost** — stačí čeština? (ČPV je česká soutěž; předpoklad: ano, jen česky.)
+9. **Účast závodníků do 18 let na Hameráku** — pojedou dětské a mládežnické kategorie (mládež K1H, K1D, C2M), případně junioři mladší 18 let? Rozhodnutí pořadatele. Dopad: rozsah číselníku kategorií ve formuláři, stvrzení osobou povinnou dohledem (otázka 1), pravidlo „do 18 let přihlašuje vysílající složka“ (bod 1.7), případná úprava trati pro mládež (bod 4.7 pravidel).
+10. **Využití dat ČSK — rozsah a režim.** Co a v jakém režimu můžeme z databáze ČSK využít, aby to bylo vyvážené mezi GDPR a praktičností/UX — škála od žádných dat, přes veřejný číselník oddílů (název + číslo), až po našeptávání členů po ověření správce (viz větev 1). Řídíme se stavem platným pro rok 2026; k projednání s ČSK.
 
 ## Vazby a podklady
 
