@@ -4,9 +4,11 @@ status: navrh
 
 # Zadání: Dotace převyšující náklad účastníka — nevyužitá část propadá
 
-> **Stav: Návrh.** Analýza problému a návrh řešení; čeká na grilování. Navazuje na kanonický algoritmus [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) (kroky 6–7).
+> **Stav: POZASTAVENO (2026-08-03).** Analýza problému a volba řešení (varianta B, water-filling) jsou hotové a platí. Realizace čeká na samostatné zadání [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) — obecný mechanismus „návrh vs. platná částka" pro `eventPaymentPrescriptions`. Bez něj by nasazení opravy algoritmu tiše změnilo částku u přihlášek, které už mají vygenerovaný (byť nezaplacený) předpis — viz „Zpětná kompatibilita" níže, teď nahrazená obecným mechanismem místo speciálního pinningu.
 >
-> **Rozhodnuto uživatelem (2026-07-09):** řešením je **varianta B (water-filling redistribuce)**. Závazné omezení: **u akcí, kde už jsou předpisy vygenerované, se výpočet nesmí změnit** — viz sekce „Zpětná kompatibilita".
+> Navazuje na kanonický algoritmus [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) (kroky 6–7).
+>
+> **Rozhodnuto uživatelem (2026-07-09):** řešením je **varianta B (water-filling redistribuce)**.
 
 ## Problém (jak ho vnímá uživatel)
 
@@ -80,25 +82,18 @@ Ukázat skutečný `totalCost` a rozlišit „dotace využitá / nevyužitá". N
 
 **Rozhodnutí (2026-07-09): Varianta B.** Cap z varianty A je v ní obsažen inherentně a naplňuje záměr dotace (podpora členů, ne papírové číslo).
 
-## Zpětná kompatibilita — akce s vygenerovanými předpisy se NEsmí přepočítat (závazné)
+## Zpětná kompatibilita — řeší obecný mechanismus, ne speciální pinning
 
-`getEventSettlement` počítá vždy živě, takže změna algoritmu by okamžitě změnila zobrazená čísla i u akcí, kde už byly předpisy vygenerované (a případně rozeslané e-maily / spárované platby). To je nepřijatelné — **jednou vygenerované předpisy musí navždy odpovídat algoritmu, kterým vznikly**. Pozor: gate podle aktuálního `billing_status` nestačí, protože `unlockBilling` vrací akci do `draft` (předpisy se nemažou) — akce „kdysi prescribed, teď draft" by tiše přeskočila na nový algoritmus.
+Původní návrh tady řešil zpětnou kompatibilitu speciálním sloupcem `events.settlement_algo_version` (pinning verze algoritmu per akce, s migrací a backfillem). Při rozboru vyšlo najevo, že jde o **instanci obecnějšího problému**: libovolná budoucí příčina přepočtu (ne jen tahle oprava) může u už vygenerovaného předpisu dát jiné číslo. Řešení je proto přesunuté do samostatného zadání [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) — mechanismus „návrh vs. platná částka" na úrovni `eventPaymentPrescriptions`, který funguje pro libovolnou příčinu přepočtu, nejen pro tuhle opravu.
 
-**Řešení: verze algoritmu uložená na akci (pinning).**
-
-- Nový sloupec `events.settlement_algo_version` (`integer NOT NULL`): `1` = plošná dotace (dnešní krok 6), `2` = water-filling (varianta B).
-- **Migrace (backfill):** existující akce, u kterých kdy proběhlo generování předpisů, dostanou `1`; ostatní `2`. Kritérium „kdy proběhlo generování": `billing_status = 'prescribed'` **NEBO** existuje settlement předpis s `amount > 0` **NEBO** jakýkoli předpis akce s `email_sent_at IS NOT NULL` / `status IN ('matched','paid')` (pokrývá i akce po `unlockBilling`). Default sloupce pro nové akce: `2`.
-- `getEventSettlement` čte verzi z akce a podle ní volá starý (`computeSubsidyPerMember` plošně) nebo nový (`computeSubsidyAmounts`) výpočet dotace. Zbytek algoritmu (kroky 1–5, 7–8) je pro obě verze společný.
-- Verze se **nikdy automaticky nemění** — ani při `unlockBilling` + `regeneratePrescriptions` staré akce. Případný explicitní admin přechod staré akce na v2 je otevřená otázka (viz níže), default je žádný.
-- Starý kód kroku 6 se tedy neodstraňuje — zůstává jako verze 1 vedle verze 2, obojí kryté unit testy.
+**Důsledek pro nasazení této opravy:** až bude mechanismus návrh/potvrzení hotový, nasazení nového `computeSubsidyAmounts` (water-filling) u akcí s už vygenerovaným (i nezaplaceným) předpisem vytvoří `proposedAmount` místo tichého přepisu — hospodář ho pak potvrdí jednotlivě/hromadně/částečně stejně jako u jakékoli jiné budoucí změny. Žádný sloupec ani migrace specifické pro tuhle opravu už nejsou potřeba.
 
 ## Dotčená místa
 
 | Místo | Změna |
 |---|---|
 | `src/lib/settlement-calc.ts` | nová čistá funkce (např. `computeSubsidyAmounts(subsidyTotal, membersWithCosts) → Map<key, number>`), nahradí prosté `computeSubsidyPerMember` + plošné přiznání |
-| `src/lib/actions/event-settlement.ts` (`getEventSettlement`, ~ř. 387–410) | volat výpočet dle `settlement_algo_version` akce; `subsidyAmount` per účastník místo konstanty |
-| `src/db/schema.ts` + migrace `supabase/migrations/` | sloupec `events.settlement_algo_version` (default `2`) + backfill `1` pro akce s kdy vygenerovanými předpisy |
+| `src/lib/actions/event-settlement.ts` (`getEventSettlement`, ~ř. 387–410) | `subsidyAmount` per účastník místo konstanty; nasazení chráněno mechanismem z [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md), žádná vlastní schema změna zde |
 | `2026-06-24-vypocet-nakladu-akce.md` | aktualizovat krok 6 (a poznámku ke kroku 7) po schválení |
 | UI Náklady/Platby + e-mail s předpisem | beze změny vzorců (`finalAmount + subsidyAmount` dál platí); zvážit řádek „dotace nevyužitá — zůstává klubu" v souhrnu akce |
 | unit testy (`settlement-calc.test.ts`) | testy nové funkce — viz níže |
@@ -113,21 +108,21 @@ Nejdřív **regresní test reprodukující dnešní chování** (člen s `totalC
 4. Σ nákladů všech členů < subsidyTotal → každý dostane svůj náklad, zbytek explicitně nevyužit (`Σ subsidyAmount < subsidyTotal`).
 5. `totalMemberParticipants = 0` → prázdný výsledek (dnešní chování zachováno).
 6. Invarianty na náhodných vstupech: `Σ ≤ subsidyTotal`, žádné záporné, `finalAmount ≥ 0`.
-7. **Pinning verze**: akce s `settlement_algo_version = 1` dává přesně dnešní čísla (regrese fixture beze změny); verze `2` water-filling. Backfill migrace ověřit na staging DB (akce „Isel" má být `1`).
+7. **Nasazení u akcí s existujícím předpisem**: regresní test/scénář ověřující, že změna výsledné částky projde jako `proposedAmount` (mechanismus z navazujícího zadání), ne jako tichý přepis.
 
 ## Rozhodnuto (2026-07-09)
 
 - **Varianta B (water-filling)** — vybráno uživatelem.
-- **Žádná změna výpočtu u akcí s vygenerovanými předpisy** — řešeno pinningem `settlement_algo_version` (viz „Zpětná kompatibilita").
+- **Žádná tichá změna výpočtu u akcí s vygenerovanými předpisy** — řešeno obecným mechanismem návrh/potvrzení, viz [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) (nahrazuje dřívější nápad s `settlement_algo_version` pinningem).
 
 ## Otevřené otázky (ke grilování)
 
 1. **Zaokrouhlení capu**: člen s `totalCost = 100,6` — dotace `floor(100,6) = 100` znamená doplatek `ceil(0,6) = 1 Kč` (drobná platba „za nic"), dotace `ceil(100,6) = 101` znamená přiznat o <1 Kč víc než náklad. Co je pro hospodáře přijatelnější? (Návrh: `ceil` u kapnutých členů — nikdo neplatí haléřové doplatky; invariant Σ ≤ subsidyTotal je třeba doložit/ošetřit.)
 2. Má se v souhrnu akce zobrazovat trojice „dotace schválená / využitá / nevyužitá"?
-3. Má mít admin možnost **explicitně** převést starou akci (verze 1) na water-filling (verze 2) — např. při vědomém odemčení a přegenerování předpisů? Default návrhu: ne, verze je neměnná.
 
 ## Vazby
 
+- [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) — **prerekvizita nasazení**, obecný mechanismus návrh/potvrzení, na kterém tahle oprava závisí.
 - [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) — kanonický algoritmus (kroky 6–7 se mění, ostatní beze změny).
 - [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) — pravidlo „regresní test před fixem výpočtu".
 - Fixture: akce „Zahraniční zájezd – Isel" (staging, event id 4) — pozor, žádný člen tam dnes nemá `totalCost < 263`, pro testy je třeba syntetický případ (unit test, ne staging data).
