@@ -19,7 +19,7 @@ OVT Bohemians na podzim 2026 pořádá závod seriálu **Český pohár vodáků
 
 Systém musí být robustní, intuitivní pro účastníky, s jasným přehledem pro organizátora, odolný proti náhodným „ukliknutím“ (účastníků i organizátora) a plně auditovaný.
 
-**Termíny (odvozeno, potvrdit):** deadline změn přihlášek = neděle **27. 9. 2026** („7 dní před akcí“) → akce se koná o víkendu **3.–4. 10. 2026**. Jde o náš tradiční závod **„Hamerák“**; přesný oficiální název v kalendáři ČPV a termín doplnit.
+**Termíny (potvrzeno uživatelem):** závod — náš tradiční **„Hamerák“** — je v sobotu **3. 10. 2026**; deadline samoobslužných změn přihlášek = neděle **27. 9. 2026** („7 dní před akcí“); odvolání „pevného startu předem“ do čtvrtka **1. 10. 2026** večer (větev 2). Přesný oficiální název závodu v kalendáři ČPV doplnit.
 
 **Referenční rámec:** řídíme se pravidly, vzorem přihlášky a stavem ČPV/ČSK **platnými pro rok 2026**.
 
@@ -162,7 +162,17 @@ Jen rámcově — bude samostatné zadání + podklady pro jednání s ČSK:
 
 - ČSK vede databázi oddílů; každý oddíl má správce a členy. Idea: přihlašovatel vybere oddíl z **našeptávače** (adresář oddílů ČSK je poloveřejný — název + číslo oddílu) a zadá — **bez nápovědy, jako důkaz oprávnění** — e-mail správce oddílu. Pokud se shoduje s ČSK evidencí, začneme mu **našeptávat členy oddílu** (jméno, příjmení, reg. číslo, ročník → automatické zařazení do kategorie). To by byl gamechanger: bezchybná reg. čísla, žádné překlepy, rychlé vyplnění.
 - Co máme v ruce: vlastní oddílový export z ČSK (`zadani/csk_data-utf-2026-04-08-22-59-48.csv`) se strukturou `PRIJMENI; JMENO; DATUM_NAROZENI; ADRESA; OBEC; E-MAIL; TELEFON; FUNKCE; REG_CISLO; TR_TRIDA; ROZH_TRIDA; NSA-*; CLEN-OD/DO; SPORTOVEC-OD/DO; PROHLIDKA-OD/DO` — tj. ČSK data obsahují vše potřebné pro našeptávání (a víc, než bychom směli použít).
-- K projednání s ČSK (seed, doplníme): právní titul a rozsah (jen jméno + reg. číslo + ročník?), API vs. periodický export, ověření správce (e-mail v evidenci vs. jiný mechanismus), příznak uhrazených příspěvků (definice „registrovaného závodníka“ dle 1.6 — pro pořadatele zajímavé, možná mimo rozsah), souhlas oddílů, retence dat po závodě.
+- **Eskalační škála využití ČSK dat** (od nejmenšího zásahu po gamechanger — lze jednat postupně, každý stupeň má samostatnou hodnotu):
+  1. *Číselník oddílů* — název + číslo oddílu pro našeptávač v hlavičce přihlášky (adresář je poloveřejný, nejmenší GDPR zátěž).
+  2. *Validace reg. čísla* — dotaz „existuje reg. číslo X a patří oddílu Y?“ (ano/ne, žádná osobní data k nám netečou; eliminuje překlepy = administrativní pochybení dle 6.8–6.10).
+  3. *Našeptávání členů oddílu* po ověření správce — jméno, příjmení, reg. číslo, ročník (automatické zařazení do kategorie).
+  4. *Příznak „registrovaný závodník“* dle bodu 1.6 (uhrazené příspěvky do 31. 3.) — zajímavé pro výsledky/celkové hodnocení, možná mimo rozsah přihlášek.
+
+- **K projednání s ČSK — data:** přesný minimální rozsah polí pro stupeň 3 (jméno, příjmení, reg. číslo, ročník — nic víc); zdroj a aktuálnost (jak často se členská základna mění, sync před závodem); formát (API vs. periodický export typu našeho oddílového CSV).
+- **K projednání s ČSK — právní režim (GDPR):** role správce/zpracovatele (ČSK správce členské DB, my správce dat závodu — předání mezi správci, nebo my zpracovatel pro ČSK?); právní titul (oprávněný zájem — konzistentní s doložkou na vzoru přihlášky 2026 — vs. plnění členské smlouvy vs. souhlas); minimalizace (preferovat režim, kdy data neopouštějí ČSK — autocomplete API vrací jen shody k dotazu, žádný plošný export); retence u nás (jen soutěžní rok, pak výmaz — zrcadlí doložku vzoru 2026); kdo plní informační povinnost vůči členům oddílů (ideálně ČSK v rámci členské agendy).
+- **K projednání s ČSK — ověření správce oddílu:** mechanismus „zadá e-mail správce bez nápovědy“ vyžaduje, aby ČSK uměl potvrdit shodu, aniž by nám e-maily vydal — varianty: (a) porovnání na straně ČSK (my pošleme zadaný e-mail, ČSK vrátí ano/ne), (b) hash e-mailů správců u nás, (c) ověřovací e-mail rozesílá ČSK. Fallback bez ČSK: ověření proti kontaktní osobě z loňské papírové přihlášky, nebo ruční schválení organizátorem.
+- **K projednání s ČSK — technika a proces:** existuje API / kdo spravuje členskou DB a zavody-cpv.cz (výsledkový servis už dnes validuje reg. čísla — na čem běží, nejde se napojit tam?); zabezpečení přístupu (token, rate limit, audit na jejich straně); s kým jednat (výbor sekce VT ČSK — cpv@kanoe.cz); precedens — řešil už tohle některý pořadatel?
+- **Argumenty pro ČSK:** méně administrativních pochybení ve výsledcích (opravy dle 6.8–6.10 dnes zatěžují výbor), čistší data pro celkové hodnocení seriálu, pilot na našem závodě s možností nabídnout systém i ostatním pořadatelům ČPV.
 - Systém musí plně fungovat i **bez** této integrace (výchozí předpoklad: data ČSK nemáme).
 
 ## Větev 2 (rozpracovat později): Prezence a výdej startovních čísel na místě
@@ -186,7 +196,7 @@ Jen rámcově — bude samostatné zadání:
 ## Otevřené otázky
 
 1. **Podpis / kvalifikované stvrzení prohlášení.** Papírový podpis stvrzuje bezpečnostní prohlášení + vzetí na vědomí informace o zpracování osobních údajů (u nezletilých podpis osoby povinné dohledem). Jak nahradit online? Kandidáti: (a) checkbox + auditovaný záznam (kdo, kdy, IP) — právně nejslabší, ale bezbariérové; (b) potvrzení odkazem z e-mailu (double opt-in); (c) podpisová listina vytištěná ze systému a podepsaná fyzicky při prezenci v sobotu (kombinuje online data s papírovým podpisem — dnes fakticky nejblíž současné praxi); (d) kombinace a + c. **Necháno otevřené na pokyn uživatele.**
-2. **Přesný název, termín a startovné závodu** — doplnit (odvozený víkend 3.–4. 10. 2026; startovné X Kč/osoba).
+2. **Oficiální název závodu v kalendáři ČPV a výše startovného** — doplnit (termín potvrzen: sobota 3. 10. 2026; startovné X Kč/osoba).
 3. **Mapování „H“ řady na variabilní symbol** — VS musí být numerický; jak přesně kóduje řadu (např. VS = `8` + pořadové číslo?), jednotný vs. per-předpis VS.
 4. **Osud neproplacených přeplatků** — vratka na žádost; co s přeplatky, o které si nikdo neřekne (propadají? aktivně vracíme vše po závodě?).
 5. **Kapacita závodu** — existuje strop počtu lodí? (Ovlivňuje potřebu „pod čarou“ logiky známé z akcí.) Předpoklad: bez limitu.
