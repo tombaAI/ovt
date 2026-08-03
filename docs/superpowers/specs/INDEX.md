@@ -41,6 +41,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-07-23-integracni-test-gemini-analyzy.md](2026-07-23-integracni-test-gemini-analyzy.md) | Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS) | `navrh` |
 | [2026-07-23-vylepseni-popisu-prijemce.md](2026-07-23-vylepseni-popisu-prijemce.md) | Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (výměna/re-analýza) | `navrh` |
 | [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) | Obecný mechanismus návrh/potvrzení pro změnu částky už vygenerovaného předpisu | `navrh` — grilování probíhá, prerekvizita pro dotaci výše |
+| [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) | Záloha se nepřepočte při změně počtu osob na přihlášce po jejím vzniku | `navrh` — jen zapsáno, k dořešení |
 
 ## Navazující design dokumenty (`docs/`)
 
@@ -69,6 +70,7 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 6. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
 7. Integrační test Gemini analýzy dokladů — vzorové JPG/PDF/XLS (`2026-07-23-integracni-test-gemini-analyzy.md`) — zároveň první zkušební běh nového postupu vývoje přes feature větev (viz `CLAUDE.md`)
 8. Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (`2026-07-23-vylepseni-popisu-prijemce.md`)
+9. Záloha nesedí po změně počtu osob na přihlášce (`2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md`) — jen zapsáno, k dořešení
 
 ## Ostatní dokumenty — zůstávají ve `zadani/`
 

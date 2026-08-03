@@ -72,12 +72,13 @@ Tenhle mechanismus ji nahrazuje a rozšiřuje: `matched`/`paid` přestává znam
 ## Otevřené otázky (ke grilování)
 
 1. **Kdy se návrh generuje** — při každém živém volání `getEventSettlement()` (tedy i při pouhém prohlížení stránky), nebo jen při explicitní akci (`lockBilling`/`regeneratePrescriptions`)? Návrh: jen explicitní akcí — jinak by se `proposedAmount` zapisoval do DB při každém otevření stránky a „návrh" by se tiše měnil pod rukama jen tím, že si někdo něco prohlíží.
-2. **Rozsah** — týká se jen `type = 'settlement'`, nebo i `type = 'deposit'`? Zálohy jsou dnes fixní sazba × `personsCount`, neprochází stejným přepočtem — návrh: mimo rozsah, ale ověřit, jestli přidání/odebrání účastníka přihlášky nemění `personsCount` a tím nepřímo i zálohu.
+2. ~~**Rozsah**~~ — **rozhodnuto:** jen `type = 'settlement'`. Ověřeno: `addParticipantToRegistration`/`removeParticipantFromRegistration` (`event-settlement.ts:1611-1727`) mění `personsCount`, ale nic nepřepisuje `amount` existující zálohy — riziko tichého přepsání, které tenhle mechanismus řeší u settlementu, u zálohy dnes v kódu neexistuje (není co přepisovat). Zjištěn ale **jiný, samostatný problém** téhož okolí — záloha po změně `personsCount` neodpovídá skutečnosti — zapsáno jako [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md), k dořešení mimo tohle zadání.
 3. Má existovat **expirace/TTL** nevyřízeného návrhu, nebo zůstává viset, dokud ho někdo neřeší?
 4. Zamítnutí návrhu — má systém **zapamatovat, že tahle konkrétní hodnota byla zamítnutá**, aby se stejný návrh hned znovu neobjevil při příštím přepočtu se stejnými vstupy? Nebo je to na admin, aby si to pohlídal (další přepočet= další příležitost návrh znovu posoudit)?
 
 ## Vazby
 
 - Blokuje realizaci [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) — oprava algoritmu dotace se nasadí až po tomhle mechanismu, jinak by u již vygenerovaných (byť `pending`) předpisů potichu změnila částku.
+- [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) — samostatný nález ze stejného grilování, mimo rozsah tohoto zadání.
 - `src/lib/actions/event-settlement.ts` — `upsertPrescriptionAmounts` (~ř. 1091-1132), `regeneratePrescriptions` (~ř. 1057), `lockBilling` (~ř. 659).
 - `src/db/schema.ts` — `eventPaymentPrescriptions` (~ř. 496-537), precedens `paymentLedger.reconciliationStatus` (~ř. 305-307) a `paymentAllocations.isSuggested/confirmedBy/confirmedAt` (~ř. 334-336).
