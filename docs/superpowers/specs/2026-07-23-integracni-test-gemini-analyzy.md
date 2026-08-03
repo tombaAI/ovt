@@ -1,14 +1,15 @@
 ---
-status: zgrilovano
+status: produkce
 ---
 
 # Zadání: Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS)
 
-> **Stav: Zgrilováno.** Zapsáno z rozhovoru o mezerách v testovací pyramidě po zavedení
+> **Stav: Produkce.** Zapsáno z rozhovoru o mezerách v testovací pyramidě po zavedení
 > XLS/XLSX podpory (viz [`docs/superpowers/specs/2026-07-22-xlsx-invoice-support-design.md`](../docs/superpowers/specs/2026-07-22-xlsx-invoice-support-design.md)).
 > Grilling dokončen 2026-07-23 včetně dohledání a stažení 5 reálných vzorových dokladů.
-> Tohle zadání je zároveň první zkušební běh nového postupu vývoje přes samostatnou
-> feature větev — viz `CLAUDE.md`, sekce „Superpowers vývoj (feature branch)".
+> Implementováno na samostatné feature větvi a nasazeno v produkci (PR #33) — první
+> zkušební běh nového postupu vývoje přes feature větev, viz `CLAUDE.md`, sekce
+> „Superpowers vývoj (feature branch)".
 
 ## Cíl
 
