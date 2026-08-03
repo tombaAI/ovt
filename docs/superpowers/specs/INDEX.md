@@ -42,6 +42,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-07-23-vylepseni-popisu-prijemce.md](2026-07-23-vylepseni-popisu-prijemce.md) | Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (výměna/re-analýza) | `produkce` — PR #32 |
 | [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) | Obecný mechanismus návrh/potvrzení pro změnu částky už vygenerovaného předpisu | `zgrilovano` — realizace na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`, prerekvizita pro dotaci výše |
 | [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) | Záloha se nepřepočte při změně počtu osob na přihlášce po jejím vzniku | `navrh` — jen zapsáno, k dořešení |
+| [2026-08-03-prihlasky-zavod-cpv.md](2026-08-03-prihlasky-zavod-cpv.md) | Online přihlašování na pořádaný závod ČPV (podzim 2026) — veřejný formulář, předpisy „H“, platby, změny, vratky | `navrh` — obohaceno o rešerši pravidel ČPV 2026, čeká na grilování + dekompozici |
 
 ## Navazující design dokumenty (`docs/`)
 
@@ -70,6 +71,7 @@ _(prázdné — poslední dávka: audit akcí, výměna přílohy, automatické 
 5. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
 6. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
 7. Záloha nesedí po změně počtu osob na přihlášce (`2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md`) — jen zapsáno, k dořešení
+8. Online přihlašování na závod ČPV podzim 2026 (`2026-08-03-prihlasky-zavod-cpv.md`) — velký celek (první veřejná část systému), čeká na grilování a dekompozici; termínově vázáno na závod (deadline změn 27. 9. 2026)
 
 ## Ostatní dokumenty — zůstávají ve `zadani/`
 
