@@ -13,7 +13,7 @@ import type { EventExpenseRow } from "@/lib/actions/event-expenses";
 import { getPeopleForAutocomplete, type PersonOption } from "@/lib/actions/people";
 import { expenseCategoryEnum, EXPENSE_CATEGORY_LABELS, type ExpenseCategory } from "@/lib/expense-categories";
 import { setTreasurerApproval, getVyuctovaniActivityLog, type VyuctovaniActivity } from "@/lib/actions/events";
-import { lockForReimbursement, unlockForReimbursement } from "@/lib/actions/event-settlement";
+import { lockForReimbursement, unlockForReimbursement, lockBilling, unlockBilling } from "@/lib/actions/event-settlement";
 import { EventExpenseActions, EventExpenseDocForms } from "./event-expense-actions";
 import { PersonAutocomplete } from "./person-autocomplete";
 import { analyzedMatchesAmount, hasAmountMismatch, isMismatchAcknowledged } from "@/lib/expense-mismatch";
@@ -2931,6 +2931,8 @@ export function EventExpensesTab({
     lockForReimbursement: initialLockForReimbursement,
     treasurerApproved: initialTreasurerApproved,
     isTreasurer,
+    isProvozni = false,
+    onBillingStatusChange,
 }: {
     eventId: number;
     eventName: string;
@@ -2940,6 +2942,8 @@ export function EventExpensesTab({
     lockForReimbursement: boolean;
     treasurerApproved: boolean;
     isTreasurer: boolean;
+    isProvozni?: boolean;
+    onBillingStatusChange?: (s: "draft" | "prescribed") => void;
 }) {
     const isPrescribed = billingStatus === "prescribed";
     const lockedForParticipants = isPrescribed;
@@ -2953,6 +2957,8 @@ export function EventExpensesTab({
     const [treasurerApproved, setTreasurerApproved] = useState(initialTreasurerApproved);
     const [approvalSaving, setApprovalSaving] = useState(false);
     const [activityLog, setActivityLog] = useState<VyuctovaniActivity[]>([]);
+    const [amountLocking, setAmountLocking] = useState(false);
+    const [amountLockError, setAmountLockError] = useState<string | null>(null);
 
     const load = useCallback(async () => {
         // Bez setLoading(true) zde: při refetchi po uložení (onUpdated) by "loading" na chvíli
@@ -3001,6 +3007,23 @@ export function EventExpensesTab({
         setReimbursementLocking(false);
     }
 
+    async function handleToggleAmountLock() {
+        setAmountLocking(true);
+        setAmountLockError(null);
+        const res = isPrescribed
+            ? await unlockBilling(eventId, { confirmed: true })
+            : await lockBilling(eventId);
+        if ("error" in res) {
+            setAmountLockError(res.error);
+        } else {
+            const next = isPrescribed ? "draft" : "prescribed";
+            onBillingStatusChange?.(next);
+            setTreasurerApproved(next === "prescribed"); // auto-souhlas / odvolání ze serveru (Task 4)
+            getVyuctovaniActivityLog(eventId).then(setActivityLog);
+        }
+        setAmountLocking(false);
+    }
+
     function handlePersonCreated(person: PersonOption) {
         setPersonOptions(prev => [...prev, person].sort((a, b) => a.fullName.localeCompare(b.fullName, "cs")));
     }
@@ -3012,38 +3035,56 @@ export function EventExpensesTab({
 
     return (
         <div className="space-y-4">
+            {isProvozni && !isPrescribed && (
+                <div className="rounded-xl border px-4 py-4 space-y-2">
+                    <p className="text-sm text-gray-700">
+                        Až budou všechny doklady zadané, uzamkněte částky — tím je připravíte k odeslání na TJ.
+                    </p>
+                    <Button size="sm" onClick={handleToggleAmountLock} disabled={amountLocking}>
+                        {amountLocking ? "…" : "Uzamknout částky"}
+                    </Button>
+                    {amountLockError && <p className="text-xs text-red-600">{amountLockError}</p>}
+                </div>
+            )}
+
             {isPrescribed && (
                 <div className="rounded-xl border border-[#327600]/30 bg-[#327600]/5 px-4 py-4 space-y-4">
                     {/* Status řádek */}
                     <p className="text-sm text-[#327600] flex items-center gap-2">
                         <span>🔒</span>
-                        <span>Příjmový zámek je aktivní — předpisy byly vygenerovány. Částky a rozdělení nelze měnit. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</span>
+                        <span>
+                            {isProvozni
+                                ? "Částky jsou uzamčeny — před odesláním na TJ je nelze měnit. Pro úpravy odemkněte níže."
+                                : <>Příjmový zámek je aktivní — předpisy byly vygenerovány. Částky a rozdělení nelze měnit. Pro úpravy přejděte na záložku <strong>Vyúčtování</strong> a odemkněte.</>}
+                        </span>
                     </p>
 
                     {/* Souhlas hospodáře */}
-                    <label className={`flex items-center gap-3 cursor-${isTreasurer ? "pointer" : "default"}`}>
-                        <div className="relative shrink-0">
-                            <input
-                                type="checkbox"
-                                checked={treasurerApproved}
-                                disabled={!isTreasurer || approvalSaving}
-                                onChange={e => handleTreasurerApproval(e.target.checked)}
-                                className="sr-only"
-                            />
-                            <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
-                                treasurerApproved
-                                    ? "bg-[#327600] border-[#327600]"
-                                    : "bg-white border-gray-300"
-                            } ${!isTreasurer ? "opacity-60" : ""}`}>
-                                {treasurerApproved && <Check size={12} strokeWidth={3} className="text-white" />}
+                    {!isProvozni && (
+                        <label className={`flex items-center gap-3 cursor-${isTreasurer ? "pointer" : "default"}`}>
+                            <div className="relative shrink-0">
+                                <input
+                                    type="checkbox"
+                                    checked={treasurerApproved}
+                                    disabled={!isTreasurer || approvalSaving}
+                                    onChange={e => handleTreasurerApproval(e.target.checked)}
+                                    className="sr-only"
+                                />
+                                <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                    treasurerApproved
+                                        ? "bg-[#327600] border-[#327600]"
+                                        : "bg-white border-gray-300"
+                                } ${!isTreasurer ? "opacity-60" : ""}`}>
+                                    {treasurerApproved && <Check size={12} strokeWidth={3} className="text-white" />}
+                                </div>
                             </div>
-                        </div>
-                        <span className="text-sm text-gray-700">
-                            Hospodář zkontroloval a souhlasí s vyúčtováním
-                            {!isTreasurer && <span className="text-xs text-gray-400 ml-1">(pouze hospodář)</span>}
-                        </span>
-                        {approvalSaving && <span className="text-xs text-gray-400">Ukládám…</span>}
-                    </label>
+                            <span className="text-sm text-gray-700">
+                                Hospodář zkontroloval a souhlasí s vyúčtováním
+                                {!isTreasurer && <span className="text-xs text-gray-400 ml-1">(pouze hospodář)</span>}
+                            </span>
+                            {approvalSaving && <span className="text-xs text-gray-400">Ukládám…</span>}
+                        </label>
+                    )}
 
                     {/* Vyúčtování akce — tlačítka */}
                     <div className="border-t border-[#327600]/10 pt-3">
@@ -3052,8 +3093,18 @@ export function EventExpensesTab({
                             expenses={expenses ?? []}
                             onSent={() => getVyuctovaniActivityLog(eventId).then(setActivityLog)}
                             treasurerApproved={treasurerApproved}
+                            isProvozni={isProvozni}
                         />
                     </div>
+
+                    {isProvozni && (
+                        <div className="border-t border-[#327600]/10 pt-3">
+                            <Button size="sm" variant="outline" onClick={handleToggleAmountLock} disabled={amountLocking}>
+                                {amountLocking ? "…" : "Odemknout částky"}
+                            </Button>
+                            {amountLockError && <p className="text-xs text-red-600 mt-1">{amountLockError}</p>}
+                        </div>
+                    )}
 
                     {/* Log odeslaných vyúčtování */}
                     {activityLog.length > 0 && (

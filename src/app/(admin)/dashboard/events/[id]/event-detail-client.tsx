@@ -1812,6 +1812,7 @@ function RegistrationsTab({ eventId, billingStatus, eventName }: { eventId: numb
 // ── Main component ────────────────────────────────────────────────────────────
 
 export function EventDetailClient({ event, isTreasurer }: Props) {
+    const isProvozni = event.eventType === "provozni";
     const router = useRouter();
     const [activeTab, setActiveTab] = useState<string>(() => {
         if (typeof window !== "undefined") {
@@ -1882,10 +1883,10 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
     }
 
     function handleDelete() {
-        if (!confirm(`Smazat akci „${event.name}"? Tato akce je nevratná.`)) return;
+        if (!confirm(`Smazat ${isProvozni ? "provozní výdaj" : "akci"} „${event.name}"? Tato akce je nevratná.`)) return;
         startDeleteT(async () => {
             await deleteEvent(event.id);
-            router.push(`/dashboard/events?year=${event.year}`);
+            router.push(isProvozni ? "/dashboard/provoz" : `/dashboard/events?year=${event.year}`);
         });
     }
 
@@ -1895,24 +1896,28 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
 
                 {/* ── Page header ── */}
                 <div className="flex items-center gap-3 mb-5">
-                    <Link href={`/dashboard/events?year=${event.year}`}
+                    <Link href={isProvozni ? "/dashboard/provoz" : `/dashboard/events?year=${event.year}`}
                         className="flex items-center gap-0.5 text-sm text-gray-500 hover:text-gray-900 transition-colors shrink-0">
                         <ChevronLeft size={16} />
-                        <span>Kalendář {event.year}</span>
+                        <span>{isProvozni ? "Provozní výdaje" : `Kalendář ${event.year}`}</span>
                     </Link>
                     <div className="flex-1" />
-                    <Button asChild size="sm" variant="outline">
-                        <a href={`/api/events/${event.id}/ucastnici`}>
-                            <Download size={14} />
-                            Seznam účastníků
-                        </a>
-                    </Button>
-                    <Button asChild size="sm" variant="outline">
-                        <a href={`/api/events/${event.id}/pivnik`}>
-                            <Download size={14} />
-                            Pivník
-                        </a>
-                    </Button>
+                    {!isProvozni && (
+                        <>
+                            <Button asChild size="sm" variant="outline">
+                                <a href={`/api/events/${event.id}/ucastnici`}>
+                                    <Download size={14} />
+                                    Seznam účastníků
+                                </a>
+                            </Button>
+                            <Button asChild size="sm" variant="outline">
+                                <a href={`/api/events/${event.id}/pivnik`}>
+                                    <Download size={14} />
+                                    Pivník
+                                </a>
+                            </Button>
+                        </>
+                    )}
                     <Button asChild size="sm" variant="outline">
                         <a href={`/api/events/${event.id}/vyuctovani`}>
                             <Download size={14} />
@@ -1932,7 +1937,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                             </button>
                             <button onClick={handleDelete} disabled={deleting}
                                 className="w-full text-left px-2.5 py-1.5 rounded text-sm text-red-600 hover:bg-red-50 transition-colors disabled:opacity-50">
-                                {deleting ? "Mažu…" : "Smazat akci"}
+                                {deleting ? "Mažu…" : isProvozni ? "Smazat výdaj" : "Smazat akci"}
                             </button>
                         </PopoverContent>
                     </Popover>
@@ -1942,14 +1947,20 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                 <div className="mb-5">
                     <h1 className="text-xl font-semibold text-gray-900 leading-tight">{event.name}</h1>
                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
-                        <Badge className={`${TYPE_COLORS[event.eventType] ?? TYPE_COLORS.other} border-0 text-xs font-normal`}>
-                            {EVENT_TYPE_LABELS[event.eventType]}
-                        </Badge>
-                        <Badge className={`${STATUS_COLORS[event.status] ?? ""} border-0 text-xs font-normal`}>
-                            {EVENT_STATUS_LABELS[event.status]}
-                        </Badge>
-                        {event.gcalSync && event.gcalEventId && (
-                            <Badge className="bg-violet-50 text-violet-600 border border-violet-200 text-xs font-normal">GCal</Badge>
+                        {isProvozni ? (
+                            <Badge className="bg-slate-100 text-slate-600 border-0 text-xs font-normal">{EVENT_TYPE_LABELS.provozni}</Badge>
+                        ) : (
+                            <>
+                                <Badge className={`${TYPE_COLORS[event.eventType] ?? TYPE_COLORS.other} border-0 text-xs font-normal`}>
+                                    {EVENT_TYPE_LABELS[event.eventType]}
+                                </Badge>
+                                <Badge className={`${STATUS_COLORS[event.status] ?? ""} border-0 text-xs font-normal`}>
+                                    {EVENT_STATUS_LABELS[event.status]}
+                                </Badge>
+                                {event.gcalSync && event.gcalEventId && (
+                                    <Badge className="bg-violet-50 text-violet-600 border border-violet-200 text-xs font-normal">GCal</Badge>
+                                )}
+                            </>
                         )}
                     </div>
                 </div>
@@ -1957,7 +1968,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                 {/* ── Tabs ── */}
                 <Tabs value={activeTab} onValueChange={tab => { setActiveTab(tab); sessionStorage.setItem(`event-${event.id}-tab`, tab); }} className="gap-3">
                     <div className="rounded-2xl border border-slate-200 bg-gradient-to-r from-white via-slate-50 to-emerald-50/60 p-1.5 shadow-sm">
-                        <TabsList className={`mb-0 !grid w-full !h-auto ${isTreasurer ? "grid-cols-6" : "grid-cols-5"} gap-1.5 bg-transparent p-0`}>
+                        <TabsList className={`mb-0 !grid w-full !h-auto ${isProvozni ? "grid-cols-3" : isTreasurer ? "grid-cols-6" : "grid-cols-5"} gap-1.5 bg-transparent p-0`}>
                             <TabsTrigger value="detail"
                                 className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
                                 <span className="inline-flex items-center gap-1.5">
@@ -1965,13 +1976,15 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                     <span className="font-semibold">Detail</span>
                                 </span>
                             </TabsTrigger>
-                            <TabsTrigger value="registrations"
-                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
-                                <span className="inline-flex items-center gap-1.5">
-                                    <Users size={14} />
-                                    <span className="font-semibold">Přihlášky</span>
-                                </span>
-                            </TabsTrigger>
+                            {!isProvozni && (
+                                <TabsTrigger value="registrations"
+                                    className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <Users size={14} />
+                                        <span className="font-semibold">Přihlášky</span>
+                                    </span>
+                                </TabsTrigger>
+                            )}
                             <TabsTrigger value="expenses"
                                 className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
                                 <span className="inline-flex items-center gap-1.5">
@@ -1979,20 +1992,24 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                     <span className="font-semibold">Náklady</span>
                                 </span>
                             </TabsTrigger>
-                            <TabsTrigger value="settlement"
-                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
-                                <span className="inline-flex items-center gap-1.5">
-                                    <Calculator size={14} />
-                                    <span className="font-semibold">Vyúčtování</span>
-                                </span>
-                            </TabsTrigger>
-                            <TabsTrigger value="payments"
-                                className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
-                                <span className="inline-flex items-center gap-1.5">
-                                    <Wallet size={14} />
-                                    <span className="font-semibold">Platby</span>
-                                </span>
-                            </TabsTrigger>
+                            {!isProvozni && (
+                                <TabsTrigger value="settlement"
+                                    className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <Calculator size={14} />
+                                        <span className="font-semibold">Vyúčtování</span>
+                                    </span>
+                                </TabsTrigger>
+                            )}
+                            {!isProvozni && (
+                                <TabsTrigger value="payments"
+                                    className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
+                                    <span className="inline-flex items-center gap-1.5">
+                                        <Wallet size={14} />
+                                        <span className="font-semibold">Platby</span>
+                                    </span>
+                                </TabsTrigger>
+                            )}
                             {isTreasurer && (
                                 <TabsTrigger value="audit"
                                     className="h-auto min-h-[52px] rounded-xl border border-transparent px-3 py-2 data-[state=active]:bg-white data-[state=active]:border-emerald-200 data-[state=active]:text-emerald-800 data-[state=active]:shadow-sm data-[state=active]:shadow-emerald-100/70">
@@ -2016,10 +2033,14 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                 onGcalAccept={gcalFieldValue("name") !== undefined ? makeGcalAccept("name", gcalFieldValue("name") ?? null) : undefined}
                                 onGcalPush={gcalFieldValue("name") !== undefined ? pushToGcal : undefined}
                             />
-                            <ImmediateSelect label="Typ" value={event.eventType}
-                                options={SELECTABLE_EVENT_TYPES} eventId={event.id} field="eventType" onSaved={refresh} />
-                            <ImmediateSelect label="Stav" value={event.status}
-                                options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={refresh} />
+                            {!isProvozni && (
+                                <>
+                                    <ImmediateSelect label="Typ" value={event.eventType}
+                                        options={SELECTABLE_EVENT_TYPES} eventId={event.id} field="eventType" onSaved={refresh} />
+                                    <ImmediateSelect label="Stav" value={event.status}
+                                        options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={refresh} />
+                                </>
+                            )}
                             <ImmediateDate label="Datum od" value={event.dateFrom}
                                 eventId={event.id} field="dateFrom" onSaved={refreshWithDiff}
                                 gcalValue={gcalFieldValue("dateFrom")}
@@ -2064,13 +2085,15 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                         </div>
 
                         {/* ── Termín přihlášek ── */}
-                        <div className="rounded-xl border px-4">
-                            <ImmediateDate label="Přihlášky od" value={event.registrationFrom}
-                                eventId={event.id} field="registrationFrom" onSaved={refresh} />
-                            <ImmediateDate label="Přihlášky do" value={event.registrationTo}
-                                eventId={event.id} field="registrationTo"
-                                min={event.registrationFrom ?? undefined} onSaved={refresh} />
-                        </div>
+                        {!isProvozni && (
+                            <div className="rounded-xl border px-4">
+                                <ImmediateDate label="Přihlášky od" value={event.registrationFrom}
+                                    eventId={event.id} field="registrationFrom" onSaved={refresh} />
+                                <ImmediateDate label="Přihlášky do" value={event.registrationTo}
+                                    eventId={event.id} field="registrationTo"
+                                    min={event.registrationFrom ?? undefined} onSaved={refresh} />
+                            </div>
+                        )}
 
                         <div className="rounded-xl border px-4">
                             <ImmediateTextarea label="Popis" value={event.description}
@@ -2085,17 +2108,21 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                 placeholder="Interní poznámka…" />
                         </div>
 
-                        {event.gcalEventId ? (
-                            <GcalStatusBar diff={diff} syncing={syncing} onPush={pushToGcal} />
-                        ) : (
-                            <GcalSyncStarter event={event} onSaved={refresh} />
+                        {!isProvozni && (
+                            event.gcalEventId ? (
+                                <GcalStatusBar diff={diff} syncing={syncing} onPush={pushToGcal} />
+                            ) : (
+                                <GcalSyncStarter event={event} onSaved={refresh} />
+                            )
                         )}
                     </TabsContent>
 
                     {/* ── Tab: Přihlášky ── */}
-                    <TabsContent value="registrations" className="mt-0">
-                        <RegistrationsTab eventId={event.id} billingStatus={event.billingStatus} eventName={event.name} />
-                    </TabsContent>
+                    {!isProvozni && (
+                        <TabsContent value="registrations" className="mt-0">
+                            <RegistrationsTab eventId={event.id} billingStatus={event.billingStatus} eventName={event.name} />
+                        </TabsContent>
+                    )}
 
                     {/* ── Tab: Náklady ── */}
                     <TabsContent value="expenses" className="mt-0">
@@ -2104,27 +2131,33 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                             eventName={event.name}
                             leaderName={event.leaderName}
                             leaderCskNumber={event.leaderCskNumber}
-                            billingStatus={event.billingStatus}
+                            billingStatus={billingStatus}
                             lockForReimbursement={event.lockForReimbursement}
                             treasurerApproved={event.treasurerApproved}
                             isTreasurer={isTreasurer}
+                            isProvozni={isProvozni}
+                            onBillingStatusChange={setBillingStatus}
                         />
                     </TabsContent>
 
                     {/* ── Tab: Vyúčtování ── */}
-                    <TabsContent value="settlement" className="mt-0">
-                        <EventSettlementTab eventId={event.id} billingStatus={billingStatus} />
-                    </TabsContent>
+                    {!isProvozni && (
+                        <TabsContent value="settlement" className="mt-0">
+                            <EventSettlementTab eventId={event.id} billingStatus={billingStatus} />
+                        </TabsContent>
+                    )}
 
                     {/* ── Tab: Platby ── */}
-                    <TabsContent value="payments" className="mt-0">
-                        <EventPaymentsTab
-                            eventId={event.id}
-                            billingStatus={billingStatus}
-                            treasurerApproved={event.treasurerApproved}
-                            onBillingStatusChange={setBillingStatus}
-                        />
-                    </TabsContent>
+                    {!isProvozni && (
+                        <TabsContent value="payments" className="mt-0">
+                            <EventPaymentsTab
+                                eventId={event.id}
+                                billingStatus={billingStatus}
+                                treasurerApproved={event.treasurerApproved}
+                                onBillingStatusChange={setBillingStatus}
+                            />
+                        </TabsContent>
+                    )}
 
                     {/* ── Tab: Audit (jen hospodář) ── */}
                     {isTreasurer && (
