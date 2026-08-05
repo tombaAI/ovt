@@ -57,6 +57,7 @@ Závod **ČPV Hamerský potok** (Malý Ratmírov – Jindřiš; v roce 2024 62. 
 
 - **Věkový limit hlavního závodu: 16+** („závodu se mohou účastnit závodníci, kteří v daném soutěžním roce dovrší věk 16 let a starší; za mladistvé zodpovídá vysílající složka“). **Soutěž mládeže je samostatná** (2024: start 14:00 ve Dvorečku, mimo hlavní trať) → přímý vstup pro otevřenou otázku 9.
 - **Poplatky 2024:** startovné **200 Kč/osoba** (zahrnuje závod + splutí na víkend); vedle toho splutí pro nezávodníky (víkend 200 Kč, den 150 Kč) a permanentka na autobusovou dopravu (oba dny 230 Kč, den 170 Kč) — placeno hotově na místě, mimo přihlášku. **Ztráta startovního čísla: 500 Kč.**
+- **Návrh cen 2026** (web [hamerak.ovtbohemians.cz](https://hamerak.ovtbohemians.cz/), načteno 2026-08-05): web už avizuje *„možnost online předregistrace a platby přes samostatnou stránku“* — tedy tento systém — s podmínkou *„při registraci a úhradě do 7 dní před akcí získáte slevu 50 Kč z každé položky ceníku“* (7 dní před akcí = 27. 9., shodné s deadline změn přihlášek). Ceník (na místě / online): **splutí se závodem ČPV 300 / 250 Kč**; splutí víkend 350/300, sobota 250/200, neděle 300/250; doprava oba dny 350/300, sobota 300/250, neděle 300/250; doporučená kombinace „na místě 650 Kč · online 550 Kč“. Ztráta startovního čísla 500 Kč. Důsledky pro systém: platba předem má nově reálnou finanční motivaci (interakce s principem „termín platby není závazný“) a ceník obsahuje i položky nad rámec startovného (splutí bez závodu, doprava) — co z toho online přihláška prodává, viz otázka 11.
 - **Harmonogram soboty 2024:** přihlašování a placení 8:00–11:30, výklad trati 9:00, start první lodi 9:30, start poslední lodi 12:30 — časové okno prezence a výdeje čísel pro větev 2.
 - **Občerstvení v cíli se vydává proti vrácení startovního čísla** — existující motivace k vracení čísel, na kterou naváže evidence výdeje/vrácení (větev 2).
 - Protesty se odchylně od pravidel podávají písemně řediteli závodu do týdne od uveřejnění výsledků.
@@ -99,7 +100,7 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 
 ### 3. Předpis platby
 
-- Po potvrzení přihlášky se vygeneruje **předpis se splatností 7 dní**: částka = počet přihlášených osob × startovné.
+- Po potvrzení přihlášky se vygeneruje **předpis se splatností 7 dní**: částka = počet přihlášených osob × startovné (cenový model 2026 s online slevou a případnými dalšími položkami ceníku — viz otázka 11).
 - **Číselná řada s prefixem „H“**, obdoba předpisů u akcí (`event_payment_prescriptions.prescription_code`), stejný princip (částka, VS, zpráva pro příjemce, QR platba pokud ji u akcí máme). Platí se **výhradně na účet TJ Bohemians** (jako u akcí). Mapování „H“ řady na numerický variabilní symbol pro banku dořešit při grilování.
 - **Termín platby není závazný** a nikde to nebudeme psát — žádné sankce, žádné automatické stornování nezaplacených přihlášek. Nezaplacené přihlášky prostě evidujeme (dnes se platí vše hotově na místě; online platba předem je nová pohodlnější cesta, ne povinnost).
 - Při každé změně počtu osob se předpis přepočítává, resp. vzniká rozdílový předpis (viz scénáře).
@@ -248,7 +249,7 @@ Evidence vrácení čísel (zodpovídá kontaktní osoba oddílu, bod 1.7; navaz
 ## Otevřené otázky
 
 1. **Podpis / kvalifikované stvrzení prohlášení.** Papírový podpis stvrzuje bezpečnostní prohlášení + vzetí na vědomí informace o zpracování osobních údajů (u nezletilých podpis osoby povinné dohledem). Jak nahradit online? Kandidáti: (a) checkbox + auditovaný záznam (kdo, kdy, IP) — právně nejslabší, ale bezbariérové; (b) potvrzení odkazem z e-mailu (double opt-in); (c) podpisová listina vytištěná ze systému a podepsaná fyzicky při prezenci v sobotu (kombinuje online data s papírovým podpisem — dnes fakticky nejblíž současné praxi); (d) kombinace a + c. **Necháno otevřené na pokyn uživatele.**
-2. **Oficiální název závodu v kalendáři ČPV a výše startovného pro 2026** — doplnit (termín potvrzen: sobota 3. 10. 2026; startovné 2024 bylo 200 Kč/osoba).
+2. **Oficiální název závodu v kalendáři ČPV** — doplnit (termín potvrzen: sobota 3. 10. 2026; návrh cen 2026 je na webu — viz sekce Hamerák, startovné se závodem 300 Kč / online 250 Kč).
 3. **Mapování „H“ řady na variabilní symbol** — VS musí být numerický; jak přesně kóduje řadu (např. VS = `8` + pořadové číslo?), jednotný vs. per-předpis VS.
 4. **Osud neproplacených přeplatků** — vratka na žádost; co s přeplatky, o které si nikdo neřekne (propadají? aktivně vracíme vše po závodě?).
 5. **Kapacita závodu** — existuje strop počtu lodí? (Ovlivňuje potřebu „pod čarou“ logiky známé z akcí.) Předpoklad: bez limitu.
@@ -257,6 +258,7 @@ Evidence vrácení čísel (zodpovídá kontaktní osoba oddílu, bod 1.7; navaz
 8. **Vícejazyčnost** — stačí čeština? (ČPV je česká soutěž; předpoklad: ano, jen česky.)
 9. **Účast závodníků do 18 let na Hameráku** — pojedou dětské a mládežnické kategorie (mládež K1H, K1D, C2M), případně junioři mladší 18 let? Rozhodnutí pořadatele. Propozice 2024: hlavní závod **16+**, soutěž mládeže **samostatná** (start 14:00 ve Dvorečku) — pro 2026 potvrdit a rozhodnout, zda a jak se mládežnická soutěž přihlašuje online (odděleně od hlavního závodu?). Dopad: rozsah číselníku kategorií ve formuláři, stvrzení osobou povinnou dohledem (otázka 1), pravidlo „do 18 let přihlašuje vysílající složka“ (bod 1.7), případná úprava trati pro mládež (bod 4.7 pravidel).
 10. **Využití dat ČSK — rozsah a režim.** Pro MVP rozhodnuto: **bez jakýchkoli ČSK dat** (viz větev 1) — jen kontrola duplicit zadaných čísel. Otázka zůstává pro další fáze: co a v jakém režimu můžeme z databáze ČSK využít, aby to bylo vyvážené mezi GDPR a praktičností/UX — škála od číselníku oddílů po našeptávání členů po ověření správce. Řídíme se stavem platným pro rok 2026; k projednání s ČSK.
+11. **Rozsah online prodeje a cenový model 2026.** Web navrhuje online slevu 50 Kč z každé položky ceníku při registraci a úhradě do 27. 9. a ceník obsahuje kromě startovného i splutí bez závodu a dopravu. K rozhodnutí (grilování): (a) prodává online přihláška jen startovné závodníků, nebo i splutí/dopravu — třeba pro doprovod?; (b) jak se online cena promítne do předpisu — cena podle data úhrady vs. podle data vzniku předpisu, a co s platbou došlou po 27. 9. (doplatek 50 Kč/položka na místě?); (c) vyznění vůči principu „termín platby není závazný“ — sleva je motivace, ne sankce, komunikace tomu musí odpovídat.
 
 ## Vazby a podklady
 
