@@ -216,6 +216,9 @@ export type ProvozniVydajRow = {
 };
 
 export async function getProvozniVydaje(): Promise<ProvozniVydajRow[]> {
+    const session = await auth();
+    if (!isTreasurer(session?.user?.email)) return [];
+
     const db = getDb();
     const rows = await db
         .select({
