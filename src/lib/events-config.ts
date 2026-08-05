@@ -8,6 +8,7 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
     race:         "Závod",
     brigada:      "Brigáda",
     other:        "Jiné",
+    provozni:     "Provozní výdaj",
 };
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
@@ -16,6 +17,14 @@ export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
     cancelled: "Zrušeno",
     completed: "Proběhlo",
 };
+
+/**
+ * Typy nabízené v selectech typu akce. `provozni` je záměrně vynechán —
+ * provozní výdaje vznikají výhradně tlačítkem na /dashboard/provoz a běžná
+ * akce se na provozní výdaj nesmí přepnout (a naopak).
+ */
+export const SELECTABLE_EVENT_TYPES = (Object.entries(EVENT_TYPE_LABELS) as [EventType, string][])
+    .filter(([k]) => k !== "provozni");
 
 export const MONTH_NAMES = [
     "", "Leden", "Únor", "Březen", "Duben", "Květen", "Červen",

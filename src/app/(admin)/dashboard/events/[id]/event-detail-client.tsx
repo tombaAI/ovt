@@ -18,7 +18,7 @@ import {
     getMembersForAutocomplete,
 } from "@/lib/actions/events";
 import { getEventRegistrationsForAdmin, getRegistrationAuditLog, getEventFullAuditLog } from "@/lib/actions/event-registrations";
-import { EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
+import { SELECTABLE_EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type {
     EventRow, EventType, EventStatus, EventAuditEntry,
     GcalDiffResult, GcalDiffField, MemberOption,
@@ -72,7 +72,6 @@ function getFieldDiff(diff: GcalDiffResult | null, field: string): GcalDiffField
     return entry && !entry.match ? entry : null;
 }
 
-const EVENT_TYPES = Object.entries(EVENT_TYPE_LABELS) as [EventType, string][];
 const EVENT_STATUSES = Object.entries(EVENT_STATUS_LABELS) as [EventStatus, string][];
 
 const EVENT_FIELD_LABELS: Record<string, string> = {
@@ -2018,7 +2017,7 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                                 onGcalPush={gcalFieldValue("name") !== undefined ? pushToGcal : undefined}
                             />
                             <ImmediateSelect label="Typ" value={event.eventType}
-                                options={EVENT_TYPES} eventId={event.id} field="eventType" onSaved={refresh} />
+                                options={SELECTABLE_EVENT_TYPES} eventId={event.id} field="eventType" onSaved={refresh} />
                             <ImmediateSelect label="Stav" value={event.status}
                                 options={EVENT_STATUSES} eventId={event.id} field="status" onSaved={refresh} />
                             <ImmediateDate label="Datum od" value={event.dateFrom}

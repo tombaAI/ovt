@@ -375,7 +375,7 @@ export const boats = appSchema.table(
 
 // ── Event tables ─────────────────────────────────────────────────────────────
 
-export const eventTypeEnum = ["cpv", "foreign", "recreational", "club", "race", "brigada", "other"] as const;
+export const eventTypeEnum = ["cpv", "foreign", "recreational", "club", "race", "brigada", "other", "provozni"] as const;
 export type EventType = typeof eventTypeEnum[number];
 
 export const eventStatusEnum = ["planned", "confirmed", "cancelled", "completed"] as const;
