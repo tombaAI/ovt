@@ -87,6 +87,7 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 
 - Veřejná stránka (bez přihlášení) s formulářem odpovídajícím oficiálnímu vzoru 2026: hlavička (oddíl, číslo oddílu / „N“, kontaktní osoba, telefon, e-mail, adresa) + libovolný počet řádků závodníků (jméno, příjmení, kategorie z číselníku, reg. č. ČSK VT / rok narození).
 - Deblové kategorie (C2m, C2d, K2, GTX): UI musí umět svázat dva řádky do jedné lodi (posádky). Validace: posádka má právě 2 členy, kategorie obou řádků se shoduje, C2d smí kombinovat věkové skupiny.
+- Kromě řádků závodníků může přihláška obsahovat i **další položky ceníku bez závodu** — splutí (víkend/sobota/neděle) a dopravu (oba dny/sobota/neděle), např. pro doprovod (rozhodnuto v otázce 11a; přesná podoba — počty kusů vs. jmenovité osoby — ke grilování).
 - Měkké validace podle pravidel: ročník vs. kategorie (mládež/junioři/dospělí), duplicitní závodník v téže kategorii, chybějící reg. číslo i rok narození. Tvrdě blokovat jen skutečné nesmysly — přihlašuje se i pro cizí lidi a organizátor musí umět cokoli opravit.
 - Stvrzení prohlášení (pravidla ČPV, bezpečnostní podmínky, vzetí na vědomí informace o zpracování osobních údajů — přesné znění převzít z oficiálního vzoru 2026): checkbox + zaznamenat kdy/kdo/odkud.
 - Po odeslání: potvrzovací e-mail na kontaktní adresu s rekapitulací, platebními údaji a odkazem pro úpravy. Zvážit ověření e-mailu ještě před potvrzením přihlášky (překlep v e-mailu = ztracený přístup i nedoručitelné platební údaje).
@@ -100,9 +101,10 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 
 ### 3. Předpis platby
 
-- Po potvrzení přihlášky se vygeneruje **předpis se splatností 7 dní**: částka = počet přihlášených osob × startovné (cenový model 2026 s online slevou a případnými dalšími položkami ceníku — viz otázka 11).
+- Po potvrzení přihlášky se vygeneruje **předpis se splatností 7 dní** (od tohoto okamžiku): částka = suma položek přihlášky v online ceně — startovné za každého závodníka + případné další položky ceníku (splutí bez závodu, doprava).
 - **Číselná řada s prefixem „H“**, obdoba předpisů u akcí (`event_payment_prescriptions.prescription_code`), stejný princip (částka, VS, zpráva pro příjemce, QR platba pokud ji u akcí máme). Platí se **výhradně na účet TJ Bohemians** (jako u akcí). Mapování „H“ řady na numerický variabilní symbol pro banku dořešit při grilování.
-- **Termín platby není závazný** a nikde to nebudeme psát — žádné sankce, žádné automatické stornování nezaplacených přihlášek. Nezaplacené přihlášky prostě evidujeme (dnes se platí vše hotově na místě; online platba předem je nová pohodlnější cesta, ne povinnost).
+- **Komunikace splatnosti a upomínání:** splatnost 7 dní komunikujeme při vygenerování předpisu; po jejím marném uplynutí systém pošle **jednu upomínku** k zaplacení — další upomínky se už neposílají. Jinak se při nezaplacení průběžně **nic neděje**: termín není vymáhaný ani sankcionovaný (ale nikde to nepíšeme). Smysl sedmidenní splatnosti je **rozložit placení a evidenci plateb v čase** — nekoncentrovat všechno k 27. 9.
+- **Finální hranice 27. 9.:** do ní platí online cena (sleva 50 Kč/položka při registraci a úhradě). Kdo do 27. 9. nezaplatí, riskuje zrušení přihlášky — řešeno **individuálně, ne automaticky**: pondělí 28. 9. je státní svátek; v úterý 29. 9. si organizátor nad aktuálním výpisem plateb projde nezaplacené přihlášky, individuálně je osloví s náhradním termínem „zaplatit dnes“, a ve středu 30. 9. s novým výpisem nezaplacené stornuje. Systém žádné automatické storno nedělá — jen pro tento proces poskytuje podporu (viz Přehled organizátora).
 - Při každé změně počtu osob se předpis přepočítává, resp. vzniká rozdílový předpis (viz scénáře).
 
 ### 4. Úpravy přihlášky účastníkem (do 27. 9.)
@@ -117,6 +119,7 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 - **Veškeré finance jdou jen a pouze přes TJ Bohemians** — oddílový účet a Fio sync nejsou pro tento systém relevantní. Příchozí platby se do systému dostávají **importem výsledovky TJ Bohemians** (existující modul `finance-tj`, `import_fin_tj_transactions`) → `payment_ledger` → auto-match podle VS na předpisy „H“ řady. Přesná částka → spárováno; odchylka → návrh k ručnímu potvrzení (stejná logika jako u členských příspěvků/akcí).
 - Stavy vůči přihlášce: nezaplaceno / částečně / zaplaceno / přeplatek. Zobrazovat je účastníkovi (přes edit-link) i organizátorovi.
 - Pozor na **prodlevu výsledovky** — import z TJ není denní bankovní sync; mezi odesláním platby a jejím objevením v systému mohou uplynout i týdny. Komunikace stavů nesmí působit jako urgence („evidujeme platby k datu posledního importu X“, ne „NEZAPLACENO!“). Scénář „zaplaceno, ale ještě to nevidíme“ je tady normou, ne výjimkou.
+- V posledním týdnu před akcí je naopak potřeba pracovat s čerstvými daty: na 29. 9. (individuální řešení nezaplacených) a 30. 9. (storno) organizátor počítá s aktuálními výpisy plateb — importy budou v tomto okně časté (denně/ad hoc).
 - **Párování rozšířit na všechny pohyby závodu** — nejen příchozí startovné, ale i **odchozí vratky** a jakékoli další platby: každá vratka odeslaná účtárnou TJ se musí v následném importu výsledovky objevit a spárovat s evidovanou žádostí o vratku (uzavření smyčky). Funkčnosti kolem párování plateb je potřeba v tomto duchu rozšířit — dnes se párují jen příchozí platby.
 
 ### 6. Přeplatky, rozdílové platby a vratky
@@ -130,6 +133,7 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 
 - Dashboard závodu: počty přihlášek / lidí / lodí, rozpad podle kategorií, stav plateb (zaplaceno / částečně / nezaplaceno / přeplatky), fronta žádostí o vratku, přihlášky se stavem „ke kontrole“ (podezřelé duplicity, nevalidní kategorie…).
 - Detail přihlášky: plná editace všeho (i po 27. 9.), historie změn, platební historie, možnost ručně přidat platbu (hotovost na místě), poslat znovu edit-link, storno přihlášky.
+- **Podpora finálního doúčtování (29.–30. 9.):** filtr nezaplacených přihlášek po 27. 9., individuální oslovení s náhradním termínem, následné ruční storno nezaplacených — auditované, s možností obnovy.
 - Exporty: startovní listina pro výsledkový software (pořadí, čísla, kategorie, jména, reg. čísla) — samotné zpracování výsledků je mimo rozsah, ale data z přihlášek jsou jeho přímým vstupem.
 
 ## Katalog scénářů (k pokrytí návrhem i testy)
@@ -148,7 +152,7 @@ Platební flow zná systém z členských příspěvků a akcí; tady navíc př
 8. Platba „v letu“ — odeslána, ale ještě není v importované výsledovce TJ (prodleva i týdny); účastník mezitím upravuje přihlášku. Nesmí dojít ke zmatení stavů ani k urgenci.
 9. Platba dorazí až po odebrání člověka, na který byla určena (crossing platby a změny) → skončí jako přeplatek, standardní cesta.
 10. Platba z cizího účtu (platí rodič, oddílová pokladna…) → párování dle VS funguje; vratka jde na protiúčet skutečné platby, ne „účet přihlášeného“.
-11. Platba nikdy nepřijde → přihláška zůstává platná, doplatí se hotově na místě (dnešní standard). Předpis zůstává otevřený.
+11. Platba nikdy nepřijde → po splatnosti jedna upomínka, pak se až do 27. 9. nic neděje; 29. 9. individuální oslovení organizátorem s náhradním termínem „zaplatit dnes“, 30. 9. ruční storno nezaplacených. Pokud organizátor přihlášku ponechá, doplácí se na místě za cenu „na místě“.
 12. Platba přijde po provedení vratky → nový přeplatek, další kolo.
 13. Hotovostní platba na místě → organizátor ji ručně zaeviduje (cash zdroj v ledgeru existuje).
 
@@ -258,7 +262,7 @@ Evidence vrácení čísel (zodpovídá kontaktní osoba oddílu, bod 1.7; navaz
 8. **Vícejazyčnost** — stačí čeština? (ČPV je česká soutěž; předpoklad: ano, jen česky.)
 9. **Účast závodníků do 18 let na Hameráku** — pojedou dětské a mládežnické kategorie (mládež K1H, K1D, C2M), případně junioři mladší 18 let? Rozhodnutí pořadatele. Propozice 2024: hlavní závod **16+**, soutěž mládeže **samostatná** (start 14:00 ve Dvorečku) — pro 2026 potvrdit a rozhodnout, zda a jak se mládežnická soutěž přihlašuje online (odděleně od hlavního závodu?). Dopad: rozsah číselníku kategorií ve formuláři, stvrzení osobou povinnou dohledem (otázka 1), pravidlo „do 18 let přihlašuje vysílající složka“ (bod 1.7), případná úprava trati pro mládež (bod 4.7 pravidel).
 10. **Využití dat ČSK — rozsah a režim.** Pro MVP rozhodnuto: **bez jakýchkoli ČSK dat** (viz větev 1) — jen kontrola duplicit zadaných čísel. Otázka zůstává pro další fáze: co a v jakém režimu můžeme z databáze ČSK využít, aby to bylo vyvážené mezi GDPR a praktičností/UX — škála od číselníku oddílů po našeptávání členů po ověření správce. Řídíme se stavem platným pro rok 2026; k projednání s ČSK.
-11. **Rozsah online prodeje a cenový model 2026.** Web navrhuje online slevu 50 Kč z každé položky ceníku při registraci a úhradě do 27. 9. a ceník obsahuje kromě startovného i splutí bez závodu a dopravu. K rozhodnutí (grilování): (a) prodává online přihláška jen startovné závodníků, nebo i splutí/dopravu — třeba pro doprovod?; (b) jak se online cena promítne do předpisu — cena podle data úhrady vs. podle data vzniku předpisu, a co s platbou došlou po 27. 9. (doplatek 50 Kč/položka na místě?); (c) vyznění vůči principu „termín platby není závazný“ — sleva je motivace, ne sankce, komunikace tomu musí odpovídat.
+11. **Rozsah online prodeje a cenový model 2026.** Částečně rozhodnuto (2026-08-05): **(a) ANO — online přihláška prodává i splutí bez závodu a dopravu** (všechny položky ceníku); přesná podoba položek na přihlášce (počty kusů vs. jmenovité osoby) ke grilování. **(c) vyřešeno komunikačním modelem** v sekci Předpis platby: splatnost 7 dní od vygenerování + jediná upomínka po splatnosti, jinak se nic neděje; hranice 27. 9. (online cena), individuální doúčtování 29. 9. a ruční storno nezaplacených 30. 9. Zbývá ke grilování: **(b)** technické promítnutí online ceny do předpisu (cena podle data úhrady vs. vzniku předpisu; platba odeslaná před 27. 9., ale importovaná později — jak ji poznáme včas) a napojení doplatku 50 Kč/položka při platbě na místě.
 
 ## Vazby a podklady
 
