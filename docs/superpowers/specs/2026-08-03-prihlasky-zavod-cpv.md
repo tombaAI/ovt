@@ -4,7 +4,7 @@ status: navrh
 
 # Zadání: Online přihlašování na závod ČPV (podzim 2026)
 
-> **Stav: Návrh.** Zapsáno podle zadání uživatele 2026-08-03 a obohaceno o rešerši oficiálních pravidel ČPV 2026. Negrilováno — před implementací projde grilling session a pravděpodobně dekompozicí na dílčí zadání (jde o největší samostatný celek od vzniku systému: první veřejná, ne-admin část aplikace).
+> **Stav: Návrh.** Zapsáno podle zadání uživatele 2026-08-03, obohaceno o rešerši oficiálních pravidel ČPV 2026 a propozic Hameráku 2024, doplněno o poznámky uživatele 2026-08-05. Negrilováno — před implementací projde grilling session a pravděpodobně dekompozicí na dílčí zadání. Jde o největší samostatný celek od vzniku systému: ne první veřejnou část (veřejné přihlášky na oddílové akce už máme a jsou zdrojem inspirace), ale první veřejnou část **samostatně přístupnou bez přihlášení** a s **komplexním životním cyklem** (přihláška → platba → změny → vratky).
 
 ## Souhrn
 
@@ -12,8 +12,8 @@ OVT Bohemians na podzim 2026 pořádá závod seriálu **Český pohár vodáků
 
 1. **Veřejný přihlašovací formulář** (oddíly i jednotlivci, bez přihlášení do systému),
 2. **evidenci přihlášených** (lidé, lodě, kategorie),
-3. **generování předpisů plateb** (řada s prefixem „H“, splatnost 7 dní, stejný účet a princip jako u akcí),
-4. **příjem a párování plateb** (existující payment ledger),
+3. **generování předpisů plateb** (řada s prefixem „H“, splatnost 7 dní, účet TJ Bohemians — stejný princip jako u akcí),
+4. **příjem a párování plateb** (výhradně přes TJ Bohemians — import výsledovky TJ do existujícího payment ledgeru; párování rozšířit na všechny pohyby včetně vratek),
 5. **změny přihlášky** účastníky samotnými až do 7 dní před akcí (přidání/odebrání/výměna lidí, rozdílové platby, přeplatky),
 6. **vratky** — od vrácení přeplatku jednotlivci až po hromadné vratky při zrušení celé akce.
 
@@ -51,7 +51,19 @@ Doplňující pravidla podstatná pro datový model:
 - Jeden závodník se smí v rámci závodu přihlásit **v každé kategorii jen jednou** (porušení = diskvalifikace v dané kategorii), ale smí startovat ve více kategoriích (body 1.7 a 7.7) — systém by měl duplicitu v téže kategorii detekovat a varovat.
 - Závodníci do 18 let nemají právo samostatné přihlášky — přihlašuje a zodpovídá „vysílající složka“ (bod 1.7), u nezletilých podepisuje „osoba povinná dohledem“.
 
-### Dnešní papírová přihláška (vzor `zadani/Prihl_CPV_2016_Blanice.pdf`)
+### Hamerák — náš závod (propozice 2024)
+
+Závod **ČPV Hamerský potok** (Malý Ratmírov – Jindřiš; v roce 2024 62. ročník) pořádá oddíl vodní turistiky TJ Bohemians Praha; web [hamerak.ovtbohemians.cz](https://hamerak.ovtbohemians.cz). Fakta z propozic 2024 (`zadani/CPV-Hamersky-potok-2024-propozice.pdf`) relevantní pro tento systém — pro ročník 2026 potvrdit:
+
+- **Věkový limit hlavního závodu: 16+** („závodu se mohou účastnit závodníci, kteří v daném soutěžním roce dovrší věk 16 let a starší; za mladistvé zodpovídá vysílající složka“). **Soutěž mládeže je samostatná** (2024: start 14:00 ve Dvorečku, mimo hlavní trať) → přímý vstup pro otevřenou otázku 9.
+- **Poplatky 2024:** startovné **200 Kč/osoba** (zahrnuje závod + splutí na víkend); vedle toho splutí pro nezávodníky (víkend 200 Kč, den 150 Kč) a permanentka na autobusovou dopravu (oba dny 230 Kč, den 170 Kč) — placeno hotově na místě, mimo přihlášku. **Ztráta startovního čísla: 500 Kč.**
+- **Harmonogram soboty 2024:** přihlašování a placení 8:00–11:30, výklad trati 9:00, start první lodi 9:30, start poslední lodi 12:30 — časové okno prezence a výdeje čísel pro větev 2.
+- **Občerstvení v cíli se vydává proti vrácení startovního čísla** — existující motivace k vracení čísel, na kterou naváže evidence výdeje/vrácení (větev 2).
+- Protesty se odchylně od pravidel podávají písemně řediteli závodu do týdne od uveřejnění výsledků.
+
+### Referenční formulář přihlášky
+
+**Referenční je aktuální oficiální vzor 2026** (`zadani/Prihl_CPV_vzor.xlsx`) — online formulář i tisková podoba přihlášky se řídí jím. Papírová přihláška 2016 (`zadani/Prihl_CPV_2016_Blanice.pdf`) je jen historická ukázka téhož layoutu.
 
 Hlavička: název závodu, rok, **zúčastněný oddíl + číslo oddílu** (dle adresáře ČSK; neregistrovaný oddíl uvádí „N“), **kontaktní osoba + telefon + adresa + e-mail** (osoba zodpovědná za správné vyplnění přihlášky **a vrácení startovních čísel** — bod 1.7).
 
@@ -65,47 +77,55 @@ Nad tabulkou je blok prohlášení (start na vlastní nebezpečí, povinná vest
 - **Startovní číslo patří lodi**, ne člověku. Do přihlášky se startovní čísla **nevyplňují** — přidělují se až v sobotu ráno při prezenci (větev 2). Čísla tvoří souvislou řadu a vydávají se sekvenčně v pořadí, v jakém oddíly fyzicky přijdou.
 - **Pořadí řádků na přihlášce je závazné** pro pořadí lodí při výdeji čísel (tak to funguje dodnes — čísla se přidělují po přihláškách, v pořadí podání/příchodu).
 - **Platí se za člověka** (startovné X Kč / osoba), ne za loď. Předpis = počet přihlášených lidí × sazba.
-- **Registrační číslo ČSK VT**: vychází z databáze ČSK, ke které **pravděpodobně nebudeme mít přístup** (GDPR — k dořešení, viz větev 1). Výchozí předpoklad: volné textové pole; nečlen vyplní rok narození. Formát dle ČSK exportu je šesticiferné číslo (např. `556101`).
+- **Registrační číslo ČSK VT**: v MVP **nemáme žádná interní data z databáze ČSK** — volné textové pole bez validace proti ČSK a bez předvyplňování; nečlen vyplní rok narození. Kontrolují se pouze **duplicity zadaných reg. čísel** (napříč řádky i přihláškami). Formát dle ČSK exportu je šesticiferné číslo (např. `556101`). Integrace s ČSK je odložená větev 1.
 - **E-mail kontaktní osoby = vstupní brána k přihlášce.** Odkaz pro úpravy zaslaný e-mailem, bez účtu a hesla — stejný princip, jaký už používáme u přihlášek na oddílové akce (edit-link s tokenem).
 
 ## Rozsah — hlavní větev (co systém má umět)
 
 ### 1. Veřejný přihlašovací formulář
 
-- Veřejná stránka (bez přihlášení) s formulářem odpovídajícím papírové přihlášce: hlavička (oddíl, číslo oddílu / „N“, kontaktní osoba, telefon, e-mail, adresa) + libovolný počet řádků závodníků (jméno, příjmení, kategorie z číselníku, reg. č. ČSK VT / rok narození).
+- Veřejná stránka (bez přihlášení) s formulářem odpovídajícím oficiálnímu vzoru 2026: hlavička (oddíl, číslo oddílu / „N“, kontaktní osoba, telefon, e-mail, adresa) + libovolný počet řádků závodníků (jméno, příjmení, kategorie z číselníku, reg. č. ČSK VT / rok narození).
 - Deblové kategorie (C2m, C2d, K2, GTX): UI musí umět svázat dva řádky do jedné lodi (posádky). Validace: posádka má právě 2 členy, kategorie obou řádků se shoduje, C2d smí kombinovat věkové skupiny.
 - Měkké validace podle pravidel: ročník vs. kategorie (mládež/junioři/dospělí), duplicitní závodník v téže kategorii, chybějící reg. číslo i rok narození. Tvrdě blokovat jen skutečné nesmysly — přihlašuje se i pro cizí lidi a organizátor musí umět cokoli opravit.
 - Stvrzení prohlášení (pravidla ČPV, bezpečnostní podmínky, vzetí na vědomí informace o zpracování osobních údajů — přesné znění převzít z oficiálního vzoru 2026): checkbox + zaznamenat kdy/kdo/odkud.
 - Po odeslání: potvrzovací e-mail na kontaktní adresu s rekapitulací, platebními údaji a odkazem pro úpravy. Zvážit ověření e-mailu ještě před potvrzením přihlášky (překlep v e-mailu = ztracený přístup i nedoručitelné platební údaje).
 
-### 2. Předpis platby
+### 2. Tisk přihlášky
+
+- Přihlášku lze kdykoli po vyplnění **vytisknout ve formátu oficiálního formuláře** (vzor 2026) — vypadá jako vyplněný papírový formulář ČPV.
+- Navíc oproti vzoru: v zápatí **datum a čas tisku** a na dokumentu **QR kód vedoucí na detail přihlášky**. **Pozor — nikoli na editační odkaz** (na papíře by to bylo bezpečnostní riziko), ale na **view-only náhled** (pro nepřihlášeného), resp. **admin pohled** na tutéž přihlášku (pro přihlášeného admina) — tentýž pohled, jakým se přihláška „posílá k výdeji“ (větev 2: stejný QR slouží při sobotní prezenci).
+- View-only náhled má vlastní token oddělený od editačního.
+- Tisk dostupný z potvrzovací stránky, z view-only náhledu, z editačního rozhraní i z admin detailu.
+
+### 3. Předpis platby
 
 - Po potvrzení přihlášky se vygeneruje **předpis se splatností 7 dní**: částka = počet přihlášených osob × startovné.
-- **Číselná řada s prefixem „H“**, obdoba předpisů u akcí (`event_payment_prescriptions.prescription_code`), stejný bankovní účet, stejný princip (částka, VS, zpráva pro příjemce, QR platba pokud ji u akcí máme). Mapování „H“ řady na numerický variabilní symbol pro banku dořešit při grilování.
+- **Číselná řada s prefixem „H“**, obdoba předpisů u akcí (`event_payment_prescriptions.prescription_code`), stejný princip (částka, VS, zpráva pro příjemce, QR platba pokud ji u akcí máme). Platí se **výhradně na účet TJ Bohemians** (jako u akcí). Mapování „H“ řady na numerický variabilní symbol pro banku dořešit při grilování.
 - **Termín platby není závazný** a nikde to nebudeme psát — žádné sankce, žádné automatické stornování nezaplacených přihlášek. Nezaplacené přihlášky prostě evidujeme (dnes se platí vše hotově na místě; online platba předem je nová pohodlnější cesta, ne povinnost).
 - Při každé změně počtu osob se předpis přepočítává, resp. vzniká rozdílový předpis (viz scénáře).
 
-### 3. Úpravy přihlášky účastníkem (do 27. 9.)
+### 4. Úpravy přihlášky účastníkem (do 27. 9.)
 
 - Odkaz z e-mailu otevře přihlášku k úpravám: přidat člověka, odebrat člověka, vyměnit člověka, opravit údaje (jméno, reg. číslo, kategorie), přeuspořádat pořadí řádků, přeskládat posádky.
 - Do **neděle 27. 9. 2026** (7 dní před akcí) bez omezení a bez sankcí. Po tomto datu je samoobslužná editace zamčená — změny už jen přes organizátora (a na místě).
 - **Odolnost proti ukliknutí**: destruktivní kroky (odebrání člověka, storno přihlášky) vyžadují explicitní potvrzení; smazání je soft-delete s možností obnovy organizátorem; každá změna je auditovaná (kdo — účastník přes token / admin, kdy, co, staré → nové hodnoty; stejný vzor jako `audit_log`).
 - Každá relevantní změna generuje notifikační e-mail s rekapitulací (účastník má vždy aktuální stav v ruce, a zároveň je to obrana proti změnám, kterých si nevšiml).
 
-### 4. Platby a párování
+### 5. Platby a párování
 
-- Příchozí platby tečou existující cestou: Fio sync → `payment_ledger` → auto-match podle VS na předpisy „H“ řady. Přesná částka → spárováno; odchylka → návrh k ručnímu potvrzení (stejná logika jako u členských příspěvků/akcí).
+- **Veškeré finance jdou jen a pouze přes TJ Bohemians** — oddílový účet a Fio sync nejsou pro tento systém relevantní. Příchozí platby se do systému dostávají **importem výsledovky TJ Bohemians** (existující modul `finance-tj`, `import_fin_tj_transactions`) → `payment_ledger` → auto-match podle VS na předpisy „H“ řady. Přesná částka → spárováno; odchylka → návrh k ručnímu potvrzení (stejná logika jako u členských příspěvků/akcí).
 - Stavy vůči přihlášce: nezaplaceno / částečně / zaplaceno / přeplatek. Zobrazovat je účastníkovi (přes edit-link) i organizátorovi.
-- Pozor na **prodlevu výpisu** (Fio sync 1× denně): účastník mohl zaplatit včera a systém to ještě nevidí. Komunikace stavů nesmí působit jako urgence („evidujeme k datu X“, ne „NEZAPLACENO!“).
+- Pozor na **prodlevu výsledovky** — import z TJ není denní bankovní sync; mezi odesláním platby a jejím objevením v systému mohou uplynout i týdny. Komunikace stavů nesmí působit jako urgence („evidujeme platby k datu posledního importu X“, ne „NEZAPLACENO!“). Scénář „zaplaceno, ale ještě to nevidíme“ je tady normou, ne výjimkou.
+- **Párování rozšířit na všechny pohyby závodu** — nejen příchozí startovné, ale i **odchozí vratky** a jakékoli další platby: každá vratka odeslaná účtárnou TJ se musí v následném importu výsledovky objevit a spárovat s evidovanou žádostí o vratku (uzavření smyčky). Funkčnosti kolem párování plateb je potřeba v tomto duchu rozšířit — dnes se párují jen příchozí platby.
 
-### 5. Přeplatky, rozdílové platby a vratky
+### 6. Přeplatky, rozdílové platby a vratky
 
 - Přidání osob po zaplacení → **rozdílový předpis** na doplatek (stejná splatnost 7 dní, vlastní položka v „H“ řadě).
 - Odebrání osob po zaplacení → **přeplatek**; účastník může požádat o vrácení (tlačítko v edit rozhraní), nebo přeplatek nechat (vyřeší se na místě / propadne ve prospěch pořadatele — rozhodnout).
-- **Vratky**: fronta žádostí pro organizátora; schválení → evidence vratky (částka, datum, na jaký účet — primárně protiúčet příchozí platby z výpisu), odeslání provádí organizátor ručně v bance, systém eviduje a páruje odchozí platbu. Auditované.
-- **Zrušení akce**: hromadný scénář — všechny zaplacené přihlášky přejdou do stavu „k vrácení“, systém vygeneruje seznam vratek (částka + protiúčet), organizátor odbaví, systém odškrtává. Musí to být proveditelné pro nižší stovky plateb bez ručního dohledávání.
+- **Vratky**: fronta žádostí pro organizátora; schválení → **e-mail na účtárnu TJ Bohemians** s pokynem k vratce (částka, protiúčet — primárně protiúčet skutečné příchozí platby; stejný pattern, jaký už používáme u proplácení nákladů akcí), účtárna odešle, systém vratku eviduje a následně **spáruje s odchozí platbou v importu výsledovky**. Auditované.
+- **Zrušení akce**: hromadný scénář — všechny zaplacené přihlášky přejdou do stavu „k vrácení“, systém vygeneruje pro účtárnu TJ hromadný seznam vratek (částka + protiúčet), systém odškrtává podle importů výsledovky. Musí to být proveditelné pro nižší stovky plateb bez ručního dohledávání.
 
-### 6. Přehled organizátora (admin)
+### 7. Přehled organizátora (admin)
 
 - Dashboard závodu: počty přihlášek / lidí / lodí, rozpad podle kategorií, stav plateb (zaplaceno / částečně / nezaplaceno / přeplatky), fronta žádostí o vratku, přihlášky se stavem „ke kontrole“ (podezřelé duplicity, nevalidní kategorie…).
 - Detail přihlášky: plná editace všeho (i po 27. 9.), historie změn, platební historie, možnost ručně přidat platbu (hotovost na místě), poslat znovu edit-link, storno přihlášky.
@@ -124,7 +144,7 @@ Platební flow zná systém z členských příspěvků a akcí; tady navíc př
 5. Více plateb postupně na jeden předpis (doplácení po částech).
 6. Jedna platba pokrývající více předpisů (oddíl zaplatí základní předpis + rozdílový jedním převodem; nebo dvě přihlášky téhož oddílu jednou částkou) → split alokace (ledger to umí).
 7. Duplicitní platba (zaplatí omylem dvakrát) → přeplatek → vratka.
-8. Platba „v letu“ — odeslána, ještě není na výpisu; účastník mezitím upravuje přihlášku. Nesmí dojít ke zmatení stavů ani k urgenci.
+8. Platba „v letu“ — odeslána, ale ještě není v importované výsledovce TJ (prodleva i týdny); účastník mezitím upravuje přihlášku. Nesmí dojít ke zmatení stavů ani k urgenci.
 9. Platba dorazí až po odebrání člověka, na který byla určena (crossing platby a změny) → skončí jako přeplatek, standardní cesta.
 10. Platba z cizího účtu (platí rodič, oddílová pokladna…) → párování dle VS funguje; vratka jde na protiúčet skutečné platby, ne „účet přihlášeného“.
 11. Platba nikdy nepřijde → přihláška zůstává platná, doplatí se hotově na místě (dnešní standard). Předpis zůstává otevřený.
@@ -155,10 +175,11 @@ Platební flow zná systém z členských příspěvků a akcí; tady navíc př
 30. Nedoručitelný e-mail / překlep → přihláška existuje, ale kontakt je mrtvý; organizátor vidí bounce a umí kontakt opravit + poslat nový link.
 31. Robot / spam na veřejném formuláři → rate limiting, honeypot/CAPTCHA, potvrzení e-mailem; nesmí zaplevelit evidenci ani vyčerpat Resend kvótu.
 32. Nezletilí: přihlašuje vysílající složka (oddíl); u „rodinné“ přihlášky bez oddílu je přihlašovatelem rodič. Bez podpisu na místě nelze plně splnit bod 1.7 — viz otevřené otázky.
+33. Vratka odeslaná účtárnou TJ se v následném importu výsledovky nespáruje automaticky (odchylka částky, chybějící VS) → ruční párování; vratka nespárovaná po dalším importu = položka „ke kontrole“.
 
-## Větev 1 (rozpracovat později): Integrace s databází ČSK
+## Větev 1 (odloženo, mimo MVP): Integrace s databází ČSK
 
-Jen rámcově — bude samostatné zadání + podklady pro jednání s ČSK:
+**Rozhodnutí pro verzi 1 (MVP):** žádná integrace — nebudeme nic předvyplňovat ani validovat reg. čísla proti ČSK; nemáme k dispozici žádná interní data z databáze členů, pracuje se jen s tím, co přihlašovatel zadá. Jediná kontrola: **duplicity v zadaných číslech ČSK** (napříč řádky i přihláškami). Vše níže je budoucí rozšíření — bude samostatné zadání + podklady pro jednání s ČSK:
 
 - ČSK vede databázi oddílů; každý oddíl má správce a členy. Idea: přihlašovatel vybere oddíl z **našeptávače** (adresář oddílů ČSK je poloveřejný — název + číslo oddílu) a zadá — **bez nápovědy, jako důkaz oprávnění** — e-mail správce oddílu. Pokud se shoduje s ČSK evidencí, začneme mu **našeptávat členy oddílu** (jméno, příjmení, reg. číslo, ročník → automatické zařazení do kategorie). To by byl gamechanger: bezchybná reg. čísla, žádné překlepy, rychlé vyplnění.
 - Co máme v ruce: vlastní oddílový export z ČSK (`zadani/csk_data-utf-2026-04-08-22-59-48.csv`) se strukturou `PRIJMENI; JMENO; DATUM_NAROZENI; ADRESA; OBEC; E-MAIL; TELEFON; FUNKCE; REG_CISLO; TR_TRIDA; ROZH_TRIDA; NSA-*; CLEN-OD/DO; SPORTOVEC-OD/DO; PROHLIDKA-OD/DO` — tj. ČSK data obsahují vše potřebné pro našeptávání (a víc, než bychom směli použít).
@@ -173,20 +194,51 @@ Jen rámcově — bude samostatné zadání + podklady pro jednání s ČSK:
 - **K projednání s ČSK — ověření správce oddílu:** mechanismus „zadá e-mail správce bez nápovědy“ vyžaduje, aby ČSK uměl potvrdit shodu, aniž by nám e-maily vydal — varianty: (a) porovnání na straně ČSK (my pošleme zadaný e-mail, ČSK vrátí ano/ne), (b) hash e-mailů správců u nás, (c) ověřovací e-mail rozesílá ČSK. Fallback bez ČSK: ověření proti kontaktní osobě z loňské papírové přihlášky, nebo ruční schválení organizátorem.
 - **K projednání s ČSK — technika a proces:** existuje API / kdo spravuje členskou DB a zavody-cpv.cz (výsledkový servis už dnes validuje reg. čísla — na čem běží, nejde se napojit tam?); zabezpečení přístupu (token, rate limit, audit na jejich straně); s kým jednat (výbor sekce VT ČSK — cpv@kanoe.cz); precedens — řešil už tohle některý pořadatel?
 - **Argumenty pro ČSK:** méně administrativních pochybení ve výsledcích (opravy dle 6.8–6.10 dnes zatěžují výbor), čistší data pro celkové hodnocení seriálu, pilot na našem závodě s možností nabídnout systém i ostatním pořadatelům ČPV.
-- Systém musí plně fungovat i **bez** této integrace (výchozí předpoklad: data ČSK nemáme).
 
-## Větev 2 (rozpracovat později): Prezence a výdej startovních čísel na místě
+## Větev 2 (rozpracovat do samostatného zadání): Prezence, spolupráce s výdejním systémem, výdej startovních čísel
 
-Jen rámcově — bude samostatné zadání:
+Úkol této větve: **navrhnout flow a spolupráci s druhým systémem — a lidmi kolem něj —, který dnes zajišťuje evidenci přihlášek na místě, přidělení startovních čísel a tisk výdejky startovního čísla.** Návrh níže je výchozí podklad k projednání s týmem výdeje; rozpracuje se do samostatného zadání.
 
-- **Dnešní proces:** v sobotu 8:00 se otevře přihlašování; lidé ve frontě odevzdají papírovou přihlášku → spočítáme lidi, vybereme hotovost → papír jde „dozadu“, kde se ručně přepíše do PC a lodím se přidělí startovní čísla → vytiskne se potvrzení a čísla se fyzicky vydají. Kdo přijde, ten fyzicky je — pořadí příchodu určuje pořadí startu. Čísla jsou souvislá řada vydávaná sekvenčně od začátku, jiné pořadí výdeje neexistuje.
-- **Cíl:** místo papíru a přepisování check-in z online přihlášky — např. **QR kód** v potvrzovacím e-mailu; organizátor ho naskenuje mobilem = „teď zařaď do fronty“ → systém přidělí lodím z přihlášky souvislý blok startovních čísel (v závazném pořadí řádků) → vydáme čísla, doplatíme případný rozdíl (hotově/na místě).
-- **Varianta „pevný start předem“:** na přihlášce lze zaškrtnout „chci startovat hned na začátku; beru na vědomí, že tím jsem pevně zařazen ke startu, a pokud to neodvolám do čtvrtka večera před závodem, čísla mi takto zůstanou a je moje zodpovědnost si je vyzvednout“. Tím může být třeba polovina startovního pole přidělena předem a fronta v sobotu se dramaticky zkrátí.
-- Navazuje: evidence **vrácení čísel** (za vrácení zodpovídá kontaktní osoba oddílu, bod 1.7), papírová podpisová listina při prezenci (možné řešení otázky podpisů), přepínání online/hotovost doplatků na místě, offline odolnost (síť na břehu řeky).
+### Dnešní proces (dle propozic 2024)
+
+V sobotu 8:00–11:30 přihlašování a placení (výklad trati 9:00, start první lodi 9:30, poslední 12:30). Lidé ve frontě odevzdají papírovou přihlášku → „přední“ stanoviště spočítá lidi a vybere hotovost → papír jde „dozadu“, kde ho obsluha **výdejního systému** přepíše do PC, lodím přidělí startovní čísla (souvislá řada, sekvenčně, v pořadí příchodu a v závazném pořadí řádků přihlášky) → vytiskne se **výdejka startovních čísel** → čísla se fyzicky vydají. Kdo přijde, ten fyzicky je; pořadí příchodu = pořadí startu; jiné pořadí výdeje než sekvenční od začátku neexistuje. Občerstvení v cíli se vydává proti vrácení čísla; ztráta čísla stojí 500 Kč.
+
+### Aktéři
+
+| Aktér | Role |
+|---|---|
+| Účastník (kontaktní osoba oddílu) | přichází s QR (vytištěná přihláška nebo mobil), řeší doplatek, přebírá čísla |
+| Prezence („přepážka“ vpředu) | skenuje QR, kontroluje stav přihlášky a plateb, inkasuje hotovost, zařazuje do fronty |
+| Výdejní systém + obsluha („vzadu“) | dnes samostatná evidence: přiděluje startovní čísla, tiskne výdejku |
+| Náš systém (OVT správa) | zdroj pravdy o přihláškách a platbách, fronta k výdeji |
+
+### Navržené flow v sobotu ráno
+
+1. Účastník přijde s QR kódem — z vytištěné přihlášky (viz Tisk přihlášky) nebo z potvrzovacího e-mailu v mobilu.
+2. Prezence naskenuje QR mobilem → otevře se **admin pohled na přihlášku** (tentýž, na který vede QR z tisku): aktuální složení (lidé/lodě/kategorie), stav plateb, co doplatit či vrátit.
+3. Hotovost se vyřeší na místě (doplatek, případně vrácení přeplatku) a ihned zaeviduje (cash platba v ledgeru).
+4. Tlačítko **„Zařadit k výdeji“** → přihláška vstupuje do **fronty výdeje** s časovým razítkem; pořadí fronty = závazné pořadí přidělování čísel.
+5. Lodím přihlášky se přidělí souvislý blok startovních čísel v pořadí řádků → tisk výdejky → fyzický výdej čísel.
+6. Po dojetí se vrácení čísel odškrtává proti výdejce (občerstvení proti vrácení; ztráta 500 Kč).
+
+### Integrace s výdejním systémem — varianty k projednání
+
+- **(a) Výdejní systém čte naši frontu** — obrazovka nebo exportní feed z našeho systému nahradí přepisování papíru; čísla přiděluje a výdejku tiskne dál výdejní systém. Nejmenší zásah do zaběhnutého procesu; odpadá přepis — dnešní největší úzké hrdlo a zdroj chyb.
+- **(b) Náš systém převezme i přidělování čísel a tisk výdejky** — výdejní systém (resp. zpracování výsledků) dostane až hotovou startovku. Největší přínos, ale i největší změna pro tým výdeje.
+- **(c) Přechodná varianta „průvodka“** — prezence z našeho systému vytiskne kompletní čitelnou přihlášku a ta putuje „dozadu“ jako dnes papír; obsluha přepisuje z úplného, čitelného podkladu. Nulová integrace, přesto eliminuje nečitelné ručně psané přihlášky.
+- Varianty lze kombinovat v čase (c → a → b, podle důvěry a kapacity týmu). **K projednání s lidmi kolem výdejního systému:** co je to za software a kdo ho ovládá, jaká data potřebuje na vstupu, v jakém formátu umí přijmout startovku/frontu, a co je pro tým přijatelné už pro ročník 2026.
+
+### Pevný start předem
+
+Na přihlášce lze zaškrtnout „chci startovat hned na začátku; beru na vědomí, že jsem tím pevně zařazen ke startu, a pokud to neodvolám do čtvrtka 1. 10. večer, čísla mi takto zůstanou a je moje zodpovědnost si je vyzvednout“. Bloky čísel pro tyto přihlášky se přidělí předem (výdejky nachystané) — třeba polovina startovního pole může být daná předem a sobotní fronta se dramaticky zkrátí.
+
+### Další témata větve 2
+
+Evidence vrácení čísel (zodpovídá kontaktní osoba oddílu, bod 1.7; navazuje poplatek 500 Kč za ztrátu), papírová podpisová listina při prezenci (možné řešení otázky podpisů — otázka 1), souběh více prezenčních stanovišť (jedna fronta?), offline odolnost (síť v kempu na břehu potoka), samostatné odbavení soutěže mládeže (jiný čas i místo startu).
 
 ## Nefunkční požadavky a architektonické poznámky
 
-- **První veřejná část systému.** Dosud je celá aplikace za admin loginem (Google OAuth + whitelist). Přihlašovací formulář a edit-linky jsou veřejné → nový bezpečnostní perimetr: tokeny s dostatečnou entropií, rate limiting, žádný únik osobních dat mezi přihláškami, oddělení od admin API. Zásadní bod pro grilování.
+- **Veřejný perimetr.** Veřejné přihlášky na oddílové akce už existují (edit-link s tokenem) a jsou zdrojem inspirace i ověřených vzorů. Tohle je ale první veřejná část **samostatně přístupná bez přihlášení** (vlastní vstupní stránka, přihlášku nezakládá nikdo zevnitř systému) a s komplexním životním cyklem přihláška → platba → změny → vratky. Bezpečnostní požadavky: tokeny s dostatečnou entropií, **oddělené tokeny pro view-only náhled a pro editaci** (QR na tištěné přihlášce vede jen na view), rate limiting, žádný únik osobních dat mezi přihláškami, oddělení od admin API. Zásadní bod pro grilování.
 - **GDPR:** sbíráme osobní údaje cizích lidí (jména, ročníky, reg. čísla, kontakty). Oficiální vzor 2026 už nepracuje se souhlasem, ale s **informací o zpracování na základě oprávněného zájmu pořadatele**: kontaktní údaje kontaktní osoby se uchovávají do konce soutěžního roku a poté se likvidují; jméno, příjmení a rok narození závodníka slouží k identifikaci a rozřazení a zveřejňují se ve výsledkových listinách. Online systém tento režim převezme (informační povinnost na formuláři, retence/anonymizace kontaktů po konci soutěžního roku); u online plateb navíc dořešit retenci platebních údajů (protiúčty) vůči účetním povinnostem.
 - **Audit všeho** — stejný standard jako zbytek systému (`audit_log`), včetně akcí provedených účastníkem přes token (aktér = přihláška/token, ne admin e-mail).
 - **E-maily přes Resend** — potvrzení, rekapitulace změn, platební údaje, edit-linky; pozor na kvóty a doručitelnost (SPF/DKIM už vyřešeno pro is.ovtbohemians.cz).
@@ -196,23 +248,25 @@ Jen rámcově — bude samostatné zadání:
 ## Otevřené otázky
 
 1. **Podpis / kvalifikované stvrzení prohlášení.** Papírový podpis stvrzuje bezpečnostní prohlášení + vzetí na vědomí informace o zpracování osobních údajů (u nezletilých podpis osoby povinné dohledem). Jak nahradit online? Kandidáti: (a) checkbox + auditovaný záznam (kdo, kdy, IP) — právně nejslabší, ale bezbariérové; (b) potvrzení odkazem z e-mailu (double opt-in); (c) podpisová listina vytištěná ze systému a podepsaná fyzicky při prezenci v sobotu (kombinuje online data s papírovým podpisem — dnes fakticky nejblíž současné praxi); (d) kombinace a + c. **Necháno otevřené na pokyn uživatele.**
-2. **Oficiální název závodu v kalendáři ČPV a výše startovného** — doplnit (termín potvrzen: sobota 3. 10. 2026; startovné X Kč/osoba).
+2. **Oficiální název závodu v kalendáři ČPV a výše startovného pro 2026** — doplnit (termín potvrzen: sobota 3. 10. 2026; startovné 2024 bylo 200 Kč/osoba).
 3. **Mapování „H“ řady na variabilní symbol** — VS musí být numerický; jak přesně kóduje řadu (např. VS = `8` + pořadové číslo?), jednotný vs. per-předpis VS.
 4. **Osud neproplacených přeplatků** — vratka na žádost; co s přeplatky, o které si nikdo neřekne (propadají? aktivně vracíme vše po závodě?).
 5. **Kapacita závodu** — existuje strop počtu lodí? (Ovlivňuje potřebu „pod čarou“ logiky známé z akcí.) Předpoklad: bez limitu.
 6. **Rozdílový předpis vs. přepis částky** u nezaplaceného předpisu (scénář 14/16) — jednodušší UX vs. čistší účetní stopa; souvisí s již zgrilovaným mechanismem návrh/potvrzení změny částky předpisu ([2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md)).
 7. **Ověření e-mailu před vznikem přihlášky** (double opt-in) — ano/ne; chrání proti překlepům a spamu, přidává tření.
 8. **Vícejazyčnost** — stačí čeština? (ČPV je česká soutěž; předpoklad: ano, jen česky.)
-9. **Účast závodníků do 18 let na Hameráku** — pojedou dětské a mládežnické kategorie (mládež K1H, K1D, C2M), případně junioři mladší 18 let? Rozhodnutí pořadatele. Dopad: rozsah číselníku kategorií ve formuláři, stvrzení osobou povinnou dohledem (otázka 1), pravidlo „do 18 let přihlašuje vysílající složka“ (bod 1.7), případná úprava trati pro mládež (bod 4.7 pravidel).
-10. **Využití dat ČSK — rozsah a režim.** Co a v jakém režimu můžeme z databáze ČSK využít, aby to bylo vyvážené mezi GDPR a praktičností/UX — škála od žádných dat, přes veřejný číselník oddílů (název + číslo), až po našeptávání členů po ověření správce (viz větev 1). Řídíme se stavem platným pro rok 2026; k projednání s ČSK.
+9. **Účast závodníků do 18 let na Hameráku** — pojedou dětské a mládežnické kategorie (mládež K1H, K1D, C2M), případně junioři mladší 18 let? Rozhodnutí pořadatele. Propozice 2024: hlavní závod **16+**, soutěž mládeže **samostatná** (start 14:00 ve Dvorečku) — pro 2026 potvrdit a rozhodnout, zda a jak se mládežnická soutěž přihlašuje online (odděleně od hlavního závodu?). Dopad: rozsah číselníku kategorií ve formuláři, stvrzení osobou povinnou dohledem (otázka 1), pravidlo „do 18 let přihlašuje vysílající složka“ (bod 1.7), případná úprava trati pro mládež (bod 4.7 pravidel).
+10. **Využití dat ČSK — rozsah a režim.** Pro MVP rozhodnuto: **bez jakýchkoli ČSK dat** (viz větev 1) — jen kontrola duplicit zadaných čísel. Otázka zůstává pro další fáze: co a v jakém režimu můžeme z databáze ČSK využít, aby to bylo vyvážené mezi GDPR a praktičností/UX — škála od číselníku oddílů po našeptávání členů po ověření správce. Řídíme se stavem platným pro rok 2026; k projednání s ČSK.
 
 ## Vazby a podklady
 
 - `zadani/Pravidla_CPV_2026_full.pdf` — oficiální pravidla ČPV 2026, lokální kopie ([originál na kanoe.cz](https://www.kanoe.cz/img/turistika/2026/Pravidla_CPV_2026_full.pdf), ověřeno checksum).
 - `zadani/Prihl_CPV_vzor.xlsx` — oficiální vzor přihlášky 2026 s číselníkem kategorií a GDPR doložkou ([originál](https://www.kanoe.cz/img/turistika/2026/Prihl_CPV_vzor.xlsx)).
-- `zadani/Prihl_CPV_2016_Blanice.pdf` — historický vzor papírové přihlášky 2016 (podklad od uživatele; struktura shodná se vzorem 2026, liší se GDPR text — 2016 „souhlas“, 2026 „informace o zpracování“).
+- `zadani/Prihl_CPV_2016_Blanice.pdf` — historický vzor papírové přihlášky 2016 (struktura shodná se vzorem 2026, liší se GDPR text — 2016 „souhlas“, 2026 „informace o zpracování“; referenční je vzor 2026).
+- `zadani/CPV-Hamersky-potok-2024-propozice.pdf` — propozice Hameráku 2024 (věkový limit 16+, samostatná soutěž mládeže, poplatky, harmonogram prezence, občerstvení proti vrácení čísla).
 - `zadani/csk_data-utf-2026-04-08-22-59-48.csv` — export členů našeho oddílu z ČSK databáze (struktura dat pro větev 1).
 - [Stránka ČPV na kanoe.cz](https://www.kanoe.cz/vodni-turistika/pyranha-cup-cpv), [výsledky zavody-cpv.cz](http://www.zavody-cpv.cz).
 - [2026-06-15-zivotni-cyklus-akce.md](2026-06-15-zivotni-cyklus-akce.md) — přihlášky na oddílové akce (edit-link princip, předpisy, zálohy) — ideový předchůdce.
 - [2026-04-10-rekonciliace-plateb-v1.md](2026-04-10-rekonciliace-plateb-v1.md) — payment ledger, auto-match, split alokace — platební základ, na kterém stavíme.
+- Modul importu výsledovky TJ Bohemians (`src/lib/actions/finance-tj.ts`, tabulky `import_fin_tj_*`) — jediná cesta, kudy do systému tečou bankovní pohyby závodu (příchozí platby i odchozí vratky).
 - [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) — mechanismus změny částky předpisu (otevřená otázka 6).
