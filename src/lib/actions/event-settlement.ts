@@ -669,7 +669,9 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
 
         const isProvozni = event.eventType === "provozni";
         if (isProvozni && !isTreasurer(session.user.email)) {
-            return { error: "Provozní výdaj může uzamknout jen hospodář." };
+            const reason = "Provozní výdaj může uzamknout jen hospodář.";
+            await logBlockedAttempt(db, { attemptedAction: "lock_billing", reason, changedBy: session.user.email, eventId });
+            return { error: reason };
         }
 
         const settlement = await getEventSettlement(eventId);
@@ -693,19 +695,21 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         // Provozní výdaj: zamyká sám hospodář — samostatný krok souhlasu odpadá,
         // souhlas se uděluje automaticky při zamčení (spec 2026-08-05-provozni-vydaje.md).
         if (isProvozni && !event.treasurerApproved) {
-            await db.update(events).set({ treasurerApproved: true }).where(eq(events.id, eventId));
-            await db.insert(eventTreasurerApprovalLog).values({
-                eventId,
-                action: "approved",
-                changedBy: session.user.name?.trim() || session.user.email,
-            });
-            await db.insert(auditLog).values({
-                entityType: "event",
-                entityId: eventId,
-                action: "treasurer_approve",
-                changes: { treasurerApproved: { old: "false", new: "true" } },
-                metadata: { eventId, auto: "provozni_lock" },
-                changedBy: session.user.email,
+            await db.transaction(async tx => {
+                await tx.update(events).set({ treasurerApproved: true }).where(eq(events.id, eventId));
+                await tx.insert(eventTreasurerApprovalLog).values({
+                    eventId,
+                    action: "approved",
+                    changedBy: session.user!.name?.trim() || session.user!.email!,
+                });
+                await tx.insert(auditLog).values({
+                    entityType: "event",
+                    entityId: eventId,
+                    action: "treasurer_approve",
+                    changes: { treasurerApproved: { old: "false", new: "true" } },
+                    metadata: { eventId, auto: "provozni_lock" },
+                    changedBy: session.user!.email!,
+                });
             });
         }
 
@@ -768,8 +772,12 @@ export async function unlockBilling(
                 entityType: "event",
                 entityId: eventId,
                 action: "unlock_billing",
-                changes: collecting
-                    ? { billingStatus: { old: "prescribed", new: "draft" }, collecting: { old: "true", new: "true" }, treasurerApproved: { old: "true", new: "false" } }
+                changes: (collecting || isProvozni)
+                    ? {
+                        billingStatus: { old: "prescribed", new: "draft" },
+                        ...(collecting ? { collecting: { old: "true", new: "true" } } : {}),
+                        treasurerApproved: { old: "true", new: "false" },
+                      }
                     : { billingStatus: { old: "prescribed", new: "draft" } },
                 metadata: { eventId },
                 changedBy: session.user!.email!,
