@@ -1,7 +1,7 @@
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import { members, memberContributions, contributionPeriods, events, boats, brigades, payments } from "@/db/schema";
-import { eq, sql, isNull, lte, and, or } from "drizzle-orm";
+import { eq, ne, sql, isNull, lte, and, or } from "drizzle-orm";
 import { Card, CardContent, CardHeader } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import Link from "next/link";
@@ -109,7 +109,7 @@ async function EventsCard({ year }: { year: number }) {
         total:    sql<number>`count(*)`,
         noDate:   sql<number>`count(*) filter (where ${events.dateFrom} is null)`,
         upcoming: sql<number>`count(*) filter (where ${events.dateFrom} >= ${today} and ${events.status} != 'cancelled')`,
-    }).from(events).where(eq(events.year, year));
+    }).from(events).where(and(eq(events.year, year), ne(events.eventType, "provozni")));
 
     const upcomingEvents = Number(eventCounts?.upcoming ?? 0);
 

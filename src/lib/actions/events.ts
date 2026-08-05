@@ -2,7 +2,7 @@
 
 import { getDb } from "@/lib/db";
 import { events, members, auditLog, eventVyuctovaniSends, eventTreasurerApprovalLog } from "@/db/schema";
-import { eq, asc, desc, sql } from "drizzle-orm";
+import { eq, ne, and, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
 import type { EventType, EventStatus, EventSource } from "@/db/schema";
@@ -96,7 +96,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
         })
         .from(events)
         .leftJoin(members, eq(events.leaderId, members.id))
-        .where(eq(events.year, year))
+        .where(and(eq(events.year, year), ne(events.eventType, "provozni")))
         .orderBy(asc(events.dateFrom), asc(events.approxMonth), asc(events.name));
 
     return rows.map(r => ({
@@ -194,6 +194,7 @@ export async function getEventYears(): Promise<number[]> {
     const rows = await db
         .select({ year: sql<number>`distinct ${events.year}` })
         .from(events)
+        .where(ne(events.eventType, "provozni"))
         .orderBy(desc(events.year));
 
     const current = new Date().getFullYear();
