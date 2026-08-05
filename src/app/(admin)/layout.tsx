@@ -5,11 +5,13 @@ import { NavLinks } from "./nav-links";
 import { YearSelector } from "./year-selector";
 import { MobileNav } from "./mobile-nav";
 import { getSelectedYear } from "@/lib/actions/year";
+import { isTreasurer } from "@/lib/treasurer";
 import type { ReactNode } from "react";
 
 export default async function AdminLayout({ children }: { children: ReactNode }) {
     const [session, selectedYear] = await Promise.all([auth(), getSelectedYear()]);
     const isStaging = process.env.NEXT_PUBLIC_APP_ENV === "staging";
+    const showProvoz = isTreasurer(session?.user?.email);
 
     return (
         <div className="min-h-screen flex flex-col bg-gray-50">
@@ -42,7 +44,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
 
             {/* Desktop nav tab bar */}
             <nav className={`hidden md:flex border-t border-white/10 px-2 overflow-x-auto ${isStaging ? "bg-blue-800" : "bg-[#26272b]"}`}>
-                <NavLinks />
+                <NavLinks showProvoz={showProvoz} />
             </nav>
 
             {/* Main content — extra bottom padding on mobile for the nav bar */}
@@ -51,7 +53,7 @@ export default async function AdminLayout({ children }: { children: ReactNode })
             </main>
 
             {/* Mobile bottom navigation */}
-            <MobileNav />
+            <MobileNav showProvoz={showProvoz} />
         </div>
     );
 }
