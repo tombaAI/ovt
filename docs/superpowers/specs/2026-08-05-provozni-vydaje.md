@@ -1,32 +1,36 @@
 ---
-status: navrh
+status: zgrilovano
 ---
 
 # Zadání: Provozní výdaje — vyúčtování mimo akce
 
-> **Stav: Návrh schválený v brainstormingu (2026-08-05).** Rozhodnutá varianta: provozní výdaj je technicky akce s novým typem `provozni`, navenek žije na samostatné stránce `/dashboard/provoz`. Čeká na implementační plán.
+> **Stav: Zgrilováno (2026-08-05).** Rozhodnutá varianta: provozní výdaj je technicky akce s novým typem `provozni`, navenek žije na samostatné stránce `/dashboard/provoz` viditelné **jen pro hospodáře**. Schvalovací krok odpadá (zamyká sám hospodář). Čeká na implementační plán.
 
 ## Problém
 
-Člen oddílu koupí věc pro provoz oddílu (např. materiál na opravu vleku) a oddíl mu ji chce proplatit přes TJ. Takový výdaj potřebuje **stejné vyúčtování jako akce** — doklad, kategorii, beneficienta, souhlas hospodáře, odeslání k proplacení, evidenci proplacení — ale **nemá účastníky**: nikdo se nepřihlašuje, nikomu se nic nerozpočítává ani nepředepisuje.
+Člen oddílu koupí věc pro provoz oddílu (např. materiál na opravu vleku) a oddíl mu ji chce proplatit přes TJ. Takový výdaj potřebuje **stejné vyúčtování jako akce** — doklad, kategorii, beneficienta, odeslání k proplacení, evidenci — ale **nemá účastníky**: nikdo se nepřihlašuje, nikomu se nic nerozpočítává ani nepředepisuje.
 
-Dnes jediná cesta je založit fiktivní akci (na stagingu existuje akce id 48 „Oprava vleku", typ `other`, 0 přihlášek, 1 náklad). Funguje to — výpočet vyúčtování nulové účastníky ustojí (`computeUnitPrice` v `src/lib/settlement-calc.ts` vrací při nulové váze 0, nic se nerozpočítává) — ale:
+Dnes jediná cesta je založit fiktivní akci (na stagingu existuje akce id 48 „Oprava vleku", typ `other`, 0 přihlášek, 1 náklad). Funguje to — výpočet vyúčtování nulové účastníky ustojí (`computeUnitPrice` v `src/lib/settlement-calc.ts` vrací při nulové váze 0) a PDF vyúčtování se skládá čistě z nákladů (přihlášky vůbec nečte) — ale:
 
 - provozní výdaj je zamíchaný mezi skutečnými akcemi v `/dashboard/events`,
 - detail nabízí nesmyslné záložky (Přihlášky, Platby) a pole (registrace, záloha, dotace na člena, GCal sync).
 
-## Rozhodnutí z brainstormingu
+## Rozhodnutí z brainstormingu a grilování
 
 | Otázka | Rozhodnutí |
 |---|---|
-| Četnost | **Pravidelná kategorie** hospodaření oddílu (loděnice, vlek, materiál, služby) — ne jednorázová výjimka. |
-| Umístění v UI | **Samostatná stránka** — provozní výdaje se oddělí od seznamu akcí. |
-| Granularita | **Případ s více doklady** — 1 záznam = 1 účel („Oprava vleku 2026"), pod ním libovolný počet nákladů/dokladů; vyúčtování a souhlas hospodáře nad celým případem najednou. |
+| Četnost | **Pravidelná kategorie** hospodaření oddílu (loděnice, vlek, materiál, služby). |
+| Umístění v UI | **Samostatná stránka** `/dashboard/provoz` — oddělené od seznamu akcí. |
+| Granularita | **Případ s více doklady** — 1 záznam = 1 účel („Oprava vleku 2026"), pod ním libovolný počet nákladů/dokladů. |
 | Technické řešení | **Varianta A** — nový typ akce `provozni`, žádné nové tabulky (viz alternativy níže). |
+| Přístup | **Jen hospodář** (`isTreasurer()`, env `TREASURER_EMAIL`) — pro ostatní adminy sekce úplně skrytá (nav, seznam i detail). |
+| Workflow | **2 kroky: uzamknout částky → odeslat na TJ.** Souhlas hospodáře jako samostatný krok odpadá — nastaví se automaticky při zamčení. |
+| Povinná pole | **Jen název.** Rok se doplní automaticky aktuální; datum, odpovědná osoba a popis volitelné. |
+| Stav v seznamu | **Odvozený, 3 stavy**: rozpracováno → částky uzamčeny → odesláno na TJ. Pole `events.status` se pro provozní nepoužívá (zůstává výchozí `planned`). |
 
-## Řešení (varianta A)
+## Řešení
 
-Celá výdajová mašinerie (náklady s doklady, Gemini analýza, zámky, souhlas hospodáře, proplacení od TJ, audit) visí na tabulce `events` přes `event_expenses.event_id`. Nový typ akce ji zdědí beze změn — samostatná stránka je jen jiný pohled na stejná data.
+Celá výdajová mašinerie (náklady s doklady, Gemini analýza, zámky, odeslání na TJ, audit) visí na tabulce `events` přes `event_expenses.event_id`. Nový typ akce ji zdědí beze změn — samostatná stránka je jen jiný pohled na stejná data.
 
 ### 1. Datový model
 
@@ -35,28 +39,32 @@ Celá výdajová mašinerie (náklady s doklady, Gemini analýza, zámky, souhla
 
 ### 2. Nová stránka `/dashboard/provoz`
 
-- Položka **„Provoz"** v hlavní navigaci admin layoutu.
-- Seznam provozních výdajů po letech (stejný vzor `?year=X` jako akce): název, datum, odpovědná osoba, počet dokladů, suma nákladů, stav (rozpracováno / schváleno hospodářem / odesláno k proplacení).
-- Tlačítko **„Nový provozní výdaj"** — formulář jen s poli: název, rok, datum, odpovědná osoba (`leader_id`), popis. Vytvoří `events` řádek s `event_type = 'provozni'`.
+- Položka **„Provoz"** v hlavní navigaci — vykreslí se jen hospodáři; stránka i detail provozního výdaje ostatní adminy přesměrují na dashboard.
+- Nadpis stránky „Provozní výdaje". **Jeden seznam bez záložek po letech** (objem bude malý, rok není pro členění relevantní), řazený od nejnovějšího: název, datum, odpovědná osoba, počet dokladů, suma nákladů, odvozený stav.
+- Odvození stavu: `billingStatus = 'draft'` → **rozpracováno**; `'prescribed'` bez záznamu v `event_vyuctovani_sends` → **částky uzamčeny**; se záznamem → **odesláno na TJ**.
+- Tlačítko **„Nový provozní výdaj"** — povinný jen název; rok se nastaví automaticky na aktuální; datum, odpovědná osoba (`leader_id`) a popis volitelné. Vytvoří `events` řádek s `event_type = 'provozni'`.
 
-### 3. Seznam akcí `/dashboard/events`
+### 3. Seznam akcí `/dashboard/events` a dashboard
 
-- Dotaz seznamu (`getEvents` a spol. v `src/lib/actions/events.ts`) typ `provozni` vyfiltruje — provozní výdaje žijí jen na své stránce.
+- Dotazy seznamu akcí (`getEvents` a spol. v `src/lib/actions/events.ts`) typ `provozni` vyfiltrují.
+- Počty akcí na dashboard home (`src/app/(admin)/dashboard/page.tsx`) typ `provozni` také vynechají.
 - Typ `provozni` se nenabízí při zakládání běžné akce (add-event-sheet).
 
 ### 4. Detail — recyklace stávajícího detailu akce
 
 URL detailu zůstává `/dashboard/events/[id]` (jedna route, žádná duplikace komponent). Pro `event_type = 'provozni'` se detail přizpůsobí:
 
+- **Přístup**: ne-hospodář je přesměrován na dashboard (stejný gate jako seznam).
 - **Skryté záložky**: Přihlášky, Platby.
-- **Skrytá pole**: registrace od/do, záloha, dotace na člena, GCal sync, zámek pro účastníky (`lockForParticipants`).
-- **Zůstává**: Detail (název, datum, odpovědná osoba, popis), Náklady (beze změn vč. Gemini analýzy), Vyúčtování — jen výdajová strana (souhrn dokladů, souhlas hospodáře, proplacení), Audit.
-- **Zpětný odkaz / breadcrumb** vede na `/dashboard/provoz` místo na seznam akcí.
-- Popisky v UI mluví o „provozním výdaji", ne o „akci" (název stránky, nadpisy, tlačítka).
+- **Skrytá pole**: registrace od/do, záloha, dotace na člena, GCal sync, zámek pro účastníky, typ akce, stav akce.
+- **Skryté participantské exporty**: pivník, seznam účastníků.
+- **Zůstává**: Detail (název, datum, odpovědná osoba, popis), Náklady (beze změn vč. Gemini analýzy), Vyúčtování — jen výdajová strana, Audit.
+- **Zpětný odkaz / breadcrumb** vede na `/dashboard/provoz`; popisky mluví o „provozním výdaji", ne o „akci".
 
-### 5. Workflow vyúčtování — beze změn
+### 5. Workflow vyúčtování — 2 kroky
 
-Souhlas hospodáře (`treasurerApproved`), zámek dokladů pro proplacení (`lockForReimbursement`) i evidence odeslání k proplacení fungují nad náklady nezávisle na účastnících. Participantská větev (předpisy, rozpočítání, zálohy) se u provozního výdaje vůbec neuplatní — žádné přihlášky neexistují.
+1. **„Uzamknout částky"** — stávající `lockBilling` (s 0 přihláškami projde: gate kontroluje jen nevyřešené zálohy a koeficienty, obojí prázdné; vygeneruje 0 předpisů, přepne `billingStatus` na `prescribed`). U typu `provozni` navíc **automaticky nastaví `treasurerApproved = true`** včetně zápisu do `event_treasurer_approval_log` — zamyká sám hospodář, samostatné schvalování je zbytečné. Mail i audit tak zůstanou konzistentní.
+2. **„Odeslat vyúčtování na TJ"** — stávající route `POST /api/events/[id]/send-vyuctovani` **beze změny**: vyžaduje `prescribed` + `treasurerApproved` + ≥1 potvrzený doklad s vyplněnou částkou, účelem, příjemcem a bankovním účtem. Příjemce mailu: vedoucí (odpovědná osoba) a/nebo env `EMAIL_HOSPODAR_ODDILU_TJB` — stačí jeden z nich.
 
 ### 6. Guardraily
 
@@ -65,15 +73,22 @@ Souhlas hospodáře (`treasurerApproved`), zámek dokladů pro proplacení (`loc
 
 ### 7. Testy
 
-- E2E smoke test stránky `/dashboard/provoz` (vykreslení, založení záznamu).
+- E2E smoke test stránky `/dashboard/provoz` (vykreslení, založení záznamu, gate pro ne-hospodáře) — vyžaduje nastavení `TREASURER_EMAIL` v testovacím prostředí.
 - Unit test filtru seznamu akcí (typ `provozni` se v seznamu akcí neobjeví).
 - Výpočty ve `settlement-calc.ts` se nemění — stávající testy stačí.
 
 ### 8. Data — staging akce 48
 
-Po nasazení se akci 48 „Oprava vleku" na stagingu přepne `event_type` na `provozni` (v UI detailu, případně jedním SQL updatem na staging DB) — zmizí ze seznamu akcí a objeví se v Provozu. V produkci žádná taková data zatím nejsou.
+Po nasazení se akci 48 „Oprava vleku" na stagingu přepne `event_type` na `provozni` (jedním SQL updatem na staging DB) — zmizí ze seznamu akcí a objeví se v Provozu. V produkci žádná taková data zatím nejsou.
+
+## Mimo rozsah (vědomě)
+
+- **Stav „proplaceno od TJ"** — v systému dnes neexistuje ani u akcí; případná vazba na import financí TJ je otevřená otázka lifecycle specu (`2026-06-15-zivotni-cyklus-akce.md`, otázka 5). Až vznikne, provozní výdaje ji zdědí zdarma.
+- Oprávnění na úrovni server actions — gate je na úrovni stránek a navigace, admini jsou důvěryhodní (konzistentní se zbytkem aplikace).
 
 ## Zamítnuté alternativy
 
-- **B. Samostatná entita (nové tabulky)** — čistší doménový model, ale `event_expenses.event_id` je NOT NULL FK na `events`; musela by se duplikovat nebo polymorfizovat celá výdajová větev včetně zámků, schvalování a analýzy dokladů. Hodně práce za nulový funkční přínos.
-- **C. Nechat jako běžnou akci typu `other`** — funguje už dnes, ale trvale míchá provozní výdaje mezi akce a nabízí nesmyslné UI; uživatelem zamítnuto volbou samostatné stránky.
+- **B. Samostatná entita (nové tabulky)** — čistší doménový model, ale `event_expenses.event_id` je NOT NULL FK na `events`; musela by se duplikovat nebo polymorfizovat celá výdajová větev včetně zámků a analýzy dokladů. Hodně práce za nulový funkční přínos.
+- **C. Nechat jako běžnou akci typu `other`** — funguje už dnes, ale trvale míchá provozní výdaje mezi akce a nabízí nesmyslné UI.
+- **Zkrácení workflow na 1 krok / vynechání zámku** — route odeslání by se musela měnit a ztratil by se explicitní okamžik „částky zmrazeny"; dva kroky hospodáře nezatíží.
+- **Read-only viditelnost pro ostatní adminy** — zamítnuto, sekce je čistě hospodářská agenda.
