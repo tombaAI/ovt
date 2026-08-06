@@ -714,11 +714,13 @@ export function EventExpenseActions({
   expenses,
   onSent,
   treasurerApproved,
+  isProvozni = false,
 }: {
   eventId: number;
   expenses: ExpenseRow[];
   onSent?: () => void;
   treasurerApproved: boolean;
+  isProvozni?: boolean;
 }) {
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
@@ -786,7 +788,11 @@ export function EventExpenseActions({
       )}
 
       {!treasurerApproved && !sendMessage && (
-        <p className="text-xs text-red-600">Vyúčtování nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním.</p>
+        <p className="text-xs text-red-600">
+          {isProvozni
+            ? "Vyúčtování nelze odeslat — nejdřív uzamkněte částky."
+            : "Vyúčtování nelze odeslat — hospodář ještě neudělil souhlas s vyúčtováním."}
+        </p>
       )}
 
       {sendMessage && <p className="text-xs text-green-700">{sendMessage}</p>}

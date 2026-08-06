@@ -1,10 +1,11 @@
 "use server";
 
 import { getDb } from "@/lib/db";
-import { events, members, auditLog, eventVyuctovaniSends, eventTreasurerApprovalLog } from "@/db/schema";
-import { eq, asc, desc, sql } from "drizzle-orm";
+import { events, members, auditLog, eventVyuctovaniSends, eventTreasurerApprovalLog, eventExpenses } from "@/db/schema";
+import { eq, ne, and, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
+import { isTreasurer } from "@/lib/treasurer";
 import type { EventType, EventStatus, EventSource } from "@/db/schema";
 
 export type { EventType, EventStatus, EventSource };
@@ -96,7 +97,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
         })
         .from(events)
         .leftJoin(members, eq(events.leaderId, members.id))
-        .where(eq(events.year, year))
+        .where(and(eq(events.year, year), ne(events.eventType, "provozni")))
         .orderBy(asc(events.dateFrom), asc(events.approxMonth), asc(events.name));
 
     return rows.map(r => ({
@@ -194,12 +195,54 @@ export async function getEventYears(): Promise<number[]> {
     const rows = await db
         .select({ year: sql<number>`distinct ${events.year}` })
         .from(events)
+        .where(ne(events.eventType, "provozni"))
         .orderBy(desc(events.year));
 
     const current = new Date().getFullYear();
     const dbYears = rows.map(r => Number(r.year));
     const all = new Set([...dbYears, current, current + 1]);
     return Array.from(all).sort((a, b) => b - a);
+}
+
+export type ProvozniVydajRow = {
+    id: number;
+    name: string;
+    dateFrom: string | null;
+    leaderName: string | null;
+    billingStatus: "draft" | "prescribed";
+    expenseCount: number;
+    expenseSum: number;
+    sentToTj: boolean;
+};
+
+export async function getProvozniVydaje(): Promise<ProvozniVydajRow[]> {
+    const session = await auth();
+    if (!isTreasurer(session?.user?.email)) return [];
+
+    const db = getDb();
+    const rows = await db
+        .select({
+            id: events.id,
+            name: events.name,
+            dateFrom: events.dateFrom,
+            leaderName: members.fullName,
+            billingStatus: events.billingStatus,
+            expenseCount: sql<number>`(select count(*) from ${eventExpenses} where ${eventExpenses.eventId} = ${events.id})`,
+            expenseSum: sql<number>`coalesce((select sum(${eventExpenses.amount}) from ${eventExpenses} where ${eventExpenses.eventId} = ${events.id}), 0)`,
+            sentToTj: sql<boolean>`exists (select 1 from ${eventVyuctovaniSends} where ${eventVyuctovaniSends.eventId} = ${events.id})`,
+        })
+        .from(events)
+        .leftJoin(members, eq(events.leaderId, members.id))
+        .where(eq(events.eventType, "provozni"))
+        .orderBy(desc(events.createdAt));
+
+    return rows.map(r => ({
+        ...r,
+        billingStatus: r.billingStatus as "draft" | "prescribed",
+        dateFrom: r.dateFrom as unknown as string | null,
+        expenseCount: Number(r.expenseCount),
+        expenseSum: Number(r.expenseSum),
+    }));
 }
 
 // ── Mutations ────────────────────────────────────────────────────────────────
@@ -231,6 +274,39 @@ export async function createEvent(data: EventFormData): Promise<{ id: number }> 
 
     revalidatePath("/dashboard/events");
     return { id: event.id };
+}
+
+export type ProvozniVydajFormData = {
+    name: string;
+    dateFrom: string | null;
+    leaderId: number | null;
+    description: string | null;
+};
+
+export async function createProvozniVydaj(
+    data: ProvozniVydajFormData,
+): Promise<{ id: number } | { error: string }> {
+    const session = await auth();
+    if (!session?.user?.email) return { error: "Nepřihlášen" };
+    if (!isTreasurer(session.user.email)) return { error: "Provozní výdaje jsou jen pro hospodáře." };
+    if (!data.name.trim()) return { error: "Název je povinný." };
+
+    const db = getDb();
+    const [row] = await db
+        .insert(events)
+        .values({
+            year: new Date().getFullYear(),
+            name: data.name.trim(),
+            eventType: "provozni",
+            dateFrom: data.dateFrom ?? undefined,
+            leaderId: data.leaderId ?? undefined,
+            description: data.description ?? undefined,
+            createdBy: session.user.email,
+        })
+        .returning({ id: events.id });
+
+    revalidatePath("/dashboard/provoz");
+    return { id: row.id };
 }
 
 export async function updateEvent(id: number, data: EventFormData): Promise<void> {

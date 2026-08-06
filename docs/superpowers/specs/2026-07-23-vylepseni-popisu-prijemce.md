@@ -1,12 +1,12 @@
 ---
-status: navrh
+status: produkce
 ---
 
 # Zadání: Návrh lepšího popisu a příjemce faktury podle analýzy dokladu
 
-> **Stav: Návrh.** Vzniklo z postřehu, že vedoucí akce zapisují náklady narychlo a stroze,
-> což dělá problém při proplacení účetnímu oddělení. Neprošlo grilováním, rozsah se ještě
-> může měnit.
+> **Stav: Produkce.** Vzniklo z postřehu, že vedoucí akce zapisují náklady narychlo a stroze,
+> což dělá problém při proplacení účetnímu oddělení. Zgrilováno, implementováno na
+> samostatné feature větvi a nasazeno v produkci (PR #32).
 
 ## Kontext / problém
 

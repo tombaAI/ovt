@@ -34,12 +34,16 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md) | Náklad bez souboru, dodatečné přiložení | `produkce` (rozšíření viz design dokument níže) |
 | [2026-06-15-propadla-zaloha.md](2026-06-15-propadla-zaloha.md) | Propadlá záloha při odhlášení účastníka | `produkce` |
 | [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) | Kanonický algoritmus výpočtu nákladů/doplatku | `produkce` |
-| [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | Doplnění chybějících audit-log zápisů | `staging-uat` — commit `f28f062`, viz ADR-0002 |
+| [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | Doplnění chybějících audit-log zápisů | `produkce` — commit `f28f062`, viz ADR-0002 |
 | [2026-07-04-automaticky-import-vysledovky.md](2026-07-04-automaticky-import-vysledovky.md) | Automatický import PDF výsledovky z Gmailu | `navrh` |
-| [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | Vitest unit + Playwright E2E smoke testy | `staging-uat` — commit `d222eba` |
-| [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `navrh` — rozhodnuto: varianta B (water-filling) + pinning verze algoritmu na akci |
-| [2026-07-23-integracni-test-gemini-analyzy.md](2026-07-23-integracni-test-gemini-analyzy.md) | Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS) | `navrh` |
-| [2026-07-23-vylepseni-popisu-prijemce.md](2026-07-23-vylepseni-popisu-prijemce.md) | Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (výměna/re-analýza) | `navrh` |
+| [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | Vitest unit + Playwright E2E smoke testy | `produkce` — commit `d222eba` |
+| [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `navrh` — **pozastaveno**, čeká na prerekvizitu níže; rozhodnuto: varianta B (water-filling) |
+| [2026-07-23-integracni-test-gemini-analyzy.md](2026-07-23-integracni-test-gemini-analyzy.md) | Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS) | `produkce` — PR #33 |
+| [2026-07-23-vylepseni-popisu-prijemce.md](2026-07-23-vylepseni-popisu-prijemce.md) | Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (výměna/re-analýza) | `produkce` — PR #32 |
+| [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) | Obecný mechanismus návrh/potvrzení pro změnu částky už vygenerovaného předpisu | `zgrilovano` — realizace na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`, prerekvizita pro dotaci výše |
+| [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) | Záloha se nepřepočte při změně počtu osob na přihlášce po jejím vzniku | `navrh` — jen zapsáno, k dořešení |
+| [2026-08-03-prihlasky-zavod-cpv.md](2026-08-03-prihlasky-zavod-cpv.md) | Online přihlašování na pořádaný závod ČPV (podzim 2026) — veřejný formulář, předpisy „H”, platby, změny, vratky | `navrh` — obohaceno o rešerši pravidel ČPV 2026, čeká na grilování + dekompozici |
+| [2026-08-05-provozni-vydaje.md](2026-08-05-provozni-vydaje.md) | Provozní výdaje mimo akce (oprava vleku apod.) — typ akce `provozni` + samostatná stránka `/dashboard/provoz` jen pro hospodáře | `schvaleno` — ověřeno na staging, čeká na merge PR do `main` |
 
 ## Navazující design dokumenty (`docs/`)
 
@@ -47,26 +51,28 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 
 | Dokument | Navazuje na | Stav |
 |---|---|---|
-| [`2026-07-04-invoice-attachment-replace-design.md`](2026-07-04-invoice-attachment-replace-design.md) | [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md) | `staging-uat` — výměna přílohy, kontrola shody částky, hospodářské potvrzení neshody (commity `44d8503`…`3c60af0`) |
+| [`2026-07-04-invoice-attachment-replace-design.md`](2026-07-04-invoice-attachment-replace-design.md) | [2026-06-15-faktura-bez-dokladu.md](2026-06-15-faktura-bez-dokladu.md) | `produkce` — výměna přílohy, kontrola shody částky, hospodářské potvrzení neshody (commity `44d8503`…`3c60af0`) |
 | [`docs/adr/0001-analyzed-amount-historical-backfill.md`](../../adr/0001-analyzed-amount-historical-backfill.md) | invoice-attachment-replace-design | `superseded` — nahrazeno reálným re-analýza backfillem místo odhadu |
-| [`docs/adr/0002-event-audit-log-scope-and-reconstructability.md`](../../adr/0002-event-audit-log-scope-and-reconstructability.md) | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | implementováno (`f28f062`), `staging-uat` |
+| [`docs/adr/0002-event-audit-log-scope-and-reconstructability.md`](../../adr/0002-event-audit-log-scope-and-reconstructability.md) | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | implementováno (`f28f062`), `produkce` |
 | [`docs/TESTING.md`](../../TESTING.md) | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | průvodce realizací — jak testy spouštět, validovat a rozšiřovat (vč. receptu na E2E průchod akcí) |
 
 ## Roadmap — co je rozdělané
 
 **Čeká na UAT/schválení a merge do produkce** (na stagingu, funkčně hotovo):
-1. Audit akcí a vyúčtování (`2026-07-04-audit-akce-mezery.md`)
-2. Výměna přílohy nákladu + kontrola shody s dokladem (`invoice-attachment-replace-design.md`)
-3. Automatické testy (`2026-07-06-automaticke-testy.md`)
+
+1. Provozní výdaje mimo akce (`2026-08-05-provozni-vydaje.md`) — ověřeno na staging, schváleno, PR `staging → main` otevřený
+
+**V realizaci:**
+2. Schvalování změny částky předpisu — obecný mechanismus (`2026-08-03-schvalovani-zmeny-castky-predpisu.md`), zgrilováno, vývoj na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`; **blokuje** položku 3 backlogu níže
 
 **Backlog — návrh, implementace nezahájena:**
-1. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`)
-2. Automatický import výsledovky z Gmailu (`2026-07-04-automaticky-import-vysledovky.md`)
-3. UX redesign — Lodě, Brigády, Akce (zbytek `2026-04-23-ux-redesign-v1.md`)
-4. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
-5. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
-6. Integrační test Gemini analýzy dokladů — vzorové JPG/PDF/XLS (`2026-07-23-integracni-test-gemini-analyzy.md`) — zároveň první zkušební běh nového postupu vývoje přes feature větev (viz `CLAUDE.md`)
-7. Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (`2026-07-23-vylepseni-popisu-prijemce.md`)
+3. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`) — pozastaveno, čeká na položku 2 výše
+4. Automatický import výsledovky z Gmailu (`2026-07-04-automaticky-import-vysledovky.md`)
+5. UX redesign — Lodě, Brigády, Akce (zbytek `2026-04-23-ux-redesign-v1.md`)
+6. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
+7. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
+8. Záloha nesedí po změně počtu osob na přihlášce (`2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md`) — jen zapsáno, k dořešení
+9. Online přihlašování na závod ČPV podzim 2026 (`2026-08-03-prihlasky-zavod-cpv.md`) — velký celek (první veřejná část systému), čeká na grilování a dekompozici; termínově vázáno na závod (deadline změn 27. 9. 2026)
 
 ## Ostatní dokumenty — zůstávají ve `zadani/`
 

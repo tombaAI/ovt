@@ -173,6 +173,7 @@ export async function POST(
       .select({
         id: events.id,
         name: events.name,
+        eventType: events.eventType,
         billingStatus: events.billingStatus,
         treasurerApproved: events.treasurerApproved,
         leaderName: members.fullName,
@@ -186,6 +187,10 @@ export async function POST(
     if (!event) {
       return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
     }
+
+    // Provozní výdaj nemá "akci" ani nutně vedoucího — vyúčtování i email o něm mluví
+    // jako o nákladu a připravuje ho vždy hospodář (viz spec 2026-08-05-provozni-vydaje.md).
+    const isProvozni = event.eventType === "provozni";
 
     if (event.billingStatus !== "prescribed") {
       return NextResponse.json(
@@ -300,12 +305,14 @@ export async function POST(
     const settlementData: VyuctovaniData = {
       oddi: DEFAULT_ODDIL,
       cisloZalohy: "",
-      zaMesicLabel: "za akci",
+      zaMesicLabel: isProvozni ? "náklad" : "za akci",
       zaMesic: event.name,
       veVysi: 0,
       naklady,
       prijmy: {},
-      vyuctoval: event.leaderName ?? "",
+      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje ho hospodář,
+      // takže pole odpovídá tomu, kdo souhlas udělil (latestApproval), ne event.leaderName.
+      vyuctoval: isProvozni ? (latestApproval?.changedBy ?? DEFAULT_SCHVALIL) : (event.leaderName ?? ""),
       schvalil: DEFAULT_SCHVALIL,
       datum: new Intl.DateTimeFormat("cs-CZ").format(new Date()),
     };
@@ -331,7 +338,9 @@ export async function POST(
           payeeName: expense.reimbursementPayeeName ?? "Nedoplněno",
           bankAccountNumber: expense.bankAccountNumber ?? "",
           bankCode: expense.bankCode ?? "",
-          paymentMessage: `proplacení nákladů z akce OVT: ${event.name}`,
+          paymentMessage: isProvozni
+            ? `proplacení nákladů OVT: ${event.name}`
+            : `proplacení nákladů z akce OVT: ${event.name}`,
           items: [],
           total: 0,
         });
@@ -448,6 +457,8 @@ export async function POST(
       ? `${session.user.name.trim()} (${session.user.email})`
       : session.user.email;
 
+    const vyuctovaniLabel = isProvozni ? "Vyúčtování nákladu" : "Vyúčtování akce";
+
     const html = `<!DOCTYPE html>
 <html lang="cs">
 <head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"></head>
@@ -459,7 +470,7 @@ export async function POST(
   <tr>
     <td style="background:#327600;padding:24px 32px;">
       <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Oddíl Vodní Turistiky TJ Bohemians</p>
-      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">Vyúčtování akce</p>
+      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">${vyuctovaniLabel}</p>
     </td>
   </tr>
 
@@ -467,7 +478,9 @@ export async function POST(
     <td style="padding:28px 32px 10px;">
       <p style="margin:0 0 16px;font-size:15px;color:#374151;">Dobrý den,</p>
       <p style="margin:0 0 20px;font-size:14px;color:#6b7280;line-height:1.6;">
-        v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>
+        ${isProvozni
+          ? `v příloze zasíláme vyúčtování <strong>${escapeHtml(event.name)}</strong>`
+          : `v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>`}
         včetně všech dokladů. CSV příloha obsahuje přehled pro bankovní převody.
       </p>
 
@@ -498,8 +511,11 @@ export async function POST(
         <tr>
           <td style="padding:10px 16px;border-right:1px solid #e5e7eb;width:50%;vertical-align:top;">
             <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;">Připravil</p>
-            <p style="margin:0;font-size:13px;color:#374151;font-weight:600;">${escapeHtml(event.leaderName ?? "—")}</p>
-            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Vedoucí akce</p>
+            ${isProvozni
+              ? `<p style="margin:0;font-size:13px;color:#374151;font-weight:600;">${escapeHtml(latestApproval?.changedBy ?? "—")}</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Hospodář oddílu</p>`
+              : `<p style="margin:0;font-size:13px;color:#374151;font-weight:600;">${escapeHtml(event.leaderName ?? "—")}</p>
+            <p style="margin:2px 0 0;font-size:11px;color:#6b7280;">Vedoucí akce</p>`}
           </td>
           <td style="padding:10px 16px;vertical-align:top;">
             <p style="margin:0 0 2px;font-size:10px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:.06em;">Schválil</p>
@@ -544,9 +560,9 @@ export async function POST(
     const { data, error } = await resend.emails.send({
       from: settings.from,
       to,
-      subject: `OVT vyúčtování akce: ${event.name}`,
+      subject: `OVT ${vyuctovaniLabel.toLowerCase()}: ${event.name}`,
       html,
-      text: `Vyúčtování akce: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
+      text: `${vyuctovaniLabel}: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
       replyTo: settings.replyTo,
       attachments,
     });

@@ -1,10 +1,10 @@
 ---
-status: staging-uat
+status: produkce
 ---
 
 # Zadání: Automatické testy (unit + UI/E2E)
 
-> **Stav: Na stagingu (UAT).** Implementováno (commit `d222eba`), čeká na ověření a schválení uživatelem před mergem do produkce. Viz [INDEX.md](INDEX.md).
+> **Stav: Produkce.** Implementováno (commit `d222eba`), nasazeno v produkci. Viz [INDEX.md](INDEX.md).
 
 Cíl: po **každé úpravě kódu** automaticky ověřit, že aplikace funguje — algoritmicky (výpočty, data) i z pohledu UI (stránky se vykreslí, klíčové toky fungují). Dosud existovala jen statická kontrola (ESLint + `tsc --noEmit` v pre-commit) a ruční ověřování na stagingu; regrese typu issue #28 (dvojí započtení propadlé zálohy) se odhalily až v datech.
 
