@@ -739,6 +739,11 @@ export async function unlockBilling(
         const [ev] = await db.select({ eventType: events.eventType }).from(events).where(eq(events.id, eventId));
         if (!ev) return { error: "Akce nenalezena" };
         const isProvozni = ev.eventType === "provozni";
+        if (isProvozni && !isTreasurer(session.user.email)) {
+            const reason = "Provozní výdaj může odemknout jen hospodář.";
+            await logBlockedAttempt(db, { attemptedAction: "unlock_billing", reason, changedBy: session.user.email, eventId });
+            return { error: reason };
+        }
 
         const collecting = await isEventCollecting(db, eventId);
 

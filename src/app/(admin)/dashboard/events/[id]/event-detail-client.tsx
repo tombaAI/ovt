@@ -20,7 +20,7 @@ import {
 import { getEventRegistrationsForAdmin, getRegistrationAuditLog, getEventFullAuditLog } from "@/lib/actions/event-registrations";
 import { SELECTABLE_EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
 import type {
-    EventRow, EventType, EventStatus, EventAuditEntry,
+    EventRow, EventStatus, EventAuditEntry,
     GcalDiffResult, GcalDiffField, MemberOption,
 } from "@/lib/actions/events";
 import type { EventRegistrationAdminRow, RegistrationAuditEntry, EventFullAuditEntry } from "@/lib/actions/event-registrations";
