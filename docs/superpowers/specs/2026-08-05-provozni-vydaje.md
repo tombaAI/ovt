@@ -1,10 +1,10 @@
 ---
-status: implementace
+status: schvaleno
 ---
 
 # Zadání: Provozní výdaje — vyúčtování mimo akce
 
-> **Stav: Zgrilováno (2026-08-05).** Rozhodnutá varianta: provozní výdaj je technicky akce s novým typem `provozni`, navenek žije na samostatné stránce `/dashboard/provoz` viditelné **jen pro hospodáře**. Schvalovací krok odpadá (zamyká sám hospodář). Čeká na implementační plán.
+> **Stav: Schváleno (2026-08-06).** Implementováno a ověřeno na staging (reálný test na akci „Oprava vleku" vč. odeslání vyúčtování e-mailem, wording mailu doladěn). Čeká na merge PR `staging → main`. Rozhodnutá varianta: provozní výdaj je technicky akce s novým typem `provozni`, navenek žije na samostatné stránce `/dashboard/provoz` viditelné **jen pro hospodáře**. Schvalovací krok odpadá (zamyká sám hospodář).
 
 ## Problém
 
