@@ -1,4 +1,5 @@
 import { expect, test } from "@playwright/test";
+import { encode } from "next-auth/jwt";
 
 // Smoke testy — chytají "aplikace se slepila": stránka se nevykreslí, auth nefunguje,
 // data netečou z DB do UI. Detailní chování výpočtů hlídají unit testy (Vitest).
@@ -22,6 +23,7 @@ test.describe("přihlášený admin", () => {
         { path: "/dashboard/payments", probe: /./ },
         { path: "/dashboard/events", probe: /./ },
         { path: "/dashboard/boats", probe: /./ },
+        { path: "/dashboard/provoz", probe: /./ },
     ];
 
     for (const { path, probe } of pages) {
@@ -44,5 +46,55 @@ test.describe("přihlášený admin", () => {
         await expect(page).toHaveURL(/\/dashboard\/members\/\d+/);
         await expect(page.getByText("Jan Testovací").filter({ visible: true }).first()).toBeVisible();
         await expect(page.getByText("jan.testovaci@test.local").filter({ visible: true }).first()).toBeVisible();
+    });
+});
+
+test.describe("provozní výdaje", () => {
+    test("hospodář založí výdaj; nezobrazí se v kalendáři, zobrazí se v Provozu", async ({ page }) => {
+        await page.goto("/dashboard/provoz");
+        await expect(page.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
+
+        await page.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await page.getByLabel("Název *").fill("E2E oprava vleku");
+        await page.getByRole("button", { name: "Založit" }).click();
+
+        // Po založení přesměruje na detail v režimu provozního výdaje
+        await expect(page).toHaveURL(/\/dashboard\/events\/\d+/);
+        await expect(page.getByRole("heading", { name: "E2E oprava vleku" })).toBeVisible();
+        await expect(page.getByRole("tab", { name: "Náklady" })).toBeVisible();
+        await expect(page.getByRole("tab", { name: "Přihlášky" })).toHaveCount(0);
+
+        // Nezobrazuje se v kalendáři akcí
+        await page.goto(`/dashboard/events?year=${new Date().getFullYear()}`);
+        await expect(page.getByText("E2E oprava vleku")).toHaveCount(0);
+
+        // Zobrazuje se v seznamu Provozu
+        await page.goto("/dashboard/provoz");
+        await expect(page.getByText("E2E oprava vleku").first()).toBeVisible();
+    });
+
+    test("ne-hospodář je z /dashboard/provoz přesměrován", async ({ browser, baseURL }) => {
+        const secret = process.env.AUTH_SECRET;
+        if (!secret) throw new Error("AUTH_SECRET musí být nastaven");
+        const token = await encode({
+            token: { name: "E2E Ne-hospodář", email: "e2e-nehospodar@test.local", sub: "e2e-nehospodar" },
+            secret,
+            salt: "authjs.session-token",
+            maxAge: 3600,
+        });
+        const context = await browser.newContext();
+        await context.addCookies([{
+            name: "authjs.session-token",
+            value: token,
+            domain: new URL(baseURL!).hostname,
+            path: "/",
+            httpOnly: true,
+            secure: false,
+            sameSite: "Lax",
+        }]);
+        const page = await context.newPage();
+        await page.goto("/dashboard/provoz");
+        await expect(page).toHaveURL(/\/dashboard$/);
+        await context.close();
     });
 });

@@ -13,6 +13,7 @@ import {
     members,
     people,
     auditLog,
+    eventTreasurerApprovalLog,
 } from "@/db/schema";
 import { eq, and, or, isNull, isNotNull, sql, inArray } from "drizzle-orm";
 import { revalidatePath } from "next/cache";
@@ -661,8 +662,17 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         const session = await auth();
         if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
-        const [event] = await db.select({ name: events.name }).from(events).where(eq(events.id, eventId));
+        const [event] = await db
+            .select({ name: events.name, eventType: events.eventType, treasurerApproved: events.treasurerApproved })
+            .from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
+
+        const isProvozni = event.eventType === "provozni";
+        if (isProvozni && !isTreasurer(session.user.email)) {
+            const reason = "Provozní výdaj může uzamknout jen hospodář.";
+            await logBlockedAttempt(db, { attemptedAction: "lock_billing", reason, changedBy: session.user.email, eventId });
+            return { error: reason };
+        }
 
         const settlement = await getEventSettlement(eventId);
         const gateError = await prescriptionGateError(db, eventId, settlement, "lock_billing", session.user.email);
@@ -681,6 +691,27 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
             metadata: { eventId },
             changedBy: session.user.email,
         });
+
+        // Provozní výdaj: zamyká sám hospodář — samostatný krok souhlasu odpadá,
+        // souhlas se uděluje automaticky při zamčení (spec 2026-08-05-provozni-vydaje.md).
+        if (isProvozni && !event.treasurerApproved) {
+            await db.transaction(async tx => {
+                await tx.update(events).set({ treasurerApproved: true }).where(eq(events.id, eventId));
+                await tx.insert(eventTreasurerApprovalLog).values({
+                    eventId,
+                    action: "approved",
+                    changedBy: session.user!.name?.trim() || session.user!.email!,
+                });
+                await tx.insert(auditLog).values({
+                    entityType: "event",
+                    entityId: eventId,
+                    action: "treasurer_approve",
+                    changes: { treasurerApproved: { old: "false", new: "true" } },
+                    metadata: { eventId, auto: "provozni_lock" },
+                    changedBy: session.user!.email!,
+                });
+            });
+        }
 
         revalidatePath(`/dashboard/events/${eventId}`);
         return { success: true };
@@ -705,6 +736,15 @@ export async function unlockBilling(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
+        const [ev] = await db.select({ eventType: events.eventType }).from(events).where(eq(events.id, eventId));
+        if (!ev) return { error: "Akce nenalezena" };
+        const isProvozni = ev.eventType === "provozni";
+        if (isProvozni && !isTreasurer(session.user.email)) {
+            const reason = "Provozní výdaj může odemknout jen hospodář.";
+            await logBlockedAttempt(db, { attemptedAction: "unlock_billing", reason, changedBy: session.user.email, eventId });
+            return { error: reason };
+        }
+
         const collecting = await isEventCollecting(db, eventId);
 
         // Když už akce vybírá peníze, odemčení je citlivý zásah: smí ho udělat jen hospodář,
@@ -727,7 +767,8 @@ export async function unlockBilling(
                     billingStatus: "draft",
                     lockForParticipants: false,
                     // Po odemčení akce, která vybírá, padá souhlas hospodáře — po úpravách musí znovu schválit.
-                    ...(collecting ? { treasurerApproved: false } : {}),
+                    // U provozního výdaje padá souhlas při každém odemčení (odpadá samostatný krok schválení).
+                    ...(collecting || isProvozni ? { treasurerApproved: false } : {}),
                     updatedAt: new Date(),
                 })
                 .where(eq(events.id, eventId));
@@ -736,12 +777,24 @@ export async function unlockBilling(
                 entityType: "event",
                 entityId: eventId,
                 action: "unlock_billing",
-                changes: collecting
-                    ? { billingStatus: { old: "prescribed", new: "draft" }, collecting: { old: "true", new: "true" }, treasurerApproved: { old: "true", new: "false" } }
+                changes: (collecting || isProvozni)
+                    ? {
+                        billingStatus: { old: "prescribed", new: "draft" },
+                        ...(collecting ? { collecting: { old: "true", new: "true" } } : {}),
+                        treasurerApproved: { old: "true", new: "false" },
+                      }
                     : { billingStatus: { old: "prescribed", new: "draft" } },
                 metadata: { eventId },
                 changedBy: session.user!.email!,
             });
+
+            if (isProvozni) {
+                await tx.insert(eventTreasurerApprovalLog).values({
+                    eventId,
+                    action: "revoked",
+                    changedBy: session.user!.name?.trim() || session.user!.email!,
+                });
+            }
         });
 
         revalidatePath(`/dashboard/events/${eventId}`);

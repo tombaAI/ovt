@@ -1,4 +1,4 @@
-import { notFound } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { getEventById } from "@/lib/actions/events";
 import { auth } from "@/auth";
 import { EventDetailClient } from "./event-detail-client";
@@ -17,6 +17,8 @@ export default async function EventDetailPage({
 
     const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
     const isTreasurer = !!(treasurerEmail && session?.user?.email?.toLowerCase() === treasurerEmail);
+
+    if (event.eventType === "provozni" && !isTreasurer) redirect("/dashboard");
 
     return <EventDetailClient event={event} isTreasurer={isTreasurer} />;
 }

@@ -1,5 +1,5 @@
 ---
-status: zgrilovano
+status: implementace
 ---
 
 # Zadání: Provozní výdaje — vyúčtování mimo akce
@@ -55,16 +55,18 @@ Celá výdajová mašinerie (náklady s doklady, Gemini analýza, zámky, odesl�
 URL detailu zůstává `/dashboard/events/[id]` (jedna route, žádná duplikace komponent). Pro `event_type = 'provozni'` se detail přizpůsobí:
 
 - **Přístup**: ne-hospodář je přesměrován na dashboard (stejný gate jako seznam).
-- **Skryté záložky**: Přihlášky, Platby.
+- **Skryté záložky**: Přihlášky, Vyúčtování i Platby — záložka Vyúčtování je čistě participantská (rozpočítávání nákladů na účastníky) a tlačítka výdajové strany (zámek částek, PDF, odeslání na TJ) žijí v záložce Náklady.
 - **Skrytá pole**: registrace od/do, záloha, dotace na člena, GCal sync, zámek pro účastníky, typ akce, stav akce.
 - **Skryté participantské exporty**: pivník, seznam účastníků.
-- **Zůstává**: Detail (název, datum, odpovědná osoba, popis), Náklady (beze změn vč. Gemini analýzy), Vyúčtování — jen výdajová strana, Audit.
+- **Zůstává**: Detail (název, datum, odpovědná osoba, popis), Náklady, Audit.
 - **Zpětný odkaz / breadcrumb** vede na `/dashboard/provoz`; popisky mluví o „provozním výdaji", ne o „akci".
 
 ### 5. Workflow vyúčtování — 2 kroky
 
 1. **„Uzamknout částky"** — stávající `lockBilling` (s 0 přihláškami projde: gate kontroluje jen nevyřešené zálohy a koeficienty, obojí prázdné; vygeneruje 0 předpisů, přepne `billingStatus` na `prescribed`). U typu `provozni` navíc **automaticky nastaví `treasurerApproved = true`** včetně zápisu do `event_treasurer_approval_log` — zamyká sám hospodář, samostatné schvalování je zbytečné. Mail i audit tak zůstanou konzistentní.
 2. **„Odeslat vyúčtování na TJ"** — stávající route `POST /api/events/[id]/send-vyuctovani` **beze změny**: vyžaduje `prescribed` + `treasurerApproved` + ≥1 potvrzený doklad s vyplněnou částkou, účelem, příjemcem a bankovním účtem. Příjemce mailu: vedoucí (odpovědná osoba) a/nebo env `EMAIL_HOSPODAR_ODDILU_TJB` — stačí jeden z nich.
+
+Tlačítka „Uzamknout částky"/„Odemknout částky" jsou v záložce Náklady (záložka Platby s původním zámkem je u provozního skrytá); odemčení automaticky odvolá souhlas hospodáře.
 
 ### 6. Guardraily
 
@@ -74,7 +76,7 @@ URL detailu zůstává `/dashboard/events/[id]` (jedna route, žádná duplikace
 ### 7. Testy
 
 - E2E smoke test stránky `/dashboard/provoz` (vykreslení, založení záznamu, gate pro ne-hospodáře) — vyžaduje nastavení `TREASURER_EMAIL` v testovacím prostředí.
-- Unit test filtru seznamu akcí (typ `provozni` se v seznamu akcí neobjeví).
+- Filtr kalendáře pokrývá E2E asercí (DB dotaz nejde unit-testovat); unit test má čistý modul `deriveProvozniStav` (`src/lib/provoz-status.test.ts`).
 - Výpočty ve `settlement-calc.ts` se nemění — stávající testy stačí.
 
 ### 8. Data — staging akce 48

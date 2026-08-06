@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createEvent } from "@/lib/actions/events";
-import { EVENT_TYPE_LABELS, MONTH_NAMES } from "@/lib/events-config";
+import { SELECTABLE_EVENT_TYPES, MONTH_NAMES } from "@/lib/events-config";
 import type { EventType } from "@/lib/actions/events";
 
 interface MemberOption {
@@ -24,8 +24,6 @@ interface Props {
     allMembers: MemberOption[];
     onSaved: () => void;
 }
-
-const EVENT_TYPES = Object.entries(EVENT_TYPE_LABELS) as [EventType, string][];
 
 function matchesMember(m: MemberOption, q: string) {
     const lq = q.toLowerCase();
@@ -108,7 +106,7 @@ export function AddEventSheet({ open, onOpenChange, defaultYear, allMembers, onS
                             <Label>Typ</Label>
                             <select value={eventType} onChange={e => setEventType(e.target.value as EventType)}
                                 className="w-full h-9 rounded-md border border-input bg-background px-2 text-sm shadow-sm focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-ring">
-                                {EVENT_TYPES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                                {SELECTABLE_EVENT_TYPES.map(([k, v]) => <option key={k} value={k}>{v}</option>)}
                             </select>
                         </div>
                         <div className="space-y-1.5">

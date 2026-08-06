@@ -25,12 +25,19 @@ function isNavActive(pathname: string, href: string, exact?: boolean): boolean {
     return false;
 }
 
-export function NavLinks() {
+export function NavLinks({ showProvoz }: { showProvoz: boolean }) {
     const pathname = usePathname();
+
+    const items = NAV_ITEMS.flatMap(item => [
+        item,
+        ...(item.href === "/dashboard/finance" && showProvoz
+            ? [{ href: "/dashboard/provoz", label: "Provoz" }]
+            : []),
+    ]);
 
     return (
         <>
-            {NAV_ITEMS.map(({ href, label, exact }) => {
+            {items.map(({ href, label, exact }) => {
                 const isActive = isNavActive(pathname, href, exact);
                 return (
                     <Link

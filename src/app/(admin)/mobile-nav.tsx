@@ -30,11 +30,13 @@ function isPrimaryActive(pathname: string, href: string): boolean {
     return false;
 }
 
-export function MobileNav() {
+export function MobileNav({ showProvoz }: { showProvoz: boolean }) {
     const pathname = usePathname();
     const [moreOpen, setMoreOpen] = useState(false);
 
-    const isMoreActive = MORE_ITEMS.some(item =>
+    const moreItems = [...MORE_ITEMS, ...(showProvoz ? [{ href: "/dashboard/provoz", label: "Provoz" }] : [])];
+
+    const isMoreActive = moreItems.some(item =>
         item.href === "/dashboard" ? pathname === "/dashboard" : pathname.startsWith(item.href)
     );
 
@@ -72,7 +74,7 @@ export function MobileNav() {
                     <div className="pt-2 pb-6">
                         <div className="w-10 h-1 bg-white/20 rounded-full mx-auto mb-5" />
                         <div className="grid grid-cols-3 gap-1">
-                            {MORE_ITEMS.map(({ href, label }) => {
+                            {moreItems.map(({ href, label }) => {
                                 const active = href === "/dashboard" ? pathname === href : pathname.startsWith(href);
                                 return (
                                     <Link key={href} href={href}
