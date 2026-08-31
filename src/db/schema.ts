@@ -387,6 +387,9 @@ export type EventBillingStatus = typeof eventBillingStatusEnum[number];
 export const eventSourceEnum = ["manual", "google_calendar", "kanoe_rss"] as const;
 export type EventSource = typeof eventSourceEnum[number];
 
+export const oddilEnum = ["ovt", "tom"] as const;
+export type Oddil = typeof oddilEnum[number];
+
 export const events = appSchema.table(
     "events",
     {
@@ -394,6 +397,7 @@ export const events = appSchema.table(
         year: smallint("year").notNull(),
         name: text("name").notNull(),
         eventType: text("event_type", { enum: eventTypeEnum }).notNull().default("other"),
+        oddil: text("oddil", { enum: oddilEnum }).notNull().default("ovt"),
         dateFrom: date("date_from"),
         dateTo: date("date_to"),
         timeFrom: text("time_from"),
