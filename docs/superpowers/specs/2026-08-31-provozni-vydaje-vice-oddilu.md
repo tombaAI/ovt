@@ -25,7 +25,7 @@ Výsledovka / hospodaření oddílu (`src/lib/actions/finance-tj.ts`, `hospodare
 | Rozsah | **Jen provozní výdaje mimo akci.** Členové, příspěvky, běžné akce s účastníky, lodě, brigády zůstávají výhradně agendou OVT (oddíl 207) — nezdvojují se. |
 | Kdo vidí sekci Provoz | **Jen hospodáři** — OVT i TOM. Ostatní admini ji nevidí vůbec, stejně jako dnes (sekce se pro ně v navigaci ani nezobrazí, přímý vstup na URL přesměruje na dashboard). |
 | Rozsah viditelnosti hospodáře | Hospodář OVT i hospodář TOM vidí **oba** oddíly (plný přehled obou agend). Uzamknout částky / odeslat na TJ ale smí **jen hospodář příslušného oddílu** — hospodář TOM nemůže uzamknout ani odeslat provozní výdaj OVT a naopak. |
-| Kdo zakládá výdaj a přidává doklady | **Kterýkoli z obou hospodářů**, pro libovolný ze dvou oddílů (plyne z toho, že oba vidí obě agendy v plném rozsahu). |
+| Kdo zakládá výdaj a přidává doklady | **Založení nového výdaje**: jen hospodář **vlastního** oddílu — revize po bezpečnostním nálezu (2026-09-02), zpřísněno z původního "kterýkoli hospodář, libovolný oddíl". **Přidávání dokladů** k už existujícímu (neuzamčenému) výdaji zůstává otevřené komukoli, kdo výdaj vidí (viz řádek výše) — beze změny. |
 | UI struktura | **Samostatné záložky per oddíl** na `/dashboard/provoz` (ne jeden seznam s filtrem) — blíže odděleným agendám. |
 | Kód oddílu TOM | **234** (analogie k "207" u OVT), tiskne se na PDF vyúčtování a do mailu na TJ. |
 | Hospodář TOM | **Alžběta Poštulková** — potřebuje nový záznam v `admin_users` (Google OAuth whitelist), jinak se do appky nedostane vůbec. |
@@ -92,7 +92,8 @@ Gate se **rozšiřuje z jednoho hospodáře na "kteréhokoli z hospodářů"**, 
 - Nav položka "Provoz" (`(admin)/layout.tsx`): `showProvoz = isAnyOddilTreasurer(email)` (dřív `isTreasurer`).
 - `/dashboard/provoz/page.tsx`: `if (!isAnyOddilTreasurer(...)) redirect("/dashboard")`.
 - `/dashboard/events/[id]/page.tsx` pro `eventType === 'provozni'`: stejný redirect, `isAnyOddilTreasurer` místo `isTreasurer`.
-- `getProvozniVydaje()` / `createProvozniVydaj()` (`actions/events.ts`): gate `isAnyOddilTreasurer` místo `isTreasurer`. Kdokoli z obou hospodářů vidí a zakládá záznamy pro oba oddíly.
+- `getProvozniVydaje()` (`actions/events.ts`): gate `isAnyOddilTreasurer` — kdokoli z obou hospodářů vidí záznamy obou oddílů.
+- `createProvozniVydaj()` (`actions/events.ts`): gate `isTreasurerOfOddil(email, data.oddil)` — založit smí jen hospodář oddílu, pro který se výdaj zakládá (revize po bezpečnostním nálezu, viz řádek "Kdo zakládá výdaj a přidává doklady" výše). Vstupní `data.oddil` se navíc validuje proti `ODDIL_VALUES`, než se vůbec zapíše do DB.
 
 Ostatní admini (mimo obou hospodářů) nevidí sekci vůbec — shodné s dnešním chováním, jen rozšířené o druhou osobu.
 
@@ -100,7 +101,7 @@ Ostatní admini (mimo obou hospodářů) nevidí sekci vůbec — shodné s dne�
 
 - Nahoře záložky **OVT** / **TOM** (`?oddil=ovt|tom` v URL, obdoba dnešního `?year=` patternu na strankách Členové/Příspěvky), datově vygenerované z `oddilEnum` — třetí oddíl přidá záložku automaticky.
 - Každá záložka = nezávislý seznam (dnešní tabulka název/datum/odpovědná osoba/doklady/částka/stav), filtrovaný podle `events.oddil`.
-- Dialog "Nový provozní výdaj" dostane select **Oddíl** (default = aktivní záložka) — vytvoří `events` řádek s příslušným `oddil`.
+- Dialog "Nový provozní výdaj" dostane select **Oddíl** (default = aktivní záložka) — vytvoří `events` řádek s příslušným `oddil`. Select nabízí obě hodnoty bez ohledu na to, kterého oddílu je přihlášený uživatel hospodářem — pokus založit výdaj cizího oddílu server odmítne čistou chybovou hláškou (viz bod 3). Vyfiltrování selectu jen na vlastní oddíl je otevřený UX vylepšovák, ne požadavek tohoto zadání.
 
 ### 5. Detail akce — akce hospodáře zůstávají per-oddíl
 

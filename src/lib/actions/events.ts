@@ -5,7 +5,8 @@ import { events, members, auditLog, eventVyuctovaniSends, eventTreasurerApproval
 import { eq, ne, and, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
-import { isAnyOddilTreasurer } from "@/lib/treasurer";
+import { isAnyOddilTreasurer, isTreasurerOfOddil } from "@/lib/treasurer";
+import { ODDIL_LABELS, ODDIL_VALUES } from "@/lib/oddily-config";
 import type { EventType, EventStatus, EventSource, Oddil } from "@/db/schema";
 
 export type { EventType, EventStatus, EventSource, Oddil };
@@ -295,7 +296,10 @@ export async function createProvozniVydaj(
 ): Promise<{ id: number } | { error: string }> {
     const session = await auth();
     if (!session?.user?.email) return { error: "Nepřihlášen" };
-    if (!isAnyOddilTreasurer(session.user.email)) return { error: "Provozní výdaje jsou jen pro hospodáře." };
+    if (!ODDIL_VALUES.includes(data.oddil)) return { error: "Neplatný oddíl." };
+    if (!isTreasurerOfOddil(session.user.email, data.oddil)) {
+        return { error: `Provozní výdaj oddílu ${ODDIL_LABELS[data.oddil]} může založit jen jeho hospodář.` };
+    }
     if (!data.name.trim()) return { error: "Název je povinný." };
 
     const db = getDb();

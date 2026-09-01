@@ -164,18 +164,18 @@ test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
         await expect(page.getByRole("button", { name: "Odeslat vyúčtování" })).toBeDisabled();
     });
 
-    test("hospodář OVT smí založit provozní výdaj i pro oddíl TOM (kterýkoli hospodář, libovolný oddíl)", async ({ page }) => {
+    test("hospodář OVT NESMÍ založit provozní výdaj pro oddíl TOM (založení je jen pro hospodáře vlastního oddílu)", async ({ page }) => {
         await page.goto("/dashboard/provoz");
         await expect(page.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
         await page.getByRole("tab", { name: "TOM" }).click();
 
         await page.getByRole("button", { name: "Nový provozní výdaj" }).click();
         await expect(page.locator("#provoz-oddil")).toHaveValue("tom");
-        await page.getByLabel("Název *").fill("E2E výdaj TOM od OVT");
+        await page.getByLabel("Název *").fill("E2E výdaj TOM od OVT — má selhat");
         await page.getByRole("button", { name: "Založit" }).click();
 
-        await expect(page).toHaveURL(/\/dashboard\/events\/\d+/);
-        await expect(page.getByRole("heading", { name: "E2E výdaj TOM od OVT" })).toBeVisible();
-        await expect(page.getByText("TOM", { exact: true }).first()).toBeVisible();
+        // Založení je odmítnuto — dialog zůstává otevřený, žádný redirect na detail výdaje
+        await expect(page.getByText(/může založit jen jeho hospodář/)).toBeVisible();
+        await expect(page).not.toHaveURL(/\/dashboard\/events\/\d+/);
     });
 });
