@@ -4,14 +4,16 @@ import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
     Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger, DialogFooter,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Plus } from "lucide-react";
-import { createProvozniVydaj, type ProvozniVydajRow, type MemberOption } from "@/lib/actions/events";
+import { createProvozniVydaj, type ProvozniVydajRow, type MemberOption, type Oddil } from "@/lib/actions/events";
 import { deriveProvozniStav, PROVOZNI_STAV_LABELS, type ProvozniStav } from "@/lib/provoz-status";
+import { ODDIL_LABELS, ODDIL_VALUES } from "@/lib/oddily-config";
 
 const STAV_COLORS: Record<ProvozniStav, string> = {
     rozpracovano: "bg-gray-100 text-gray-600",
@@ -24,15 +26,34 @@ const fmtKc = (n: number) =>
 const fmtDate = (d: string | null) =>
     d ? new Intl.DateTimeFormat("cs-CZ", { day: "numeric", month: "numeric", year: "numeric" }).format(new Date(d)) : "—";
 
-export function ProvozClient({ rows, allMembers }: { rows: ProvozniVydajRow[]; allMembers: MemberOption[] }) {
+function updateOddilInUrl(oddil: Oddil) {
+    const url = new URL(window.location.href);
+    if (oddil === "ovt") url.searchParams.delete("oddil");
+    else url.searchParams.set("oddil", oddil);
+    window.history.replaceState({}, "", url.toString());
+}
+
+export function ProvozClient({
+    rows, allMembers, initialOddil,
+}: {
+    rows: ProvozniVydajRow[]; allMembers: MemberOption[]; initialOddil: Oddil;
+}) {
     const router = useRouter();
+    const [activeOddil, setActiveOddil] = useState<Oddil>(initialOddil);
     const [open, setOpen] = useState(false);
     const [name, setName] = useState("");
     const [dateFrom, setDateFrom] = useState("");
     const [leaderId, setLeaderId] = useState("");
     const [description, setDescription] = useState("");
+    const [oddil, setOddil] = useState<Oddil>(initialOddil);
     const [error, setError] = useState<string | null>(null);
     const [pending, startTransition] = useTransition();
+
+    function handleTabChange(value: string) {
+        const next = value as Oddil;
+        setActiveOddil(next);
+        updateOddilInUrl(next);
+    }
 
     function handleCreate() {
         setError(null);
@@ -42,24 +63,35 @@ export function ProvozClient({ rows, allMembers }: { rows: ProvozniVydajRow[]; a
                 dateFrom: dateFrom || null,
                 leaderId: leaderId ? Number(leaderId) : null,
                 description: description.trim() || null,
-                oddil: 'ovt',
+                oddil,
             });
             if ("error" in res) { setError(res.error); return; }
             router.push(`/dashboard/events/${res.id}`);
         });
     }
 
+    const visibleRows = rows.filter(r => r.oddil === activeOddil);
+
     return (
         <div>
             <div className="flex items-center justify-between mb-5">
                 <h1 className="text-xl font-semibold text-gray-900">Provozní výdaje</h1>
-                <Dialog open={open} onOpenChange={o => { setOpen(o); setError(null); }}>
+                <Dialog open={open} onOpenChange={o => { setOpen(o); setError(null); if (o) setOddil(activeOddil); }}>
                     <DialogTrigger asChild>
                         <Button size="sm"><Plus size={15} />Nový provozní výdaj</Button>
                     </DialogTrigger>
                     <DialogContent className="sm:max-w-md">
                         <DialogHeader><DialogTitle>Nový provozní výdaj</DialogTitle></DialogHeader>
                         <div className="space-y-3">
+                            <div className="space-y-1">
+                                <label htmlFor="provoz-oddil" className="text-sm font-medium">Oddíl</label>
+                                <select id="provoz-oddil" value={oddil} onChange={e => setOddil(e.target.value as Oddil)}
+                                    className="w-full h-9 rounded-md border border-input bg-transparent px-3 text-sm">
+                                    {ODDIL_VALUES.map(o => (
+                                        <option key={o} value={o}>{ODDIL_LABELS[o]}</option>
+                                    ))}
+                                </select>
+                            </div>
                             <div className="space-y-1">
                                 <label htmlFor="provoz-name" className="text-sm font-medium">Název *</label>
                                 <Input id="provoz-name" value={name} onChange={e => setName(e.target.value)}
@@ -95,7 +127,15 @@ export function ProvozClient({ rows, allMembers }: { rows: ProvozniVydajRow[]; a
                 </Dialog>
             </div>
 
-            {rows.length === 0 ? (
+            <Tabs value={activeOddil} onValueChange={handleTabChange} className="mb-4 gap-0">
+                <TabsList>
+                    {ODDIL_VALUES.map(o => (
+                        <TabsTrigger key={o} value={o}>{ODDIL_LABELS[o]}</TabsTrigger>
+                    ))}
+                </TabsList>
+            </Tabs>
+
+            {visibleRows.length === 0 ? (
                 <p className="text-sm text-gray-500">Zatím žádné provozní výdaje.</p>
             ) : (
                 <div className="rounded-xl border overflow-x-auto">
@@ -111,7 +151,7 @@ export function ProvozClient({ rows, allMembers }: { rows: ProvozniVydajRow[]; a
                             </tr>
                         </thead>
                         <tbody>
-                            {rows.map(r => {
+                            {visibleRows.map(r => {
                                 const stav = deriveProvozniStav(r.billingStatus, r.sentToTj);
                                 return (
                                     <tr key={r.id} onClick={() => router.push(`/dashboard/events/${r.id}`)}
