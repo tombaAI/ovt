@@ -20,8 +20,13 @@ const ODDIL_TREASURER_ENV: Record<Oddil, string> = {
 /**
  * Hospodář KONKRÉTNÍHO oddílu (provozní výdaje — spec 2026-08-31-provozni-vydaje-vice-oddilu.md).
  * `isTreasurerOfOddil(email, 'ovt')` je záměrně identické s `isTreasurer(email)` — čte stejný env.
+ *
+ * Hospodář OVT je nad ostatními odd íly "superhospodář" — smí uzamknout/odeslat/založit
+ * i za druhý oddíl (rozhodnutí 2026-09-02, po dotazu na testování bez přístupu k účtu
+ * druhého hospodáře). Asymetricky: hospodář jiného oddílu do OVT stejné právo nemá.
  */
 export function isTreasurerOfOddil(email: string | null | undefined, oddil: Oddil): boolean {
+    if (isTreasurer(email)) return true;
     const treasurerEmail = process.env[ODDIL_TREASURER_ENV[oddil]]?.trim().toLowerCase();
     return !!treasurerEmail && !!email && email.toLowerCase() === treasurerEmail;
 }

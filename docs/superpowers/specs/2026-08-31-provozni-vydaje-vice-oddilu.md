@@ -24,8 +24,8 @@ Výsledovka / hospodaření oddílu (`src/lib/actions/finance-tj.ts`, `hospodare
 |---|---|
 | Rozsah | **Jen provozní výdaje mimo akci.** Členové, příspěvky, běžné akce s účastníky, lodě, brigády zůstávají výhradně agendou OVT (oddíl 207) — nezdvojují se. |
 | Kdo vidí sekci Provoz | **Jen hospodáři** — OVT i TOM. Ostatní admini ji nevidí vůbec, stejně jako dnes (sekce se pro ně v navigaci ani nezobrazí, přímý vstup na URL přesměruje na dashboard). |
-| Rozsah viditelnosti hospodáře | Hospodář OVT i hospodář TOM vidí **oba** oddíly (plný přehled obou agend). Uzamknout částky / odeslat na TJ ale smí **jen hospodář příslušného oddílu** — hospodář TOM nemůže uzamknout ani odeslat provozní výdaj OVT a naopak. |
-| Kdo zakládá výdaj a přidává doklady | **Založení nového výdaje**: jen hospodář **vlastního** oddílu — revize po bezpečnostním nálezu (2026-09-02), zpřísněno z původního "kterýkoli hospodář, libovolný oddíl". **Přidávání dokladů** k už existujícímu (neuzamčenému) výdaji zůstává otevřené komukoli, kdo výdaj vidí (viz řádek výše) — beze změny. |
+| Rozsah viditelnosti hospodáře | Hospodář OVT i hospodář TOM vidí **oba** oddíly (plný přehled obou agend). Uzamknout částky / odeslat na TJ: **hospodář OVT je nad TOM "superhospodář"** — smí tyto akce dělat i za TOM (revize 2026-09-02: bez toho by ověření/testování TOM agendy záviselo na součinnosti druhé osoby při každé změně). Hospodář TOM smí tyto akce jen za **svůj** oddíl — asymetrie, opačným směrem přístup nemá. |
+| Kdo zakládá výdaj a přidává doklady | **Založení nového výdaje**: hospodář vlastního oddílu, nebo hospodář OVT (superhospodář, viz řádek výše) pro libovolný oddíl — zpřísněno bezpečnostním nálezem 2026-09-02 z původního "kterýkoli hospodář, libovolný oddíl" a vzápětí doplněno o výjimku pro OVT. **Přidávání dokladů** k už existujícímu (neuzamčenému) výdaji zůstává otevřené komukoli, kdo výdaj vidí (viz řádek výše) — beze změny. |
 | UI struktura | **Samostatné záložky per oddíl** na `/dashboard/provoz` (ne jeden seznam s filtrem) — blíže odděleným agendám. |
 | Kód oddílu TOM | **234** (analogie k "207" u OVT), tiskne se na PDF vyúčtování a do mailu na TJ. |
 | Hospodář TOM | **Alžběta Poštulková** — potřebuje nový záznam v `admin_users` (Google OAuth whitelist), jinak se do appky nedostane vůbec. |
@@ -74,6 +74,7 @@ const ODDIL_TREASURER_ENV: Record<Oddil, string> = {
 };
 
 export function isTreasurerOfOddil(email: string | null | undefined, oddil: Oddil): boolean {
+    if (isTreasurer(email)) return true; // hospodář OVT = superhospodář, viz revize 2026-09-02
     const treasurerEmail = process.env[ODDIL_TREASURER_ENV[oddil]]?.trim().toLowerCase();
     return !!treasurerEmail && !!email && email.toLowerCase() === treasurerEmail;
 }

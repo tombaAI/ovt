@@ -19,12 +19,11 @@ describe("isTreasurer", () => {
 });
 
 describe("isTreasurerOfOddil", () => {
-    it("ovt čte TREASURER_EMAIL, tom čte TREASURER_EMAIL_TOM — nezávisle", () => {
+    it("tom čte TREASURER_EMAIL_TOM nezávisle na TREASURER_EMAIL", () => {
         vi.stubEnv("TREASURER_EMAIL", "hospodar-ovt@test.local");
         vi.stubEnv("TREASURER_EMAIL_TOM", "hospodarka-tom@test.local");
 
         expect(isTreasurerOfOddil("hospodar-ovt@test.local", "ovt")).toBe(true);
-        expect(isTreasurerOfOddil("hospodar-ovt@test.local", "tom")).toBe(false);
         expect(isTreasurerOfOddil("hospodarka-tom@test.local", "tom")).toBe(true);
         expect(isTreasurerOfOddil("hospodarka-tom@test.local", "ovt")).toBe(false);
     });
@@ -32,6 +31,20 @@ describe("isTreasurerOfOddil", () => {
     it("isTreasurerOfOddil(email, 'ovt') je identické s isTreasurer(email)", () => {
         vi.stubEnv("TREASURER_EMAIL", "hospodar-ovt@test.local");
         expect(isTreasurerOfOddil("hospodar-ovt@test.local", "ovt")).toBe(isTreasurer("hospodar-ovt@test.local"));
+    });
+
+    it("hospodář OVT je 'superhospodář' — projde i pro jiný oddíl", () => {
+        vi.stubEnv("TREASURER_EMAIL", "hospodar-ovt@test.local");
+        vi.stubEnv("TREASURER_EMAIL_TOM", "hospodarka-tom@test.local");
+
+        expect(isTreasurerOfOddil("hospodar-ovt@test.local", "tom")).toBe(true);
+    });
+
+    it("asymetrie: hospodář jiného oddílu NEPROJDE pro 'ovt'", () => {
+        vi.stubEnv("TREASURER_EMAIL", "hospodar-ovt@test.local");
+        vi.stubEnv("TREASURER_EMAIL_TOM", "hospodarka-tom@test.local");
+
+        expect(isTreasurerOfOddil("hospodarka-tom@test.local", "ovt")).toBe(false);
     });
 });
 
