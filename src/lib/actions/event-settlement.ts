@@ -85,6 +85,9 @@ export type PrescriptionInfo = {
     depositWontPay: boolean;
     depositWontPayNote: string | null;
     emailSentAt: Date | null;
+    /** Návrh přepočtené částky, čeká na potvrzení (mechanismus schvalování změny) — null = žádný nevyřízený návrh. */
+    proposedAmount: number | null;
+    proposedAt: Date | null;
 };
 
 /** Záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude platit) — blokuje generování doplatku. */
@@ -300,6 +303,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositWontPay: eventPaymentPrescriptions.depositWontPay,
                 depositWontPayNote: eventPaymentPrescriptions.depositWontPayNote,
                 emailSentAt: eventPaymentPrescriptions.emailSentAt,
+                proposedAmount: eventPaymentPrescriptions.proposedAmount,
+                proposedAt: eventPaymentPrescriptions.proposedAt,
             })
             .from(eventPaymentPrescriptions)
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
@@ -481,6 +486,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositWontPay: p.depositWontPay,
                 depositWontPayNote: p.depositWontPayNote,
                 emailSentAt: p.emailSentAt,
+                proposedAmount: p.proposedAmount ? parseFloat(p.proposedAmount) : null,
+                proposedAt: p.proposedAt,
             } : null;
 
         const depositPrescription = toPrescriptionInfo(depositRaw);
