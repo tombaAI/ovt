@@ -39,6 +39,7 @@ import {
     type PersonKey,
     type RegistrationDeposit,
 } from "@/lib/settlement-calc";
+import { decideProposalAction } from "@/lib/prescription-proposal";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -663,7 +664,7 @@ function missingCoefficientsError(settlement: Awaited<ReturnType<typeof getEvent
     return `Nenastavený koeficient u nákladů s vlastními podíly — ${detail}. U každého doplňte podíl v záložce Vyúčtování (0 = neplatí, 1 = platí jako ostatní).`;
 }
 
-export async function lockBilling(eventId: number): Promise<{ success: true } | { error: string }> {
+export async function lockBilling(eventId: number): Promise<{ success: true; proposed: number } | { error: string }> {
     try {
         const session = await auth();
         if (!session?.user?.email) return { error: "Nepřihlášen" };
@@ -674,7 +675,7 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         const settlement = await getEventSettlement(eventId);
         const gateError = await prescriptionGateError(db, eventId, settlement, "lock_billing", session.user.email);
         if (gateError) return { error: gateError };
-        await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
+        const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
             .set({ billingStatus: "prescribed", lockForParticipants: true, updatedAt: new Date() })
@@ -684,13 +685,16 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
             entityType: "event",
             entityId: eventId,
             action: "lock_billing",
-            changes: { billingStatus: { old: "draft", new: "prescribed" } },
+            changes: {
+                billingStatus: { old: "draft", new: "prescribed" },
+                ...(result.proposed > 0 ? { proposed: { old: null, new: String(result.proposed) } } : {}),
+            },
             metadata: { eventId },
             changedBy: session.user.email,
         });
 
         revalidatePath(`/dashboard/events/${eventId}`);
-        return { success: true };
+        return { success: true, proposed: result.proposed };
     } catch (e) {
         console.error(e);
         return { error: "Chyba při uzamčení vyúčtování" };
@@ -1063,7 +1067,7 @@ async function createSettlementPrescription(
 /** Přegeneruje předpisy (přepočítá částky) bez odeslání e-mailů. */
 export async function regeneratePrescriptions(
     eventId: number,
-): Promise<{ error: string } | { created: number; updated: number }> {
+): Promise<{ error: string } | { created: number; updated: number; proposed: number }> {
     try {
         const session = await auth();
         if (!session?.user?.email) return { error: "Nepřihlášen" };
@@ -1078,7 +1082,11 @@ export async function regeneratePrescriptions(
             entityType: "event",
             entityId: eventId,
             action: "regenerate_prescriptions",
-            changes: { created: { old: null, new: String(result.created) }, updated: { old: null, new: String(result.updated) } },
+            changes: {
+                created: { old: null, new: String(result.created) },
+                updated: { old: null, new: String(result.updated) },
+                proposed: { old: null, new: String(result.proposed) },
+            },
             metadata: { eventId },
             changedBy: session.user.email,
         });
@@ -1094,48 +1102,72 @@ export async function regeneratePrescriptions(
  * Interní helper: vytvoří nebo aktualizuje settlement (doplatek) předpisy.
  * Deposit předpisy (zálohy) se NIKDY nemění — jejich částka je fixní od přihlášky.
  * Settlement částka = max(0, totalAmount − depositAmount).
+ *
+ * Jednou vygenerovaná částka se nikdy nepřepíše potichu (viz
+ * docs/superpowers/specs/2026-08-03-schvalovani-zmeny-castky-predpisu.md) — o tom,
+ * co přesně se stane, rozhoduje decideProposalAction. Platí i pro matched/paid
+ * předpisy: rozdíl se ukáže jako návrh, `amount` (co bylo skutečně zaplaceno/dohodnuto)
+ * se nezmění, dokud ho admin výslovně nepotvrdí.
  */
 async function upsertPrescriptionAmounts(
     eventId: number,
     settlement: Awaited<ReturnType<typeof getEventSettlement>>,
     eventName: string,
     db: ReturnType<typeof getDb>,
-): Promise<{ created: number; updated: number }> {
+): Promise<{ created: number; updated: number; proposed: number }> {
     const paymentDue = new Date();
     paymentDue.setDate(paymentDue.getDate() + 7);
     const paymentDueStr = paymentDue.toISOString().slice(0, 10);
-    let created = 0, updated = 0;
+    let created = 0, updated = 0, proposed = 0;
 
     await db.transaction(async tx => {
         for (const reg of settlement.registrations) {
-            const settlementAmount = String(Math.max(0, reg.totalAmount - reg.effectiveDepositForSettlement));
+            const newAmount = Math.max(0, reg.totalAmount - reg.effectiveDepositForSettlement);
 
-            // Pojistka: už zaplacený/spárovaný doplatek se NIKDY nepřepisuje — člověk zaplatil
-            // dohodnutou částku, ta platí (důvěra uživatelů > korunová přesnost). Přepočet smí
-            // měnit jen pending předpisy. Viz no-regen-after-payments.
-            if (reg.settlementPrescription && (reg.settlementPrescription.status === "matched" || reg.settlementPrescription.status === "paid")) {
-                continue;
-            }
-
-            if (reg.settlementPrescription) {
-                await tx.update(eventPaymentPrescriptions)
-                    .set({ amount: settlementAmount, paymentDue: paymentDueStr, updatedAt: new Date() })
-                    .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
-                updated++;
-            } else {
+            if (!reg.settlementPrescription) {
                 await createSettlementPrescription(tx, eventId, reg.registrationId, reg.firstName, reg.lastName, eventName);
-                // Při prvním vytvoření nastavíme správnou částku a splatnost
+                // Při prvním vytvoření nastavíme správnou částku a splatnost — nikdy návrh,
+                // amount = 0 před tímto zápisem znamená "nic nebylo vygenerováno", není co chránit.
                 await tx.update(eventPaymentPrescriptions)
-                    .set({ amount: settlementAmount, paymentDue: paymentDueStr })
+                    .set({ amount: String(newAmount), paymentDue: paymentDueStr })
                     .where(and(
                         eq(eventPaymentPrescriptions.registrationId, reg.registrationId),
                         eq(eventPaymentPrescriptions.type, "settlement"),
                     ));
                 created++;
+                continue;
+            }
+
+            const decision = decideProposalAction(
+                reg.settlementPrescription.amount,
+                newAmount,
+                reg.settlementPrescription.proposedAmount !== null,
+            );
+
+            switch (decision.kind) {
+                case "write_amount":
+                    await tx.update(eventPaymentPrescriptions)
+                        .set({ amount: String(decision.amount), paymentDue: paymentDueStr, updatedAt: new Date() })
+                        .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
+                    updated++;
+                    break;
+                case "clear_proposal":
+                    await tx.update(eventPaymentPrescriptions)
+                        .set({ proposedAmount: null, proposedAt: null })
+                        .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
+                    break;
+                case "set_proposal":
+                    await tx.update(eventPaymentPrescriptions)
+                        .set({ proposedAmount: String(decision.proposedAmount), proposedAt: new Date() })
+                        .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
+                    proposed++;
+                    break;
+                case "no_op":
+                    break;
             }
         }
     });
-    return { created, updated };
+    return { created, updated, proposed };
 }
 
 // ── Správa přihlášek v adminu ─────────────────────────────────────────────────
