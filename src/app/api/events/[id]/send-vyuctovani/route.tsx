@@ -7,7 +7,7 @@ import { eventExpenses, events, eventTreasurerApprovalLog, members, people } fro
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
-import { getOddilNazevPlny, getOddilTjRecipientEmail } from "@/lib/oddily-config";
+import { getOddilNazevPlny, getOddilTjRecipientEmail, ODDIL_LABELS } from "@/lib/oddily-config";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -219,7 +219,7 @@ export async function POST(
     const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
     if (recipients.length === 0) {
       return NextResponse.json(
-        { error: "Vedoucí akce nemá e-mail a ENV EMAIL_HOSPODAR_ODDILU_TJB není nastavený. Nelze odeslat." },
+        { error: `Vedoucí akce nemá e-mail a příjemce na TJ pro oddíl ${ODDIL_LABELS[event.oddil]} není nastavený. Nelze odeslat.` },
         { status: 503 },
       );
     }
