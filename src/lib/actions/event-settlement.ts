@@ -1515,6 +1515,15 @@ export async function sendEventSettlementEmails(
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
         const freshSettlement = await getEventSettlement(eventId);
 
+        // Nevyřízený návrh přepočtu = platná částka (`amount`) v hlavičce e-mailu i v QR kódu
+        // by nesouhlasila s rozpisem ceny/dotace/zálohy, který se do e-mailu počítá živě.
+        // Radši nerozeslat nic a nechat admina návrhy nejdřív potvrdit (viz decideProposalAction).
+        const withProposal = freshSettlement.registrations.filter(r =>
+            r.settlementPrescription?.proposedAmount != null && r.settlementPrescription.status !== "cancelled");
+        if (withProposal.length > 0) {
+            return { error: `Nelze rozeslat e-maily — ${withProposal.length} ${withProposal.length === 1 ? "přihláška má" : "přihlášek má"} nevyřízený návrh přepočtu částky. Nejdřív návrhy potvrďte (Potvrdit vše).` };
+        }
+
         const resend = getResendClient();
         let sent = 0;
         let skipped = 0;
@@ -1604,6 +1613,11 @@ export async function sendSingleRegistrationEmail(
         const regRow = freshSettlement.registrations.find(r => r.registrationId === registrationId);
         if (!regRow) return { error: "Přihláška není ve vyúčtování" };
         if (!regRow.settlementPrescription) return { error: "Přihláška nemá doplatek předpis — nejdříve uzamkněte náklady." };
+        // Viz sendEventSettlementEmails — s nevyřízeným návrhem by hlavička e-mailu (platná
+        // částka) neseděla s živě počítaným rozpisem ani s QR kódem.
+        if (regRow.settlementPrescription.proposedAmount !== null) {
+            return { error: "Nelze odeslat e-mail — přihláška má nevyřízený návrh přepočtu částky, nejdřív ho potvrďte." };
+        }
 
         const to = emailSettings.testTo ?? regRow.email;
         const senderName = session.user.name ?? undefined;
@@ -1893,8 +1907,10 @@ export async function cancelParticipant(
             // with_coefficients váhy se počítají vždy živě z aktivních účastníků (getEventSettlement),
             // odhlášený účastník se tedy automaticky vyřadí — žádný přepočet alokací není potřeba.
 
-            // Pokud je billing uzamčen, přepočítáme i settlement předpisy — jinak payments tab ukazuje
-            // stará čísla z doby před odhlášením účastníka.
+            // Pokud je billing uzamčen, projedeme i settlement předpisy — odhlášení účastníka mění
+            // doplatek. Platná částka se ale nepřepíše potichu: upsertPrescriptionAmounts u už
+            // vygenerovaného předpisu jen založí návrh přepočtu (proposedAmount), který admin
+            // potvrdí na záložce Platby. Do té doby všude platí původní částka.
             const [ev] = await db
                 .select({ billingStatus: events.billingStatus, name: events.name })
                 .from(events)

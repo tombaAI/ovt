@@ -128,11 +128,11 @@ function fmtCzk(amount: number) {
 }
 
 // ── Stav doplatku (životní cyklus) — analogicky k záložce Platby ─────────────
-// Stejná logika jako computeLifecycle v event-payments-tab.tsx. r.totalAmount i
-// r.settlementAmount (viz getEventRegistrationsForAdmin) jsou živě dotažené z
-// getEventSettlement, ne jen uložená (a snadno zastaralá) hodnota z prescription —
-// jinak by se po příslibu/spárování zálohy bez přegenerování předpisů ukazovalo
-// staré číslo doplatku (issue nahlášený uživatelem 2026-06-24, Filip Havlíček).
+// Stejná logika jako computeLifecycle v event-payments-tab.tsx. r.totalAmount se dotahuje
+// živě z getEventSettlement (v prescription se neukládá, jinak by se po příslibu/spárování
+// zálohy ukazovalo staré číslo — issue nahlášený uživatelem 2026-06-24, Filip Havlíček).
+// r.settlementAmount je naopak platná (potvrzená) částka z prescription — živý přepočet
+// se použije, jen dokud předpis neexistuje. Viz getEventRegistrationsForAdmin.
 
 type PaymentLifecycle =
     | { kind: "not_yet" }

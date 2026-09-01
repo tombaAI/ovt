@@ -26,4 +26,17 @@ describe("decideProposalAction", () => {
     it("liší se i směrem dolů (accepted amount klesl)", () => {
         expect(decideProposalAction(4578, 4315, false)).toEqual({ kind: "set_proposal", proposedAmount: 4315 });
     });
+
+    // Regrese: záloha se dělí počtem osob bez zaokrouhlení (effectiveDepositForSettlement),
+    // takže přepočet vyjde 1666.6666666666665, ale v DB (numeric(10,2)) je uloženo 1666.67.
+    // Přesná rovnost floatů by návrh vytvářela pořád dokola a nikdy ho nešlo vyčistit.
+    it("float nepřesnost z nezaokrouhleného dělení zálohy neblokuje vyčištění návrhu (regrese)", () => {
+        expect(decideProposalAction(1666.67, 1666.6666666666665, true)).toEqual({ kind: "clear_proposal" });
+        expect(decideProposalAction(1666.67, 1666.6666666666665, false)).toEqual({ kind: "no_op" });
+    });
+
+    it("návrh se zapisuje zaokrouhlený na haléře (přesnost úložiště)", () => {
+        expect(decideProposalAction(4315, 1666.6666666666665, false)).toEqual({ kind: "set_proposal", proposedAmount: 1666.67 });
+        expect(decideProposalAction(0, 1666.6666666666665, false)).toEqual({ kind: "write_amount", amount: 1666.67 });
+    });
 });

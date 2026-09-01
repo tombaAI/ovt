@@ -1239,11 +1239,12 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         participantsByRegistration.set(participantRow.registrationId, list);
     }
 
-    // Doplatek uložený v prescription se nepřepočítává automaticky při každé změně
-    // (příslib/nebude platit zálohy, spárování platby, úprava dotace…) — jen při
-    // lockBilling/regeneratePrescriptions/odeslání e-mailu. Aby tahle admin tabulka
-    // neukazovala zastaralé číslo, doplatek (a totalAmount pro stav plateb) se vždy
-    // dotáhne živě ze stejného zdroje jako záložka Platby (getEventSettlement).
+    // Živý přepočet ze stejného zdroje jako záložka Platby (getEventSettlement) — dává
+    // totalAmount (cena po dotaci, v prescription se neukládá) a doplatek pro přihlášky,
+    // které settlement předpis ještě nemají (akce v přípravě). Jakmile předpis existuje,
+    // vyhrává jeho uložená částka: živý přepočet se od ní může lišit o nepotvrzený návrh
+    // (proposedAmount) a QR kód i e-mail musí ukazovat stejné číslo — viz
+    // authoritativeSettlementAmount v event-payments-tab.tsx.
     const liveSettlement = await getEventSettlement(eventId);
     const liveByRegistration = new Map(liveSettlement.registrations.map(sr => [sr.registrationId, sr]));
 
@@ -1293,7 +1294,7 @@ export async function getEventRegistrationsForAdmin(eventId: number): Promise<Ev
         depositWontPay: row.depositWontPay ?? false,
         depositWontPayNote: row.depositWontPayNote,
         settlementCodeLabel: row.settlementCode ? formatForeignWaterCode(row.settlementCode) : null,
-        settlementAmount: liveByRegistration.get(row.registrationId)?.settlementAmount ?? (row.settlementAmount ? Number(row.settlementAmount) : null),
+        settlementAmount: row.settlementAmount !== null ? Number(row.settlementAmount) : (liveByRegistration.get(row.registrationId)?.settlementAmount ?? null),
         settlementStatus: row.settlementStatus as EventPaymentPrescriptionStatus | null,
         settlementMatchedAmount: row.settlementMatchedAmount ? Number(row.settlementMatchedAmount) : null,
         settlementEmailSentAt: row.settlementEmailSentAt as unknown as Date | null,

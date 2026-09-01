@@ -11,12 +11,25 @@ export type ProposalAction =
     | { kind: "clear_proposal" }
     | { kind: "set_proposal"; proposedAmount: number };
 
+/**
+ * Obě strany porovnání musí být na stejné přesnosti jako úložiště (numeric(10,2)).
+ * `currentAmount` přišel z DB už zaokrouhlený na 2 desetinná místa, `newAmount` je
+ * čerstvý přepočet s nezaokrouhleným dělením zálohy počtem osob (např. 1666.6666666666665).
+ * Bez zaokrouhlení by se ekonomicky stejná částka lišila o zlomek haléře, návrh by se
+ * donekonečna vytvářel znovu a nikdy by nešel vyčistit.
+ */
+function round2(n: number): number {
+    return Math.round(n * 100) / 100;
+}
+
 export function decideProposalAction(
     currentAmount: number,
     newAmount: number,
     hasPendingProposal: boolean,
 ): ProposalAction {
-    if (currentAmount === 0) return { kind: "write_amount", amount: newAmount };
-    if (currentAmount === newAmount) return hasPendingProposal ? { kind: "clear_proposal" } : { kind: "no_op" };
-    return { kind: "set_proposal", proposedAmount: newAmount };
+    const current = round2(currentAmount);
+    const next = round2(newAmount);
+    if (current === 0) return { kind: "write_amount", amount: next };
+    if (current === next) return hasPendingProposal ? { kind: "clear_proposal" } : { kind: "no_op" };
+    return { kind: "set_proposal", proposedAmount: next };
 }

@@ -622,6 +622,12 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
 
     const [confirmingBulk, startConfirmBulk] = useTransition();
 
+    // Přihlášky s nevyřízeným návrhem — jeden zdroj pro banner i pro "Potvrdit vše".
+    // settlement.registrations neobsahuje zrušené přihlášky, takže se hromadné potvrzení
+    // musí omezit na tyhle konkrétní předpisy; jinak by potvrdilo i návrhy u zrušených
+    // přihlášek, které banner nezapočítal.
+    const pendingProposals = settlement?.registrations.filter(r => r.settlementPrescription?.proposedAmount != null) ?? [];
+
     async function handleConfirmProposal(prescriptionId: number) {
         const res = await confirmProposedAmount(prescriptionId);
         if ("error" in res) { setSendFeedback(`Chyba: ${res.error}`); return; }
@@ -630,7 +636,9 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
 
     function handleConfirmAllProposals() {
         startConfirmBulk(async () => {
-            const res = await confirmProposedAmounts(eventId);
+            const ids = pendingProposals.map(r => r.settlementPrescription!.id);
+            if (ids.length === 0) { setSendFeedback("Žádné návrhy k potvrzení."); return; }
+            const res = await confirmProposedAmounts(eventId, ids);
             if ("error" in res) { setSendFeedback(`Chyba: ${res.error}`); return; }
             setSendFeedback(res.confirmed > 0 ? `Potvrzeno ${res.confirmed} návrhů.` : "Žádné návrhy k potvrzení.");
             silentReload();
@@ -860,21 +868,17 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                         ({settlement.totalParticipants} účastníků, {settlement.registrations.length} přihlášek)
                     </span>
                 </h3>
-                {(() => {
-                    const pending = settlement.registrations.filter(r => r.settlementPrescription?.proposedAmount != null);
-                    if (pending.length === 0) return null;
-                    return (
-                        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                            <p className="text-xs text-amber-800">
-                                <span className="font-medium">{pending.length}</span> {pending.length === 1 ? "přihláška má" : "přihlášek má"} navržený přepočet.
-                            </p>
-                            <Button size="sm" variant="outline" onClick={handleConfirmAllProposals} disabled={confirmingBulk}
-                                className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100">
-                                {confirmingBulk ? <><Loader2 size={12} className="animate-spin mr-1" />Potvrzuji…</> : "Potvrdit vše"}
-                            </Button>
-                        </div>
-                    );
-                })()}
+                {pendingProposals.length > 0 && (
+                    <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                        <p className="text-xs text-amber-800">
+                            <span className="font-medium">{pendingProposals.length}</span> {pendingProposals.length === 1 ? "přihláška má" : "přihlášek má"} navržený přepočet.
+                        </p>
+                        <Button size="sm" variant="outline" onClick={handleConfirmAllProposals} disabled={confirmingBulk}
+                            className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100">
+                            {confirmingBulk ? <><Loader2 size={12} className="animate-spin mr-1" />Potvrzuji…</> : "Potvrdit vše"}
+                        </Button>
+                    </div>
+                )}
                 {!hasRegistrations ? (
                     <p className="text-sm text-gray-400 py-4 text-center">Žádné přihlášky na akci.</p>
                 ) : (
