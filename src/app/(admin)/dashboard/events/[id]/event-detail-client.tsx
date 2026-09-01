@@ -19,6 +19,7 @@ import {
 } from "@/lib/actions/events";
 import { getEventRegistrationsForAdmin, getRegistrationAuditLog, getEventFullAuditLog } from "@/lib/actions/event-registrations";
 import { SELECTABLE_EVENT_TYPES, EVENT_TYPE_LABELS, EVENT_STATUS_LABELS, MONTH_NAMES } from "@/lib/events-config";
+import { ODDIL_LABELS } from "@/lib/oddily-config";
 import type {
     EventRow, EventStatus, EventAuditEntry,
     GcalDiffResult, GcalDiffField, MemberOption,
@@ -1948,7 +1949,10 @@ export function EventDetailClient({ event, isTreasurer }: Props) {
                     <h1 className="text-xl font-semibold text-gray-900 leading-tight">{event.name}</h1>
                     <div className="flex items-center gap-1.5 mt-1.5 flex-wrap">
                         {isProvozni ? (
-                            <Badge className="bg-slate-100 text-slate-600 border-0 text-xs font-normal">{EVENT_TYPE_LABELS.provozni}</Badge>
+                            <>
+                                <Badge className="bg-slate-100 text-slate-600 border-0 text-xs font-normal">{EVENT_TYPE_LABELS.provozni}</Badge>
+                                <Badge className="bg-emerald-50 text-emerald-700 border-0 text-xs font-normal">{ODDIL_LABELS[event.oddil]}</Badge>
+                            </>
                         ) : (
                             <>
                                 <Badge className={`${TYPE_COLORS[event.eventType] ?? TYPE_COLORS.other} border-0 text-xs font-normal`}>
