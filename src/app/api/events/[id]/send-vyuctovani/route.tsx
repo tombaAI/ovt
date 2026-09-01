@@ -8,6 +8,8 @@ import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
 import { getOddilNazevPlny, getOddilTjRecipientEmail, ODDIL_LABELS } from "@/lib/oddily-config";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
+import { logBlockedAttempt } from "@/lib/audit";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -192,6 +194,12 @@ export async function POST(
     // Provozní výdaj nemá "akci" ani nutně vedoucího — vyúčtování i email o něm mluví
     // jako o nákladu a připravuje ho vždy hospodář (viz spec 2026-08-05-provozni-vydaje.md).
     const isProvozni = event.eventType === "provozni";
+
+    if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+      const reason = `Vyúčtování oddílu ${ODDIL_LABELS[event.oddil]} může odeslat jen jeho hospodář.`;
+      await logBlockedAttempt(db, { attemptedAction: "send_vyuctovani", reason, changedBy: session.user.email, eventId });
+      return NextResponse.json({ error: reason }, { status: 403 });
+    }
 
     if (event.billingStatus !== "prescribed") {
       return NextResponse.json(

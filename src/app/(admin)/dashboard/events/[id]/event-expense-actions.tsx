@@ -715,19 +715,25 @@ export function EventExpenseActions({
   onSent,
   treasurerApproved,
   isProvozni = false,
+  isTreasurer = false,
 }: {
   eventId: number;
   expenses: ExpenseRow[];
   onSent?: () => void;
   treasurerApproved: boolean;
   isProvozni?: boolean;
+  isTreasurer?: boolean;
 }) {
   const [sending, setSending] = useState(false);
   const [sendMessage, setSendMessage] = useState<string | null>(null);
   const [sendError, setSendError] = useState<string | null>(null);
 
   const blockingIssues = computeBlockingIssues(expenses);
-  const canSend = expenses.length > 0 && blockingIssues.length === 0 && treasurerApproved;
+  const notOwningTreasurer = isProvozni && !isTreasurer;
+  const displayIssues = notOwningTreasurer
+    ? [...blockingIssues, "Odeslat smí jen hospodář tohoto oddílu."]
+    : blockingIssues;
+  const canSend = expenses.length > 0 && blockingIssues.length === 0 && treasurerApproved && !notOwningTreasurer;
 
   async function handleSendSettlement() {
     setSending(true);
@@ -761,7 +767,9 @@ export function EventExpenseActions({
   return (
     <div className="space-y-2">
       <p className="text-xs text-gray-500">
-        Odeslání pošle vedoucímu akce a hospodáři TJ Bohemians všechny doklady a CSV k proplacení.
+        {isProvozni
+          ? "Odeslání pošle vedoucímu akce a hospodáři oddílu a TJ Bohemians všechny doklady a CSV k proplacení."
+          : "Odeslání pošle vedoucímu akce a hospodáři TJ Bohemians všechny doklady a CSV k proplacení."}
       </p>
       <div className="flex flex-wrap gap-2">
         <Button asChild size="sm" variant="outline">
@@ -772,17 +780,17 @@ export function EventExpenseActions({
         </Button>
 
         <Button size="sm" onClick={handleSendSettlement} disabled={sending || !canSend}
-          title={blockingIssues.length > 0 ? blockingIssues.join("; ") : undefined}>
+          title={displayIssues.length > 0 ? displayIssues.join("; ") : undefined}>
           <Send className="size-4" />
           {sending ? "Odesílám…" : "Odeslat vyúčtování"}
         </Button>
       </div>
 
-      {blockingIssues.length > 0 && !sendMessage && (
+      {displayIssues.length > 0 && !sendMessage && (
         <div className="rounded-lg bg-amber-50 border border-amber-200 px-3 py-2 space-y-0.5">
           <p className="text-xs font-medium text-amber-700">Před odesláním je třeba:</p>
           <ul className="text-xs text-amber-700 list-disc list-inside space-y-0.5">
-            {blockingIssues.map((issue) => <li key={issue}>{issue}</li>)}
+            {displayIssues.map((issue) => <li key={issue}>{issue}</li>)}
           </ul>
         </div>
       )}

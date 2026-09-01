@@ -5,7 +5,9 @@ import { getDb } from "@/lib/db";
 import { eventExpenses, events, mailEvents, auditLog } from "@/db/schema";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildInvoicePaymentInstructionEmail } from "@/lib/email-templates/invoice-payment-instruction";
-import { getOddilTjRecipientEmail } from "@/lib/oddily-config";
+import { getOddilTjRecipientEmail, ODDIL_LABELS } from "@/lib/oddily-config";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
+import { logBlockedAttempt } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -85,13 +87,20 @@ export async function POST(
         }
 
         const [event] = await db
-            .select({ name: events.name, oddil: events.oddil })
+            .select({ name: events.name, oddil: events.oddil, eventType: events.eventType })
             .from(events)
             .where(eq(events.id, eventId))
             .limit(1);
 
         if (!event) {
             return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        }
+
+        const isProvozni = event.eventType === "provozni";
+        if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+            const reason = `Pokyn k úhradě u provozního výdaje oddílu ${ODDIL_LABELS[event.oddil]} může odeslat jen jeho hospodář.`;
+            await logBlockedAttempt(db, { attemptedAction: "send_invoice_payment", reason, changedBy: session.user.email, eventId });
+            return NextResponse.json({ error: reason }, { status: 403 });
         }
 
         const hospodarEmail = getOddilTjRecipientEmail(event.oddil);

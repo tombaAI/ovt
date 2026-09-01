@@ -12,7 +12,7 @@ export const dynamic = "force-dynamic";
 /**
  * Potvrdí AKTUÁLNÍ neshodu zjištěné vs. zapsané částky jako v pořádku (typicky jiná měna
  * dokladu — faktura v EUR, zaplaceno v CZK — což se nikdy "neopraví" na číselnou shodu).
- * Jen hospodář. Váže se přesně na dvojici (amount, analyzedAmount) v okamžiku potvrzení —
+ * Jen hospodář (hospodář oddílu, kterému doklad patří). Váže se přesně na dvojici (amount, analyzedAmount) v okamžiku potvrzení —
  * jakákoli pozdější změna (nový doklad, oprava částky) potvrzení automaticky zneplatní
  * (viz isMismatchAcknowledged v lib/expense-mismatch.ts).
  *

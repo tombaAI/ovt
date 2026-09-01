@@ -122,7 +122,7 @@ test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
         return context;
     }
 
-    test("hospodářka TOM založí výdaj pro TOM; hospodář OVT ho vidí, ale nesmí uzamknout", async ({ browser, baseURL, page }) => {
+    test("hospodářka TOM založí výdaj pro TOM; hospodář OVT ho vidí, ale nesmí uzamknout ani odeslat", async ({ browser, baseURL, page }) => {
         const tomCtx = await tomContext(browser, baseURL);
         const tomPage = await tomCtx.newPage();
 
@@ -137,7 +137,6 @@ test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
 
         await expect(tomPage).toHaveURL(/\/dashboard\/events\/\d+/);
         const eventUrl = tomPage.url();
-        await tomCtx.close();
 
         // Hospodář OVT (výchozí přihlášená session) vidí detail cizího oddílu…
         await page.goto(eventUrl);
@@ -148,5 +147,35 @@ test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
         await page.getByRole("tab", { name: "Náklady" }).click();
         await page.getByRole("button", { name: "Uzamknout částky" }).click();
         await expect(page.getByText(/může uzamknout jen jeho hospodář/)).toBeVisible();
+
+        // Hospodářka TOM ale uzamknout smí — přejde do stavu "prescribed" (u provozního výdaje
+        // s tím automaticky i souhlas hospodáře, viz lockBilling).
+        await tomPage.getByRole("tab", { name: "Náklady" }).click();
+        await tomPage.getByRole("button", { name: "Uzamknout částky" }).click();
+        await expect(tomPage.getByText(/Částky jsou uzamčeny/)).toBeVisible();
+        await tomCtx.close();
+
+        // Po uzamčení hospodářkou TOM je "Odeslat vyúčtování" viditelné i hospodáři OVT (jde
+        // o cizí oddíl), ale zablokované — odeslat smí jen hospodář vlastnícího oddílu (Fix 1c/1d).
+        await page.reload();
+        await page.getByRole("tab", { name: "Náklady" }).click();
+        await expect(page.getByText(/Částky jsou uzamčeny/)).toBeVisible();
+        await expect(page.getByText("Odeslat smí jen hospodář tohoto oddílu.")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Odeslat vyúčtování" })).toBeDisabled();
+    });
+
+    test("hospodář OVT smí založit provozní výdaj i pro oddíl TOM (kterýkoli hospodář, libovolný oddíl)", async ({ page }) => {
+        await page.goto("/dashboard/provoz");
+        await expect(page.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
+        await page.getByRole("tab", { name: "TOM" }).click();
+
+        await page.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await expect(page.locator("#provoz-oddil")).toHaveValue("tom");
+        await page.getByLabel("Název *").fill("E2E výdaj TOM od OVT");
+        await page.getByRole("button", { name: "Založit" }).click();
+
+        await expect(page).toHaveURL(/\/dashboard\/events\/\d+/);
+        await expect(page.getByRole("heading", { name: "E2E výdaj TOM od OVT" })).toBeVisible();
+        await expect(page.getByText("TOM", { exact: true }).first()).toBeVisible();
     });
 });

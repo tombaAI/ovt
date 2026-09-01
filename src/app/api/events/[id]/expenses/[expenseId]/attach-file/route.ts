@@ -19,7 +19,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
  * Při každém nahrání proběhne Gemini analýza a uloží se analyzed_amount (baseline pro kontrolu shody).
  *
  * Zamčené předpisy (lockForParticipants): server ignoruje klientem poslanou částku (obrana proti
- * obejití zámku) a neshodu smí uložit jen hospodář po potvrzení. Odemčeno: částka editovatelná bez gate.
+ * obejití zámku) a neshodu smí uložit jen hospodář po potvrzení (hospodář oddílu, kterému doklad patří). Odemčeno: částka editovatelná bez gate.
  * lockForReimbursement: tvrdě blokováno, bez výjimky.
  */
 export async function POST(

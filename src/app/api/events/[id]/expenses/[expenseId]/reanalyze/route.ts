@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * kontroly shody u dokladů, které analýzu neměly (nebo po zlepšení promptu).
  *
  * Stejné brány jako u výměny přílohy: lockForReimbursement tvrdě blokuje (bez výjimky),
- * lockForParticipants + neshoda → jen hospodář po potvrzení (confirmMismatch).
+ * lockForParticipants + neshoda → jen hospodář po potvrzení (confirmMismatch; hospodář oddílu, kterému doklad patří).
  */
 export async function POST(
     request: NextRequest,
