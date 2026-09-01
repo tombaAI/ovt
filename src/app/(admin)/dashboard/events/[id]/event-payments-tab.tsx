@@ -401,7 +401,7 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
     onSendEmail: (registrationId: number, name: string) => void;
     onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
     onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
-    onConfirmProposal: (prescriptionId: number) => void;
+    onConfirmProposal: (prescriptionId: number) => Promise<void>;
 }) {
     const [expanded, setExpanded] = useState(false);
     const lifecycle = computeLifecycle(reg, isPrescribed);
@@ -541,7 +541,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
     onSendEmail: (registrationId: number, name: string) => void;
     onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
     onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
-    onConfirmProposal: (prescriptionId: number) => void;
+    onConfirmProposal: (prescriptionId: number) => Promise<void>;
 }) {
     return (
         <div className="overflow-x-auto">
@@ -622,11 +622,10 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
 
     const [confirmingBulk, startConfirmBulk] = useTransition();
 
-    function handleConfirmProposal(prescriptionId: number) {
-        confirmProposedAmount(prescriptionId).then(res => {
-            if ("error" in res) setSendFeedback(`Chyba: ${res.error}`);
-            else silentReload();
-        });
+    async function handleConfirmProposal(prescriptionId: number) {
+        const res = await confirmProposedAmount(prescriptionId);
+        if ("error" in res) { setSendFeedback(`Chyba: ${res.error}`); return; }
+        silentReload();
     }
 
     function handleConfirmAllProposals() {
