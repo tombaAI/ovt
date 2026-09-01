@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import { eventExpenses, events, auditLog } from "@/db/schema";
-import { isTreasurer } from "@/lib/treasurer";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
 import { hasAmountMismatch } from "@/lib/expense-mismatch";
 import { logBlockedAttempt } from "@/lib/audit";
 
@@ -29,9 +29,6 @@ export async function POST(
         if (!session?.user?.email) {
             return NextResponse.json({ error: "Nepřihlášen" }, { status: 401 });
         }
-        if (!isTreasurer(session.user.email)) {
-            return NextResponse.json({ error: "Neshodu smí potvrdit jen hospodář" }, { status: 403 });
-        }
 
         const { id, expenseId: expenseIdStr } = await params;
         const eventId = Number(id);
@@ -43,10 +40,13 @@ export async function POST(
         const db = getDb();
 
         const [eventRow] = await db
-            .select({ lockForReimbursement: events.lockForReimbursement })
+            .select({ lockForReimbursement: events.lockForReimbursement, oddil: events.oddil })
             .from(events)
             .where(eq(events.id, eventId));
         if (!eventRow) return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        if (!isTreasurerOfOddil(session.user.email, eventRow.oddil)) {
+            return NextResponse.json({ error: "Neshodu smí potvrdit jen hospodář" }, { status: 403 });
+        }
         if (eventRow.lockForReimbursement) {
             const reason = "Nelze potvrdit neshodu — výdajový zámek je aktivní";
             await logBlockedAttempt(db, { attemptedAction: "acknowledge_expense_mismatch", reason, changedBy: session.user.email, eventId, expenseId });
