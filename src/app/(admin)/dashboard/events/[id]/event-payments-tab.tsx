@@ -18,6 +18,8 @@ import {
     getEventSettlementEmailLog,
     setDepositPromise,
     setDepositWontPay,
+    confirmProposedAmount,
+    confirmProposedAmounts,
 } from "@/lib/actions/event-settlement";
 import type { EventSettlement, SettlementRegistrationRow, SettlementParticipant, PrescriptionInfo, EmailSendLogEntry } from "@/lib/actions/event-settlement";
 
@@ -50,6 +52,16 @@ function registrationForfeitTotal(reg: SettlementRegistrationRow): number {
     return reg.participants
         .filter(p => p.cancelledAt && p.depositForfeitPolicy)
         .reduce((sum, p) => sum + Math.max(0, depositPerPerson - (p.depositRefundAmount ?? 0)), 0);
+}
+
+/**
+ * "K zaplacení" musí ukazovat skutečně platnou (potvrzenou) částku, ne živý přepočet —
+ * jinak by nepotvrzený návrh (proposedAmount) tiše "vyhrál" v hlavním sloupci ještě
+ * před potvrzením. Dokud settlementPrescription neexistuje (akce v přípravě, nikdy
+ * nezamčeno), platná hodnota ještě neexistuje — použije se živý přepočet jako náhled.
+ */
+function authoritativeSettlementAmount(reg: SettlementRegistrationRow): number {
+    return reg.settlementPrescription ? reg.settlementPrescription.amount : reg.settlementAmount;
 }
 
 // ── Stav platby přihlášky (krok navíc nad samotným doplatkem/zálohou) ────────
@@ -383,12 +395,13 @@ function ParticipantRow({ p, reg, depositSharePerPerson }: { p: SettlementPartic
 
 // ── Registration summary table ────────────────────────────────────────────────
 
-function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange }: {
+function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange, onConfirmProposal }: {
     reg: SettlementRegistrationRow; hasPerReg: boolean;
     isPrescribed: boolean; treasurerApproved: boolean;
     onSendEmail: (registrationId: number, name: string) => void;
     onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
     onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
+    onConfirmProposal: (prescriptionId: number) => void;
 }) {
     const [expanded, setExpanded] = useState(false);
     const lifecycle = computeLifecycle(reg, isPrescribed);
@@ -398,6 +411,12 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
     const forfeitTotal = registrationForfeitTotal(reg);
     const displayCenaAkce = reg.totalAmount + reg.subsidy + forfeitTotal;
     const displayZaloha = reg.effectiveDepositForSettlement + forfeitTotal;
+    const proposedAmount = reg.settlementPrescription?.proposedAmount ?? null;
+    // Zvýrazněné varování pro matched/paid — přijetí návrhu tam znamená reálný doplatek
+    // nebo vratku, ne jen úpravu čísla na papíře (viz zadání, sekce UI).
+    const proposalOnPaidPrescription = proposedAmount !== null
+        && (reg.settlementPrescription?.status === "matched" || reg.settlementPrescription?.status === "paid");
+    const [confirming, startConfirm] = useTransition();
 
     return (
         <>
@@ -462,7 +481,33 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
                         )}
                     </div>
                 </td>
-                <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums">{fmtCzk(reg.settlementAmount)}</td>
+                <td className="py-2 pr-3 text-right font-semibold text-gray-900 tabular-nums" onClick={e => e.stopPropagation()}>
+                    <div className="flex flex-col items-end gap-0.5">
+                        <span>{fmtCzk(authoritativeSettlementAmount(reg))}</span>
+                        {proposedAmount !== null && reg.settlementPrescription && (
+                            <div className="flex flex-col items-end gap-0.5">
+                                <div className="flex items-center gap-1.5">
+                                    <Badge className={proposalOnPaidPrescription
+                                        ? "bg-red-100 text-red-700 border-0 text-[10px]"
+                                        : "bg-amber-100 text-amber-700 border-0 text-[10px]"}>
+                                        Návrh: {fmtCzk(proposedAmount)}
+                                    </Badge>
+                                    <button
+                                        onClick={() => { const id = reg.settlementPrescription!.id; startConfirm(async () => onConfirmProposal(id)); }}
+                                        disabled={confirming}
+                                        className="text-[10px] text-emerald-600 hover:text-emerald-700 font-medium whitespace-nowrap">
+                                        {confirming ? "…" : "potvrdit"}
+                                    </button>
+                                </div>
+                                {proposalOnPaidPrescription && (
+                                    <p className="text-[9px] text-red-600 max-w-[140px] text-right leading-tight">
+                                        Už {reg.settlementPrescription.status === "paid" ? "zaplaceno" : "spárováno"} — přijetí znamená doplatek/vratku
+                                    </p>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </td>
                 <td className="py-2 text-right" onClick={e => e.stopPropagation()}>
                     <div className="flex items-center justify-end gap-1.5">
                         <LifecycleBadge lifecycle={lifecycle} />
@@ -490,12 +535,13 @@ function RegistrationRow({ reg, hasPerReg, isPrescribed, treasurerApproved, onSe
     );
 }
 
-function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange }: {
+function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, treasurerApproved, onSendEmail, onDepositPromiseChange, onDepositWontPayChange, onConfirmProposal }: {
     rows: SettlementRegistrationRow[]; unitPrice: number; hasPerReg: boolean;
     isPrescribed: boolean; treasurerApproved: boolean;
     onSendEmail: (registrationId: number, name: string) => void;
     onDepositPromiseChange: (prescriptionId: number, promise: boolean, note: string) => void;
     onDepositWontPayChange: (prescriptionId: number, wontPay: boolean, note: string) => void;
+    onConfirmProposal: (prescriptionId: number) => void;
 }) {
     return (
         <div className="overflow-x-auto">
@@ -519,7 +565,8 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                     {rows.map(reg => (
                         <RegistrationRow key={reg.registrationId} reg={reg} hasPerReg={hasPerReg}
                             isPrescribed={isPrescribed} treasurerApproved={treasurerApproved}
-                            onSendEmail={onSendEmail} onDepositPromiseChange={onDepositPromiseChange} onDepositWontPayChange={onDepositWontPayChange} />
+                            onSendEmail={onSendEmail} onDepositPromiseChange={onDepositPromiseChange} onDepositWontPayChange={onDepositWontPayChange}
+                            onConfirmProposal={onConfirmProposal} />
                     ))}
                 </tbody>
                 <tfoot>
@@ -530,7 +577,7 @@ function RegistrationSummaryTable({ rows, unitPrice, hasPerReg, isPrescribed, tr
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.totalAmount + r.subsidy + registrationForfeitTotal(r), 0))}</td>
                         <td className="pt-2 pr-3 text-right text-xs text-emerald-600 tabular-nums">−{fmtCzk(rows.reduce((s, r) => s + r.subsidy, 0))}</td>
                         <td className="pt-2 pr-3 text-right text-xs text-gray-600 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.effectiveDepositForSettlement + registrationForfeitTotal(r), 0))}</td>
-                        <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + r.settlementAmount, 0))}</td>
+                        <td className="pt-2 pr-3 text-right text-sm font-bold text-gray-900 tabular-nums">{fmtCzk(rows.reduce((s, r) => s + authoritativeSettlementAmount(r), 0))}</td>
                         <td />
                     </tr>
                 </tfoot>
@@ -573,6 +620,24 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
         getEventSettlement(eventId).then(s => { setSettlement(s); setSubsidyTotal(s.subsidyTotal); });
     }
 
+    const [confirmingBulk, startConfirmBulk] = useTransition();
+
+    function handleConfirmProposal(prescriptionId: number) {
+        confirmProposedAmount(prescriptionId).then(res => {
+            if ("error" in res) setSendFeedback(`Chyba: ${res.error}`);
+            else silentReload();
+        });
+    }
+
+    function handleConfirmAllProposals() {
+        startConfirmBulk(async () => {
+            const res = await confirmProposedAmounts(eventId);
+            if ("error" in res) { setSendFeedback(`Chyba: ${res.error}`); return; }
+            setSendFeedback(res.confirmed > 0 ? `Potvrzeno ${res.confirmed} návrhů.` : "Žádné návrhy k potvrzení.");
+            silentReload();
+        });
+    }
+
     function loadLog() { getEventSettlementEmailLog(eventId).then(setEmailLog); }
 
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -593,6 +658,7 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
             setBillingStatus("prescribed");
             onBillingStatusChange("prescribed");
             load();
+            if (res.proposed > 0) setSendFeedback(`Vygenerováno. ${res.proposed} přihlášek má navržený přepočet ke schválení.`);
             setBatchModalOpen(true);
         });
     }
@@ -795,6 +861,21 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                         ({settlement.totalParticipants} účastníků, {settlement.registrations.length} přihlášek)
                     </span>
                 </h3>
+                {(() => {
+                    const pending = settlement.registrations.filter(r => r.settlementPrescription?.proposedAmount != null);
+                    if (pending.length === 0) return null;
+                    return (
+                        <div className="mb-3 flex items-center justify-between gap-3 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                            <p className="text-xs text-amber-800">
+                                <span className="font-medium">{pending.length}</span> {pending.length === 1 ? "přihláška má" : "přihlášek má"} navržený přepočet.
+                            </p>
+                            <Button size="sm" variant="outline" onClick={handleConfirmAllProposals} disabled={confirmingBulk}
+                                className="h-7 text-xs border-amber-300 text-amber-800 hover:bg-amber-100">
+                                {confirmingBulk ? <><Loader2 size={12} className="animate-spin mr-1" />Potvrzuji…</> : "Potvrdit vše"}
+                            </Button>
+                        </div>
+                    );
+                })()}
                 {!hasRegistrations ? (
                     <p className="text-sm text-gray-400 py-4 text-center">Žádné přihlášky na akci.</p>
                 ) : (
@@ -807,6 +888,7 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                         onSendEmail={(id, name) => { setSendFeedback(null); setIndividualTarget({ registrationId: id, name }); }}
                         onDepositPromiseChange={handleDepositPromiseChange}
                         onDepositWontPayChange={handleDepositWontPayChange}
+                        onConfirmProposal={handleConfirmProposal}
                     />
                 )}
             </div>
