@@ -525,6 +525,13 @@ export const eventPaymentPrescriptions = appSchema.table(
         // e-mail s předpisem — rozlišuje stav "odeslat předpis" vs. "k zaplacení" na záložce Platby.
         // Nastavuje se jen při úspěšném odeslání (ne při skip/fail v batch rozeslání).
         emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+        // Návrh přepočtené částky (mechanismus schvalování změny — viz
+        // docs/superpowers/specs/2026-08-03-schvalovani-zmeny-castky-predpisu.md).
+        // Vyplní se jen když se přepočet liší od `amount` a `amount` už bylo reálně
+        // vygenerováno (ne 0). `amount` se dál nemění, dokud admin proposedAmount
+        // výslovně nepotvrdí (confirmProposedAmount/confirmProposedAmounts).
+        proposedAmount: numeric("proposed_amount", { precision: 10, scale: 2 }),
+        proposedAt: timestamp("proposed_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },
