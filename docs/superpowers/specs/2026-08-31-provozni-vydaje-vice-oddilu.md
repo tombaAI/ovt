@@ -1,5 +1,5 @@
 ---
-status: navrh
+status: implementace
 ---
 
 # Zadání: Provozní výdaje — druhý oddíl (TOM)

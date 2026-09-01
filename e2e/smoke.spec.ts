@@ -98,3 +98,55 @@ test.describe("provozní výdaje", () => {
         await context.close();
     });
 });
+
+test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
+    async function tomContext(browser: import("@playwright/test").Browser, baseURL: string | undefined) {
+        const secret = process.env.AUTH_SECRET;
+        if (!secret) throw new Error("AUTH_SECRET musí být nastaven");
+        const token = await encode({
+            token: { name: "E2E Hospodářka TOM", email: "e2e-tom@test.local", sub: "e2e-tom" },
+            secret,
+            salt: "authjs.session-token",
+            maxAge: 3600,
+        });
+        const context = await browser.newContext();
+        await context.addCookies([{
+            name: "authjs.session-token",
+            value: token,
+            domain: new URL(baseURL!).hostname,
+            path: "/",
+            httpOnly: true,
+            secure: false,
+            sameSite: "Lax",
+        }]);
+        return context;
+    }
+
+    test("hospodářka TOM založí výdaj pro TOM; hospodář OVT ho vidí, ale nesmí uzamknout", async ({ browser, baseURL, page }) => {
+        const tomCtx = await tomContext(browser, baseURL);
+        const tomPage = await tomCtx.newPage();
+
+        await tomPage.goto("/dashboard/provoz");
+        await expect(tomPage.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
+        await expect(tomPage.getByRole("tab", { name: "OVT" })).toBeVisible();
+        await tomPage.getByRole("tab", { name: "TOM" }).click();
+
+        await tomPage.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await tomPage.getByLabel("Název *").fill("E2E výdaj TOM");
+        await tomPage.getByRole("button", { name: "Založit" }).click();
+
+        await expect(tomPage).toHaveURL(/\/dashboard\/events\/\d+/);
+        const eventUrl = tomPage.url();
+        await tomCtx.close();
+
+        // Hospodář OVT (výchozí přihlášená session) vidí detail cizího oddílu…
+        await page.goto(eventUrl);
+        await expect(page.getByRole("heading", { name: "E2E výdaj TOM" })).toBeVisible();
+        await expect(page.getByText("TOM", { exact: true }).first()).toBeVisible();
+
+        // …ale uzamčení je vyhrazené hospodářce TOM.
+        await page.getByRole("tab", { name: "Náklady" }).click();
+        await page.getByRole("button", { name: "Uzamknout částky" }).click();
+        await expect(page.getByText(/může uzamknout jen jeho hospodář/)).toBeVisible();
+    });
+});
