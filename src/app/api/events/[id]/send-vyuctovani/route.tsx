@@ -223,6 +223,8 @@ export async function POST(
       .orderBy(desc(eventTreasurerApprovalLog.changedAt))
       .limit(1);
 
+    const provozniSchvalil = latestApproval?.changedBy ?? DEFAULT_SCHVALIL;
+
     const hospodarEmail = getOddilTjRecipientEmail(event.oddil);
     const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
     if (recipients.length === 0) {
@@ -319,10 +321,12 @@ export async function POST(
       veVysi: 0,
       naklady,
       prijmy: {},
-      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje ho hospodář,
-      // takže pole odpovídá tomu, kdo souhlas udělil (latestApproval), ne event.leaderName.
-      vyuctoval: isProvozni ? (latestApproval?.changedBy ?? DEFAULT_SCHVALIL) : (event.leaderName ?? ""),
-      schvalil: DEFAULT_SCHVALIL,
+      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje i schvaluje ho
+      // sám hospodář oddílu (schvalovací krok odpadá, viz spec 2026-08-05-provozni-vydaje.md),
+      // takže obě pole odpovídají tomu, kdo souhlas udělil (latestApproval), ne DEFAULT_SCHVALIL —
+      // ten je specifický pro OVT a u TOM by ukazoval špatnou osobu (spec 2026-08-31).
+      vyuctoval: isProvozni ? provozniSchvalil : (event.leaderName ?? ""),
+      schvalil: isProvozni ? provozniSchvalil : DEFAULT_SCHVALIL,
       datum: new Intl.DateTimeFormat("cs-CZ").format(new Date()),
     };
 

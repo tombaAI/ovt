@@ -1,8 +1,8 @@
 import { renderToBuffer } from "@react-pdf/renderer";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
-import { eventExpenses, events, members } from "@/db/schema";
+import { eventExpenses, events, eventTreasurerApprovalLog, members } from "@/db/schema";
 import { buildPdfAttachmentDisposition } from "@/lib/content-disposition";
 import { getDb } from "@/lib/db";
 import { getOddilNazevPlny } from "@/lib/oddily-config";
@@ -38,6 +38,7 @@ export async function GET(
             .select({
                 id: events.id,
                 name: events.name,
+                eventType: events.eventType,
                 oddil: events.oddil,
                 leaderName: members.fullName,
             })
@@ -49,6 +50,20 @@ export async function GET(
         if (!event) {
             return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
         }
+
+        // Provozní výdaj nemá vedoucího a schvalovací krok odpadá (zamyká sám hospodář
+        // oddílu) — vyúčtoval i schválil proto odpovídá poslednímu schválení hospodáře,
+        // ne DEFAULT_SCHVALIL, který je specifický pro OVT (spec 2026-08-31-provozni-vydaje-vice-oddilu.md).
+        const isProvozni = event.eventType === "provozni";
+        const [latestApproval] = isProvozni
+            ? await db
+                .select({ changedBy: eventTreasurerApprovalLog.changedBy })
+                .from(eventTreasurerApprovalLog)
+                .where(eq(eventTreasurerApprovalLog.eventId, eventId))
+                .orderBy(desc(eventTreasurerApprovalLog.changedAt))
+                .limit(1)
+            : [];
+        const provozniSchvalil = latestApproval?.changedBy ?? DEFAULT_SCHVALIL;
 
         const expenses = await db
             .select({
@@ -72,8 +87,8 @@ export async function GET(
             veVysi: 0,
             naklady,
             prijmy: {},
-            vyuctoval: event.leaderName ?? "",
-            schvalil: DEFAULT_SCHVALIL,
+            vyuctoval: isProvozni ? provozniSchvalil : (event.leaderName ?? ""),
+            schvalil: isProvozni ? provozniSchvalil : DEFAULT_SCHVALIL,
             datum: new Intl.DateTimeFormat("cs-CZ").format(new Date()),
         };
 
