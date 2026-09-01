@@ -42,6 +42,7 @@ export function ProvozClient({ rows, allMembers }: { rows: ProvozniVydajRow[]; a
                 dateFrom: dateFrom || null,
                 leaderId: leaderId ? Number(leaderId) : null,
                 description: description.trim() || null,
+                oddil: 'ovt',
             });
             if ("error" in res) { setError(res.error); return; }
             router.push(`/dashboard/events/${res.id}`);

@@ -5,10 +5,10 @@ import { events, members, auditLog, eventVyuctovaniSends, eventTreasurerApproval
 import { eq, ne, and, asc, desc, sql } from "drizzle-orm";
 import { auth } from "@/auth";
 import { revalidatePath } from "next/cache";
-import { isTreasurer } from "@/lib/treasurer";
-import type { EventType, EventStatus, EventSource } from "@/db/schema";
+import { isAnyOddilTreasurer } from "@/lib/treasurer";
+import type { EventType, EventStatus, EventSource, Oddil } from "@/db/schema";
 
-export type { EventType, EventStatus, EventSource };
+export type { EventType, EventStatus, EventSource, Oddil };
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
@@ -17,6 +17,7 @@ export type EventRow = {
     year: number;
     name: string;
     eventType: EventType;
+    oddil: Oddil;
     dateFrom: string | null;
     dateTo: string | null;
     timeFrom: string | null;
@@ -70,6 +71,7 @@ export async function getEvents(year: number): Promise<EventRow[]> {
             year: events.year,
             name: events.name,
             eventType: events.eventType,
+            oddil: events.oddil,
             dateFrom: events.dateFrom,
             dateTo: events.dateTo,
             timeFrom: events.timeFrom,
@@ -147,6 +149,7 @@ export async function getEventById(id: number): Promise<EventRow | null> {
             year: events.year,
             name: events.name,
             eventType: events.eventType,
+            oddil: events.oddil,
             dateFrom: events.dateFrom,
             dateTo: events.dateTo,
             timeFrom: events.timeFrom,
@@ -213,11 +216,12 @@ export type ProvozniVydajRow = {
     expenseCount: number;
     expenseSum: number;
     sentToTj: boolean;
+    oddil: Oddil;
 };
 
 export async function getProvozniVydaje(): Promise<ProvozniVydajRow[]> {
     const session = await auth();
-    if (!isTreasurer(session?.user?.email)) return [];
+    if (!isAnyOddilTreasurer(session?.user?.email)) return [];
 
     const db = getDb();
     const rows = await db
@@ -230,6 +234,7 @@ export async function getProvozniVydaje(): Promise<ProvozniVydajRow[]> {
             expenseCount: sql<number>`(select count(*) from ${eventExpenses} where ${eventExpenses.eventId} = ${events.id})`,
             expenseSum: sql<number>`coalesce((select sum(${eventExpenses.amount}) from ${eventExpenses} where ${eventExpenses.eventId} = ${events.id}), 0)`,
             sentToTj: sql<boolean>`exists (select 1 from ${eventVyuctovaniSends} where ${eventVyuctovaniSends.eventId} = ${events.id})`,
+            oddil: events.oddil,
         })
         .from(events)
         .leftJoin(members, eq(events.leaderId, members.id))
@@ -242,6 +247,7 @@ export async function getProvozniVydaje(): Promise<ProvozniVydajRow[]> {
         dateFrom: r.dateFrom as unknown as string | null,
         expenseCount: Number(r.expenseCount),
         expenseSum: Number(r.expenseSum),
+        oddil: r.oddil as Oddil,
     }));
 }
 
@@ -281,6 +287,7 @@ export type ProvozniVydajFormData = {
     dateFrom: string | null;
     leaderId: number | null;
     description: string | null;
+    oddil: Oddil;
 };
 
 export async function createProvozniVydaj(
@@ -288,7 +295,7 @@ export async function createProvozniVydaj(
 ): Promise<{ id: number } | { error: string }> {
     const session = await auth();
     if (!session?.user?.email) return { error: "Nepřihlášen" };
-    if (!isTreasurer(session.user.email)) return { error: "Provozní výdaje jsou jen pro hospodáře." };
+    if (!isAnyOddilTreasurer(session.user.email)) return { error: "Provozní výdaje jsou jen pro hospodáře." };
     if (!data.name.trim()) return { error: "Název je povinný." };
 
     const db = getDb();
@@ -298,6 +305,7 @@ export async function createProvozniVydaj(
             year: new Date().getFullYear(),
             name: data.name.trim(),
             eventType: "provozni",
+            oddil: data.oddil,
             dateFrom: data.dateFrom ?? undefined,
             leaderId: data.leaderId ?? undefined,
             description: data.description ?? undefined,
