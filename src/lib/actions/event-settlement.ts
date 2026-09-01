@@ -2279,3 +2279,106 @@ export async function setDepositWontPay(
         return { error: "Nepodařilo se nastavit rozhodnutí o záloze" };
     }
 }
+
+/**
+ * Potvrdí návrh přepočtené částky jedné přihlášky — `amount = proposedAmount`, vyčistí
+ * proposedAmount/proposedAt. Viz docs/superpowers/specs/2026-08-03-schvalovani-zmeny-castky-predpisu.md.
+ */
+export async function confirmProposedAmount(prescriptionId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+        const db = getDb();
+
+        const [p] = await db
+            .select({
+                type: eventPaymentPrescriptions.type,
+                eventId: eventPaymentPrescriptions.eventId,
+                registrationId: eventPaymentPrescriptions.registrationId,
+                amount: eventPaymentPrescriptions.amount,
+                proposedAmount: eventPaymentPrescriptions.proposedAmount,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        if (!p) return { error: "Předpis nenalezen" };
+        if (p.type !== "settlement") return { error: "Návrh lze potvrdit jen u doplatku" };
+        if (p.proposedAmount === null) return { error: "Žádný návrh k potvrzení" };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({ amount: p.proposedAmount, proposedAmount: null, proposedAt: null, updatedAt: new Date() })
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        await db.insert(auditLog).values({
+            entityType: "event_registration",
+            entityId: p.registrationId,
+            action: "confirm_proposed_amount",
+            changes: { amount: { old: p.amount, new: p.proposedAmount } },
+            metadata: { eventId: p.eventId, registrationId: p.registrationId, prescriptionId },
+            changedBy: session.user.email,
+        });
+
+        revalidatePath(`/dashboard/events/${p.eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se potvrdit návrh" };
+    }
+}
+
+/**
+ * Hromadně potvrdí návrhy přepočtu — bez `prescriptionIds` všechny nevyřízené návrhy
+ * akce, s `prescriptionIds` jen vybranou podmnožinu (scénář "část lidí už zaplatila,
+ * u nich změnu nechci, zbytek přepočítám").
+ */
+export async function confirmProposedAmounts(
+    eventId: number,
+    prescriptionIds?: number[],
+): Promise<{ success: true; confirmed: number } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+        const changedBy = session.user.email;
+        const db = getDb();
+
+        const rows = await db
+            .select({
+                id: eventPaymentPrescriptions.id,
+                registrationId: eventPaymentPrescriptions.registrationId,
+                amount: eventPaymentPrescriptions.amount,
+                proposedAmount: eventPaymentPrescriptions.proposedAmount,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(and(
+                eq(eventPaymentPrescriptions.eventId, eventId),
+                eq(eventPaymentPrescriptions.type, "settlement"),
+                isNotNull(eventPaymentPrescriptions.proposedAmount),
+                ...(prescriptionIds ? [inArray(eventPaymentPrescriptions.id, prescriptionIds)] : []),
+            ));
+
+        if (rows.length === 0) return { success: true, confirmed: 0 };
+
+        await db.transaction(async tx => {
+            for (const p of rows) {
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ amount: p.proposedAmount!, proposedAmount: null, proposedAt: null, updatedAt: new Date() })
+                    .where(eq(eventPaymentPrescriptions.id, p.id));
+
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId: p.registrationId,
+                    action: "confirm_proposed_amount",
+                    changes: { amount: { old: p.amount, new: p.proposedAmount } },
+                    metadata: { eventId, registrationId: p.registrationId, prescriptionId: p.id },
+                    changedBy,
+                });
+            }
+        });
+
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true, confirmed: rows.length };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se potvrdit návrhy" };
+    }
+}
