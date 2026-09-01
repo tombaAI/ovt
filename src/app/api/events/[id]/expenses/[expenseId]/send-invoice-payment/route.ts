@@ -5,6 +5,7 @@ import { getDb } from "@/lib/db";
 import { eventExpenses, events, mailEvents, auditLog } from "@/db/schema";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildInvoicePaymentInstructionEmail } from "@/lib/email-templates/invoice-payment-instruction";
+import { getOddilTjRecipientEmail } from "@/lib/oddily-config";
 
 export const dynamic = "force-dynamic";
 
@@ -36,14 +37,6 @@ export async function POST(
         if (!settings.configured) {
             return NextResponse.json(
                 { error: "RESEND_API_KEY není nastavený. E-mail nelze odeslat." },
-                { status: 503 },
-            );
-        }
-
-        const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
-        if (!hospodarEmail) {
-            return NextResponse.json(
-                { error: "ENV EMAIL_HOSPODAR_ODDILU_TJB není nastavený. Příjemce neznámý." },
                 { status: 503 },
             );
         }
@@ -92,13 +85,21 @@ export async function POST(
         }
 
         const [event] = await db
-            .select({ name: events.name })
+            .select({ name: events.name, oddil: events.oddil })
             .from(events)
             .where(eq(events.id, eventId))
             .limit(1);
 
         if (!event) {
             return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        }
+
+        const hospodarEmail = getOddilTjRecipientEmail(event.oddil);
+        if (!hospodarEmail) {
+            return NextResponse.json(
+                { error: `Příjemce mailu pro oddíl ${event.oddil} není nastavený (chybějící env proměnná).` },
+                { status: 503 },
+            );
         }
 
         const attachment = await fetchBlobAttachment(expense.fileUrl, expense.fileName);

@@ -7,6 +7,7 @@ import { eventExpenses, events, eventTreasurerApprovalLog, members, people } fro
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
+import { getOddilNazevPlny, getOddilTjRecipientEmail } from "@/lib/oddily-config";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -15,7 +16,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_ODDIL = "207 Oddíl vodní turistiky";
 const DEFAULT_SCHVALIL = "Tomáš Bauer";
 
 type EmailAttachment = {
@@ -174,6 +174,7 @@ export async function POST(
         id: events.id,
         name: events.name,
         eventType: events.eventType,
+        oddil: events.oddil,
         billingStatus: events.billingStatus,
         treasurerApproved: events.treasurerApproved,
         leaderName: members.fullName,
@@ -214,7 +215,7 @@ export async function POST(
       .orderBy(desc(eventTreasurerApprovalLog.changedAt))
       .limit(1);
 
-    const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
+    const hospodarEmail = getOddilTjRecipientEmail(event.oddil);
     const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
     if (recipients.length === 0) {
       return NextResponse.json(
@@ -303,7 +304,7 @@ export async function POST(
     }
 
     const settlementData: VyuctovaniData = {
-      oddi: DEFAULT_ODDIL,
+      oddi: getOddilNazevPlny(event.oddil),
       cisloZalohy: "",
       zaMesicLabel: isProvozni ? "náklad" : "za akci",
       zaMesic: event.name,

@@ -5,6 +5,7 @@ import { auth } from "@/auth";
 import { eventExpenses, events, members } from "@/db/schema";
 import { buildPdfAttachmentDisposition } from "@/lib/content-disposition";
 import { getDb } from "@/lib/db";
+import { getOddilNazevPlny } from "@/lib/oddily-config";
 import {
     VyuctovaniDocument,
     type VyuctovaniData,
@@ -13,7 +14,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_ODDIL = "207 Oddíl vodní turistiky";
 const DEFAULT_SCHVALIL = "Tomáš Bauer";
 
 export async function GET(
@@ -38,6 +38,7 @@ export async function GET(
             .select({
                 id: events.id,
                 name: events.name,
+                oddil: events.oddil,
                 leaderName: members.fullName,
             })
             .from(events)
@@ -64,7 +65,7 @@ export async function GET(
         }
 
         const data: VyuctovaniData = {
-            oddi: DEFAULT_ODDIL,
+            oddi: getOddilNazevPlny(event.oddil),
             cisloZalohy: "",
             zaMesicLabel: "za akci",
             zaMesic: event.name,
