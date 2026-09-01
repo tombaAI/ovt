@@ -3094,6 +3094,7 @@ export function EventExpensesTab({
                             onSent={() => getVyuctovaniActivityLog(eventId).then(setActivityLog)}
                             treasurerApproved={treasurerApproved}
                             isProvozni={isProvozni}
+                            isTreasurer={isTreasurer}
                         />
                     </div>
 

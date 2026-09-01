@@ -7,6 +7,9 @@ import { eventExpenses, events, eventTreasurerApprovalLog, members, people } fro
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
+import { getOddilNazevPlny, getOddilTjRecipientEmail, ODDIL_LABELS } from "@/lib/oddily-config";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
+import { logBlockedAttempt } from "@/lib/audit";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -15,7 +18,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_ODDIL = "207 Oddíl vodní turistiky";
 const DEFAULT_SCHVALIL = "Tomáš Bauer";
 
 type EmailAttachment = {
@@ -174,6 +176,7 @@ export async function POST(
         id: events.id,
         name: events.name,
         eventType: events.eventType,
+        oddil: events.oddil,
         billingStatus: events.billingStatus,
         treasurerApproved: events.treasurerApproved,
         leaderName: members.fullName,
@@ -191,6 +194,12 @@ export async function POST(
     // Provozní výdaj nemá "akci" ani nutně vedoucího — vyúčtování i email o něm mluví
     // jako o nákladu a připravuje ho vždy hospodář (viz spec 2026-08-05-provozni-vydaje.md).
     const isProvozni = event.eventType === "provozni";
+
+    if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+      const reason = `Vyúčtování oddílu ${ODDIL_LABELS[event.oddil]} může odeslat jen jeho hospodář.`;
+      await logBlockedAttempt(db, { attemptedAction: "send_vyuctovani", reason, changedBy: session.user.email, eventId });
+      return NextResponse.json({ error: reason }, { status: 403 });
+    }
 
     if (event.billingStatus !== "prescribed") {
       return NextResponse.json(
@@ -214,11 +223,13 @@ export async function POST(
       .orderBy(desc(eventTreasurerApprovalLog.changedAt))
       .limit(1);
 
-    const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
+    const provozniSchvalil = latestApproval?.changedBy ?? DEFAULT_SCHVALIL;
+
+    const hospodarEmail = getOddilTjRecipientEmail(event.oddil);
     const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
     if (recipients.length === 0) {
       return NextResponse.json(
-        { error: "Vedoucí akce nemá e-mail a ENV EMAIL_HOSPODAR_ODDILU_TJB není nastavený. Nelze odeslat." },
+        { error: `Vedoucí akce nemá e-mail a příjemce na TJ pro oddíl ${ODDIL_LABELS[event.oddil]} není nastavený. Nelze odeslat.` },
         { status: 503 },
       );
     }
@@ -303,17 +314,19 @@ export async function POST(
     }
 
     const settlementData: VyuctovaniData = {
-      oddi: DEFAULT_ODDIL,
+      oddi: getOddilNazevPlny(event.oddil),
       cisloZalohy: "",
       zaMesicLabel: isProvozni ? "náklad" : "za akci",
       zaMesic: event.name,
       veVysi: 0,
       naklady,
       prijmy: {},
-      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje ho hospodář,
-      // takže pole odpovídá tomu, kdo souhlas udělil (latestApproval), ne event.leaderName.
-      vyuctoval: isProvozni ? (latestApproval?.changedBy ?? DEFAULT_SCHVALIL) : (event.leaderName ?? ""),
-      schvalil: DEFAULT_SCHVALIL,
+      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje i schvaluje ho
+      // sám hospodář oddílu (schvalovací krok odpadá, viz spec 2026-08-05-provozni-vydaje.md),
+      // takže obě pole odpovídají tomu, kdo souhlas udělil (latestApproval), ne DEFAULT_SCHVALIL —
+      // ten je specifický pro OVT a u TOM by ukazoval špatnou osobu (spec 2026-08-31).
+      vyuctoval: isProvozni ? provozniSchvalil : (event.leaderName ?? ""),
+      schvalil: isProvozni ? provozniSchvalil : DEFAULT_SCHVALIL,
       datum: new Intl.DateTimeFormat("cs-CZ").format(new Date()),
     };
 

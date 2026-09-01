@@ -98,3 +98,84 @@ test.describe("provozní výdaje", () => {
         await context.close();
     });
 });
+
+test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
+    async function tomContext(browser: import("@playwright/test").Browser, baseURL: string | undefined) {
+        const secret = process.env.AUTH_SECRET;
+        if (!secret) throw new Error("AUTH_SECRET musí být nastaven");
+        const token = await encode({
+            token: { name: "E2E Hospodářka TOM", email: "e2e-tom@test.local", sub: "e2e-tom" },
+            secret,
+            salt: "authjs.session-token",
+            maxAge: 3600,
+        });
+        const context = await browser.newContext();
+        await context.addCookies([{
+            name: "authjs.session-token",
+            value: token,
+            domain: new URL(baseURL!).hostname,
+            path: "/",
+            httpOnly: true,
+            secure: false,
+            sameSite: "Lax",
+        }]);
+        return context;
+    }
+
+    test("hospodářka TOM založí výdaj pro TOM; hospodář OVT ho vidí, ale nesmí uzamknout ani odeslat", async ({ browser, baseURL, page }) => {
+        const tomCtx = await tomContext(browser, baseURL);
+        const tomPage = await tomCtx.newPage();
+
+        await tomPage.goto("/dashboard/provoz");
+        await expect(tomPage.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
+        await expect(tomPage.getByRole("tab", { name: "OVT" })).toBeVisible();
+        await tomPage.getByRole("tab", { name: "TOM" }).click();
+
+        await tomPage.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await tomPage.getByLabel("Název *").fill("E2E výdaj TOM");
+        await tomPage.getByRole("button", { name: "Založit" }).click();
+
+        await expect(tomPage).toHaveURL(/\/dashboard\/events\/\d+/);
+        const eventUrl = tomPage.url();
+
+        // Hospodář OVT (výchozí přihlášená session) vidí detail cizího oddílu…
+        await page.goto(eventUrl);
+        await expect(page.getByRole("heading", { name: "E2E výdaj TOM" })).toBeVisible();
+        await expect(page.getByText("TOM", { exact: true }).first()).toBeVisible();
+
+        // …ale uzamčení je vyhrazené hospodářce TOM.
+        await page.getByRole("tab", { name: "Náklady" }).click();
+        await page.getByRole("button", { name: "Uzamknout částky" }).click();
+        await expect(page.getByText(/může uzamknout jen jeho hospodář/)).toBeVisible();
+
+        // Hospodářka TOM ale uzamknout smí — přejde do stavu "prescribed" (u provozního výdaje
+        // s tím automaticky i souhlas hospodáře, viz lockBilling).
+        await tomPage.getByRole("tab", { name: "Náklady" }).click();
+        await tomPage.getByRole("button", { name: "Uzamknout částky" }).click();
+        await expect(tomPage.getByText(/Částky jsou uzamčeny/)).toBeVisible();
+        await tomCtx.close();
+
+        // Po uzamčení hospodářkou TOM je "Odeslat vyúčtování" viditelné i hospodáři OVT (jde
+        // o cizí oddíl), ale zablokované — odeslat smí jen hospodář vlastnícího oddílu (Fix 1c/1d).
+        await page.reload();
+        await page.getByRole("tab", { name: "Náklady" }).click();
+        await expect(page.getByText(/Částky jsou uzamčeny/)).toBeVisible();
+        await expect(page.getByText("Odeslat smí jen hospodář tohoto oddílu.")).toBeVisible();
+        await expect(page.getByRole("button", { name: "Odeslat vyúčtování" })).toBeDisabled();
+    });
+
+    test("hospodář OVT NESMÍ založit provozní výdaj pro oddíl TOM (založení je jen pro hospodáře vlastního oddílu)", async ({ page }) => {
+        await page.goto("/dashboard/provoz");
+        await expect(page.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
+        await page.getByRole("tab", { name: "TOM" }).click();
+
+        await page.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await expect(page.locator("#provoz-oddil")).toHaveValue("tom");
+        await page.getByLabel("Název *").fill("E2E výdaj TOM od OVT — má selhat");
+        await page.getByRole("button", { name: "Založit" }).click();
+
+        // Založení je odmítnuto — dialog zůstává otevřený, žádný redirect na detail výdaje
+        await expect(page.getByText(/může založit jen jeho hospodář/)).toBeVisible();
+        await expect(page).not.toHaveURL(/\/dashboard\/events\/\d+/);
+    });
+});

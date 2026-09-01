@@ -26,6 +26,7 @@ export DATABASE_URL=postgres://postgres:test@127.0.0.1:54329/postgres
 export AUTH_SECRET=e2e-test-secret
 export ADMIN_EMAILS=e2e-admin@test.local
 export TREASURER_EMAIL=e2e-admin@test.local  # e2e admin je zároveň hospodář (testy sekce Provoz)
+export TREASURER_EMAIL_TOM=e2e-tom@test.local  # samostatný e2e admin jako hospodářka oddílu TOM (testy druhého oddílu v sekci Provoz)
 export AUTH_GOOGLE_ID=dummy AUTH_GOOGLE_SECRET=dummy
 E2E_ALLOW_SEED=1 node e2e/seed.mjs
 npx playwright install chromium   # jen poprvé

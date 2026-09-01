@@ -44,6 +44,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) | Záloha se nepřepočte při změně počtu osob na přihlášce po jejím vzniku | `navrh` — jen zapsáno, k dořešení |
 | [2026-08-03-prihlasky-zavod-cpv.md](2026-08-03-prihlasky-zavod-cpv.md) | Online přihlašování na pořádaný závod ČPV (podzim 2026) — veřejný formulář, předpisy „H”, platby, změny, vratky | `navrh` — obohaceno o rešerši pravidel ČPV 2026, čeká na grilování + dekompozici |
 | [2026-08-05-provozni-vydaje.md](2026-08-05-provozni-vydaje.md) | Provozní výdaje mimo akce (oprava vleku apod.) — typ akce `provozni` + samostatná stránka `/dashboard/provoz` jen pro hospodáře | `schvaleno` — ověřeno na staging, čeká na merge PR do `main` |
+| [2026-08-31-provozni-vydaje-vice-oddilu.md](2026-08-31-provozni-vydaje-vice-oddilu.md) | Provozní výdaje pro druhý oddíl (TOM) — vlastní hospodář, kód oddílu, příjemce mailu na TJ | `implementace` — větev `feat/2026-08-31-provozni-vydaje-druhy-oddil` |
 
 ## Navazující design dokumenty (`docs/`)
 

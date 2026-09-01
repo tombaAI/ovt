@@ -20,7 +20,8 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
-import { isTreasurer } from "@/lib/treasurer";
+import { isTreasurer, isTreasurerOfOddil } from "@/lib/treasurer";
+import { ODDIL_LABELS } from "@/lib/oddily-config";
 import { logBlockedAttempt, BlockedError, blockedOrError } from "@/lib/audit";
 import {
     activePersonKeysForRegistration,
@@ -671,13 +672,13 @@ export async function lockBilling(eventId: number): Promise<{ success: true; pro
         if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
         const [event] = await db
-            .select({ name: events.name, eventType: events.eventType, treasurerApproved: events.treasurerApproved })
+            .select({ name: events.name, eventType: events.eventType, treasurerApproved: events.treasurerApproved, oddil: events.oddil })
             .from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
 
         const isProvozni = event.eventType === "provozni";
-        if (isProvozni && !isTreasurer(session.user.email)) {
-            const reason = "Provozní výdaj může uzamknout jen hospodář.";
+        if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+            const reason = `Provozní výdaj oddílu ${ODDIL_LABELS[event.oddil]} může uzamknout jen jeho hospodář.`;
             await logBlockedAttempt(db, { attemptedAction: "lock_billing", reason, changedBy: session.user.email, eventId });
             return { error: reason };
         }
@@ -747,11 +748,11 @@ export async function unlockBilling(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
-        const [ev] = await db.select({ eventType: events.eventType }).from(events).where(eq(events.id, eventId));
+        const [ev] = await db.select({ eventType: events.eventType, oddil: events.oddil }).from(events).where(eq(events.id, eventId));
         if (!ev) return { error: "Akce nenalezena" };
         const isProvozni = ev.eventType === "provozni";
-        if (isProvozni && !isTreasurer(session.user.email)) {
-            const reason = "Provozní výdaj může odemknout jen hospodář.";
+        if (isProvozni && !isTreasurerOfOddil(session.user.email, ev.oddil)) {
+            const reason = `Provozní výdaj oddílu ${ODDIL_LABELS[ev.oddil]} může odemknout jen jeho hospodář.`;
             await logBlockedAttempt(db, { attemptedAction: "unlock_billing", reason, changedBy: session.user.email, eventId });
             return { error: reason };
         }
