@@ -5,7 +5,7 @@ import { auth } from "@/auth";
 import { getDb } from "@/lib/db";
 import { eventExpenses, events, auditLog } from "@/db/schema";
 import { analyzeExpenseFile, ExpenseAnalysisConfigError } from "@/lib/expense-analysis";
-import { isTreasurer } from "@/lib/treasurer";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
 import { evaluateLockedMismatchGate, analyzedMatchesAmount } from "@/lib/expense-mismatch";
 import { logBlockedAttempt } from "@/lib/audit";
 import { isAllowedExpenseFile, resolveExpenseFileMime } from "@/lib/expense-file-validation";
@@ -19,7 +19,7 @@ const MAX_FILE_BYTES = 10 * 1024 * 1024;
  * Při každém nahrání proběhne Gemini analýza a uloží se analyzed_amount (baseline pro kontrolu shody).
  *
  * Zamčené předpisy (lockForParticipants): server ignoruje klientem poslanou částku (obrana proti
- * obejití zámku) a neshodu smí uložit jen hospodář po potvrzení. Odemčeno: částka editovatelná bez gate.
+ * obejití zámku) a neshodu smí uložit jen hospodář po potvrzení (hospodář oddílu, kterému doklad patří). Odemčeno: částka editovatelná bez gate.
  * lockForReimbursement: tvrdě blokováno, bez výjimky.
  */
 export async function POST(
@@ -46,6 +46,7 @@ export async function POST(
             .select({
                 lockForParticipants: events.lockForParticipants,
                 lockForReimbursement: events.lockForReimbursement,
+                oddil: events.oddil,
             })
             .from(events)
             .where(eq(events.id, eventId));
@@ -97,7 +98,7 @@ export async function POST(
             const gate = evaluateLockedMismatchGate({
                 amount: expense.amount,
                 analyzedAmount,
-                isTreasurer: isTreasurer(session.user.email),
+                isTreasurer: isTreasurerOfOddil(session.user.email, eventRow.oddil),
                 confirmMismatch,
             });
             if (!gate.ok) {

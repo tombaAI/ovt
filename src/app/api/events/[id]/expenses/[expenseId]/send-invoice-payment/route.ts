@@ -5,6 +5,9 @@ import { getDb } from "@/lib/db";
 import { eventExpenses, events, mailEvents, auditLog } from "@/db/schema";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildInvoicePaymentInstructionEmail } from "@/lib/email-templates/invoice-payment-instruction";
+import { getOddilTjRecipientEmail, ODDIL_LABELS } from "@/lib/oddily-config";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
+import { logBlockedAttempt } from "@/lib/audit";
 
 export const dynamic = "force-dynamic";
 
@@ -36,14 +39,6 @@ export async function POST(
         if (!settings.configured) {
             return NextResponse.json(
                 { error: "RESEND_API_KEY není nastavený. E-mail nelze odeslat." },
-                { status: 503 },
-            );
-        }
-
-        const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
-        if (!hospodarEmail) {
-            return NextResponse.json(
-                { error: "ENV EMAIL_HOSPODAR_ODDILU_TJB není nastavený. Příjemce neznámý." },
                 { status: 503 },
             );
         }
@@ -92,13 +87,28 @@ export async function POST(
         }
 
         const [event] = await db
-            .select({ name: events.name })
+            .select({ name: events.name, oddil: events.oddil, eventType: events.eventType })
             .from(events)
             .where(eq(events.id, eventId))
             .limit(1);
 
         if (!event) {
             return NextResponse.json({ error: "Akce nenalezena" }, { status: 404 });
+        }
+
+        const isProvozni = event.eventType === "provozni";
+        if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+            const reason = `Pokyn k úhradě u provozního výdaje oddílu ${ODDIL_LABELS[event.oddil]} může odeslat jen jeho hospodář.`;
+            await logBlockedAttempt(db, { attemptedAction: "send_invoice_payment", reason, changedBy: session.user.email, eventId });
+            return NextResponse.json({ error: reason }, { status: 403 });
+        }
+
+        const hospodarEmail = getOddilTjRecipientEmail(event.oddil);
+        if (!hospodarEmail) {
+            return NextResponse.json(
+                { error: `Příjemce mailu pro oddíl ${event.oddil} není nastavený (chybějící env proměnná).` },
+                { status: 503 },
+            );
         }
 
         const attachment = await fetchBlobAttachment(expense.fileUrl, expense.fileName);
@@ -110,6 +120,7 @@ export async function POST(
             purposeText: expense.purposeText,
             fileName: expense.fileName,
             senderName: session.user.name ?? session.user.email,
+            oddil: event.oddil,
         });
 
         const resend = getResendClient();

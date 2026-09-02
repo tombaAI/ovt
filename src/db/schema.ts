@@ -387,6 +387,9 @@ export type EventBillingStatus = typeof eventBillingStatusEnum[number];
 export const eventSourceEnum = ["manual", "google_calendar", "kanoe_rss"] as const;
 export type EventSource = typeof eventSourceEnum[number];
 
+export const oddilEnum = ["ovt", "tom"] as const;
+export type Oddil = typeof oddilEnum[number];
+
 export const events = appSchema.table(
     "events",
     {
@@ -394,6 +397,7 @@ export const events = appSchema.table(
         year: smallint("year").notNull(),
         name: text("name").notNull(),
         eventType: text("event_type", { enum: eventTypeEnum }).notNull().default("other"),
+        oddil: text("oddil", { enum: oddilEnum }).notNull().default("ovt"),
         dateFrom: date("date_from"),
         dateTo: date("date_to"),
         timeFrom: text("time_from"),
@@ -525,6 +529,13 @@ export const eventPaymentPrescriptions = appSchema.table(
         // e-mail s předpisem — rozlišuje stav "odeslat předpis" vs. "k zaplacení" na záložce Platby.
         // Nastavuje se jen při úspěšném odeslání (ne při skip/fail v batch rozeslání).
         emailSentAt: timestamp("email_sent_at", { withTimezone: true }),
+        // Návrh přepočtené částky (mechanismus schvalování změny — viz
+        // docs/superpowers/specs/2026-08-03-schvalovani-zmeny-castky-predpisu.md).
+        // Vyplní se jen když se přepočet liší od `amount` a `amount` už bylo reálně
+        // vygenerováno (ne 0). `amount` se dál nemění, dokud admin proposedAmount
+        // výslovně nepotvrdí (confirmProposedAmount/confirmProposedAmounts).
+        proposedAmount: numeric("proposed_amount", { precision: 10, scale: 2 }),
+        proposedAt: timestamp("proposed_at", { withTimezone: true }),
         createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
         updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
     },

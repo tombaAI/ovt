@@ -1,12 +1,14 @@
 import { renderToBuffer } from "@react-pdf/renderer";
 import { asc, desc, eq } from "drizzle-orm";
-import * as iconv from "iconv-lite";
 import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/auth";
 import { eventExpenses, events, eventTreasurerApprovalLog, members, people } from "@/db/schema";
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
+import { getOddilNazevPlny, getOddilTjRecipientEmail, ODDIL_EMAIL_COLORS, ODDIL_LABELS, ODDIL_KOD, ODDIL_NAZEV } from "@/lib/oddily-config";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
+import { logBlockedAttempt } from "@/lib/audit";
 import {
   VyuctovaniDocument,
   type VyuctovaniData,
@@ -15,7 +17,6 @@ import {
 
 export const dynamic = "force-dynamic";
 
-const DEFAULT_ODDIL = "207 Oddíl vodní turistiky";
 const DEFAULT_SCHVALIL = "Tomáš Bauer";
 
 type EmailAttachment = {
@@ -44,80 +45,8 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function csvCell(value: string | number | null): string {
-  const raw = value === null ? "" : String(value);
-  return `"${raw.replace(/"/g, '""')}"`;
-}
-
 function formatAmount(amount: number): string {
   return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(amount);
-}
-
-type PohodaPayment = {
-  id: string;
-  payeeName: string;
-  bankAccountNumber: string;
-  bankCode: string;
-  amount: number;
-  text: string;
-  note: string;
-  datePayment: string;
-};
-
-function xmlEscape(value: string): string {
-  return value
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;")
-    .replace(/'/g, "&apos;");
-}
-
-function generatePohodaXml(
-  payments: PohodaPayment[],
-  eventName: string,
-  ico: string,
-): Buffer {
-  const itemsXml = payments.map((p) => `
-  <dat:dataPackItem version="2.0" id="${xmlEscape(p.id)}">
-    <bnk:bank version="2.0">
-      <bnk:bankHeader>
-        <bnk:bankType>expense</bnk:bankType>
-        <bnk:datePayment>${p.datePayment}</bnk:datePayment>
-        <bnk:text>${xmlEscape(p.text.slice(0, 96))}</bnk:text>
-        <bnk:partnerIdentity>
-          <typ:address>
-            <typ:name>${xmlEscape(p.payeeName)}</typ:name>
-          </typ:address>
-        </bnk:partnerIdentity>
-        <bnk:paymentAccount>
-          <typ:accountNo>${xmlEscape(p.bankAccountNumber)}</typ:accountNo>
-          <typ:bankCode>${xmlEscape(p.bankCode)}</typ:bankCode>
-        </bnk:paymentAccount>
-        <bnk:note>${xmlEscape(p.note)}</bnk:note>
-      </bnk:bankHeader>
-      <bnk:bankSummary>
-        <bnk:homeCurrency>
-          <typ:priceNone>${p.amount.toFixed(2)}</typ:priceNone>
-        </bnk:homeCurrency>
-      </bnk:bankSummary>
-    </bnk:bank>
-  </dat:dataPackItem>`).join("");
-
-  const xml = `<?xml version="1.0" encoding="Windows-1250"?>
-<dat:dataPack
-    xmlns:dat="http://www.stormware.cz/schema/version_2/data.xsd"
-    xmlns:bnk="http://www.stormware.cz/schema/version_2/bank.xsd"
-    xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd"
-    version="2.0"
-    id="ovt-vydaje-${Date.now()}"
-    ico="${xmlEscape(ico)}"
-    application="OVT Bohemians"
-    note="${xmlEscape(`Proplacení výdajů z akce: ${eventName}`)}">${itemsXml}
-</dat:dataPack>`;
-
-  // POHODA requires Windows-1250 encoding
-  return iconv.encode(xml, "win1250");
 }
 
 async function fetchPrivateBlobAttachment(url: string, filename: string): Promise<EmailAttachment> {
@@ -174,6 +103,7 @@ export async function POST(
         id: events.id,
         name: events.name,
         eventType: events.eventType,
+        oddil: events.oddil,
         billingStatus: events.billingStatus,
         treasurerApproved: events.treasurerApproved,
         leaderName: members.fullName,
@@ -191,6 +121,12 @@ export async function POST(
     // Provozní výdaj nemá "akci" ani nutně vedoucího — vyúčtování i email o něm mluví
     // jako o nákladu a připravuje ho vždy hospodář (viz spec 2026-08-05-provozni-vydaje.md).
     const isProvozni = event.eventType === "provozni";
+
+    if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+      const reason = `Vyúčtování oddílu ${ODDIL_LABELS[event.oddil]} může odeslat jen jeho hospodář.`;
+      await logBlockedAttempt(db, { attemptedAction: "send_vyuctovani", reason, changedBy: session.user.email, eventId });
+      return NextResponse.json({ error: reason }, { status: 403 });
+    }
 
     if (event.billingStatus !== "prescribed") {
       return NextResponse.json(
@@ -214,11 +150,13 @@ export async function POST(
       .orderBy(desc(eventTreasurerApprovalLog.changedAt))
       .limit(1);
 
-    const hospodarEmail = process.env.EMAIL_HOSPODAR_ODDILU_TJB?.trim() || null;
+    const provozniSchvalil = latestApproval?.changedBy ?? DEFAULT_SCHVALIL;
+
+    const hospodarEmail = getOddilTjRecipientEmail(event.oddil);
     const recipients = [event.leaderEmail, hospodarEmail].filter((e): e is string => !!e);
     if (recipients.length === 0) {
       return NextResponse.json(
-        { error: "Vedoucí akce nemá e-mail a ENV EMAIL_HOSPODAR_ODDILU_TJB není nastavený. Nelze odeslat." },
+        { error: `Vedoucí akce nemá e-mail a příjemce na TJ pro oddíl ${ODDIL_LABELS[event.oddil]} není nastavený. Nelze odeslat.` },
         { status: 503 },
       );
     }
@@ -303,17 +241,19 @@ export async function POST(
     }
 
     const settlementData: VyuctovaniData = {
-      oddi: DEFAULT_ODDIL,
+      oddi: getOddilNazevPlny(event.oddil),
       cisloZalohy: "",
       zaMesicLabel: isProvozni ? "náklad" : "za akci",
       zaMesic: event.name,
       veVysi: 0,
       naklady,
       prijmy: {},
-      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje ho hospodář,
-      // takže pole odpovídá tomu, kdo souhlas udělil (latestApproval), ne event.leaderName.
-      vyuctoval: isProvozni ? (latestApproval?.changedBy ?? DEFAULT_SCHVALIL) : (event.leaderName ?? ""),
-      schvalil: DEFAULT_SCHVALIL,
+      // Provozní výdaj nemá vedoucího, který by ho "vyúčtoval" — připravuje i schvaluje ho
+      // sám hospodář oddílu (schvalovací krok odpadá, viz spec 2026-08-05-provozni-vydaje.md),
+      // takže obě pole odpovídají tomu, kdo souhlas udělil (latestApproval), ne DEFAULT_SCHVALIL —
+      // ten je specifický pro OVT a u TOM by ukazoval špatnou osobu (spec 2026-08-31).
+      vyuctoval: isProvozni ? provozniSchvalil : (event.leaderName ?? ""),
+      schvalil: isProvozni ? provozniSchvalil : DEFAULT_SCHVALIL,
       datum: new Intl.DateTimeFormat("cs-CZ").format(new Date()),
     };
 
@@ -338,9 +278,9 @@ export async function POST(
           payeeName: expense.reimbursementPayeeName ?? "Nedoplněno",
           bankAccountNumber: expense.bankAccountNumber ?? "",
           bankCode: expense.bankCode ?? "",
-          paymentMessage: isProvozni
-            ? `proplacení nákladů OVT: ${event.name}`
-            : `proplacení nákladů z akce OVT: ${event.name}`,
+          // Zkráceno na žádost účetní TJB — poznámka pro příjemce má v bance omezenou délku,
+          // "proplacení nákladů (z akce) OVT: <název>" se často oříznulo uprostřed názvu.
+          paymentMessage: `${ODDIL_LABELS[event.oddil]}: ${event.name}`,
           items: [],
           total: 0,
         });
@@ -357,21 +297,7 @@ export async function POST(
     }
     const payeeGroups = [...groupMap.values()];
     const total = payeeGroups.reduce((s, g) => s + g.total, 0);
-
-    // CSV — one summary row per beneficiary (for bank transfers)
-    const csvBom = "﻿";
-    const csvRows = [
-      ["Příjemce", "Číslo účtu", "Kód banky", "Částka Kč", "Zpráva pro příjemce", "Počet dokladů"],
-      ...payeeGroups.map((g) => [
-        g.payeeName,
-        g.bankAccountNumber,
-        g.bankCode,
-        g.total,
-        g.paymentMessage,
-        g.items.length,
-      ]),
-    ];
-    const csv = csvBom + csvRows.map((row) => row.map(csvCell).join(";")).join("\n");
+    const colors = ODDIL_EMAIL_COLORS[event.oddil];
 
     const attachmentPromises = expenses
       .filter((expense) => expense.fileUrl)
@@ -382,32 +308,10 @@ export async function POST(
 
     const documentAttachments = await Promise.all(attachmentPromises);
 
-    const ico = process.env.ICO_TJ_BOHEMIANS ?? "";
-    const datePayment = new Date().toISOString().slice(0, 10);
-    const pohodaPayments: PohodaPayment[] = payeeGroups.map((g, i) => ({
-      id: `vydaj-${i + 1}`,
-      payeeName: g.payeeName,
-      bankAccountNumber: g.bankAccountNumber,
-      bankCode: g.bankCode,
-      amount: g.total,
-      text: `Propl. vyd. - ${g.payeeName} - ${event.name}`.slice(0, 96),
-      note: g.paymentMessage,
-      datePayment,
-    }));
-    const pohodaXml = generatePohodaXml(pohodaPayments, event.name, ico);
-
     const attachments: EmailAttachment[] = [
       {
         filename: eventPdfName("vyuctovani-oddilu", event.name),
         content: settlementBuffer,
-      },
-      {
-        filename: "komu-co-odeslat.csv",
-        content: Buffer.from(csv, "utf-8"),
-      },
-      {
-        filename: eventPdfName("pohoda-import", event.name).replace(".pdf", ".xml"),
-        content: pohodaXml,
       },
       ...documentAttachments,
     ];
@@ -425,8 +329,8 @@ export async function POST(
         </tr>`).join("");
 
       return `
-        <tr style="background:#f0fdf4;">
-          <td colspan="3" style="padding:10px 10px 8px;border-top:2px solid #86efac;border-bottom:1px solid #d1fae5;">
+        <tr style="background:${colors.groupBg};">
+          <td colspan="3" style="padding:10px 10px 8px;border-top:2px solid ${colors.groupBorderTop};border-bottom:1px solid ${colors.groupBorderBottom};">
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td>
@@ -434,7 +338,7 @@ export async function POST(
                   &nbsp;&nbsp;<span style="font-size:12px;font-family:monospace;color:#6b7280;">${accountDisplay}</span>
                 </td>
                 <td style="text-align:right;white-space:nowrap;">
-                  <span style="font-size:14px;font-weight:700;color:#327600;">${formatAmount(g.total)}&nbsp;Kč</span>
+                  <span style="font-size:14px;font-weight:700;color:${colors.accent};">${formatAmount(g.total)}&nbsp;Kč</span>
                 </td>
               </tr>
               <tr>
@@ -449,9 +353,25 @@ export async function POST(
         ${itemRows}
         <tr style="background:#f9fafb;">
           <td colspan="2" style="padding:6px 10px;text-align:right;font-size:12px;color:#6b7280;">Celkem ${escapeHtml(g.payeeName)}</td>
-          <td style="padding:6px 10px;text-align:right;font-size:13px;font-weight:600;white-space:nowrap;color:#327600;">${formatAmount(g.total)}&nbsp;Kč</td>
+          <td style="padding:6px 10px;text-align:right;font-size:13px;font-weight:600;white-space:nowrap;color:${colors.accent};">${formatAmount(g.total)}&nbsp;Kč</td>
         </tr>`;
     }).join(`<tr><td colspan="3" style="padding:8px 0;background:#ffffff;"></td></tr>`);
+
+    // Prostý souhrn — jeden řádek na příjemce. Nahrazuje dřívější CSV přílohu (na žádost
+    // účetní TJB byla jen pro čtení, nešlo z ní kopírovat) — přímo v mailu jde vybrat
+    // myší a vložit do Excelu/bankovního importu.
+    const paymentSummaryHtml = payeeGroups.map((g) => {
+      const accountDisplay = g.bankAccountNumber && g.bankCode
+        ? `${escapeHtml(g.bankAccountNumber)}/${escapeHtml(g.bankCode)}`
+        : "chybí účet";
+      return `
+        <tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827;">${escapeHtml(g.payeeName)}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;font-family:monospace;color:#374151;">${accountDisplay}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;text-align:right;white-space:nowrap;color:#111827;">${formatAmount(g.total)}&nbsp;Kč</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;color:#374151;">${escapeHtml(g.paymentMessage)}</td>
+        </tr>`;
+    }).join("");
 
     const senderDisplay = session.user.name?.trim()
       ? `${session.user.name.trim()} (${session.user.email})`
@@ -468,9 +388,9 @@ export async function POST(
 <table width="680" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:680px;width:100%;">
 
   <tr>
-    <td style="background:#327600;padding:24px 32px;">
-      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Oddíl Vodní Turistiky TJ Bohemians</p>
-      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">${vyuctovaniLabel}</p>
+    <td style="background:${colors.header};padding:24px 32px;">
+      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">${ODDIL_NAZEV[event.oddil]} TJ Bohemians</p>
+      <p style="margin:4px 0 0;color:${colors.headerSubtitle};font-size:14px;">${vyuctovaniLabel}</p>
     </td>
   </tr>
 
@@ -481,11 +401,27 @@ export async function POST(
         ${isProvozni
           ? `v příloze zasíláme vyúčtování <strong>${escapeHtml(event.name)}</strong>`
           : `v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>`}
-        včetně všech dokladů. CSV příloha obsahuje přehled pro bankovní převody.
+        včetně všech dokladů. Seznam k platbě je níže — jde rovnou zkopírovat.
       </p>
 
       <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
-        Proplacení nákladů &mdash; podúčet oddílu 207
+        Seznam k platbě
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 20px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Příjemce</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účet</th>
+            <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Zpráva pro příjemce</th>
+          </tr>
+        </thead>
+        <tbody>${paymentSummaryHtml}</tbody>
+      </table>
+
+      <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
+        Proplacení nákladů &mdash; podúčet oddílu ${ODDIL_KOD[event.oddil]}
       </p>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 24px;">
@@ -498,9 +434,9 @@ export async function POST(
         </thead>
         <tbody>${payeeGroupsHtml}</tbody>
         <tfoot>
-          <tr style="background:#dcfce7;border-top:2px solid #86efac;">
+          <tr style="background:${colors.totalBg};border-top:2px solid ${colors.totalBorder};">
             <td colspan="2" style="padding:10px 10px;font-weight:700;font-size:13px;color:#111827;">Celkem k proplacení</td>
-            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:#15803d;">${formatAmount(total)}&nbsp;Kč</td>
+            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:${colors.totalText};">${formatAmount(total)}&nbsp;Kč</td>
           </tr>
         </tfoot>
       </table>
@@ -532,8 +468,8 @@ export async function POST(
   <tr>
     <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
-        Oddíl Vodní Turistiky TJ Bohemians Praha &mdash;
-        Odesláno ze správy OVT uživatelem ${escapeHtml(senderDisplay)}.
+        ${ODDIL_NAZEV[event.oddil]} TJ Bohemians Praha &mdash;
+        ${event.oddil === "tom" ? "Odesláno" : "Odesláno ze správy"} uživatelem ${escapeHtml(senderDisplay)}.
       </p>
     </td>
   </tr>
@@ -560,7 +496,7 @@ export async function POST(
     const { data, error } = await resend.emails.send({
       from: settings.from,
       to,
-      subject: `OVT ${vyuctovaniLabel.toLowerCase()}: ${event.name}`,
+      subject: `${ODDIL_LABELS[event.oddil]} ${vyuctovaniLabel.toLowerCase()}: ${event.name}`,
       html,
       text: `${vyuctovaniLabel}: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
       replyTo: settings.replyTo,

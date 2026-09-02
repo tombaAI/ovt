@@ -20,7 +20,8 @@ import { revalidatePath } from "next/cache";
 import { randomBytes } from "crypto";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { buildEventSettlementEmail } from "@/lib/email-templates/event-settlement";
-import { isTreasurer } from "@/lib/treasurer";
+import { isTreasurer, isTreasurerOfOddil } from "@/lib/treasurer";
+import { ODDIL_LABELS } from "@/lib/oddily-config";
 import { logBlockedAttempt, BlockedError, blockedOrError } from "@/lib/audit";
 import {
     activePersonKeysForRegistration,
@@ -40,6 +41,7 @@ import {
     type PersonKey,
     type RegistrationDeposit,
 } from "@/lib/settlement-calc";
+import { decideProposalAction } from "@/lib/prescription-proposal";
 
 // ── Typy ─────────────────────────────────────────────────────────────────────
 
@@ -86,6 +88,9 @@ export type PrescriptionInfo = {
     depositWontPay: boolean;
     depositWontPayNote: string | null;
     emailSentAt: Date | null;
+    /** Návrh přepočtené částky, čeká na potvrzení (mechanismus schvalování změny) — null = žádný nevyřízený návrh. */
+    proposedAmount: number | null;
+    proposedAt: Date | null;
 };
 
 /** Záloha nemá žádné rozhodnutí (zaplaceno/příslib/nebude platit) — blokuje generování doplatku. */
@@ -301,6 +306,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositWontPay: eventPaymentPrescriptions.depositWontPay,
                 depositWontPayNote: eventPaymentPrescriptions.depositWontPayNote,
                 emailSentAt: eventPaymentPrescriptions.emailSentAt,
+                proposedAmount: eventPaymentPrescriptions.proposedAmount,
+                proposedAt: eventPaymentPrescriptions.proposedAt,
             })
             .from(eventPaymentPrescriptions)
             .where(inArray(eventPaymentPrescriptions.registrationId, regIds))
@@ -482,6 +489,8 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
                 depositWontPay: p.depositWontPay,
                 depositWontPayNote: p.depositWontPayNote,
                 emailSentAt: p.emailSentAt,
+                proposedAmount: p.proposedAmount ? parseFloat(p.proposedAmount) : null,
+                proposedAt: p.proposedAt,
             } : null;
 
         const depositPrescription = toPrescriptionInfo(depositRaw);
@@ -657,19 +666,19 @@ function missingCoefficientsError(settlement: Awaited<ReturnType<typeof getEvent
     return `Nenastavený koeficient u nákladů s vlastními podíly — ${detail}. U každého doplňte podíl v záložce Vyúčtování (0 = neplatí, 1 = platí jako ostatní).`;
 }
 
-export async function lockBilling(eventId: number): Promise<{ success: true } | { error: string }> {
+export async function lockBilling(eventId: number): Promise<{ success: true; proposed: number } | { error: string }> {
     try {
         const session = await auth();
         if (!session?.user?.email) return { error: "Nepřihlášen" };
         const db = getDb();
         const [event] = await db
-            .select({ name: events.name, eventType: events.eventType, treasurerApproved: events.treasurerApproved })
+            .select({ name: events.name, eventType: events.eventType, treasurerApproved: events.treasurerApproved, oddil: events.oddil })
             .from(events).where(eq(events.id, eventId));
         if (!event) return { error: "Akce nenalezena" };
 
         const isProvozni = event.eventType === "provozni";
-        if (isProvozni && !isTreasurer(session.user.email)) {
-            const reason = "Provozní výdaj může uzamknout jen hospodář.";
+        if (isProvozni && !isTreasurerOfOddil(session.user.email, event.oddil)) {
+            const reason = `Provozní výdaj oddílu ${ODDIL_LABELS[event.oddil]} může uzamknout jen jeho hospodář.`;
             await logBlockedAttempt(db, { attemptedAction: "lock_billing", reason, changedBy: session.user.email, eventId });
             return { error: reason };
         }
@@ -677,7 +686,7 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         const settlement = await getEventSettlement(eventId);
         const gateError = await prescriptionGateError(db, eventId, settlement, "lock_billing", session.user.email);
         if (gateError) return { error: gateError };
-        await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
+        const result = await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
 
         await db.update(events)
             .set({ billingStatus: "prescribed", lockForParticipants: true, updatedAt: new Date() })
@@ -687,7 +696,10 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
             entityType: "event",
             entityId: eventId,
             action: "lock_billing",
-            changes: { billingStatus: { old: "draft", new: "prescribed" } },
+            changes: {
+                billingStatus: { old: "draft", new: "prescribed" },
+                ...(result.proposed > 0 ? { proposed: { old: null, new: String(result.proposed) } } : {}),
+            },
             metadata: { eventId },
             changedBy: session.user.email,
         });
@@ -714,7 +726,7 @@ export async function lockBilling(eventId: number): Promise<{ success: true } | 
         }
 
         revalidatePath(`/dashboard/events/${eventId}`);
-        return { success: true };
+        return { success: true, proposed: result.proposed };
     } catch (e) {
         console.error(e);
         return { error: "Chyba při uzamčení vyúčtování" };
@@ -736,11 +748,11 @@ export async function unlockBilling(
         if (!session?.user?.email) return { error: "Nepřihlášen" };
 
         const db = getDb();
-        const [ev] = await db.select({ eventType: events.eventType }).from(events).where(eq(events.id, eventId));
+        const [ev] = await db.select({ eventType: events.eventType, oddil: events.oddil }).from(events).where(eq(events.id, eventId));
         if (!ev) return { error: "Akce nenalezena" };
         const isProvozni = ev.eventType === "provozni";
-        if (isProvozni && !isTreasurer(session.user.email)) {
-            const reason = "Provozní výdaj může odemknout jen hospodář.";
+        if (isProvozni && !isTreasurerOfOddil(session.user.email, ev.oddil)) {
+            const reason = `Provozní výdaj oddílu ${ODDIL_LABELS[ev.oddil]} může odemknout jen jeho hospodář.`;
             await logBlockedAttempt(db, { attemptedAction: "unlock_billing", reason, changedBy: session.user.email, eventId });
             return { error: reason };
         }
@@ -1109,7 +1121,7 @@ async function createSettlementPrescription(
 /** Přegeneruje předpisy (přepočítá částky) bez odeslání e-mailů. */
 export async function regeneratePrescriptions(
     eventId: number,
-): Promise<{ error: string } | { created: number; updated: number }> {
+): Promise<{ error: string } | { created: number; updated: number; proposed: number }> {
     try {
         const session = await auth();
         if (!session?.user?.email) return { error: "Nepřihlášen" };
@@ -1124,7 +1136,11 @@ export async function regeneratePrescriptions(
             entityType: "event",
             entityId: eventId,
             action: "regenerate_prescriptions",
-            changes: { created: { old: null, new: String(result.created) }, updated: { old: null, new: String(result.updated) } },
+            changes: {
+                created: { old: null, new: String(result.created) },
+                updated: { old: null, new: String(result.updated) },
+                proposed: { old: null, new: String(result.proposed) },
+            },
             metadata: { eventId },
             changedBy: session.user.email,
         });
@@ -1140,48 +1156,72 @@ export async function regeneratePrescriptions(
  * Interní helper: vytvoří nebo aktualizuje settlement (doplatek) předpisy.
  * Deposit předpisy (zálohy) se NIKDY nemění — jejich částka je fixní od přihlášky.
  * Settlement částka = max(0, totalAmount − depositAmount).
+ *
+ * Jednou vygenerovaná částka se nikdy nepřepíše potichu (viz
+ * docs/superpowers/specs/2026-08-03-schvalovani-zmeny-castky-predpisu.md) — o tom,
+ * co přesně se stane, rozhoduje decideProposalAction. Platí i pro matched/paid
+ * předpisy: rozdíl se ukáže jako návrh, `amount` (co bylo skutečně zaplaceno/dohodnuto)
+ * se nezmění, dokud ho admin výslovně nepotvrdí.
  */
 async function upsertPrescriptionAmounts(
     eventId: number,
     settlement: Awaited<ReturnType<typeof getEventSettlement>>,
     eventName: string,
     db: ReturnType<typeof getDb>,
-): Promise<{ created: number; updated: number }> {
+): Promise<{ created: number; updated: number; proposed: number }> {
     const paymentDue = new Date();
     paymentDue.setDate(paymentDue.getDate() + 7);
     const paymentDueStr = paymentDue.toISOString().slice(0, 10);
-    let created = 0, updated = 0;
+    let created = 0, updated = 0, proposed = 0;
 
     await db.transaction(async tx => {
         for (const reg of settlement.registrations) {
-            const settlementAmount = String(Math.max(0, reg.totalAmount - reg.effectiveDepositForSettlement));
+            const newAmount = Math.max(0, reg.totalAmount - reg.effectiveDepositForSettlement);
 
-            // Pojistka: už zaplacený/spárovaný doplatek se NIKDY nepřepisuje — člověk zaplatil
-            // dohodnutou částku, ta platí (důvěra uživatelů > korunová přesnost). Přepočet smí
-            // měnit jen pending předpisy. Viz no-regen-after-payments.
-            if (reg.settlementPrescription && (reg.settlementPrescription.status === "matched" || reg.settlementPrescription.status === "paid")) {
-                continue;
-            }
-
-            if (reg.settlementPrescription) {
-                await tx.update(eventPaymentPrescriptions)
-                    .set({ amount: settlementAmount, paymentDue: paymentDueStr, updatedAt: new Date() })
-                    .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
-                updated++;
-            } else {
+            if (!reg.settlementPrescription) {
                 await createSettlementPrescription(tx, eventId, reg.registrationId, reg.firstName, reg.lastName, eventName);
-                // Při prvním vytvoření nastavíme správnou částku a splatnost
+                // Při prvním vytvoření nastavíme správnou částku a splatnost — nikdy návrh,
+                // amount = 0 před tímto zápisem znamená "nic nebylo vygenerováno", není co chránit.
                 await tx.update(eventPaymentPrescriptions)
-                    .set({ amount: settlementAmount, paymentDue: paymentDueStr })
+                    .set({ amount: String(newAmount), paymentDue: paymentDueStr })
                     .where(and(
                         eq(eventPaymentPrescriptions.registrationId, reg.registrationId),
                         eq(eventPaymentPrescriptions.type, "settlement"),
                     ));
                 created++;
+                continue;
+            }
+
+            const decision = decideProposalAction(
+                reg.settlementPrescription.amount,
+                newAmount,
+                reg.settlementPrescription.proposedAmount !== null,
+            );
+
+            switch (decision.kind) {
+                case "write_amount":
+                    await tx.update(eventPaymentPrescriptions)
+                        .set({ amount: String(decision.amount), paymentDue: paymentDueStr, updatedAt: new Date() })
+                        .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
+                    updated++;
+                    break;
+                case "clear_proposal":
+                    await tx.update(eventPaymentPrescriptions)
+                        .set({ proposedAmount: null, proposedAt: null })
+                        .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
+                    break;
+                case "set_proposal":
+                    await tx.update(eventPaymentPrescriptions)
+                        .set({ proposedAmount: String(decision.proposedAmount), proposedAt: new Date() })
+                        .where(eq(eventPaymentPrescriptions.id, reg.settlementPrescription.id));
+                    proposed++;
+                    break;
+                case "no_op":
+                    break;
             }
         }
     });
-    return { created, updated };
+    return { created, updated, proposed };
 }
 
 // ── Správa přihlášek v adminu ─────────────────────────────────────────────────
@@ -1529,6 +1569,15 @@ export async function sendEventSettlementEmails(
         await upsertPrescriptionAmounts(eventId, settlement, event.name, db);
         const freshSettlement = await getEventSettlement(eventId);
 
+        // Nevyřízený návrh přepočtu = platná částka (`amount`) v hlavičce e-mailu i v QR kódu
+        // by nesouhlasila s rozpisem ceny/dotace/zálohy, který se do e-mailu počítá živě.
+        // Radši nerozeslat nic a nechat admina návrhy nejdřív potvrdit (viz decideProposalAction).
+        const withProposal = freshSettlement.registrations.filter(r =>
+            r.settlementPrescription?.proposedAmount != null && r.settlementPrescription.status !== "cancelled");
+        if (withProposal.length > 0) {
+            return { error: `Nelze rozeslat e-maily — ${withProposal.length} ${withProposal.length === 1 ? "přihláška má" : "přihlášek má"} nevyřízený návrh přepočtu částky. Nejdřív návrhy potvrďte (Potvrdit vše).` };
+        }
+
         const resend = getResendClient();
         let sent = 0;
         let skipped = 0;
@@ -1618,6 +1667,11 @@ export async function sendSingleRegistrationEmail(
         const regRow = freshSettlement.registrations.find(r => r.registrationId === registrationId);
         if (!regRow) return { error: "Přihláška není ve vyúčtování" };
         if (!regRow.settlementPrescription) return { error: "Přihláška nemá doplatek předpis — nejdříve uzamkněte náklady." };
+        // Viz sendEventSettlementEmails — s nevyřízeným návrhem by hlavička e-mailu (platná
+        // částka) neseděla s živě počítaným rozpisem ani s QR kódem.
+        if (regRow.settlementPrescription.proposedAmount !== null) {
+            return { error: "Nelze odeslat e-mail — přihláška má nevyřízený návrh přepočtu částky, nejdřív ho potvrďte." };
+        }
 
         const to = emailSettings.testTo ?? regRow.email;
         const senderName = session.user.name ?? undefined;
@@ -1907,8 +1961,10 @@ export async function cancelParticipant(
             // with_coefficients váhy se počítají vždy živě z aktivních účastníků (getEventSettlement),
             // odhlášený účastník se tedy automaticky vyřadí — žádný přepočet alokací není potřeba.
 
-            // Pokud je billing uzamčen, přepočítáme i settlement předpisy — jinak payments tab ukazuje
-            // stará čísla z doby před odhlášením účastníka.
+            // Pokud je billing uzamčen, projedeme i settlement předpisy — odhlášení účastníka mění
+            // doplatek. Platná částka se ale nepřepíše potichu: upsertPrescriptionAmounts u už
+            // vygenerovaného předpisu jen založí návrh přepočtu (proposedAmount), který admin
+            // potvrdí na záložce Platby. Do té doby všude platí původní částka.
             const [ev] = await db
                 .select({ billingStatus: events.billingStatus, name: events.name })
                 .from(events)
@@ -2291,5 +2347,108 @@ export async function setDepositWontPay(
     } catch (e) {
         console.error(e);
         return { error: "Nepodařilo se nastavit rozhodnutí o záloze" };
+    }
+}
+
+/**
+ * Potvrdí návrh přepočtené částky jedné přihlášky — `amount = proposedAmount`, vyčistí
+ * proposedAmount/proposedAt. Viz docs/superpowers/specs/2026-08-03-schvalovani-zmeny-castky-predpisu.md.
+ */
+export async function confirmProposedAmount(prescriptionId: number): Promise<{ success: true } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+        const db = getDb();
+
+        const [p] = await db
+            .select({
+                type: eventPaymentPrescriptions.type,
+                eventId: eventPaymentPrescriptions.eventId,
+                registrationId: eventPaymentPrescriptions.registrationId,
+                amount: eventPaymentPrescriptions.amount,
+                proposedAmount: eventPaymentPrescriptions.proposedAmount,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        if (!p) return { error: "Předpis nenalezen" };
+        if (p.type !== "settlement") return { error: "Návrh lze potvrdit jen u doplatku" };
+        if (p.proposedAmount === null) return { error: "Žádný návrh k potvrzení" };
+
+        await db.update(eventPaymentPrescriptions)
+            .set({ amount: p.proposedAmount, proposedAmount: null, proposedAt: null, updatedAt: new Date() })
+            .where(eq(eventPaymentPrescriptions.id, prescriptionId));
+
+        await db.insert(auditLog).values({
+            entityType: "event_registration",
+            entityId: p.registrationId,
+            action: "confirm_proposed_amount",
+            changes: { amount: { old: p.amount, new: p.proposedAmount } },
+            metadata: { eventId: p.eventId, registrationId: p.registrationId, prescriptionId },
+            changedBy: session.user.email,
+        });
+
+        revalidatePath(`/dashboard/events/${p.eventId}`);
+        return { success: true };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se potvrdit návrh" };
+    }
+}
+
+/**
+ * Hromadně potvrdí návrhy přepočtu — bez `prescriptionIds` všechny nevyřízené návrhy
+ * akce, s `prescriptionIds` jen vybranou podmnožinu (scénář "část lidí už zaplatila,
+ * u nich změnu nechci, zbytek přepočítám").
+ */
+export async function confirmProposedAmounts(
+    eventId: number,
+    prescriptionIds?: number[],
+): Promise<{ success: true; confirmed: number } | { error: string }> {
+    try {
+        const session = await auth();
+        if (!session?.user?.email) return { error: "Nepřihlášen" };
+        const changedBy = session.user.email;
+        const db = getDb();
+
+        const rows = await db
+            .select({
+                id: eventPaymentPrescriptions.id,
+                registrationId: eventPaymentPrescriptions.registrationId,
+                amount: eventPaymentPrescriptions.amount,
+                proposedAmount: eventPaymentPrescriptions.proposedAmount,
+            })
+            .from(eventPaymentPrescriptions)
+            .where(and(
+                eq(eventPaymentPrescriptions.eventId, eventId),
+                eq(eventPaymentPrescriptions.type, "settlement"),
+                isNotNull(eventPaymentPrescriptions.proposedAmount),
+                ...(prescriptionIds ? [inArray(eventPaymentPrescriptions.id, prescriptionIds)] : []),
+            ));
+
+        if (rows.length === 0) return { success: true, confirmed: 0 };
+
+        await db.transaction(async tx => {
+            for (const p of rows) {
+                await tx.update(eventPaymentPrescriptions)
+                    .set({ amount: p.proposedAmount!, proposedAmount: null, proposedAt: null, updatedAt: new Date() })
+                    .where(eq(eventPaymentPrescriptions.id, p.id));
+
+                await tx.insert(auditLog).values({
+                    entityType: "event_registration",
+                    entityId: p.registrationId,
+                    action: "confirm_proposed_amount",
+                    changes: { amount: { old: p.amount, new: p.proposedAmount } },
+                    metadata: { eventId, registrationId: p.registrationId, prescriptionId: p.id },
+                    changedBy,
+                });
+            }
+        });
+
+        revalidatePath(`/dashboard/events/${eventId}`);
+        return { success: true, confirmed: rows.length };
+    } catch (e) {
+        console.error(e);
+        return { error: "Nepodařilo se potvrdit návrhy" };
     }
 }

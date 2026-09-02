@@ -43,7 +43,8 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) | Obecný mechanismus návrh/potvrzení pro změnu částky už vygenerovaného předpisu | `zgrilovano` — realizace na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`, prerekvizita pro dotaci výše |
 | [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) | Záloha se nepřepočte při změně počtu osob na přihlášce po jejím vzniku | `navrh` — jen zapsáno, k dořešení |
 | [2026-08-03-prihlasky-zavod-cpv.md](2026-08-03-prihlasky-zavod-cpv.md) | Online přihlašování na pořádaný závod ČPV (podzim 2026) — veřejný formulář, předpisy „H”, platby, změny, vratky | `navrh` — obohaceno o rešerši pravidel ČPV 2026, čeká na grilování + dekompozici |
-| [2026-08-05-provozni-vydaje.md](2026-08-05-provozni-vydaje.md) | Provozní výdaje mimo akce (oprava vleku apod.) — typ akce `provozni` + samostatná stránka `/dashboard/provoz` jen pro hospodáře | `schvaleno` — ověřeno na staging, čeká na merge PR do `main` |
+| [2026-08-05-provozni-vydaje.md](2026-08-05-provozni-vydaje.md) | Provozní výdaje mimo akce (oprava vleku apod.) — typ akce `provozni` + samostatná stránka `/dashboard/provoz` jen pro hospodáře | `produkce` — PR #37, dohledáno 2026-09-02 (spec nebyl po mergi dorovnán) |
+| [2026-08-31-provozni-vydaje-vice-oddilu.md](2026-08-31-provozni-vydaje-vice-oddilu.md) | Provozní výdaje pro druhý oddíl (TOM) — vlastní hospodář, kód oddílu, příjemce mailu na TJ | `schvaleno` — ověřeno na staging, čeká na merge PR do `main` |
 
 ## Navazující design dokumenty (`docs/`)
 
@@ -60,10 +61,8 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 
 **Čeká na UAT/schválení a merge do produkce** (na stagingu, funkčně hotovo):
 
-1. Provozní výdaje mimo akce (`2026-08-05-provozni-vydaje.md`) — ověřeno na staging, schváleno, PR `staging → main` otevřený
-
-**V realizaci:**
-2. Schvalování změny částky předpisu — obecný mechanismus (`2026-08-03-schvalovani-zmeny-castky-predpisu.md`), zgrilováno, vývoj na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`; **blokuje** položku 3 backlogu níže
+1. Provozní výdaje — druhý oddíl TOM (`2026-08-31-provozni-vydaje-vice-oddilu.md`) — ověřeno na staging, schváleno, čeká na PR `staging → main`
+2. Schvalování změny částky předpisu — obecný mechanismus (`2026-08-03-schvalovani-zmeny-castky-predpisu.md`) — smergováno do staging (PR #39), uživatel potvrdil 2026-09-02 jako hotové pro merge do produkce; **blokuje** položku 3 backlogu níže
 
 **Backlog — návrh, implementace nezahájena:**
 3. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`) — pozastaveno, čeká na položku 2 výše

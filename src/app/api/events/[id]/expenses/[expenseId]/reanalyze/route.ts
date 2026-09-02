@@ -5,7 +5,7 @@ import { getDb } from "@/lib/db";
 import { eventExpenses, events, auditLog } from "@/db/schema";
 import { analyzeExpenseFile, ExpenseAnalysisConfigError } from "@/lib/expense-analysis";
 import { fetchPrivateBlobAsFile } from "@/lib/blob-fetch";
-import { isTreasurer } from "@/lib/treasurer";
+import { isTreasurerOfOddil } from "@/lib/treasurer";
 import { evaluateLockedMismatchGate } from "@/lib/expense-mismatch";
 import { logBlockedAttempt } from "@/lib/audit";
 
@@ -17,7 +17,7 @@ export const dynamic = "force-dynamic";
  * kontroly shody u dokladů, které analýzu neměly (nebo po zlepšení promptu).
  *
  * Stejné brány jako u výměny přílohy: lockForReimbursement tvrdě blokuje (bez výjimky),
- * lockForParticipants + neshoda → jen hospodář po potvrzení (confirmMismatch).
+ * lockForParticipants + neshoda → jen hospodář po potvrzení (confirmMismatch; hospodář oddílu, kterému doklad patří).
  */
 export async function POST(
     request: NextRequest,
@@ -43,6 +43,7 @@ export async function POST(
             .select({
                 lockForParticipants: events.lockForParticipants,
                 lockForReimbursement: events.lockForReimbursement,
+                oddil: events.oddil,
             })
             .from(events)
             .where(eq(events.id, eventId));
@@ -87,7 +88,7 @@ export async function POST(
             const gate = evaluateLockedMismatchGate({
                 amount: expense.amount,
                 analyzedAmount,
-                isTreasurer: isTreasurer(session.user.email),
+                isTreasurer: isTreasurerOfOddil(session.user.email, eventRow.oddil),
                 confirmMismatch,
             });
             if (!gate.ok) {

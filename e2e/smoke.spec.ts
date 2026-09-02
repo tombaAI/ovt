@@ -98,3 +98,89 @@ test.describe("provozní výdaje", () => {
         await context.close();
     });
 });
+
+test.describe("provozní výdaje — druhý oddíl (TOM)", () => {
+    async function tomContext(browser: import("@playwright/test").Browser, baseURL: string | undefined) {
+        const secret = process.env.AUTH_SECRET;
+        if (!secret) throw new Error("AUTH_SECRET musí být nastaven");
+        const token = await encode({
+            token: { name: "E2E Hospodářka TOM", email: "e2e-tom@test.local", sub: "e2e-tom" },
+            secret,
+            salt: "authjs.session-token",
+            maxAge: 3600,
+        });
+        const context = await browser.newContext();
+        await context.addCookies([{
+            name: "authjs.session-token",
+            value: token,
+            domain: new URL(baseURL!).hostname,
+            path: "/",
+            httpOnly: true,
+            secure: false,
+            sameSite: "Lax",
+        }]);
+        return context;
+    }
+
+    test("hospodářka TOM založí výdaj pro TOM; hospodář OVT (superhospodář) ho smí uzamknout i odeslat", async ({ browser, baseURL, page }) => {
+        const tomCtx = await tomContext(browser, baseURL);
+        const tomPage = await tomCtx.newPage();
+
+        await tomPage.goto("/dashboard/provoz");
+        await expect(tomPage.getByRole("heading", { name: "Provozní výdaje" })).toBeVisible();
+        await expect(tomPage.getByRole("tab", { name: "OVT" })).toBeVisible();
+        await tomPage.getByRole("tab", { name: "TOM" }).click();
+
+        await tomPage.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await tomPage.getByLabel("Název *").fill("E2E výdaj TOM");
+        await tomPage.getByRole("button", { name: "Založit" }).click();
+
+        await expect(tomPage).toHaveURL(/\/dashboard\/events\/\d+/);
+        const eventUrl = tomPage.url();
+        await tomCtx.close();
+
+        // Hospodář OVT je nad oběma oddíly "superhospodář" (rozhodnutí 2026-09-02) — vidí
+        // cizí oddíl a smí ho i uzamknout, ne jen prohlížet.
+        await page.goto(eventUrl);
+        await expect(page.getByRole("heading", { name: "E2E výdaj TOM" })).toBeVisible();
+        await expect(page.getByText("TOM", { exact: true }).first()).toBeVisible();
+
+        await page.getByRole("tab", { name: "Náklady" }).click();
+        await page.getByRole("button", { name: "Uzamknout částky" }).click();
+        await expect(page.getByText(/Částky jsou uzamčeny/)).toBeVisible();
+
+        // "Odeslat" zůstává disabled (výdaj nemá žádné doklady), ale ne kvůli oddílové bráně —
+        // ta hospodáře OVT od tohoto rozhodnutí pouští i do cizího oddílu.
+        await expect(page.getByText("Odeslat smí jen hospodář tohoto oddílu.")).toHaveCount(0);
+    });
+
+    test("hospodářka TOM nesmí zasahovat do provozních výdajů OVT — asymetrie superhospodáře", async ({ browser, baseURL, page }) => {
+        // Hospodář OVT založí vlastní (OVT) provozní výdaj.
+        await page.goto("/dashboard/provoz");
+        await page.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await expect(page.locator("#provoz-oddil")).toHaveValue("ovt");
+        await page.getByLabel("Název *").fill("E2E výdaj OVT — chráněný před TOM");
+        await page.getByRole("button", { name: "Založit" }).click();
+        await expect(page).toHaveURL(/\/dashboard\/events\/\d+/);
+        const eventUrl = page.url();
+
+        const tomCtx = await tomContext(browser, baseURL);
+        const tomPage = await tomCtx.newPage();
+
+        // TOM nesmí založit nový výdaj pro OVT (výchozí aktivní záložka na /dashboard/provoz je OVT)…
+        await tomPage.goto("/dashboard/provoz");
+        await tomPage.getByRole("button", { name: "Nový provozní výdaj" }).click();
+        await expect(tomPage.locator("#provoz-oddil")).toHaveValue("ovt");
+        await tomPage.getByLabel("Název *").fill("E2E výdaj OVT od TOM — má selhat");
+        await tomPage.getByRole("button", { name: "Založit" }).click();
+        await expect(tomPage.getByText(/může založit jen jeho hospodář/)).toBeVisible();
+        await expect(tomPage).not.toHaveURL(/\/dashboard\/events\/\d+/);
+
+        // …ani uzamknout existující OVT výdaj hospodáře OVT.
+        await tomPage.goto(eventUrl);
+        await tomPage.getByRole("tab", { name: "Náklady" }).click();
+        await tomPage.getByRole("button", { name: "Uzamknout částky" }).click();
+        await expect(tomPage.getByText(/může uzamknout jen jeho hospodář/)).toBeVisible();
+        await tomCtx.close();
+    });
+});

@@ -1,3 +1,6 @@
+import type { Oddil } from "@/db/schema";
+import { ODDIL_EMAIL_COLORS, getOddilNazevPlny } from "@/lib/oddily-config";
+
 export type InvoicePaymentInstructionData = {
     eventName: string;
     payeeName: string | null;
@@ -5,6 +8,7 @@ export type InvoicePaymentInstructionData = {
     purposeText: string | null;
     fileName: string | null;
     senderName: string;
+    oddil: Oddil;
 };
 
 function tableRow(label: string, value: string): string {
@@ -19,6 +23,7 @@ export function buildInvoicePaymentInstructionEmail(
 ): { subject: string; html: string } {
     const payeeLabel = data.payeeName ?? "—";
     const subject = `Pokyn k úhradě faktury — ${payeeLabel} (${data.eventName})`;
+    const colors = ODDIL_EMAIL_COLORS[data.oddil];
 
     const rows = [
         data.payeeName ? tableRow("Příjemce", data.payeeName) : "",
@@ -38,7 +43,7 @@ export function buildInvoicePaymentInstructionEmail(
 
         <!-- Hlavička -->
         <tr>
-          <td style="background:#327600;padding:22px 28px;">
+          <td style="background:${colors.header};padding:22px 28px;">
             <h1 style="margin:0;color:#ffffff;font-size:20px;font-weight:700;line-height:1.2;">Pokyn k úhradě faktury</h1>
           </td>
         </tr>
@@ -49,7 +54,7 @@ export function buildInvoicePaymentInstructionEmail(
             <p style="margin:0 0 20px;font-size:15px;color:#111827;">Dobrý den,</p>
             <p style="margin:0 0 24px;font-size:15px;color:#111827;line-height:1.6;">
               prosím o proplacení faktury dle přílohy z účtu oddílu
-              <strong style="color:#327600;">207 Oddíl Vodní Turistiky</strong>.
+              <strong style="color:${colors.header};">${getOddilNazevPlny(data.oddil)}</strong>.
             </p>
 
             <!-- Detailní tabulka -->
@@ -60,8 +65,7 @@ export function buildInvoicePaymentInstructionEmail(
             <!-- Podpis -->
             <p style="margin:0 0 4px;font-size:14px;color:#374151;line-height:1.7;">
               Děkuji.<br>
-              Tomáš Bauer,<br>
-              Hospodář OVT
+              ${data.senderName}
             </p>
           </td>
         </tr>

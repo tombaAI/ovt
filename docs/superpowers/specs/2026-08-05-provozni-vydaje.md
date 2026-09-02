@@ -1,10 +1,10 @@
 ---
-status: schvaleno
+status: produkce
 ---
 
 # Zadání: Provozní výdaje — vyúčtování mimo akce
 
-> **Stav: Schváleno (2026-08-06).** Implementováno a ověřeno na staging (reálný test na akci „Oprava vleku" vč. odeslání vyúčtování e-mailem, wording mailu doladěn). Čeká na merge PR `staging → main`. Rozhodnutá varianta: provozní výdaj je technicky akce s novým typem `provozni`, navenek žije na samostatné stránce `/dashboard/provoz` viditelné **jen pro hospodáře**. Schvalovací krok odpadá (zamyká sám hospodář).
+> **Stav: Produkce (2026-08-06, dohledáno 2026-09-02 — PR #37 smergováno, tento soubor nebyl po mergi dorovnán).** Implementováno, ověřeno na staging a nasazeno do produkce. Rozhodnutá varianta: provozní výdaj je technicky akce s novým typem `provozni`, navenek žije na samostatné stránce `/dashboard/provoz` viditelné **jen pro hospodáře**. Schvalovací krok odpadá (zamyká sám hospodář). Navazuje [`2026-08-31-provozni-vydaje-vice-oddilu.md`](2026-08-31-provozni-vydaje-vice-oddilu.md) — druhý oddíl (TOM).
 
 ## Problém
 

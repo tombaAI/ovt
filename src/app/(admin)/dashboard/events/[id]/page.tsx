@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { getEventById } from "@/lib/actions/events";
 import { auth } from "@/auth";
+import { isAnyOddilTreasurer, isTreasurerOfOddil } from "@/lib/treasurer";
 import { EventDetailClient } from "./event-detail-client";
 
 export default async function EventDetailPage({
@@ -15,10 +16,13 @@ export default async function EventDetailPage({
     const [event, session] = await Promise.all([getEventById(eventId), auth()]);
     if (!event) notFound();
 
-    const treasurerEmail = process.env.TREASURER_EMAIL?.trim().toLowerCase();
-    const isTreasurer = !!(treasurerEmail && session?.user?.email?.toLowerCase() === treasurerEmail);
+    if (event.eventType === "provozni" && !isAnyOddilTreasurer(session?.user?.email)) {
+        redirect("/dashboard");
+    }
 
-    if (event.eventType === "provozni" && !isTreasurer) redirect("/dashboard");
+    // isTreasurerOfOddil(email, 'ovt') je identické s dnešním isTreasurer() — u běžných
+    // akcí (oddil vždy 'ovt') se chování oproti dnešku nemění vůbec.
+    const isTreasurer = isTreasurerOfOddil(session?.user?.email, event.oddil);
 
     return <EventDetailClient event={event} isTreasurer={isTreasurer} />;
 }

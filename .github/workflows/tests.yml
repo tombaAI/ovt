@@ -44,6 +44,7 @@ jobs:
       AUTH_TRUST_HOST: "true"
       ADMIN_EMAILS: e2e-admin@test.local
       TREASURER_EMAIL: e2e-admin@test.local
+      TREASURER_EMAIL_TOM: e2e-tom@test.local
       AUTH_GOOGLE_ID: dummy
       AUTH_GOOGLE_SECRET: dummy
       # RESEND_API_KEY / FIO_API_TOKEN záměrně nenastaveny — mail disabled, žádná banka
