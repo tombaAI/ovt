@@ -44,7 +44,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md](2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md) | Záloha se nepřepočte při změně počtu osob na přihlášce po jejím vzniku | `navrh` — jen zapsáno, k dořešení |
 | [2026-08-03-prihlasky-zavod-cpv.md](2026-08-03-prihlasky-zavod-cpv.md) | Online přihlašování na pořádaný závod ČPV (podzim 2026) — veřejný formulář, předpisy „H”, platby, změny, vratky | `navrh` — obohaceno o rešerši pravidel ČPV 2026, čeká na grilování + dekompozici |
 | [2026-08-05-provozni-vydaje.md](2026-08-05-provozni-vydaje.md) | Provozní výdaje mimo akce (oprava vleku apod.) — typ akce `provozni` + samostatná stránka `/dashboard/provoz` jen pro hospodáře | `schvaleno` — ověřeno na staging, čeká na merge PR do `main` |
-| [2026-08-31-provozni-vydaje-vice-oddilu.md](2026-08-31-provozni-vydaje-vice-oddilu.md) | Provozní výdaje pro druhý oddíl (TOM) — vlastní hospodář, kód oddílu, příjemce mailu na TJ | `implementace` — větev `feat/2026-08-31-provozni-vydaje-druhy-oddil` |
+| [2026-08-31-provozni-vydaje-vice-oddilu.md](2026-08-31-provozni-vydaje-vice-oddilu.md) | Provozní výdaje pro druhý oddíl (TOM) — vlastní hospodář, kód oddílu, příjemce mailu na TJ | `schvaleno` — ověřeno na staging, čeká na merge PR do `main` |
 
 ## Navazující design dokumenty (`docs/`)
 
@@ -62,18 +62,19 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 **Čeká na UAT/schválení a merge do produkce** (na stagingu, funkčně hotovo):
 
 1. Provozní výdaje mimo akce (`2026-08-05-provozni-vydaje.md`) — ověřeno na staging, schváleno, PR `staging → main` otevřený
+2. Provozní výdaje — druhý oddíl TOM (`2026-08-31-provozni-vydaje-vice-oddilu.md`) — ověřeno na staging, schváleno, čeká na PR `staging → main`
 
 **V realizaci:**
-2. Schvalování změny částky předpisu — obecný mechanismus (`2026-08-03-schvalovani-zmeny-castky-predpisu.md`), zgrilováno, vývoj na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`; **blokuje** položku 3 backlogu níže
+3. Schvalování změny částky předpisu — obecný mechanismus (`2026-08-03-schvalovani-zmeny-castky-predpisu.md`), zgrilováno, vývoj na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`; **blokuje** položku 4 backlogu níže
 
 **Backlog — návrh, implementace nezahájena:**
-3. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`) — pozastaveno, čeká na položku 2 výše
-4. Automatický import výsledovky z Gmailu (`2026-07-04-automaticky-import-vysledovky.md`)
-5. UX redesign — Lodě, Brigády, Akce (zbytek `2026-04-23-ux-redesign-v1.md`)
-6. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
-7. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
-8. Záloha nesedí po změně počtu osob na přihlášce (`2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md`) — jen zapsáno, k dořešení
-9. Online přihlašování na závod ČPV podzim 2026 (`2026-08-03-prihlasky-zavod-cpv.md`) — velký celek (první veřejná část systému), čeká na grilování a dekompozici; termínově vázáno na závod (deadline změn 27. 9. 2026)
+4. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`) — pozastaveno, čeká na položku 3 výše
+5. Automatický import výsledovky z Gmailu (`2026-07-04-automaticky-import-vysledovky.md`)
+6. UX redesign — Lodě, Brigády, Akce (zbytek `2026-04-23-ux-redesign-v1.md`)
+7. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
+8. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
+9. Záloha nesedí po změně počtu osob na přihlášce (`2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md`) — jen zapsáno, k dořešení
+10. Online přihlašování na závod ČPV podzim 2026 (`2026-08-03-prihlasky-zavod-cpv.md`) — velký celek (první veřejná část systému), čeká na grilování a dekompozici; termínově vázáno na závod (deadline změn 27. 9. 2026)
 
 ## Ostatní dokumenty — zůstávají ve `zadani/`
 
