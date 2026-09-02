@@ -283,9 +283,9 @@ export async function POST(
           payeeName: expense.reimbursementPayeeName ?? "Nedoplněno",
           bankAccountNumber: expense.bankAccountNumber ?? "",
           bankCode: expense.bankCode ?? "",
-          paymentMessage: isProvozni
-            ? `proplacení nákladů ${ODDIL_LABELS[event.oddil]}: ${event.name}`
-            : `proplacení nákladů z akce ${ODDIL_LABELS[event.oddil]}: ${event.name}`,
+          // Zkráceno na žádost účetní TJB — poznámka pro příjemce má v bance omezenou délku,
+          // "proplacení nákladů (z akce) OVT: <název>" se často oříznulo uprostřed názvu.
+          paymentMessage: `${ODDIL_LABELS[event.oddil]}: ${event.name}`,
           items: [],
           total: 0,
         });
@@ -380,6 +380,22 @@ export async function POST(
         </tr>`;
     }).join(`<tr><td colspan="3" style="padding:8px 0;background:#ffffff;"></td></tr>`);
 
+    // Prostý souhrn — jeden řádek na příjemce, stejné sloupce jako CSV příloha. Na žádost
+    // účetní TJB (CSV příloha je jen pro čtení, nejde z ní kopírovat) — přímo v mailu jde
+    // vybrat myší a vložit do Excelu/bankovního importu bez stahování přílohy.
+    const paymentSummaryHtml = payeeGroups.map((g) => {
+      const accountDisplay = g.bankAccountNumber && g.bankCode
+        ? `${escapeHtml(g.bankAccountNumber)}/${escapeHtml(g.bankCode)}`
+        : "chybí účet";
+      return `
+        <tr>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;color:#111827;">${escapeHtml(g.payeeName)}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;font-family:monospace;color:#374151;">${accountDisplay}</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:13px;text-align:right;white-space:nowrap;color:#111827;">${formatAmount(g.total)}&nbsp;Kč</td>
+          <td style="padding:6px 10px;border-bottom:1px solid #f3f4f6;font-size:12px;color:#374151;">${escapeHtml(g.paymentMessage)}</td>
+        </tr>`;
+    }).join("");
+
     const senderDisplay = session.user.name?.trim()
       ? `${session.user.name.trim()} (${session.user.email})`
       : session.user.email;
@@ -409,8 +425,24 @@ export async function POST(
         ${isProvozni
           ? `v příloze zasíláme vyúčtování <strong>${escapeHtml(event.name)}</strong>`
           : `v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>`}
-        včetně všech dokladů. CSV příloha obsahuje přehled pro bankovní převody.
+        včetně všech dokladů. Seznam k platbě je i přímo níže (jde zkopírovat), CSV příloha obsahuje totéž pro import.
       </p>
+
+      <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
+        Seznam k platbě
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 20px;">
+        <thead>
+          <tr style="background:#f3f4f6;">
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Příjemce</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Účet</th>
+            <th style="padding:7px 10px;text-align:right;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Částka</th>
+            <th style="padding:7px 10px;text-align:left;font-size:11px;color:#6b7280;text-transform:uppercase;letter-spacing:.04em;">Zpráva pro příjemce</th>
+          </tr>
+        </thead>
+        <tbody>${paymentSummaryHtml}</tbody>
+      </table>
 
       <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
         Proplacení nákladů &mdash; podúčet oddílu ${ODDIL_KOD[event.oddil]}
