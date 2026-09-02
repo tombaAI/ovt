@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Rozšířit existující funkci "provozní výdaje mimo akci" o druhý oddíl (TOM, kód 234, hospodářka Alžběta Poštulková) — vlastní hospodář, vlastní kód oddílu na PDF/mailu, vlastní příjemce mailu na TJ — beze změny výsledovky a bez dopadu na členy/příspěvky/běžné akce (ty zůstávají jen OVT).
+**Goal:** Rozšířit existující funkci "provozní výdaje mimo akci" o druhý oddíl (TOM, kód 234, hospodářka Alžběta Poupětová) — vlastní hospodář, vlastní kód oddílu na PDF/mailu, vlastní příjemce mailu na TJ — beze změny výsledovky a bez dopadu na členy/příspěvky/běžné akce (ty zůstávají jen OVT).
 
 **Architecture:** Žádná nová tabulka. Nový sloupec `events.oddil` (`'ovt' | 'tom'`, default `'ovt'`) rozlišuje, kterému oddílu provozní výdaj patří. Gate hospodáře se rozšiřuje ze "je jediný globální hospodář" na "je hospodář TOHOTO oddílu" (`isTreasurerOfOddil`) — a protože `isTreasurerOfOddil(email, 'ovt')` je matematicky identické s dnešním `isTreasurer(email)`, u běžných akcí (vždy `oddil = 'ovt'`) se chování nemění vůbec. Vstup do sekce Provoz řídí nová `isAnyOddilTreasurer` (kterýkoli ze dvou hospodářů).
 
@@ -1318,5 +1318,5 @@ git push
 
 1. Whole-branch review (`superpowers:requesting-code-review`) nad celým diffem `feat/2026-08-31-provozni-vydaje-druhy-oddil` vs `staging`.
 2. PR `feat/2026-08-31-provozni-vydaje-druhy-oddil → staging` (ne přímý push). Migrace `20260831_120000_events_oddil.sql` bude viditelná v PR diffu; po mergi ji na staging DB aplikuje `db-migrate-staging.yml`.
-3. UAT na staging preview: přihlásit se jako hospodář OVT, ověřit obě záložky; přihlásit se jako Alžběta Poštulková (po přidání do `admin_users` — mimo tento plán, provozní krok navíc ze spec dokumentu), založit provozní výdaj TOM, nahrát doklad, uzamknout částky, odeslat na TJ a ověřit, že mail jde na `EMAIL_HOSPODAR_ODDILU_TOM`, ne na centrální adresu.
+3. UAT na staging preview: přihlásit se jako hospodář OVT, ověřit obě záložky; přihlásit se jako Alžběta Poupětová (po přidání do `admin_users` — mimo tento plán, provozní krok navíc ze spec dokumentu), založit provozní výdaj TOM, nahrát doklad, uzamknout částky, odeslat na TJ a ověřit, že mail jde na `EMAIL_HOSPODAR_ODDILU_TOM`, ne na centrální adresu.
 4. Po UAT: spec `status: staging-uat` → `schvaleno`, PR `staging → main`. **Ověřit, že `TREASURER_EMAIL_TOM` a `EMAIL_HOSPODAR_ODDILU_TOM` jsou nastavené ve Vercel Production** (uživatel potvrdil, že jsou nastavené — ověřit i pro Production prostředí, ne jen Preview).

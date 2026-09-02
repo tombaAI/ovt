@@ -14,7 +14,7 @@ Funkce "provozní výdaje mimo akci" (viz [`2026-08-05-provozni-vydaje.md`](2026
 | `DEFAULT_ODDIL = "207 Oddíl vodní turistiky"` (konstanta) | text "oddílu" na PDF vyúčtování a v mailu na TJ | `send-vyuctovani/route.tsx`, `vyuctovani/route.tsx` |
 | `EMAIL_HOSPODAR_ODDILU_TJB` (env) | příjemce mailu s vyúčtováním na TJ | `send-vyuctovani/route.tsx` |
 
-Druhý oddíl — **Turistický oddíl mládeže (TOM)**, kód oddílu **234**, hospodářka **Alžběta Poštulková** — potřebuje stejnou funkci (evidence nákladových dokladů mimo akci, uzamčení částek, odeslání vyúčtování na TJ), ale se **svým** hospodářem, **svým** kódem oddílu na dokladech a **svým** příjemcem mailu na TJ (ne centrální `EMAIL_HOSPODAR_ODDILU_TJB`).
+Druhý oddíl — **Turistický oddíl mládeže (TOM)**, kód oddílu **234**, hospodářka **Alžběta Poupětová** — potřebuje stejnou funkci (evidence nákladových dokladů mimo akci, uzamčení částek, odeslání vyúčtování na TJ), ale se **svým** hospodářem, **svým** kódem oddílu na dokladech a **svým** příjemcem mailu na TJ (ne centrální `EMAIL_HOSPODAR_ODDILU_TJB`).
 
 Výsledovka / hospodaření oddílu (`src/lib/actions/finance-tj.ts`, `hospodareni-tab.tsx`, `TJ_ODDIL_ID`) je oddělený modul napojený na import účetních sestav TJ — **vědomě mimo rozsah**, TOM tuto agendu v appce zatím nemá.
 
@@ -28,7 +28,7 @@ Výsledovka / hospodaření oddílu (`src/lib/actions/finance-tj.ts`, `hospodare
 | Kdo zakládá výdaj a přidává doklady | **Založení nového výdaje**: hospodář vlastního oddílu, nebo hospodář OVT (superhospodář, viz řádek výše) pro libovolný oddíl — zpřísněno bezpečnostním nálezem 2026-09-02 z původního "kterýkoli hospodář, libovolný oddíl" a vzápětí doplněno o výjimku pro OVT. **Přidávání dokladů** k už existujícímu (neuzamčenému) výdaji zůstává otevřené komukoli, kdo výdaj vidí (viz řádek výše) — beze změny. |
 | UI struktura | **Samostatné záložky per oddíl** na `/dashboard/provoz` (ne jeden seznam s filtrem) — blíže odděleným agendám. |
 | Kód oddílu TOM | **234** (analogie k "207" u OVT), tiskne se na PDF vyúčtování a do mailu na TJ. |
-| Hospodář TOM | **Alžběta Poštulková** — potřebuje nový záznam v `admin_users` (Google OAuth whitelist), jinak se do appky nedostane vůbec. |
+| Hospodář TOM | **Alžběta Poupětová**, přihlašuje se sdíleným účtem `bohemians.tom@gmail.com` — ten je v `admin_users` (Google OAuth whitelist) už od dřívějška, žádný nový záznam netřeba. |
 | Příjemce mailu na TJ | TOM má **vlastní** příjemce, ne centrální `EMAIL_HOSPODAR_ODDILU_TJB`. |
 | Výsledovka/hospodaření | **Mimo rozsah**, beze změny — `finance-tj.ts` ani `TJ_ODDIL_ID` se tímto zadáním nedotýkají. |
 
@@ -59,7 +59,7 @@ export const ODDIL_KOD: Record<Oddil, string> = { ovt: "207", tom: "234" };
 Citlivé údaje (e-mail hospodáře, e-mail příjemce na TJ) zůstávají v env proměnných podle stávající konvence — přibydou:
 
 ```
-TREASURER_EMAIL_TOM         # hospodářka TOM (Alžběta Poštulková)
+TREASURER_EMAIL_TOM         # hospodářka TOM (Alžběta Poupětová)
 EMAIL_HOSPODAR_ODDILU_TOM   # příjemce mailu s vyúčtováním TOM na TJ
 ```
 
@@ -146,7 +146,7 @@ Souběžná úprava `src/db/schema.ts` (enum + sloupec).
 
 ### 9. Provozní krok navíc (mimo kód)
 
-Před nasazením na produkci: přidat Alžbětu Poštulkovou do `admin_users` (whitelist Google OAuth) a nastavit `TREASURER_EMAIL_TOM` + `EMAIL_HOSPODAR_ODDILU_TOM` ve Vercel env (staging i produkce).
+`bohemians.tom@gmail.com` (přihlašovací účet hospodářky TOM, Alžběty Poupětové) je v `admin_users` na staging i produkci už dávno (přidáno 2026-04-16, nesouvisí s tímto zadáním) — žádný nový záznam netřeba. Zbývá jen nastavit `TREASURER_EMAIL_TOM` + `EMAIL_HOSPODAR_ODDILU_TOM` ve Vercel env (staging i produkce) — potvrzeno hotové 2026-09-02.
 
 ## Mimo rozsah (vědomě)
 
