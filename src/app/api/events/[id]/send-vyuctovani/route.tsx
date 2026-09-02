@@ -45,11 +45,6 @@ function escapeHtml(value: string): string {
     .replace(/"/g, "&quot;");
 }
 
-function csvCell(value: string | number | null): string {
-  const raw = value === null ? "" : String(value);
-  return `"${raw.replace(/"/g, '""')}"`;
-}
-
 function formatAmount(amount: number): string {
   return new Intl.NumberFormat("cs-CZ", { maximumFractionDigits: 2 }).format(amount);
 }
@@ -304,21 +299,6 @@ export async function POST(
     const total = payeeGroups.reduce((s, g) => s + g.total, 0);
     const colors = ODDIL_EMAIL_COLORS[event.oddil];
 
-    // CSV — one summary row per beneficiary (for bank transfers)
-    const csvBom = "﻿";
-    const csvRows = [
-      ["Příjemce", "Číslo účtu", "Kód banky", "Částka Kč", "Zpráva pro příjemce", "Počet dokladů"],
-      ...payeeGroups.map((g) => [
-        g.payeeName,
-        g.bankAccountNumber,
-        g.bankCode,
-        g.total,
-        g.paymentMessage,
-        g.items.length,
-      ]),
-    ];
-    const csv = csvBom + csvRows.map((row) => row.map(csvCell).join(";")).join("\n");
-
     const attachmentPromises = expenses
       .filter((expense) => expense.fileUrl)
       .map((expense) => fetchPrivateBlobAttachment(
@@ -332,10 +312,6 @@ export async function POST(
       {
         filename: eventPdfName("vyuctovani-oddilu", event.name),
         content: settlementBuffer,
-      },
-      {
-        filename: "komu-co-odeslat.csv",
-        content: Buffer.from(csv, "utf-8"),
       },
       ...documentAttachments,
     ];
@@ -381,9 +357,9 @@ export async function POST(
         </tr>`;
     }).join(`<tr><td colspan="3" style="padding:8px 0;background:#ffffff;"></td></tr>`);
 
-    // Prostý souhrn — jeden řádek na příjemce, stejné sloupce jako CSV příloha. Na žádost
-    // účetní TJB (CSV příloha je jen pro čtení, nejde z ní kopírovat) — přímo v mailu jde
-    // vybrat myší a vložit do Excelu/bankovního importu bez stahování přílohy.
+    // Prostý souhrn — jeden řádek na příjemce. Nahrazuje dřívější CSV přílohu (na žádost
+    // účetní TJB byla jen pro čtení, nešlo z ní kopírovat) — přímo v mailu jde vybrat
+    // myší a vložit do Excelu/bankovního importu.
     const paymentSummaryHtml = payeeGroups.map((g) => {
       const accountDisplay = g.bankAccountNumber && g.bankCode
         ? `${escapeHtml(g.bankAccountNumber)}/${escapeHtml(g.bankCode)}`
@@ -425,7 +401,7 @@ export async function POST(
         ${isProvozni
           ? `v příloze zasíláme vyúčtování <strong>${escapeHtml(event.name)}</strong>`
           : `v příloze zasíláme vyúčtování akce <strong>${escapeHtml(event.name)}</strong>`}
-        včetně všech dokladů. Seznam k platbě je i přímo níže (jde zkopírovat), CSV příloha obsahuje totéž pro import.
+        včetně všech dokladů. Seznam k platbě je níže — jde rovnou zkopírovat.
       </p>
 
       <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
@@ -493,7 +469,7 @@ export async function POST(
     <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
         ${ODDIL_NAZEV[event.oddil]} TJ Bohemians Praha &mdash;
-        Odesláno ze správy uživatelem ${escapeHtml(senderDisplay)}.
+        ${event.oddil === "tom" ? "Odesláno" : "Odesláno ze správy"} uživatelem ${escapeHtml(senderDisplay)}.
       </p>
     </td>
   </tr>
