@@ -302,6 +302,7 @@ export async function POST(
     }
     const payeeGroups = [...groupMap.values()];
     const total = payeeGroups.reduce((s, g) => s + g.total, 0);
+    const colors = ODDIL_EMAIL_COLORS[event.oddil];
 
     // CSV — one summary row per beneficiary (for bank transfers)
     const csvBom = "﻿";
@@ -401,7 +402,6 @@ export async function POST(
       : session.user.email;
 
     const vyuctovaniLabel = isProvozni ? "Vyúčtování nákladu" : "Vyúčtování akce";
-    const colors = ODDIL_EMAIL_COLORS[event.oddil];
 
     const html = `<!DOCTYPE html>
 <html lang="cs">
