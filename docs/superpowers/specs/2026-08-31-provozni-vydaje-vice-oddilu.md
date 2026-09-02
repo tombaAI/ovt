@@ -1,10 +1,10 @@
 ---
-status: schvaleno
+status: produkce
 ---
 
 # Zadání: Provozní výdaje — druhý oddíl (TOM)
 
-> **Stav: Schváleno (2026-09-02).** Ověřeno na staging — založení/uzamčení/odeslání provozního výdaje TOM, mail na TJ (barvy, texty, kopírovatelný seznam k platbě, zkrácená poznámka pro příjemce), superhospodář OVT, env proměnné potvrzené v Production, `admin_users` ověřeno přes Neon (`bohemians.tom@gmail.com` už existoval). Čeká na merge PR `staging → main`. Během UAT nalezeno a opraveno: chybějící department gate na odeslání vyúčtování, natvrdo zapsané OVT texty/barvy v HTML těle mailu (na rozdíl od PDF), TDZ chyba (`colors` deklarované za místem použití), Pohoda XML příloha odstraněna na žádost uživatele.
+> **Stav: Produkce (2026-09-02).** Smergováno do `main` přes PR #40. Ověřeno na staging — založení/uzamčení/odeslání provozního výdaje TOM, mail na TJ (barvy, texty, kopírovatelný seznam k platbě, zkrácená poznámka pro příjemce), superhospodář OVT, env proměnné potvrzené v Production, `admin_users` ověřeno přes Neon (`bohemians.tom@gmail.com` už existoval). Během UAT nalezeno a opraveno: chybějící department gate na odeslání vyúčtování, natvrdo zapsané OVT texty/barvy v HTML těle mailu (na rozdíl od PDF), TDZ chyba (`colors` deklarované za místem použití), Pohoda XML příloha odstraněna na žádost uživatele.
 
 ## Problém
 

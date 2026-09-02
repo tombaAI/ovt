@@ -1,10 +1,10 @@
 ---
-status: zgrilovano
+status: produkce
 ---
 
 # Zadání: Schvalování změny částky vyúčtování po vygenerování předpisu
 
-> **Stav: Zgrilováno (2026-08-03).** Všechny otevřené otázky vyřešené (viz sekce „Otevřené otázky"), připraveno k realizaci na feature větvi `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`. Vzniklo jako obecná nadstavba nad [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) — ten dokument zůstává **pozastavený**, dokud tenhle mechanismus nebude implementovaný.
+> **Stav: Produkce (2026-09-02).** Realizováno na `feat/2026-08-03-schvalovani-zmeny-castky-predpisu`, smergováno do `staging` (PR #39) a odtud do `main` (PR #40). Vzniklo jako obecná nadstavba nad [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) — ten dokument zůstává **pozastavený**, teď už jen na rozhodnutí kdy začít, prerekvizita je hotová.
 
 ## Problém (obecně, ne jen dotace)
 
