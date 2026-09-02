@@ -4,7 +4,7 @@ status: navrh
 
 # Zadání: Online přihlašování na závod ČPV (podzim 2026)
 
-> **Stav: Návrh.** Zapsáno podle zadání uživatele 2026-08-03, obohaceno o rešerši oficiálních pravidel ČPV 2026 a propozic Hameráku 2024, doplněno o poznámky uživatele 2026-08-05. Negrilováno — před implementací projde grilling session a pravděpodobně dekompozicí na dílčí zadání. Jde o největší samostatný celek od vzniku systému: ne první veřejnou část (veřejné přihlášky na oddílové akce už máme a jsou zdrojem inspirace), ale první veřejnou část **samostatně přístupnou bez přihlášení** a s **komplexním životním cyklem** (přihláška → platba → změny → vratky).
+> **Stav: Návrh — ODLOŽENO na příští rok (2026-09-02, rozhodnutí uživatele).** Negoří, závod letos se bez toho obejde. Zapsáno podle zadání uživatele 2026-08-03, obohaceno o rešerši oficiálních pravidel ČPV 2026 a propozic Hameráku 2024, doplněno o poznámky uživatele 2026-08-05. Negrilováno — před implementací projde grilling session a pravděpodobně dekompozicí na dílčí zadání. Jde o největší samostatný celek od vzniku systému: ne první veřejnou část (veřejné přihlášky na oddílové akce už máme a jsou zdrojem inspirace), ale první veřejnou část **samostatně přístupnou bez přihlášení** a s **komplexním životním cyklem** (přihláška → platba → změny → vratky).
 
 ## Souhrn
 

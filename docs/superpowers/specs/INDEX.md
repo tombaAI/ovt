@@ -68,7 +68,7 @@ Nic aktuálně neběží na feature větvi ani nečeká na merge — `staging` a
 4. Životní cyklus akce — konfigurátor otázek přihlášky, EUR náklady, ubytovací/pojistný přehled, pozvánka mailem, uzavření akce (zbytek `2026-06-15-zivotni-cyklus-akce.md`)
 5. Ad-hoc TODO z `todo_next_steps.txt` (validace odeslání mailu bez dokladu, cc organizátorovi/hospodáři, odebrat generování čestného/dopravy)
 6. Záloha nesedí po změně počtu osob na přihlášce (`2026-08-03-zaloha-nesedi-po-zmene-poctu-osob.md`) — jen zapsáno, k dořešení
-7. Online přihlašování na závod ČPV podzim 2026 (`2026-08-03-prihlasky-zavod-cpv.md`) — velký celek (první veřejná část systému), čeká na grilování a dekompozici; termínově vázáno na závod (deadline změn 27. 9. 2026)
+7. Online přihlašování na závod ČPV — **odloženo na příští rok** (2026-09-02, uživatel), negoří (`2026-08-03-prihlasky-zavod-cpv.md`)
 
 ## Ostatní dokumenty — zůstávají ve `zadani/`
 
