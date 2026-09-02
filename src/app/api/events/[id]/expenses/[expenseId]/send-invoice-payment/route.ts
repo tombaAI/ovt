@@ -120,6 +120,7 @@ export async function POST(
             purposeText: expense.purposeText,
             fileName: expense.fileName,
             senderName: session.user.name ?? session.user.email,
+            oddil: event.oddil,
         });
 
         const resend = getResendClient();

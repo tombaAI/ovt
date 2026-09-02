@@ -7,7 +7,7 @@ import { eventExpenses, events, eventTreasurerApprovalLog, members, people } fro
 import { getDb } from "@/lib/db";
 import { getEmailSettings, getResendClient } from "@/lib/email";
 import { logVyuctovaniSend } from "@/lib/actions/events";
-import { getOddilNazevPlny, getOddilTjRecipientEmail, ODDIL_LABELS } from "@/lib/oddily-config";
+import { getOddilNazevPlny, getOddilTjRecipientEmail, ODDIL_EMAIL_COLORS, ODDIL_LABELS, ODDIL_KOD, ODDIL_NAZEV } from "@/lib/oddily-config";
 import { isTreasurerOfOddil } from "@/lib/treasurer";
 import { logBlockedAttempt } from "@/lib/audit";
 import {
@@ -112,9 +112,9 @@ function generatePohodaXml(
     xmlns:bnk="http://www.stormware.cz/schema/version_2/bank.xsd"
     xmlns:typ="http://www.stormware.cz/schema/version_2/type.xsd"
     version="2.0"
-    id="ovt-vydaje-${Date.now()}"
+    id="vydaje-${Date.now()}"
     ico="${xmlEscape(ico)}"
-    application="OVT Bohemians"
+    application="TJ Bohemians"
     note="${xmlEscape(`Proplacení výdajů z akce: ${eventName}`)}">${itemsXml}
 </dat:dataPack>`;
 
@@ -352,8 +352,8 @@ export async function POST(
           bankAccountNumber: expense.bankAccountNumber ?? "",
           bankCode: expense.bankCode ?? "",
           paymentMessage: isProvozni
-            ? `proplacení nákladů OVT: ${event.name}`
-            : `proplacení nákladů z akce OVT: ${event.name}`,
+            ? `proplacení nákladů ${ODDIL_LABELS[event.oddil]}: ${event.name}`
+            : `proplacení nákladů z akce ${ODDIL_LABELS[event.oddil]}: ${event.name}`,
           items: [],
           total: 0,
         });
@@ -438,8 +438,8 @@ export async function POST(
         </tr>`).join("");
 
       return `
-        <tr style="background:#f0fdf4;">
-          <td colspan="3" style="padding:10px 10px 8px;border-top:2px solid #86efac;border-bottom:1px solid #d1fae5;">
+        <tr style="background:${colors.groupBg};">
+          <td colspan="3" style="padding:10px 10px 8px;border-top:2px solid ${colors.groupBorderTop};border-bottom:1px solid ${colors.groupBorderBottom};">
             <table width="100%" cellpadding="0" cellspacing="0">
               <tr>
                 <td>
@@ -447,7 +447,7 @@ export async function POST(
                   &nbsp;&nbsp;<span style="font-size:12px;font-family:monospace;color:#6b7280;">${accountDisplay}</span>
                 </td>
                 <td style="text-align:right;white-space:nowrap;">
-                  <span style="font-size:14px;font-weight:700;color:#327600;">${formatAmount(g.total)}&nbsp;Kč</span>
+                  <span style="font-size:14px;font-weight:700;color:${colors.accent};">${formatAmount(g.total)}&nbsp;Kč</span>
                 </td>
               </tr>
               <tr>
@@ -462,7 +462,7 @@ export async function POST(
         ${itemRows}
         <tr style="background:#f9fafb;">
           <td colspan="2" style="padding:6px 10px;text-align:right;font-size:12px;color:#6b7280;">Celkem ${escapeHtml(g.payeeName)}</td>
-          <td style="padding:6px 10px;text-align:right;font-size:13px;font-weight:600;white-space:nowrap;color:#327600;">${formatAmount(g.total)}&nbsp;Kč</td>
+          <td style="padding:6px 10px;text-align:right;font-size:13px;font-weight:600;white-space:nowrap;color:${colors.accent};">${formatAmount(g.total)}&nbsp;Kč</td>
         </tr>`;
     }).join(`<tr><td colspan="3" style="padding:8px 0;background:#ffffff;"></td></tr>`);
 
@@ -471,6 +471,7 @@ export async function POST(
       : session.user.email;
 
     const vyuctovaniLabel = isProvozni ? "Vyúčtování nákladu" : "Vyúčtování akce";
+    const colors = ODDIL_EMAIL_COLORS[event.oddil];
 
     const html = `<!DOCTYPE html>
 <html lang="cs">
@@ -481,9 +482,9 @@ export async function POST(
 <table width="680" cellpadding="0" cellspacing="0" style="background:#ffffff;border-radius:12px;overflow:hidden;max-width:680px;width:100%;">
 
   <tr>
-    <td style="background:#327600;padding:24px 32px;">
-      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">Oddíl Vodní Turistiky TJ Bohemians</p>
-      <p style="margin:4px 0 0;color:#a3d977;font-size:14px;">${vyuctovaniLabel}</p>
+    <td style="background:${colors.header};padding:24px 32px;">
+      <p style="margin:0;color:#ffffff;font-size:20px;font-weight:700;">${ODDIL_NAZEV[event.oddil]} TJ Bohemians</p>
+      <p style="margin:4px 0 0;color:${colors.headerSubtitle};font-size:14px;">${vyuctovaniLabel}</p>
     </td>
   </tr>
 
@@ -498,7 +499,7 @@ export async function POST(
       </p>
 
       <p style="margin:0 0 12px;font-size:12px;font-weight:700;color:#111827;text-transform:uppercase;letter-spacing:.05em;">
-        Proplacení nákladů &mdash; podúčet oddílu 207
+        Proplacení nákladů &mdash; podúčet oddílu ${ODDIL_KOD[event.oddil]}
       </p>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="border:1px solid #e5e7eb;border-radius:8px;overflow:hidden;margin:0 0 24px;">
@@ -511,9 +512,9 @@ export async function POST(
         </thead>
         <tbody>${payeeGroupsHtml}</tbody>
         <tfoot>
-          <tr style="background:#dcfce7;border-top:2px solid #86efac;">
+          <tr style="background:${colors.totalBg};border-top:2px solid ${colors.totalBorder};">
             <td colspan="2" style="padding:10px 10px;font-weight:700;font-size:13px;color:#111827;">Celkem k proplacení</td>
-            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:#15803d;">${formatAmount(total)}&nbsp;Kč</td>
+            <td style="padding:10px 10px;font-weight:700;font-size:15px;text-align:right;white-space:nowrap;color:${colors.totalText};">${formatAmount(total)}&nbsp;Kč</td>
           </tr>
         </tfoot>
       </table>
@@ -545,8 +546,8 @@ export async function POST(
   <tr>
     <td style="padding:16px 32px 24px;border-top:1px solid #f3f4f6;">
       <p style="margin:0;font-size:12px;color:#9ca3af;line-height:1.5;">
-        Oddíl Vodní Turistiky TJ Bohemians Praha &mdash;
-        Odesláno ze správy OVT uživatelem ${escapeHtml(senderDisplay)}.
+        ${ODDIL_NAZEV[event.oddil]} TJ Bohemians Praha &mdash;
+        Odesláno ze správy uživatelem ${escapeHtml(senderDisplay)}.
       </p>
     </td>
   </tr>
@@ -573,7 +574,7 @@ export async function POST(
     const { data, error } = await resend.emails.send({
       from: settings.from,
       to,
-      subject: `OVT ${vyuctovaniLabel.toLowerCase()}: ${event.name}`,
+      subject: `${ODDIL_LABELS[event.oddil]} ${vyuctovaniLabel.toLowerCase()}: ${event.name}`,
       html,
       text: `${vyuctovaniLabel}: ${event.name}\n\nKomu co proplatit:\n\n${textRows}\n\nCelkem: ${formatAmount(total)} Kč`,
       replyTo: settings.replyTo,
