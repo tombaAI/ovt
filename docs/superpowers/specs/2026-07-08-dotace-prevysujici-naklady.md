@@ -1,10 +1,10 @@
 ---
-status: navrh
+status: zgrilovano
 ---
 
 # Zadání: Dotace převyšující náklad účastníka — nevyužitá část propadá
 
-> **Stav: POZASTAVENO (2026-08-03).** Analýza problému a volba řešení (varianta B, water-filling) jsou hotové a platí. Realizace čeká na samostatné zadání [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) — obecný mechanismus „návrh vs. platná částka" pro `eventPaymentPrescriptions`. Bez něj by nasazení opravy algoritmu tiše změnilo částku u přihlášek, které už mají vygenerovaný (byť nezaplacený) předpis — viz „Zpětná kompatibilita" níže, teď nahrazená obecným mechanismem místo speciálního pinningu.
+> **Stav: Zgrilováno (2026-09-03).** Prerekvizita ([2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md)) je od 2026-09-02 v produkci (PR #40), takže tahle oprava už nemá čím být blokovaná. Grilling session (2026-09-03) dořešila obě otevřené otázky + dvě další, které vyplynuly z rozboru kódu — viz „Otevřené otázky" a „Rozhodnuto" níže. Připraveno k realizaci na feature větvi.
 >
 > Navazuje na kanonický algoritmus [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) (kroky 6–7).
 >
@@ -115,10 +115,16 @@ Nejdřív **regresní test reprodukující dnešní chování** (člen s `totalC
 - **Varianta B (water-filling)** — vybráno uživatelem.
 - **Žádná tichá změna výpočtu u akcí s vygenerovanými předpisy** — řešeno obecným mechanismem návrh/potvrzení, viz [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) (nahrazuje dřívější nápad s `settlement_algo_version` pinningem).
 
-## Otevřené otázky (ke grilování)
+## Otevřené otázky — vyřešeno grilling session (2026-09-03)
 
-1. **Zaokrouhlení capu**: člen s `totalCost = 100,6` — dotace `floor(100,6) = 100` znamená doplatek `ceil(0,6) = 1 Kč` (drobná platba „za nic"), dotace `ceil(100,6) = 101` znamená přiznat o <1 Kč víc než náklad. Co je pro hospodáře přijatelnější? (Návrh: `ceil` u kapnutých členů — nikdo neplatí haléřové doplatky; invariant Σ ≤ subsidyTotal je třeba doložit/ošetřit.)
-2. Má se v souhrnu akce zobrazovat trojice „dotace schválená / využitá / nevyužitá"?
+1. **Zaokrouhlení capu**: `floor` jednotně pro všechny (kapnuté i nekapnuté) — přesně podle pseudokódu variace B výše (`floor(přiznáno(p))` na závěr, bez výjimky). Zamítnuta alternativa `ceil` u kapnutých členů — riskovala by prolomení invariantu `Σ subsidyAmount ≤ subsidyTotal` u více kapnutých členů najednou a přidávala složitost navíc bez jasného přínosu. Ojedinělý 1 Kč doplatek „za nic" u kapnutého člena je přijatelný, přečerpání schváleného rozpočtu dotace ne.
+2. **Zobrazení v souhrnu akce**: ano, přidat řádek „nevyužitá dotace" do admin souhrnu (záložka Náklady/Platby) — bez něj by nižší `Σ subsidyAmount` oproti `subsidyTotal` vypadalo jako chyba ve výkaznictví. Jen admin pohled, **ne** do e-mailu s předpisem (člena nezajímá, kolik dotace propadlo/přerozdělilo se ostatním).
+
+### Další otázky, které vyplynuly z rozboru kódu (2026-09-03)
+
+3. **Nasazení u rozjetých akcí**: pasivní — žádný hromadný přepočet po deployi. Mechanismus návrh/potvrzení (`upsertPrescriptionAmounts`) se spouští jen při explicitní akci hospodáře (přegenerování/zamčení), ne automaticky při zobrazení stránky, takže není důvod nic spouštět navíc.
+4. **Historie uzavřených akcí**: `EventSettlementTab` vždy počítá `getEventSettlement` naživo, bez ohledu na `billingStatus` — žádný snapshot čísel se neukládá (záměrná architektura, viz hlavička `settlement-calc.ts` a issue #28). Po nasazení se tedy **živě zobrazená** čísla u starých/uzavřených akcí s kapnutým členem přepočítají na opravené hodnoty. To je v pořádku — co bylo skutečně předepsáno/zaplaceno/odesláno (`eventPaymentPrescriptions.amount`, audit_log, mail_events, payment_ledger) zůstává nedotčené, mění se jen živý report, stejně jako u každé jiné opravy výpočtu v historii projektu.
+5. **Upomínky u nezaplacených přihlášek**: `sendSingleRegistrationEmail` před odesláním vždy přepočítá a případný nesoulad blokuje ("Nelze odeslat e-mail — přihláška má nevyřízený návrh přepočtu částky, nejdřív ho potvrďte", `event-settlement.ts:1672-1674`). Water-filling redistribuce nikdy nikomu nezvýší `finalAmount` (jen sníží nebo zachová) — invariant ověřen i matematicky (kapnutý člen platí 0 před i po opravě; nekapnutým se `subsidyAmount` může jen zvýšit, tedy `finalAmount` jen snížit). Postup u zasažené přihlášky: nejdřív **Potvrdit** (návrh je vždy bezpečný — nikdy nežádá o víc), pak poslat upomínku s opravenou částkou. Systém nemá tlačítko „zamítnout návrh, poslat se starou částkou" — obecná mezera v už nasazeném mechanismu, ale pro tuhle opravu irelevantní (nový návrh nikdy neškodí) — ponecháno jako možná budoucí položka backlogu, ne součást tohoto zadání.
 
 ## Vazby
 
