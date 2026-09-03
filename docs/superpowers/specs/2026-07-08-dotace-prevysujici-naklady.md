@@ -1,10 +1,10 @@
 ---
-status: zgrilovano
+status: implementace
 ---
 
 # Zadání: Dotace převyšující náklad účastníka — nevyužitá část propadá
 
-> **Stav: Zgrilováno (2026-09-03).** Prerekvizita ([2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md)) je od 2026-09-02 v produkci (PR #40), takže tahle oprava už nemá čím být blokovaná. Grilling session (2026-09-03) dořešila obě otevřené otázky + dvě další, které vyplynuly z rozboru kódu — viz „Otevřené otázky" a „Rozhodnuto" níže. Připraveno k realizaci na feature větvi.
+> **Stav: Implementace (2026-09-03, větev `feat/2026-07-08-dotace-prevysujici-naklady`).** Prerekvizita ([2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md)) je od 2026-09-02 v produkci (PR #40), takže tahle oprava už nemá čím být blokovaná. Grilling session (2026-09-03) dořešila obě otevřené otázky + dvě další, které vyplynuly z rozboru kódu — viz „Otevřené otázky" a „Rozhodnuto" níže. Připraveno k realizaci na feature větvi.
 >
 > Navazuje na kanonický algoritmus [2026-06-24-vypocet-nakladu-akce.md](2026-06-24-vypocet-nakladu-akce.md) (kroky 6–7).
 >

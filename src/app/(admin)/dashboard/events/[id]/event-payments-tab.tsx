@@ -277,7 +277,7 @@ function SubsidyField({ eventId, value, totalMemberParticipants, onChange, disab
                     {value > 0 ? fmtCzk(value) : <span className="text-gray-400 italic">Nezadána</span>}
                 </button>
                 {value > 0 && totalMemberParticipants > 0 && (
-                    <p className="text-xs text-gray-400 mt-0.5">= {fmtCzk(Math.floor(value / totalMemberParticipants))}/člen ({totalMemberParticipants} členů)</p>
+                    <p className="text-xs text-gray-400 mt-0.5">≈ {fmtCzk(Math.floor(value / totalMemberParticipants))}/člen v průměru ({totalMemberParticipants} členů)</p>
                 )}
             </div>
         );
@@ -745,6 +745,8 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
     const hasExpenses = settlement.finalExpenses.length > 0;
     const hasRegistrations = settlement.registrations.length > 0;
     const isPrescribed = billingStatus === "prescribed";
+    const usedSubsidy = settlement.registrations.reduce((s, r) => s + r.subsidy, 0);
+    const unusedSubsidy = Math.max(0, subsidyTotal - usedSubsidy);
 
     return (
         <div className="space-y-5">
@@ -854,7 +856,10 @@ export function EventPaymentsTab({ eventId, billingStatus: initialBillingStatus,
                     </div>
                     {subsidyTotal > 0 && (
                         <p className="text-xs text-gray-400 text-right">
-                            celková sleva −{fmtCzk(settlement.registrations.reduce((s, r) => s + r.subsidy, 0))}
+                            celková sleva −{fmtCzk(usedSubsidy)}
+                            {unusedSubsidy > 0 && (
+                                <span className="block text-amber-600">nevyužitá dotace {fmtCzk(unusedSubsidy)}</span>
+                            )}
                         </p>
                     )}
                 </div>

@@ -11,7 +11,7 @@ import {
     computePerRegistrationWeights,
     computeSettlementAmount,
     computeSplitAllWeights,
-    computeSubsidyPerMember,
+    computeSubsidyAmounts,
     computeUnitPrice,
     effectiveDepositAmount,
     sumRegistrationTotal,
@@ -149,14 +149,81 @@ describe("krok 3 — cena za jednotku váhy (plná přesnost)", () => {
     });
 });
 
-describe("krok 6 — dotace na člena se zaokrouhluje DOLŮ (regrese fixu 66ab632)", () => {
-    it("floor: součet přiznané dotace nepřekročí schválenou částku", () => {
-        expect(computeSubsidyPerMember(1000, 3)).toBe(333);
-        expect(333 * 3).toBeLessThanOrEqual(1000);
+describe("krok 6 — dotace na člena: water-filling redistribuce nevyužitého podílu (varianta B, 2026-07-08-dotace-prevysujici-naklady.md)", () => {
+    it("nikdo není kapnutý → stejný výsledek jako dřívější floor(subsidyTotal/n) (regrese)", () => {
+        const members = [
+            { key: "p1", totalCost: 2000 },
+            { key: "p2", totalCost: 1500 },
+            { key: "p3", totalCost: 1000 },
+        ];
+        const result = computeSubsidyAmounts(1000, members);
+        expect(result.get("p1")).toBe(333);
+        expect(result.get("p2")).toBe(333);
+        expect(result.get("p3")).toBe(333);
     });
 
-    it("bez členů žádná dotace", () => {
-        expect(computeSubsidyPerMember(1000, 0)).toBe(0);
+    it("jeden člen s nákladem 0 → dostane 0, ostatní si rozdělí celou dotaci", () => {
+        const members = [
+            { key: "organizator", totalCost: 0 },
+            { key: "p2", totalCost: 2000 },
+            { key: "p3", totalCost: 2000 },
+        ];
+        const result = computeSubsidyAmounts(1000, members);
+        expect(result.get("organizator")).toBe(0);
+        expect(result.get("p2")).toBe(500); // floor(1000/2)
+        expect(result.get("p3")).toBe(500);
+    });
+
+    it("člen s částečným nákladem (0 < cost < podíl) → dostane přesně svůj náklad, zbytek se přerozdělí", () => {
+        const members = [
+            { key: "castecny", totalCost: 100 }, // rovný podíl by byl 333,33 — je pod ním
+            { key: "p2", totalCost: 2000 },
+            { key: "p3", totalCost: 2000 },
+        ];
+        const result = computeSubsidyAmounts(1000, members);
+        expect(result.get("castecny")).toBe(100);
+        expect(result.get("p2")).toBe(450); // floor((1000-100)/2)
+        expect(result.get("p3")).toBe(450);
+    });
+
+    it("součet nákladů všech členů < subsidyTotal → každý dostane svůj náklad, zbytek zůstává nevyužit", () => {
+        const members = [
+            { key: "p1", totalCost: 100 },
+            { key: "p2", totalCost: 200 },
+        ];
+        const result = computeSubsidyAmounts(1000, members);
+        expect(result.get("p1")).toBe(100);
+        expect(result.get("p2")).toBe(200);
+        expect([...result.values()].reduce((s, v) => s + v, 0)).toBeLessThan(1000);
+    });
+
+    it("žádní členové → prázdná mapa", () => {
+        expect(computeSubsidyAmounts(1000, []).size).toBe(0);
+    });
+
+    it("invariant na smíšeném vstupu (dvě kola water-fillingu): Σ ≤ subsidyTotal, nikdo nedostane víc než svůj náklad", () => {
+        const members = [
+            { key: "a", totalCost: 50 },
+            { key: "b", totalCost: 180 },
+            { key: "c", totalCost: 400 },
+            { key: "d", totalCost: 900 },
+        ];
+        const result = computeSubsidyAmounts(1000, members);
+        const total = [...result.values()].reduce((s, v) => s + v, 0);
+        expect(total).toBeLessThanOrEqual(1000);
+        for (const m of members) {
+            expect(result.get(m.key)).toBeLessThanOrEqual(m.totalCost);
+            expect(result.get(m.key)).toBeGreaterThanOrEqual(0);
+        }
+    });
+
+    it("kapnutý člen se zlomkovým nákladem → floor, ne ceil (rozhodnutí z grilling session — žádný speciální případ)", () => {
+        const members = [
+            { key: "kapnuty", totalCost: 100.6 },
+            { key: "ostatni", totalCost: 2000 },
+        ];
+        const result = computeSubsidyAmounts(1000, members);
+        expect(result.get("kapnuty")).toBe(100); // floor(100.6), ne ceil(100.6)=101
     });
 });
 
@@ -225,10 +292,13 @@ describe("vzorový průchod kroky 1–8 (mini akce dle zadání)", () => {
         expect(accUnit).toBe(1000);
 
         // Kroky 4–7: p1 = 1900 − 500 → 1400, p2 = 1900 (nečlen), p3 = 900 − 500 → 400
-        const subsidy = computeSubsidyPerMember(1000, 2);
-        const p1 = computeParticipantFinalAmount(busUnit + accUnit, subsidy);
+        const subsidyMap = computeSubsidyAmounts(1000, [
+            { key: "p1", totalCost: busUnit + accUnit },
+            { key: "p3", totalCost: busUnit },
+        ]);
+        const p1 = computeParticipantFinalAmount(busUnit + accUnit, subsidyMap.get("p1") ?? 0);
         const p2 = computeParticipantFinalAmount(busUnit + accUnit, 0);
-        const p3 = computeParticipantFinalAmount(busUnit, subsidy);
+        const p3 = computeParticipantFinalAmount(busUnit, subsidyMap.get("p3") ?? 0);
         expect([p1, p2, p3]).toEqual([1400, 1900, 400]);
 
         // Krok 8: reg 2 — záloha matched 800, z toho 300 už propadlo do busu →

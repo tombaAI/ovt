@@ -9,7 +9,7 @@
  *
  * Princip: plná přesnost (float) přes všechny kroky, zaokrouhlení nahoru na celé Kč
  * přesně JEDNOU — v kroku 7, pro finální částku jednoho účastníka. Jediná výjimka:
- * dotace na člena se zaokrouhluje DOLŮ už v kroku 6 (viz computeSubsidyPerMember).
+ * dotace na člena se zaokrouhluje DOLŮ už v kroku 6 (viz computeSubsidyAmounts).
  */
 
 export type AllocationMethod = "split_all" | "per_registration" | "with_coefficients";
@@ -133,15 +133,43 @@ export function computeUnitPrice(effectiveAmount: number, totalWeight: number): 
     return totalWeight > 0 ? effectiveAmount / totalWeight : 0;
 }
 
-// ── Krok 6: dotace na člena — zaokrouhlení DOLŮ už tady ─────────────────────
+// ── Krok 6: dotace per člen — water-filling redistribuce nevyužitého podílu (varianta B) ──
 
 /**
- * Výjimka z "zaokrouhli jen jednou": dotace na člena se zaokrouhluje DOLŮ na celé Kč
- * hned v kroku 6, aby součet skutečně přiznané dotace nikdy nepřekročil schválenou
- * částku event.subsidyPerMember (zbytek zůstává klubu).
+ * Nahrazuje dřívější computeSubsidyPerMember (rovný podíl pro všechny) — viz
+ * docs/superpowers/specs/2026-07-08-dotace-prevysujici-naklady.md. Člen, jehož skutečný
+ * náklad je nižší než rovný podíl, dostane dotaci = přesně jeho náklad (nikdy víc);
+ * nevyužitý zbytek se přerozdělí mezi ostatní členy. Floor se aplikuje JEDNOTNĚ na
+ * všechny na úplném konci — žádný speciální ceil pro "kapnuté" členy (rozhodnuto v
+ * grilling session 2026-09-03: jednodušší, garantuje Σ ≤ subsidyTotal bez dalšího
+ * dokazování; ojedinělý 1 Kč doplatek u kapnutého člena je přijatelný, přečerpání
+ * schváleného rozpočtu dotace ne).
  */
-export function computeSubsidyPerMember(subsidyTotal: number, totalMemberParticipants: number): number {
-    return totalMemberParticipants > 0 ? Math.floor(subsidyTotal / totalMemberParticipants) : 0;
+export function computeSubsidyAmounts(
+    subsidyTotal: number,
+    membersWithCosts: { key: string; totalCost: number }[],
+): Map<string, number> {
+    if (membersWithCosts.length === 0) return new Map();
+
+    const exact = new Map<string, number>();
+    let remaining = subsidyTotal;
+    let pool = membersWithCosts;
+
+    while (pool.length > 0) {
+        const share = remaining / pool.length;
+        const capped = pool.filter(m => m.totalCost < share);
+        if (capped.length === 0) {
+            for (const m of pool) exact.set(m.key, share);
+            break;
+        }
+        for (const m of capped) exact.set(m.key, m.totalCost);
+        remaining -= capped.reduce((s, m) => s + m.totalCost, 0);
+        pool = pool.filter(m => m.totalCost >= share);
+    }
+
+    const result = new Map<string, number>();
+    for (const [key, value] of exact) result.set(key, Math.floor(value + 1e-9));
+    return result;
 }
 
 // ── Krok 7: JEDINÉ zaokrouhlení v celém výpočtu — finální částka účastníka ──

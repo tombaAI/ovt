@@ -37,7 +37,7 @@ Každý dokument má stav ve frontmatteru (`status:`) a jednořádkové shrnutí
 | [2026-07-04-audit-akce-mezery.md](2026-07-04-audit-akce-mezery.md) | Doplnění chybějících audit-log zápisů | `produkce` — commit `f28f062`, viz ADR-0002 |
 | [2026-07-04-automaticky-import-vysledovky.md](2026-07-04-automaticky-import-vysledovky.md) | Automatický import PDF výsledovky z Gmailu | `navrh` |
 | [2026-07-06-automaticke-testy.md](2026-07-06-automaticke-testy.md) | Vitest unit + Playwright E2E smoke testy | `produkce` — commit `d222eba` |
-| [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `zgrilovano` — varianta B (water-filling), prerekvizita splněná, připraveno k realizaci |
+| [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | Dotace vyšší než náklad člena — nevyužitá část propadá | `implementace` — větev `feat/2026-07-08-dotace-prevysujici-naklady` |
 | [2026-07-23-integracni-test-gemini-analyzy.md](2026-07-23-integracni-test-gemini-analyzy.md) | Integrační test Gemini analýzy dokladů (vzorové JPG/PDF/XLS) | `produkce` — PR #33 |
 | [2026-07-23-vylepseni-popisu-prijemce.md](2026-07-23-vylepseni-popisu-prijemce.md) | Návrh lepšího popisu/příjemce faktury podle analýzy dokladu (výměna/re-analýza) | `produkce` — PR #32 |
 | [2026-08-03-schvalovani-zmeny-castky-predpisu.md](2026-08-03-schvalovani-zmeny-castky-predpisu.md) | Obecný mechanismus návrh/potvrzení pro změnu částky už vygenerovaného předpisu | `produkce` — PR #40, prerekvizita pro dotaci výše je splněná |
@@ -62,7 +62,7 @@ Design dokumenty a ADR vznikají z grilling session nad zadáním a popisují fi
 Nic aktuálně neběží na feature větvi ani nečeká na merge — `staging` a `main` jsou synchronizované (PR #40, 2026-09-02 12:49 UTC, sloučil provozní výdaje TOM i schvalování změny částky předpisu do produkce).
 
 **Rozjíždí se:**
-1. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`) — `zgrilovano`, čeká se na implementační plán a feature větev
+1. Dotace převyšující náklad člena (`2026-07-08-dotace-prevysujici-naklady.md`) — `implementace` na větvi `feat/2026-07-08-dotace-prevysujici-naklady`
 
 **Backlog — návrh, implementace nezahájena:**
 2. Automatický import výsledovky z Gmailu (`2026-07-04-automaticky-import-vysledovky.md`)

@@ -16,7 +16,7 @@ Navazuje na [2026-06-15-propadla-zaloha.md](2026-06-15-propadla-zaloha.md) (defi
 
 Celý výpočet od nákladu po doplatek běží **ve float/decimal přesnosti, beze ztráty** (žádné mezivýsledkové `Math.ceil`/`Math.round`). Zaokrouhlení **nahoru** na celé koruny se provede **přesně jednou** — na úplném konci, pro **finální částku jednoho účastníka**, ne pro náklad, ne pro přihlášku jako celek.
 
-**Výjimka — dotace na člena (krok 6) se zaokrouhluje DOLŮ na celé Kč hned v kroku 6**, ne na konci. Důvod: dotace je schválená částka, kterou klub reálně dává členům jako slevu — součet skutečně přiznané dotace (`subsidyPerMember × totalMemberParticipants`) tak nikdy nepřekročí schválenou `event.subsidyPerMember`, nanejvýš bude o pár Kč nižší (zbytek zůstává klubu, ne navíc rozpočítaný mezi členy zaokrouhlením nahoru). Zaokrouhlení nahoru v kroku 7 zůstává jediné zaokrouhlení směrem nahoru v celém výpočtu.
+**Výjimka — dotace na člena (krok 6) se zaokrouhluje DOLŮ na celé Kč hned v kroku 6**, ne na konci. Důvod: dotace je schválená částka, kterou klub reálně dává členům jako slevu — součet skutečně přiznané dotace (`Σ subsidyAmount(p)` přes všechny členy, viz water-filling níže) tak nikdy nepřekročí schválenou `event.subsidyPerMember`, nanejvýš bude o pár Kč nižší (zbytek zůstává klubu, ne navíc rozpočítaný mezi členy zaokrouhlením nahoru). Zaokrouhlení nahoru v kroku 7 zůstává jediné zaokrouhlení směrem nahoru v celém výpočtu.
 
 Zobrazení (UI) může jakoukoli mezivýslednou hodnotu ukázat zaokrouhlenou na 2 desetinná místa (matematicky — round-half-up), ale **ta zobrazená zaokrouhlená hodnota se nikdy nepoužije zpátky do dalšího počítání** — vždy se pokračuje s plnou přesností uloženou v paměti/výpočtu.
 
@@ -109,24 +109,34 @@ Stále plná přesnost, žádné zaokrouhlení.
 
 ## Krok 6 — dotace
 
-```
-subsidyPerMember = floor( event.subsidyPerMember / totalMemberParticipants )   // ZAOKROUHLENO DOLŮ na celé Kč
-```
-
-kde `totalMemberParticipants` = počet aktivních účastníků s `memberId != null` (napříč celou akcí, ne per přihláška).
-
 Dotace se odečítá **jen účastníkům, kteří jsou členi** (`memberId != null`); ostatní platí `totalCost(p)` bez odpočtu.
 
-`subsidyPerMember` je od tohoto kroku dál **celé číslo (Kč)** — žádná desetinná přesnost se do kroku 7 nepřenáší (viz výjimka v principu výše).
+Od 2026-09 se dotace nerozpočítává rovným dílem, ale **water-filling redistribucí** (varianta B, viz [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md)) — člen, jehož `totalCost(p)` je nižší než rovný podíl, dostane dotaci = přesně jeho náklad (nikdy víc, nikdy míň, než potřebuje), nevyužitý zbytek se přerozdělí mezi ostatní členy:
 
-**Příklad:** `floor(5000 / 19) = floor(263,157894736…) = 263 Kč` — dál se počítá s `263`, ne s `263,157894736…`.
+```
+zbývá = event.subsidyPerMember
+M = aktivní členové (memberId != null)
+opakuj (konverguje ≤ |M| iterací):
+    podíl = zbývá / |M|
+    L = { p ∈ M : totalCost(p) < podíl }
+    pokud L je prázdná: každému p ∈ M přiznej podíl; konec
+    jinak: každému p ∈ L přiznej totalCost(p); zbývá −= Σ přiznáno(L); M = M − L
+
+na závěr: subsidyAmount(p) = floor(přiznáno(p))   // JEDNOTNĚ pro všechny, i kapnuté — žádný speciální ceil
+```
+
+`subsidyAmount(p)` je od tohoto kroku dál **celé číslo (Kč)**, per účastník — žádná desetinná přesnost se do kroku 7 nepřenáší (viz výjimka v principu výše). Implementace: `computeSubsidyAmounts` v `src/lib/settlement-calc.ts`.
+
+**Speciální případ — nikdo není kapnutý** (`totalCost(p) ≥ podíl` pro všechny): algoritmus se v jediném kole zredukuje na `floor(event.subsidyPerMember / totalMemberParticipants)` pro každého — to je přesně dřívější (2026-06-24) vzorec a přesně případ testovací fixture níže (žádný z 19 členů tam nemá `totalCost < 263`).
+
+**Příklad (žádný kapnutý člen, fixture níže):** `floor(5000 / 19) = floor(263,157894736…) = 263 Kč` — dál se počítá s `263`, ne s `263,157894736…`.
 
 ---
 
 ## Krok 7 — finální částka účastníka (jediné zaokrouhlení NAHORU v celém výpočtu)
 
 ```
-participantFinal(p) = ceil( max(0, totalCost(p) − (isMember(p) ? subsidyPerMember : 0)) )
+participantFinal(p) = ceil( max(0, totalCost(p) − (isMember(p) ? subsidyAmount(p) : 0)) )
 ```
 
 `ceil` = matematicky nahoru na celé Kč (vždy nahoru, ne na nejbližší — klub se nesmí dostat do mínusu kvůli zaokrouhlení).
@@ -209,7 +219,7 @@ Díky tomu, že `subsidyAmount`/`subsidy` je od kroku 6 celé číslo, platí `d
 | Krok 2 (forfeit → effectiveAmount) | `calcForfeitForExpense` — beze změny, opraveno dříve (commit `e698029`) | ✅ |
 | Krok 3 (cena za jednotku váhy, plná přesnost) | `unitPriceByExpense.set(expense.id, effectiveAmount / totalWeight)` — žádné mezivýsledkové zaokrouhlení. `setExpenseParticipantCoefficients` už neukládá derivovanou Kč alokaci (jen koeficienty) | ✅ |
 | Krok 4–5 (náklad na účastníka) | `participantCalcs` — `totalCost` per účastník, plná přesnost | ✅ |
-| Krok 6 (dotace, zaokrouhleno DOLŮ) | `subsidyPerMember = Math.floor(subsidyTotal / totalMemberParticipants)` v `getEventSettlement` — výjimka z principu, viz výše | ✅ (2026-06-24) |
+| Krok 6 (dotace, water-filling + floor) | `computeSubsidyAmounts` v `settlement-calc.ts`, volané z `getEventSettlement` — nahrazuje dřívější rovný podíl, viz [2026-07-08-dotace-prevysujici-naklady.md](2026-07-08-dotace-prevysujici-naklady.md) | ✅ (2026-09) |
 | Krok 7 (jediné zaokrouhlení nahoru) | `ceilMoney(max(0, totalCost − subsidyAmount))` — počítáno přesně jednou, per účastník (`ParticipantCalc.finalAmount`) | ✅ |
 | Krok 8 (součet přihlášky) | `totalAmount = calcs.reduce((s,c) => s + c.finalAmount, 0)` — součet už zaokrouhlených částek účastníků | ✅ |
 | Krok 8 (`ownForfeitedAmount` odpočet od zálohy) | `effectiveDepositAmount()` v `event-settlement.ts` a `settlement-calc.ts` zatím **nepočítá** `ownForfeitedAmount` — používá se celá `effectiveDepositAmount(registration)` bez odpočtu propadlé části | ❌ **TODO — viz „Issue: dvojí započtení propadlé zálohy" níže** |

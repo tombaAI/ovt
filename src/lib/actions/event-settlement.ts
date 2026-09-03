@@ -33,7 +33,7 @@ import {
     computePerRegistrationWeights,
     computeSettlementAmount,
     computeSplitAllWeights,
-    computeSubsidyPerMember,
+    computeSubsidyAmounts,
     computeUnitPrice,
     effectiveDepositAmount,
     sumRegistrationTotal,
@@ -392,8 +392,9 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
     const unitPrice = totalParticipants > 0 ? splitAllSum / totalParticipants : 0;
 
     // ── Krok 4–7: náklad na účastníka přes všechny náklady, dotace, JEDINÉ zaokrouhlení NAHORU ──
-    const subsidyPerMember = computeSubsidyPerMember(subsidyTotal, totalMemberParticipants);
+    // Krok 6: dotace per člen — water-filling redistribuce (computeSubsidyAmounts)
 
+    // Nejdřív spočítáme náklady všech účastníků
     type ParticipantCalc = {
         key: string;
         registrationId: number;
@@ -404,7 +405,13 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
         perExpense: Map<number, number>; // expenseId -> plná přesnost příspěvek (rozpis pro UI/e-mail)
     };
 
-    const participantCalcs: ParticipantCalc[] = allPersonKeys.map(k => {
+    const participantTotalCosts: Array<{
+        key: string;
+        registrationId: number;
+        memberId: number | null;
+        totalCost: number;
+        perExpense: Map<number, number>;
+    }> = allPersonKeys.map(k => {
         const perExpense = new Map<number, number>();
         let totalCost = 0;
         for (const expense of finalExpenseRows) {
@@ -413,9 +420,22 @@ export async function getEventSettlement(eventId: number): Promise<EventSettleme
             perExpense.set(expense.id, cost);
             totalCost += cost;
         }
-        const subsidyAmount = k.memberId !== null ? subsidyPerMember : 0;
-        const finalAmount = computeParticipantFinalAmount(totalCost, subsidyAmount);
-        return { key: k.key, registrationId: k.registrationId, memberId: k.memberId, totalCost, subsidyAmount, finalAmount, perExpense };
+        return { key: k.key, registrationId: k.registrationId, memberId: k.memberId, totalCost, perExpense };
+    });
+
+    // Pak vyberme členy a jejich náklady pro water-filling
+    const membersWithCosts = participantTotalCosts
+        .filter(p => p.memberId !== null)
+        .map(p => ({ key: p.key, totalCost: p.totalCost }));
+
+    // Spočítáme dotace water-filling algoritmem
+    const subsidyMap = computeSubsidyAmounts(subsidyTotal, membersWithCosts);
+
+    // Nakonec sestavíme finální výpočty s dotacemi a zaokrouhlením
+    const participantCalcs: ParticipantCalc[] = participantTotalCosts.map(p => {
+        const subsidyAmount = subsidyMap.get(p.key) ?? 0;
+        const finalAmount = computeParticipantFinalAmount(p.totalCost, subsidyAmount);
+        return { key: p.key, registrationId: p.registrationId, memberId: p.memberId, totalCost: p.totalCost, subsidyAmount, finalAmount, perExpense: p.perExpense };
     });
 
     const calcsByReg = new Map<number, ParticipantCalc[]>();
